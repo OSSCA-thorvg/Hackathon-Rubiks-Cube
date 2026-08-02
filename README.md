@@ -4,17 +4,23 @@
 
 C++로 작성된 engine이 Cube state, 3D interaction, rendering을 담당하고, [ThorVG](https://github.com/thorvg/thorvg)를 graphics pipeline의 최종 2D rendering backend로 사용합니다. Engine은 Emscripten으로 WASM으로 빌드되며, Web shell은 Vite + Vanilla TypeScript로 구성된 정적 Web application입니다.
 
+ThorVG를 submodule로 포함하고 있어 `--recurse-submodules` 옵션을 사용하길 권장합니다.
+
+```bash
+git clone --recurse-submodules https://github.com/OSSCA-thorvg/Hackathon-Rubiks-Cube
+```
+
 <!-- TODO: 배포 후 데모 링크 추가 -->
 <!-- 👉 **[Live Demo](https://<username>.github.io/thorvg-rubiks/)** -->
 
 ## 기술 스택
 
-| 영역 | 구성 |
-|---|---|
+| 영역     | 구성                                        |
+| -------- | ------------------------------------------- |
 | Frontend | Vite, Vanilla TypeScript, HTML, Vanilla CSS |
-| Engine | C++, ThorVG, Emscripten / WASM |
-| Build | Meson, Ninja, GitHub Actions |
-| Deploy | GitHub Pages |
+| Engine   | C++, ThorVG, Emscripten / WASM              |
+| Build    | Meson, Ninja, GitHub Actions                |
+| Deploy   | GitHub Pages                                |
 
 ## 프로젝트 구조
 

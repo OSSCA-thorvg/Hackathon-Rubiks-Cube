@@ -1,0 +1,20 @@
+[binaries]
+cpp = 'em++'
+ar = 'emar'
+strip = 'emstrip'
+
+[properties]
+needs_exe_wrapper = true
+
+[built-in options]
+cpp_std = 'c++17'
+debug = false
+optimization = '2'
+cpp_args = ['-fno-exceptions']
+cpp_link_args = ['-fno-exceptions']
+
+[host_machine]
+system = 'emscripten'
+cpu_family = 'wasm32'
+cpu = 'wasm32'
+endian = 'little'

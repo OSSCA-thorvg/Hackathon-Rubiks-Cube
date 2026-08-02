@@ -25,7 +25,9 @@ dist-ssr
 
 
 build*/
+subprojects/.wraplock
 .DS_Store
 
 .cache
 .vscode
+tmp

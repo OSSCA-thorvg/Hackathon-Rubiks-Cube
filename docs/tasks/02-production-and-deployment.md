@@ -125,13 +125,13 @@ Workflow에서 사용하는 공식 action의 기준 major version은 다음과 �
 
 | Action | Version |
 | --- | --- |
-| `actions/checkout` | `v6` |
-| `actions/setup-node` | `v6` |
-| `actions/setup-python` | `v6` |
-| `actions/cache` | `v5` |
-| `actions/configure-pages` | `v5` |
-| `actions/upload-pages-artifact` | `v4` |
-| `actions/deploy-pages` | `v4` |
+| `actions/checkout` | `v7` |
+| `actions/setup-node` | `v7` |
+| `actions/setup-python` | `v7` |
+| `actions/cache` | `v6` |
+| `actions/configure-pages` | `v6` |
+| `actions/upload-pages-artifact` | `v5` |
+| `actions/deploy-pages` | `v5` |
 
 Action major를 올릴 때는 runner 요구 버전과 breaking change를 확인합니다.
 
@@ -192,12 +192,16 @@ https://ossca-thorvg.github.io/Hackathon-Rubiks-Cube/
 Vite production build의 base는 `/Hackathon-Rubiks-Cube/`로 설정합니다.
 Development server는 `/`를 사용합니다.
 
-```ts
-import { defineConfig, type UserConfig } from 'vite'
+`vite preview`는 config를 `command === 'serve'`로 해석하므로 command만으로 분기하면 preview가 base `/`에서 서빙됩니다.
+그 상태에서 build output은 `/Hackathon-Rubiks-Cube/` asset을 참조하므로 asset 요청이 SPA fallback에 걸려 HTML이 반환되고, preview 기반 browser test는 MIME 오류로 실패합니다.
+Preview는 production output을 검증하는 경로이므로 `isPreview`를 함께 분기해 build와 같은 base를 사용합니다.
 
-export default defineConfig(({ command }): UserConfig => ({
-  base: command === 'build' ? '/Hackathon-Rubiks-Cube/' : '/',
-}))
+```ts
+import { defineConfig, type UserConfig } from 'vite';
+
+export default defineConfig(({ command, isPreview }): UserConfig => ({
+  base: command === 'build' || isPreview ? '/Hackathon-Rubiks-Cube/' : '/',
+}));
 ```
 
 Generated module과 WASM binary는 Vite module graph 안에 있으므로 base path는 번들링과 asset URL 재작성에 자동 반영됩니다.
@@ -210,23 +214,27 @@ Custom domain을 도입하면 base path 정책을 다시 결정하며 이 phase�
 
 `web/dist`만 Pages artifact로 업로드합니다.
 
+Generated module과 WASM binary는 Vite module graph 안에 있으므로 다른 asset과 같이 content hash가 붙은 이름으로 `assets/`에 방출됩니다.
+별도의 `wasm/` 디렉터리나 고정된 파일 이름은 존재하지 않습니다.
+
 ```text
 web/dist/
 ├── index.html
-├── assets/
-│   └── ...
-└── wasm/
-    ├── thorvg-rubiks.js
-    └── thorvg-rubiks.wasm
+├── favicon.svg
+└── assets/
+    ├── index-<hash>.js
+    ├── index-<hash>.css
+    ├── thorvg-rubiks-<hash>.js
+    └── thorvg-rubiks-<hash>.wasm
 ```
 
 Upload 전에 다음을 확인합니다.
 
 - `index.html`이 존재합니다.
-- `wasm/thorvg-rubiks.js`와 `wasm/thorvg-rubiks.wasm`이 존재하며 비어 있지 않습니다.
-- `index.html`과 generated assets가 production base path를 사용합니다.
+- `assets/`에 `thorvg-rubiks-*.wasm`과 `thorvg-rubiks-*.js`가 정확히 하나씩 존재하며 비어 있지 않습니다.
+- `index.html`이 production base path의 asset을 참조합니다.
 - Artifact 안에 source tree, `node_modules`, native binary와 build directory가 포함되지 않습니다.
-- Artifact 안에 symbolic link나 hard link가 없습니다.
+- Artifact 안에 symbolic link가 없습니다.
 
 ## Browser verification
 
@@ -283,6 +291,9 @@ concurrency:
 
 새로운 `main` commit이 들어오면 이전 배포를 취소하여 오래된 artifact가 나중에 배포되는 것을 방지합니다.
 
+이 group은 **deploy job에만** 적용합니다.
+Workflow 레벨에 두면 서로 다른 pull request의 verify까지 같은 group에 묶여 서로를 취소합니다.
+
 ## Failure behavior
 
 - Submodule checkout 실패는 즉시 workflow를 실패시킵니다.
@@ -305,9 +316,11 @@ concurrency:
 ### 2. Configure production build
 
 - [ ] `web/vite.config.ts` 추가
-- [ ] Development와 production base path 분리
+- [ ] Development와 production/preview base path 분리
 - [ ] Production build에서 WASM asset URL이 base path를 반영하는지 확인
 - [ ] `npm --prefix web run build` 결과에서 WASM artifact 확인
+- [ ] Playwright base URL에 production base path 반영
+- [ ] e2e에 console error, page error와 JS/WASM asset 응답 검증 추가
 
 ### 3. Add continuous integration
 
@@ -315,7 +328,6 @@ concurrency:
 - [ ] Recursive submodule checkout 구성
 - [ ] Node, Python, Meson과 Ninja 설정
 - [ ] Official emsdk 설치와 version-aware cache 구성
-- [ ] `actions/configure-pages`로 Pages metadata와 build 환경 구성
 - [ ] Native build와 test step 추가
 - [ ] WASM build step 추가
 - [ ] npm lockfile install과 Vite build step 추가
@@ -326,9 +338,10 @@ concurrency:
 
 - [ ] Main-only Pages artifact upload 구성
 - [ ] `github-pages` environment를 사용하는 deploy job 추가
+- [ ] `actions/configure-pages`로 Pages site 구성 (deploy job, 첫 실행 시 enablement)
 - [ ] `pages: write`와 `id-token: write`를 deploy job으로 제한
 - [ ] Deployment concurrency 구성
-- [ ] Repository Pages source를 GitHub Actions로 설정
+- [ ] Repository Pages source가 GitHub Actions인지 확인
 
 ### 5. Verify production
 

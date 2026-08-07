@@ -1,17 +1,25 @@
+#include <cstdint>
+
 #include "app/Application.hpp"
 
+namespace {
+
+constexpr std::uint32_t kSmokeWidth = 256;
+constexpr std::uint32_t kSmokeHeight = 256;
+
+}  // namespace
+
 /**
- * Initializes the engine runtime as a build and startup smoke check.
+ * Initializes the engine and renders one frame as a native smoke check.
  *
- * @return zero when ThorVG initializes successfully; otherwise one.
+ * @return zero when initialization and rendering succeed; otherwise one.
  */
 int main()
 {
-    if (!rubiks::app::initialize()) return 1;
+    if (!rubiks::app::initialize(kSmokeWidth, kSmokeHeight)) return 1;
 
-#ifndef __EMSCRIPTEN__
+    const bool rendered = rubiks::app::render();
     rubiks::app::shutdown();
-#endif
 
-    return 0;
+    return rendered ? 0 : 1;
 }

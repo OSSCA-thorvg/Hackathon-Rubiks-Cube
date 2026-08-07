@@ -24,10 +24,24 @@ dist-ssr
 *.sw?
 
 
+# Meson build directories
 build*/
 subprojects/.wraplock
-.DS_Store
 
+# Meson wrap downloads; the .wrap files themselves stay tracked
+subprojects/packagecache/
+subprojects/Catch2-*/
+
+# Generated WASM artifacts synchronized by build_wasm.sh;
+# the hand-maintained declaration file stays tracked.
+web/src/wasm/generated/*
+!web/src/wasm/generated/thorvg-rubiks.d.ts
+
+# Playwright run output
+web/test-results/
+web/playwright-report/
+web/blob-report/
+
+# etc
 .cache
-.vscode
 tmp

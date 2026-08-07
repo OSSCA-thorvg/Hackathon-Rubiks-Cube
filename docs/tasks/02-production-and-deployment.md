@@ -2,7 +2,7 @@
 
 ## Status
 
-`Proposed`
+`Completed`
 
 ## Objective
 
@@ -308,48 +308,48 @@ Workflow 레벨에 두면 서로 다른 pull request의 verify까지 같은 grou
 
 ### 1. Pin toolchains
 
-- [ ] Phase 1에서 검증한 Emscripten exact version 기록
-- [ ] Meson과 Ninja exact version을 CI requirements file에 기록
-- [ ] Node 24와 Python 3.13을 workflow에 명시
-- [ ] Local setup 문서에서 동일한 최소 toolchain 확인 방법 제공
+- [x] Phase 1에서 검증한 Emscripten exact version 기록
+- [x] Meson과 Ninja exact version을 CI requirements file에 기록
+- [x] Node 24와 Python 3.13을 workflow에 명시
+- [x] Local setup 문서에서 동일한 최소 toolchain 확인 방법 제공
 
 ### 2. Configure production build
 
-- [ ] `web/vite.config.ts` 추가
-- [ ] Development와 production/preview base path 분리
-- [ ] Production build에서 WASM asset URL이 base path를 반영하는지 확인
-- [ ] `npm --prefix web run build` 결과에서 WASM artifact 확인
-- [ ] Playwright base URL에 production base path 반영
-- [ ] e2e에 console error, page error와 JS/WASM asset 응답 검증 추가
+- [x] `web/vite.config.ts` 추가
+- [x] Development와 production/preview base path 분리
+- [x] Production build에서 WASM asset URL이 base path를 반영하는지 확인
+- [x] `npm --prefix web run build` 결과에서 WASM artifact 확인
+- [x] Playwright base URL에 production base path 반영
+- [x] e2e에 console error, page error와 JS/WASM asset 응답 검증 추가
 
 ### 3. Add continuous integration
 
-- [ ] `.github/workflows/deploy-pages.yml` 추가
-- [ ] Recursive submodule checkout 구성
-- [ ] Node, Python, Meson과 Ninja 설정
-- [ ] Official emsdk 설치와 version-aware cache 구성
-- [ ] Native build와 test step 추가
-- [ ] WASM build step 추가
-- [ ] npm lockfile install과 Vite build step 추가
-- [ ] Chromium 설치와 production browser e2e step 추가
-- [ ] Pages artifact contract 검증 step 추가
+- [x] `.github/workflows/deploy-pages.yml` 추가
+- [x] Recursive submodule checkout 구성
+- [x] Node, Python, Meson과 Ninja 설정
+- [x] Official emsdk 설치와 version-aware cache 구성
+- [x] Native build와 test step 추가
+- [x] WASM build step 추가
+- [x] npm lockfile install과 Vite build step 추가
+- [x] Chromium 설치와 production browser e2e step 추가
+- [x] Pages artifact contract 검증 step 추가
 
 ### 4. Add deployment
 
-- [ ] Main-only Pages artifact upload 구성
-- [ ] `github-pages` environment를 사용하는 deploy job 추가
-- [ ] `actions/configure-pages`로 Pages site 구성 (deploy job, 첫 실행 시 enablement)
-- [ ] `pages: write`와 `id-token: write`를 deploy job으로 제한
-- [ ] Deployment concurrency 구성
-- [ ] Repository Pages source가 GitHub Actions인지 확인
+- [x] Main-only Pages artifact upload 구성
+- [x] `github-pages` environment를 사용하는 deploy job 추가
+- [x] `actions/configure-pages`로 Pages site 구성 (deploy job, 첫 실행 시 enablement)
+- [x] `pages: write`와 `id-token: write`를 deploy job으로 제한
+- [x] Deployment concurrency 구성
+- [x] Repository Pages source가 GitHub Actions인지 확인
 
 ### 5. Verify production
 
-- [ ] Pull request에서 verify job 전체 통과
-- [ ] `main` push에서 verify 후 deploy 실행 확인
-- [ ] Deployment URL smoke verification
-- [ ] Repository subpath에서 WASM module URL 확인
-- [ ] 새 commit이 이전 deployment를 안전하게 대체하는지 확인
+- [x] Pull request에서 verify job 전체 통과
+- [x] `main` push에서 verify 후 deploy 실행 확인
+- [x] Deployment URL smoke verification
+- [x] Repository subpath에서 WASM module URL 확인
+- [x] 새 commit이 이전 deployment를 안전하게 대체하는지 확인
 
 ## Acceptance criteria
 

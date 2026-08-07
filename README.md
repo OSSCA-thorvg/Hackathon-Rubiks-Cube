@@ -10,8 +10,7 @@ ThorVG를 submodule로 포함하고 있어 `--recurse-submodules` 옵션을 사�
 git clone --recurse-submodules https://github.com/OSSCA-thorvg/Hackathon-Rubiks-Cube
 ```
 
-<!-- TODO: 배포 후 데모 링크 추가 -->
-<!-- 👉 **[Live Demo](https://<username>.github.io/thorvg-rubiks/)** -->
+👉 **[Live Demo](https://ossca-thorvg.github.io/Hackathon-Rubiks-Cube/)**
 
 ## 기술 스택
 
@@ -64,6 +63,19 @@ npm --prefix web run test:unit
 # Browser end-to-end test (build_wasm.sh 이후 실행)
 npm --prefix web run test:e2e
 ```
+
+## 배포
+
+`main`에 push하면 GitHub Actions가 native test, WASM build, browser e2e를 검증한 뒤 [GitHub Pages](https://ossca-thorvg.github.io/Hackathon-Rubiks-Cube/)에 배포합니다. Pull request는 검증만 수행합니다.
+
+CI toolchain은 저장소 파일에 고정되어 있습니다. 버전을 올릴 때 함께 수정하세요.
+
+| Toolchain | 위치 |
+| --- | --- |
+| Emscripten | `.emscripten-version` |
+| Meson, Ninja | `.github/ci-requirements.txt` |
+| Node, Python | `.github/workflows/deploy-pages.yml` |
+| ThorVG | `subprojects/thorvg` submodule commit |
 
 ## 설계 문서
 

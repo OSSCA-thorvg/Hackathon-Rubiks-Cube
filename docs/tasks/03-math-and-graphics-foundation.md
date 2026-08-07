@@ -2,7 +2,7 @@
 
 ## Status
 
-`Proposed`
+`Completed`
 
 ## Objective
 
@@ -15,11 +15,13 @@ Cube faces (world space)
 World-space quads
     ↓ Model transform
     ↓ View transform
-    ↓ Projection
-Screen-space quads
+View-space quads
+    ↓ Projection (+ near guard)
+NDC quads + depth key
     ↓ Back-face culling
     ↓ Depth sort
-RenderScene (2D)
+    ↓ Viewport transform
+RenderScene (2D, screen space)
     ↓
 ThorVGSoftwareRenderer
     ↓
@@ -135,27 +137,34 @@ DESIGN.md의 스케치대로 pass 적용을 `operator|`로 합성해, pipeline �
 auto scene = build_scene()
     | transform(model)
     | view(camera)
-    | project(camera, viewport)
+    | project(camera)
     | cull()
-    | depth_sort();
+    | depth_sort()
+    | viewport(width, height);
 ```
 
 `operator|`는 왼쪽 중간 표현에 오른쪽 pass를 적용하는 얇은 문법이며 pass 자체에 로직을 더하지 않습니다.
 각 pass는 pipeline 밖에서도 직접 호출할 수 있어야 하고, unit test는 합성이 아니라 pass 단위로 검증합니다.
 
 ```text
-build_scene()             → world-space face 목록 (기하 + 색)
-transform(model)          → world space (Phase 3에서는 identity Transform)
-view(camera)              → view space
-project(camera, viewport) → screen space (+ near guard)
-cull()                    → front face만 유지
-depth_sort()              → back-to-front 정렬
+build_scene()            → world-space face 목록 (기하 + 색)
+transform(model)         → world space (Phase 3에서는 identity Transform)
+view(camera)             → view space
+project(camera)          → NDC + depth key (+ near guard)
+cull()                   → front face만 유지
+depth_sort()             → back-to-front 정렬
+viewport(width, height)  → screen-space RenderScene
 ```
+
+Projection과 viewport 변환은 한 pass로 합치지 않고 분리합니다.
+Culling은 아래와 같이 Y flip 이전의 NDC에서 판정하므로, viewport 변환이 project 안에 들어가면 cull이 이미 뒤집힌 좌표를 받게 됩니다.
+각 중간 표현(`WorldScene`, `ViewScene`, `ClipScene`, `RenderScene`)은 서로 다른 타입이므로 pass를 잘못된 space에 적용하면 그림이 조용히 틀어지는 대신 compile error가 납니다.
 
 - `build_scene()`은 이 phase에서는 edge 길이 2, 원점 중심의 axis-aligned cube 6면을 하드코딩으로 생성합니다. Cube는 "6개 면을 독립적인 색으로 칠할 수 있는 정육면체" 모델이며, Phase 4는 같은 단위를 1×1×1 cubie로 바꿔 3×3×3 = 27개(중앙 1개는 보이지 않으므로 생략하면 26개)를 배치하고 `CubeState`가 면 색을 결정하는 자리입니다.
 - Model transform은 identity `Transform`을 pipeline에 실제로 통과시킵니다. Quaternion → `Mat4` 경로가 real path에서 한 번은 실행되게 하기 위함입니다.
 - Depth sort의 key는 face 4개 vertex의 view-space z 평균입니다. View space에서 camera는 `−Z`를 바라보므로 z가 작을수록(더 음수) 멀고, 오름차순 정렬이 back-to-front입니다. 같은 key는 입력 face index로 tie-break하는 stable sort로 결정성을 보장합니다.
 - 단일 convex cube는 culling만으로 가려짐이 해결되지만, Phase 5에서 layer가 회전하는 동안 전체 형상이 non-convex가 되므로 depth sort를 이 phase에서 미리 구축하고 pass 단위로 검증합니다.
+- 고정 camera에서 보이는 세 면의 중심은 eye가 놓인 `(1, 1, 1)` 대각선에 대해 대칭이라 depth key가 서로 같습니다. 즉 이 phase의 cube로는 정렬 순서를 검증할 수 없으므로, 순서와 tie-break는 합성 scene을 쓰는 별도 pass test가 담당합니다.
 
 ### Back-face culling
 
@@ -226,7 +235,8 @@ red   (+X) : (0.69, 0.61)
 - Sample pixel은 `(round(fx * (width - 1)), round(fy * (height - 1)))`로 계산합니다.
 - 세 sample pixel은 해당 면 색과 R, G, B, A channel별 exact match여야 합니다. 면은 단색이고 anti-aliasing은 edge에만 나타나며 sample은 face 내부 깊숙이 있습니다.
 - 네 모서리 pixel은 배경색과 exact match여야 합니다. 고정 camera에서 cube silhouette은 모서리에 닿지 않습니다.
-- Pixel 검증은 정사각형 aspect에서만 정의합니다. Sample 비율이 aspect의 함수이기 때문입니다. Native test는 정사각형 크기를 사용하고, e2e는 정사각형 viewport를 고정합니다.
+- Pixel 검증은 정사각형 aspect에서만 정의합니다. Sample 비율이 aspect의 함수이기 때문입니다. Native test는 정사각형 크기를 사용하고, e2e는 canvas가 정사각형인지(`aspect-ratio: 1 / 1` stylesheet 규칙의 결과) 먼저 단언한 뒤 sample을 읽습니다.
+- 정사각형이 아닌 target에서는 sample 대신 render 성공과 모서리 배경색만 검증합니다.
 - Resize 후에는 다른 정사각형 크기로 sample과 모서리 검증을 반복합니다.
 - Camera 상수, cube 기하 또는 면 색을 바꾸면 이 contract를 같은 변경에서 함께 갱신해야 합니다.
 
@@ -234,51 +244,54 @@ red   (+X) : (0.69, 0.61)
 
 ### 1. Math module
 
-- [ ] linalg.h를 LICENSE와 함께 `engine/third_party/linalg/`에 vendoring
-- [ ] `rubiks::math` alias 계층 정의 (linalg 직접 include 금지 규칙 포함)
-- [ ] `Quaternion` axis-angle 생성과 `Mat4` 변환 wrapper 구현
-- [ ] `look_at` 직접 구현
-- [ ] `perspective` 직접 구현
-- [ ] `Transform` → `Mat4` 합성 구현
-- [ ] Math를 ThorVG 비의존 Meson target으로 분리
+- [x] linalg.h를 LICENSE와 함께 `engine/third_party/linalg/`에 vendoring
+- [x] `rubiks::math` alias 계층 정의 (linalg 직접 include 금지 규칙 포함)
+- [x] `Quaternion` axis-angle 생성과 `Mat4` 변환 wrapper 구현
+- [x] `look_at` 직접 구현
+- [x] `perspective` 직접 구현
+- [x] `Transform` → `Mat4` 합성 구현
+- [x] Math를 ThorVG 비의존 Meson target으로 분리
 
 ### 2. Graphics pipeline
 
-- [ ] `Color`, `RenderFace`, `RenderScene` 정의
-- [ ] `Camera` 구현 및 Phase 3 고정 상수 정의
-- [ ] `build_scene()` cube 6면 생성 구현
-- [ ] Model, view, projection pass 구현
-- [ ] Near-plane guard 구현
-- [ ] NDC signed area back-face culling 구현
-- [ ] View-space z 평균 key와 stable tie-break의 depth sort 구현
-- [ ] Pass 합성 `operator|` 구현
-- [ ] Graphics를 ThorVG 비의존 Meson target으로 분리
+- [x] `Color`, `RenderFace`, `RenderScene` 정의
+- [x] `Camera` 구현 및 Phase 3 고정 상수 정의
+- [x] `build_scene()` cube 6면 생성 구현
+- [x] Model, view, projection pass 구현
+- [x] Near-plane guard 구현
+- [x] NDC signed area back-face culling 구현
+- [x] View-space z 평균 key와 stable tie-break의 depth sort 구현
+- [x] Viewport pass로 NDC → screen-space 변환 구현
+- [x] Pass 합성 `operator|` 구현
+- [x] Graphics를 ThorVG 비의존 Meson target으로 분리
 
 ### 3. Renderer and application integration
 
-- [ ] `Renderer` interface를 `render(const RenderScene&)`로 변경
-- [ ] `ThorVGSoftwareRenderer`의 per-frame scene 재구성 구현
-- [ ] `layout_scene()`과 고정 사각형 제거
-- [ ] Resize에서 scene 재구성 제거 및 semantics 문구 갱신
-- [ ] `Application`에 `Camera` 소유와 pipeline 실행 연결
-- [ ] Resize 성공 시 camera aspect 갱신
+- [x] `Renderer` interface를 `render(const RenderScene&)`로 변경
+- [x] `ThorVGSoftwareRenderer`의 per-frame scene 재구성 구현
+- [x] `layout_scene()`과 고정 사각형 제거
+- [x] Resize에서 scene 재구성 제거 및 semantics 문구 갱신
+- [x] `Application`에 `Camera` 소유와 pipeline 실행 연결
+- [x] Resize 성공 시 camera aspect 갱신
 
 ### 4. Verification
 
-- [ ] Alias 계층 규약(column vector 곱 방향, column-major 저장) 고정 test 추가
-- [ ] `look_at`, `perspective` 손계산 기대값 test 추가
-- [ ] Quaternion axis-angle 회전과 matrix 회전 일치 test 추가
-- [ ] `Transform` 합성 순서 test 추가
-- [ ] 알려진 점의 projection 결과 test 추가
-- [ ] 두 winding의 culling 판정과 edge-on face 제거 test 추가
-- [ ] Near-plane guard test 추가
-- [ ] Depth sort 순서와 tie-break 결정성 test 추가
-- [ ] Cube 전체 pipeline test 추가 (visible face 3개, 색, back-to-front 순서, centroid projection이 contract 비율과 tolerance 내 일치)
-- [ ] Native rendered scene contract v2 test로 기존 contract test 대체
-- [ ] Resize failure test를 새 semantics에 맞게 갱신
-- [ ] Browser e2e를 정사각형 viewport와 contract v2 sample로 갱신
-- [ ] Float 비교는 Catch2 `WithinAbs`/`WithinRel`을 사용 (exact 비교는 pixel channel에만 사용)
-- [ ] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
+- [x] Alias 계층 규약(column vector 곱 방향, column-major 저장) 고정 test 추가
+- [x] `look_at`, `perspective` 손계산 기대값 test 추가
+- [x] Quaternion axis-angle 회전과 matrix 회전 일치 test 추가
+- [x] `Transform` 합성 순서 test 추가
+- [x] 알려진 점의 projection 결과 test 추가
+- [x] 두 winding의 culling 판정과 edge-on face 제거 test 추가
+- [x] Near-plane guard test 추가
+- [x] Depth sort 순서와 tie-break 결정성 test 추가 (합성 scene 사용)
+- [x] Viewport 변환의 Y flip test 추가
+- [x] Cube 전체 pipeline test 추가: visible face 3개와 색, contract sample이 각각 해당 face 다각형 내부에 있고 다른 face에는 없음, silhouette이 모서리에 닿지 않음
+- [x] Model transform이 pipeline 출력에 실제로 반영되는 test 추가
+- [x] Native rendered scene contract v2 test로 기존 contract test 대체
+- [x] Resize failure test를 새 semantics에 맞게 갱신
+- [x] Browser e2e를 정사각형 단언과 contract v2 sample로 갱신
+- [x] Float 비교는 Catch2 `Approx`의 `margin`을 사용 (exact 비교는 pixel channel에만 사용)
+- [x] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
 
 ## Acceptance criteria
 

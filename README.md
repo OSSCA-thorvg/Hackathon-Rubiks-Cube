@@ -25,12 +25,19 @@ git clone --recurse-submodules https://github.com/OSSCA-thorvg/Hackathon-Rubiks-
 
 ```text
 thorvg-rubiks/
-├── web/          # Vite + TypeScript + HTML/CSS (Browser application)
-├── engine/       # C++ / WASM engine
-├── tests/        # Native unit tests
-├── subprojects/  # external C++ dependencies (ThorVG)
-└── cross/        # Emscripten cross configuration
+├── web/                    # Vite + TypeScript + HTML/CSS (Browser application)
+├── engine/
+│   ├── src/math/           # vector, matrix, quaternion, projection
+│   ├── src/graphics/       # camera, pipeline passes, RenderScene
+│   ├── src/render/         # ThorVG rendering backend
+│   ├── src/app/            # engine lifecycle
+│   └── third_party/        # vendored headers (linalg.h)
+├── tests/                  # Native unit tests
+├── subprojects/            # external C++ dependencies (ThorVG)
+└── cross/                  # Emscripten cross configuration
 ```
+
+`math`와 `graphics`는 ThorVG를 link하지 않는 별도 build target입니다. Graphics pipeline이 rendering backend에 의존하지 못하도록 빌드 구조로 막아 둔 것이라, 해당 경계를 바꿀 때는 `engine/src/meson.build`를 함께 확인하세요.
 
 ## 빌드 및 실행
 

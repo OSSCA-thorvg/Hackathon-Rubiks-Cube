@@ -35,7 +35,7 @@ WASM loading, TypeScript boundary, canvas와 pixel buffer 연결, resize 및 ini
 Phase 1의 vertical slice를 기준으로 재현 가능한 production build와 GitHub Pages 배포 흐름을 구성합니다.
 GitHub Actions에서 submodule checkout, native test, WASM build, Vite build와 배포를 자동화하여 이후 phase의 변경을 production 환경에서 지속적으로 검증할 수 있게 합니다.
 
-## [ ] Phase 3: [Math and graphics foundation](./03-math-and-graphics-foundation.md)
+## [x] Phase 3: [Math and graphics foundation](./03-math-and-graphics-foundation.md)
 
 ThorVG와 독립적인 vector, matrix, quaternion, transform, camera와 graphics pipeline을 구축합니다.
 Model, view, projection, back-face culling, depth sorting을 거쳐 하나의 3D cube를 2D render scene으로 변환하고 ThorVG로 렌더링합니다.

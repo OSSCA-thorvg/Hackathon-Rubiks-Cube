@@ -1,16 +1,24 @@
+engine_inc = include_directories('.')
+
+# is_system keeps the vendored header's warnings out of our -Wall build.
+linalg_inc = include_directories('../third_party/linalg', is_system: true)
+
+subdir('math')
+subdir('graphics')
+
+# ThorVG enters here and nowhere earlier: app/ and render/ are the only parts
+# of the engine allowed to know about the rendering backend.
 application_lib = static_library(
   'rubiks-engine',
   files(
     'app/Application.cpp',
     'render/ThorVGSoftwareRenderer.cpp',
   ),
-  dependencies: thorvg_dep,
-  include_directories: include_directories('.'),
+  dependencies: [graphics_dep, thorvg_dep],
 )
 
 application_dep = declare_dependency(
-  dependencies: thorvg_dep,
-  include_directories: include_directories('.'),
+  dependencies: [graphics_dep, thorvg_dep],
   link_with: application_lib,
 )
 

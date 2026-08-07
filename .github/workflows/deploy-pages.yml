@@ -1,0 +1,199 @@
+# Verifies the whole Web-WASM-ThorVG path on a clean runner and deploys
+# the verified web/dist to GitHub Pages. Pull requests run verify only;
+# main pushes and manual dispatches from main also deploy and then smoke
+# test the deployed URL. See docs/tasks/02-production-and-deployment.md.
+name: Deploy to GitHub Pages
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Pull request code never runs with deploy permissions; only the deploy
+# job below asks for more than read access.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout with submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Install Meson and Ninja
+        run: python -m pip install --requirement .github/ci-requirements.txt
+
+      - name: Read the pinned Emscripten version
+        id: emsdk-version
+        run: echo "version=$(cat .emscripten-version)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the emsdk cache
+        id: emsdk-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/emsdk
+          key: emsdk-${{ runner.os }}-${{ steps.emsdk-version.outputs.version }}
+
+      - name: Install emsdk
+        if: steps.emsdk-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/emscripten-core/emsdk.git "$HOME/emsdk"
+          "$HOME/emsdk/emsdk" install "${{ steps.emsdk-version.outputs.version }}"
+
+      - name: Activate emsdk
+        run: |
+          "$HOME/emsdk/emsdk" activate "${{ steps.emsdk-version.outputs.version }}"
+
+      # Native failures stop the workflow before the more expensive WASM
+      # and browser stages run.
+      - name: Native build and tests
+        run: |
+          meson setup build/native
+          meson compile -C build/native
+          meson test -C build/native --print-errorlogs
+
+      - name: WASM build
+        run: EMSDK="$HOME/emsdk" ./build_wasm.sh
+
+      - name: Verify WASM artifacts
+        run: |
+          test -s web/src/wasm/generated/thorvg-rubiks.js
+          test -s web/src/wasm/generated/thorvg-rubiks.wasm
+
+      - name: Install web dependencies
+        run: npm ci --prefix web
+
+      - name: TypeScript unit tests
+        run: npm --prefix web run test:unit
+
+      - name: Vite production build
+        run: npm --prefix web run build
+
+      - name: Install Playwright Chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser end-to-end tests
+        run: npm --prefix web run test:e2e
+
+      - name: Verify the Pages artifact contract
+        run: |
+          set -euo pipefail
+          dist=web/dist
+
+          test -f "$dist/index.html"
+
+          wasm_count=$(find "$dist/assets" -type f -name 'thorvg-rubiks-*.wasm' | wc -l)
+          js_count=$(find "$dist/assets" -type f -name 'thorvg-rubiks-*.js' | wc -l)
+          test "$wasm_count" -eq 1
+          test "$js_count" -eq 1
+          test -s "$dist"/assets/thorvg-rubiks-*.wasm
+          test -s "$dist"/assets/thorvg-rubiks-*.js
+
+          grep -q '"/Hackathon-Rubiks-Cube/assets/' "$dist/index.html"
+
+          if find "$dist" -type l | grep -q .; then
+            echo 'symbolic links found inside the artifact' >&2
+            exit 1
+          fi
+          for forbidden in node_modules src build; do
+            if find "$dist" -name "$forbidden" | grep -q .; then
+              echo "unexpected $forbidden inside the artifact" >&2
+              exit 1
+            fi
+          done
+
+      - name: Upload the Pages artifact
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: web/dist
+
+  deploy:
+    name: Deploy
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # Job-level on purpose: a workflow-level group would also serialize
+    # unrelated pull request verifies and let them cancel each other.
+    concurrency:
+      group: github-pages
+      cancel-in-progress: true
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+        with:
+          enablement: true
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
+
+  smoke:
+    name: Smoke verify the deployment
+    needs: deploy
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        run: npm ci --prefix web
+
+      - name: Install Playwright Chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      # Pages propagation can lag the deployment; retry a limited number
+      # of times instead of failing on the first fetch or looping forever.
+      - name: Wait for the deployment to respond
+        run: |
+          url='${{ needs.deploy.outputs.page_url }}'
+          for attempt in $(seq 1 10); do
+            status=$(curl -s -o /dev/null -w '%{http_code}' "$url") || status=000
+            if [ "$status" = '200' ]; then
+              exit 0
+            fi
+            echo "attempt $attempt: HTTP $status"
+            sleep 15
+          done
+          echo 'deployment did not become reachable' >&2
+          exit 1
+
+      - name: Browser end-to-end tests against the deployment
+        env:
+          SMOKE_BASE_URL: ${{ needs.deploy.outputs.page_url }}
+        run: npm --prefix web run test:e2e

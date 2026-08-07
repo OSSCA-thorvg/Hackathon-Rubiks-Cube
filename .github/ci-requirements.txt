@@ -1,0 +1,4 @@
+# Build tools pinned for CI; keep in sync with the locally verified
+# versions recorded in docs/tasks/02-production-and-deployment.md.
+meson==1.11.2
+ninja==1.13.0

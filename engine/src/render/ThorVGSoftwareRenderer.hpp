@@ -5,6 +5,7 @@
 
 #include <thorvg.h>
 
+#include "graphics/RenderScene.hpp"
 #include "render/Renderer.hpp"
 
 namespace rubiks::render {
@@ -16,6 +17,9 @@ namespace rubiks::render {
  * and stays valid from a successful create() or resize() until the next
  * resize() or destruction. Callers borrow it read-only through
  * pixel_buffer() and pixel_byte_length().
+ *
+ * The canvas contents are rebuilt from the RenderScene on every frame, so
+ * the renderer holds no scene state between frames.
  */
 class ThorVGSoftwareRenderer : public Renderer {
 public:
@@ -48,12 +52,14 @@ public:
      * Follows the resize failure semantics of the Phase 1 contract: the
      * previous target survives validation and allocation failures, a failed
      * target swap is rolled back, and a failed rollback leaves the renderer
-     * unusable until it is destroyed and recreated.
+     * unusable until it is destroyed and recreated. A successful resize does
+     * not touch scene state, because the scene arrives with each frame.
      */
     [[nodiscard]] bool resize(std::uint32_t width,
                               std::uint32_t height) noexcept override;
 
-    [[nodiscard]] bool render() noexcept override;
+    [[nodiscard]] bool render(
+        const graphics::RenderScene& scene) noexcept override;
 
     [[nodiscard]] std::uintptr_t pixel_buffer() const noexcept override;
 
@@ -85,11 +91,11 @@ protected:
                                           std::uint32_t height) noexcept;
 
 private:
-    [[nodiscard]] bool layout_scene() noexcept;
+    /** Replaces the canvas contents with the background and the scene faces. */
+    [[nodiscard]] bool rebuild_canvas(
+        const graphics::RenderScene& scene) noexcept;
 
     tvg::SwCanvas* canvas_ = nullptr;
-    tvg::Shape* background_ = nullptr;  // owned by canvas_
-    tvg::Shape* rectangle_ = nullptr;   // owned by canvas_
     std::uint32_t* buffer_ = nullptr;
     std::uint32_t width_ = 0;
     std::uint32_t height_ = 0;

@@ -1,8 +1,19 @@
 import { expect, test, type Page } from '@playwright/test';
 
-// Rendered scene contract colors as RGBA tuples.
+// Rendered scene contract v2 as RGBA tuples: the fixed camera shows three
+// differently colored cube faces over a solid background, so a winding,
+// culling, or channel-order regression shows up as the wrong color here.
 const BACKGROUND = [32, 32, 32, 255];
-const RECTANGLE = [230, 57, 70, 255];
+const UP = [255, 255, 255, 255]; // +Y white
+const FRONT = [0, 155, 72, 255]; // +Z green
+const RIGHT = [183, 18, 52, 255]; // +X red
+
+// Sample points as fractions of the drawing buffer, derived from the
+// projected centroid of each visible face. Only valid for a square buffer,
+// which the stylesheet guarantees with aspect-ratio: 1 / 1.
+const UP_SAMPLE = [0.5, 0.29] as const;
+const FRONT_SAMPLE = [0.31, 0.61] as const;
+const RIGHT_SAMPLE = [0.69, 0.61] as const;
 
 type CanvasProbe = {
   readonly width: number;
@@ -10,41 +21,59 @@ type CanvasProbe = {
   readonly cssWidth: number;
   readonly cssHeight: number;
   readonly devicePixelRatio: number;
-  readonly center: number[];
+  readonly up: number[];
+  readonly front: number[];
+  readonly right: number[];
   readonly corners: number[][];
 };
 
 /** Reads the drawing buffer size and the contract pixels from the page. */
 async function probeCanvas(page: Page): Promise<CanvasProbe> {
-  return page.evaluate(() => {
-    const canvas = document.querySelector('canvas');
-    if (!canvas) throw new Error('Canvas element is missing.');
+  return page.evaluate(
+    ([upSample, frontSample, rightSample]) => {
+      const canvas = document.querySelector('canvas');
+      if (!canvas) throw new Error('Canvas element is missing.');
 
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('2D context is missing.');
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('2D context is missing.');
 
-    const read = (x: number, y: number): number[] =>
-      Array.from(context.getImageData(x, y, 1, 1).data);
+      const read = (x: number, y: number): number[] =>
+        Array.from(context.getImageData(x, y, 1, 1).data);
 
-    return {
-      width: canvas.width,
-      height: canvas.height,
-      cssWidth: canvas.clientWidth,
-      cssHeight: canvas.clientHeight,
-      devicePixelRatio: window.devicePixelRatio,
-      center: read(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2)),
-      corners: [
-        read(0, 0),
-        read(canvas.width - 1, 0),
-        read(0, canvas.height - 1),
-        read(canvas.width - 1, canvas.height - 1),
-      ],
-    };
-  });
+      const sample = ([fx, fy]: readonly number[]): number[] =>
+        read(
+          Math.round(fx * (canvas.width - 1)),
+          Math.round(fy * (canvas.height - 1)),
+        );
+
+      return {
+        width: canvas.width,
+        height: canvas.height,
+        cssWidth: canvas.clientWidth,
+        cssHeight: canvas.clientHeight,
+        devicePixelRatio: window.devicePixelRatio,
+        up: sample(upSample),
+        front: sample(frontSample),
+        right: sample(rightSample),
+        corners: [
+          read(0, 0),
+          read(canvas.width - 1, 0),
+          read(0, canvas.height - 1),
+          read(canvas.width - 1, canvas.height - 1),
+        ],
+      };
+    },
+    [UP_SAMPLE, FRONT_SAMPLE, RIGHT_SAMPLE],
+  );
 }
 
 function assertSceneContract(probe: CanvasProbe): void {
-  expect(probe.center).toEqual(RECTANGLE);
+  expect(probe.width, 'the contract is defined for a square buffer').toBe(
+    probe.height,
+  );
+  expect(probe.up).toEqual(UP);
+  expect(probe.front).toEqual(FRONT);
+  expect(probe.right).toEqual(RIGHT);
   for (const corner of probe.corners) {
     expect(corner).toEqual(BACKGROUND);
   }

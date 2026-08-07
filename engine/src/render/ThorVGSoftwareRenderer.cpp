@@ -9,9 +9,10 @@ namespace {
 
 constexpr std::uint32_t kBytesPerPixel = 4;
 
-// Rendered scene contract colors; native and browser tests assert them.
+// Clear color behind the scene; native and browser tests assert it as part
+// of the rendered scene contract. Face colors belong to the scene, but the
+// background is a property of the target rather than of the geometry.
 constexpr std::uint8_t kBackgroundColor[4] = {32, 32, 32, 255};
-constexpr std::uint8_t kRectangleColor[4] = {230, 57, 70, 255};
 
 tvg::Shape* add_shape(tvg::SwCanvas& canvas) noexcept
 {
@@ -66,14 +67,6 @@ bool ThorVGSoftwareRenderer::init(std::uint32_t width,
     width_ = width;
     height_ = height;
 
-    background_ = add_shape(*canvas_);
-    if (!background_) return false;
-
-    rectangle_ = add_shape(*canvas_);
-    if (!rectangle_) return false;
-
-    if (!layout_scene()) return false;
-
     usable_ = true;
     return true;
 }
@@ -121,17 +114,15 @@ bool ThorVGSoftwareRenderer::resize(std::uint32_t width,
     buffer_ = next;
     width_ = width;
     height_ = height;
-
-    if (!layout_scene()) {
-        usable_ = false;
-        return false;
-    }
     return true;
 }
 
-bool ThorVGSoftwareRenderer::render() noexcept
+bool ThorVGSoftwareRenderer::render(
+    const graphics::RenderScene& scene) noexcept
 {
     if (!usable_) return false;
+
+    if (!rebuild_canvas(scene)) return false;
 
     if (canvas_->update() != tvg::Result::Success) return false;
     if (canvas_->draw(true) != tvg::Result::Success) return false;
@@ -159,32 +150,47 @@ bool ThorVGSoftwareRenderer::set_target(std::uint32_t* buffer,
                            tvg::ColorSpace::ABGR8888S) == tvg::Result::Success;
 }
 
-bool ThorVGSoftwareRenderer::layout_scene() noexcept
+bool ThorVGSoftwareRenderer::rebuild_canvas(
+    const graphics::RenderScene& scene) noexcept
 {
-    const auto width = static_cast<float>(width_);
-    const auto height = static_cast<float>(height_);
+    // Face count and geometry change every frame, so the canvas is rebuilt
+    // rather than diffed. At this scene size the cost is not measurable, and
+    // reusing shapes would be an optimization with no correctness benefit.
+    if (canvas_->remove() != tvg::Result::Success) return false;
 
-    if (background_->reset() != tvg::Result::Success) return false;
-    if (background_->appendRect(0.0f, 0.0f, width, height) !=
+    auto* background = add_shape(*canvas_);
+    if (!background) return false;
+    if (background->appendRect(0.0f, 0.0f, static_cast<float>(width_),
+                               static_cast<float>(height_)) !=
         tvg::Result::Success) {
         return false;
     }
-    if (background_->fill(kBackgroundColor[0], kBackgroundColor[1],
-                          kBackgroundColor[2], kBackgroundColor[3]) !=
+    if (background->fill(kBackgroundColor[0], kBackgroundColor[1],
+                         kBackgroundColor[2], kBackgroundColor[3]) !=
         tvg::Result::Success) {
         return false;
     }
 
-    // Centered rectangle whose sides are 50% of the drawing buffer.
-    if (rectangle_->reset() != tvg::Result::Success) return false;
-    if (rectangle_->appendRect(width * 0.25f, height * 0.25f, width * 0.5f,
-                               height * 0.5f) != tvg::Result::Success) {
-        return false;
-    }
-    if (rectangle_->fill(kRectangleColor[0], kRectangleColor[1],
-                         kRectangleColor[2], kRectangleColor[3]) !=
-        tvg::Result::Success) {
-        return false;
+    for (const auto& face : scene.faces) {
+        auto* shape = add_shape(*canvas_);
+        if (!shape) return false;
+
+        if (shape->moveTo(face.points[0].x, face.points[0].y) !=
+            tvg::Result::Success) {
+            return false;
+        }
+        for (std::size_t i = 1; i < face.points.size(); ++i) {
+            if (shape->lineTo(face.points[i].x, face.points[i].y) !=
+                tvg::Result::Success) {
+                return false;
+            }
+        }
+        if (shape->close() != tvg::Result::Success) return false;
+
+        if (shape->fill(face.color.r, face.color.g, face.color.b,
+                        face.color.a) != tvg::Result::Success) {
+            return false;
+        }
     }
 
     return true;

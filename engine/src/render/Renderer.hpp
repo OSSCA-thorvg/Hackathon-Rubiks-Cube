@@ -2,13 +2,16 @@
 
 #include <cstdint>
 
+#include "graphics/RenderScene.hpp"
+
 namespace rubiks::render {
 
 /**
  * Rendering boundary owned by the application.
  *
  * Implementations own their render target. The application never observes
- * target allocation, pointers, or pixel formats through this interface.
+ * target allocation, pointers, or pixel formats through this interface, and
+ * hands over a finished 2D RenderScene rather than anything 3D.
  */
 class Renderer {
 public:
@@ -25,9 +28,13 @@ public:
     /**
      * Renders one frame into the render target.
      *
+     * Faces are drawn in the order given, which the pipeline has already
+     * sorted back to front.
+     *
      * @return true when the frame fully reached the target.
      */
-    [[nodiscard]] virtual bool render() noexcept = 0;
+    [[nodiscard]] virtual bool render(
+        const graphics::RenderScene& scene) noexcept = 0;
 
     /**
      * Returns the address of the CPU-visible pixel buffer.

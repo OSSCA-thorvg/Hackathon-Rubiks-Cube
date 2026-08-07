@@ -6,7 +6,13 @@
 #include <catch2/catch_test_macros.hpp>
 #include <thorvg.h>
 
+#include "graphics/RenderScene.hpp"
+
 namespace {
+
+// The scene is an input to every frame now, so these cases can use an empty
+// one: they are about buffer and target lifetime, not about geometry.
+const rubiks::graphics::RenderScene kEmptyScene;
 
 /** Owns the ThorVG runtime for the lifetime of one test case. */
 struct TvgRuntime {
@@ -65,7 +71,7 @@ std::unique_ptr<FaultInjectingRenderer> make_renderer(std::uint32_t width,
 {
     auto renderer = std::make_unique<FaultInjectingRenderer>();
     REQUIRE(renderer->init(width, height));
-    REQUIRE(renderer->render());
+    REQUIRE(renderer->render(kEmptyScene));
     return renderer;
 }
 
@@ -83,12 +89,12 @@ TEST_CASE("allocation failure preserves the previous buffer and target")
 
     REQUIRE(renderer->pixel_buffer() == pointer);
     REQUIRE(renderer->pixel_byte_length() == length);
-    REQUIRE(renderer->render());
+    REQUIRE(renderer->render(kEmptyScene));
 
     // The next resize allocates normally again and succeeds.
     REQUIRE(renderer->resize(64, 64));
     REQUIRE(renderer->pixel_byte_length() == 64u * 64u * 4u);
-    REQUIRE(renderer->render());
+    REQUIRE(renderer->render(kEmptyScene));
 }
 
 TEST_CASE("failed target swap rolls back to the previous target")
@@ -106,11 +112,11 @@ TEST_CASE("failed target swap rolls back to the previous target")
 
     REQUIRE(renderer->pixel_buffer() == pointer);
     REQUIRE(renderer->pixel_byte_length() == length);
-    REQUIRE(renderer->render());
+    REQUIRE(renderer->render(kEmptyScene));
 
     renderer->only_allowed_target = nullptr;
     REQUIRE(renderer->resize(64, 64));
-    REQUIRE(renderer->render());
+    REQUIRE(renderer->render(kEmptyScene));
 }
 
 TEST_CASE("failed rollback leaves the renderer unusable until recreation")
@@ -123,7 +129,7 @@ TEST_CASE("failed rollback leaves the renderer unusable until recreation")
 
     REQUIRE(renderer->pixel_buffer() == 0);
     REQUIRE(renderer->pixel_byte_length() == 0);
-    REQUIRE(!renderer->render());
+    REQUIRE(!renderer->render(kEmptyScene));
     renderer->fail_all_targets = false;
     REQUIRE(!renderer->resize(32, 32));
 

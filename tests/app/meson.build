@@ -1,7 +1,21 @@
 application_test = executable(
   'application-test',
   files('ApplicationTest.cpp'),
-  dependencies: application_dep,
+  dependencies: [application_dep, catch2_dep],
+)
+
+render_contract_test = executable(
+  'render-contract-test',
+  files('RenderContractTest.cpp'),
+  dependencies: [application_dep, catch2_dep],
+)
+
+input_validation_test = executable(
+  'input-validation-test',
+  files('InputValidationTest.cpp'),
+  dependencies: [application_dep, catch2_dep],
 )
 
 test('application lifecycle', application_test)
+test('rendered scene contract', render_contract_test)
+test('input validation', input_validation_test)

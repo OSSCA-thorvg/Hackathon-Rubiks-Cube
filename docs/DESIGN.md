@@ -551,6 +551,12 @@ Native Build
 WASM Build
 ```
 
+Native unit test는 Catch2를 사용합니다.
+`assert()` 기반 검증은 `NDEBUG` 빌드에서 제거되어 빈 테스트가 통과하므로 사용하지 않습니다.
+
+TypeScript boundary는 fake Emscripten module을 주입하는 Vitest unit test로 검증하고,
+browser end-to-end test는 실제 WASM 연결과 pixel 계약 검증만 담당합니다.
+
 Native에서 최대한 많이 테스트합니다. 아래는 browser가 없어도 테스트할 수 있습니다.
 
 ```text

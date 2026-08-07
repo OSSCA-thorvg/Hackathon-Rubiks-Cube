@@ -35,6 +35,12 @@ thorvg-rubiks/
 
 ## 빌드 및 실행
 
+WASM 빌드는 Emscripten SDK를 필요로 합니다. `build_wasm.sh`는 `EMSDK` 환경 변수로 SDK를 찾으므로 먼저 emsdk 환경을 활성화합니다.
+
+```bash
+source /path/to/emsdk/emsdk_env.sh
+```
+
 ```bash
 # WASM engine 빌드
 ./build_wasm.sh
@@ -45,10 +51,18 @@ npm install
 npm run dev
 ```
 
-Native unit test:
+테스트:
 
 ```bash
-meson test -C build/native
+# Native unit test
+meson setup build/native
+meson test -C build/native --print-errorlogs
+
+# TypeScript boundary unit test
+npm --prefix web run test:unit
+
+# Browser end-to-end test (build_wasm.sh 이후 실행)
+npm --prefix web run test:e2e
 ```
 
 ## 설계 문서

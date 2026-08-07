@@ -25,12 +25,12 @@
 Native와 WebAssembly에서 동일한 C++ engine을 빌드할 수 있는 프로젝트 기반을 마련합니다.
 Vite application, ThorVG submodule, Meson native build, Emscripten cross build, WASM build script와 최소 application lifecycle을 포함합니다.
 
-## [ ] Phase 1: WebAssembly vertical slice
+## [x] Phase 1: [WebAssembly vertical slice](./01-wasm-vertical-slice.md)
 
 Vite application에서 C++ engine을 초기화하고 ThorVG software renderer로 browser canvas에 간단한 도형 하나를 렌더링합니다.
 WASM loading, TypeScript boundary, canvas와 pixel buffer 연결, resize 및 initialization failure까지 하나의 end-to-end 경로로 검증합니다.
 
-## [ ] Phase 2: Production and deployment
+## [ ] Phase 2: [Production and deployment](./02-production-and-deployment.md)
 
 Phase 1의 vertical slice를 기준으로 재현 가능한 production build와 GitHub Pages 배포 흐름을 구성합니다.
 GitHub Actions에서 submodule checkout, native test, WASM build, Vite build와 배포를 자동화하여 이후 phase의 변경을 production 환경에서 지속적으로 검증할 수 있게 합니다.

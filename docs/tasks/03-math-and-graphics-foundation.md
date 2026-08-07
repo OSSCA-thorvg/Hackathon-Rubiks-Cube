@@ -30,7 +30,7 @@ Pixel buffer
 
 ## Scope
 
-- `engine/src/math/`: `Vec2`, `Vec3`, `Vec4`, `Mat4`, `Quaternion`, `Transform`
+- Vendored [linalg.h](https://github.com/sgorsten/linalg) 위의 `engine/src/math/` alias 계층과 `Transform`, `look_at`, `perspective`
 - `engine/src/graphics/`: `Camera`, `RenderScene`, pipeline pass
 - 고정 perspective camera 1개 (orbit 없음)
 - 단일 cube(6면, 면당 단색) rendering
@@ -73,15 +73,20 @@ y_screen = (1 - ndc_y) / 2 * height
 
 ### Math module
 
-`rubiks::math` namespace에 value type으로 구현하고 ThorVG를 포함한 외부 의존성을 갖지 않습니다.
+기본 vector, matrix, quaternion 산술은 직접 구현하지 않고 [linalg.h](https://github.com/sgorsten/linalg) 단일 헤더를 vendoring해 사용합니다.
+손으로 작성한 행렬 연산은 이 프로젝트의 학습 목표가 아니면서 미묘한 버그의 온상이고, linalg는 기본 연산만 제공하므로 projection, camera, pipeline처럼 규약이 실리는 부분은 여전히 직접 구현하기 때문입니다.
 
-- `Vec2`, `Vec3`, `Vec4`: 산술 연산, dot, `Vec3` cross, length, normalize
-- `Mat4`: identity, 곱셈(`Mat4 * Mat4`, `Mat4 * Vec4`), translation/scale/axis rotation factory, `look_at`, `perspective`
-- `Quaternion`: identity, axis-angle 생성, 곱셈, normalize, `Mat4` 변환
-- `Transform`: translation(`Vec3`) + rotation(`Quaternion`) + uniform scale(`float`)을 `Mat4`로 합성
+- 위치: `engine/third_party/linalg/` (Unlicense이므로 LICENSE 파일과 함께 vendoring)
+- 단일 헤더라 wrapdb subproject가 필요 없고 CI에 새 네트워크 의존성이 생기지 않습니다.
+- linalg의 `mat`은 column-major 저장이고 `mul(mat, vec)`이 column vector 곱이므로 위 규약과 일치합니다.
 
-`normalize`처럼 실패할 수 있는 연산(zero-length vector)은 입력을 그대로 반환하는 대신 결과를 정의해 문서화하고 test로 고정합니다.
-일반 역행렬은 필요해질 때까지 구현하지 않습니다. View matrix는 `look_at`으로 직접 구성하므로 이 phase에는 필요하지 않습니다.
+`rubiks::math`는 linalg를 감싼 얇은 계층만 노출합니다.
+
+- `Vec2`/`Vec3`/`Vec4` = `linalg::vec<float, N>`, `Mat4` = `linalg::mat<float, 4, 4>` alias
+- 대수적 곱은 linalg에서 `mul`입니다 (`operator*`는 elementwise). 혼동을 막기 위해 engine 코드는 alias 계층이 노출하는 연산만 사용하고 linalg를 직접 include하지 않습니다.
+- `Quaternion`: linalg quaternion 연산(`rotation_quat`, `qmul` 등)을 감싼 axis-angle 생성과 `Mat4` 변환
+- `Transform`: translation(`Vec3`) + rotation(`Quaternion`) + uniform scale(`float`)을 `Mat4`로 합성 (직접 구현)
+- `look_at`, `perspective`: 위 규약대로 직접 구현합니다. linalg에도 고수준 transformation helper가 일부 있지만, 규약의 기준을 이 문서와 test에 두기 위해 사용하지 않습니다.
 
 ### Camera and fixed view
 
@@ -123,8 +128,20 @@ Depth 값은 scene에 남기지 않습니다. 정렬은 pipeline의 책임이고
 
 ### Pipeline passes
 
-각 pass는 상태 없는 `Input → Output` 함수로 구현해 native test에서 독립적으로 검증합니다.
-DESIGN.md의 `operator|` 표기는 목표 형태일 뿐이며, 일반 함수 합성으로 충분합니다.
+각 pass는 상태 없는 `Input → Output` callable로 구현해 native test에서 독립적으로 검증합니다.
+DESIGN.md의 스케치대로 pass 적용을 `operator|`로 합성해, pipeline 호출부가 데이터 흐름 순서 그대로 읽히게 합니다.
+
+```cpp
+auto scene = build_scene()
+    | transform(model)
+    | view(camera)
+    | project(camera, viewport)
+    | cull()
+    | depth_sort();
+```
+
+`operator|`는 왼쪽 중간 표현에 오른쪽 pass를 적용하는 얇은 문법이며 pass 자체에 로직을 더하지 않습니다.
+각 pass는 pipeline 밖에서도 직접 호출할 수 있어야 하고, unit test는 합성이 아니라 pass 단위로 검증합니다.
 
 ```text
 build_scene()             → world-space face 목록 (기하 + 색)
@@ -135,7 +152,7 @@ cull()                    → front face만 유지
 depth_sort()              → back-to-front 정렬
 ```
 
-- `build_scene()`은 이 phase에서는 edge 길이 2, 원점 중심의 axis-aligned cube 6면을 하드코딩으로 생성합니다. Phase 4에서 `CubeState` 기반 sticker 생성으로 대체되는 자리입니다.
+- `build_scene()`은 이 phase에서는 edge 길이 2, 원점 중심의 axis-aligned cube 6면을 하드코딩으로 생성합니다. Cube는 "6개 면을 독립적인 색으로 칠할 수 있는 정육면체" 모델이며, Phase 4는 같은 단위를 1×1×1 cubie로 바꿔 3×3×3 = 27개(중앙 1개는 보이지 않으므로 생략하면 26개)를 배치하고 `CubeState`가 면 색을 결정하는 자리입니다.
 - Model transform은 identity `Transform`을 pipeline에 실제로 통과시킵니다. Quaternion → `Mat4` 경로가 real path에서 한 번은 실행되게 하기 위함입니다.
 - Depth sort의 key는 face 4개 vertex의 view-space z 평균입니다. View space에서 camera는 `−Z`를 바라보므로 z가 작을수록(더 음수) 멀고, 오름차순 정렬이 back-to-front입니다. 같은 key는 입력 face index로 tie-break하는 stable sort로 결정성을 보장합니다.
 - 단일 convex cube는 culling만으로 가려짐이 해결되지만, Phase 5에서 layer가 회전하는 동안 전체 형상이 non-convex가 되므로 depth sort를 이 phase에서 미리 구축하고 pass 단위로 검증합니다.
@@ -173,7 +190,7 @@ C ABI와 TypeScript boundary는 바뀌지 않습니다. `thorvg_rubiks_render()`
 
 "graphics는 `#include <thorvg.h>`를 하지 않는다"를 리뷰 규칙이 아니라 build 구조로 강제합니다.
 
-- `engine/src/math`와 `engine/src/graphics`는 ThorVG dependency가 없는 별도 Meson static library로 분리합니다.
+- `engine/src/math`와 `engine/src/graphics`는 ThorVG dependency가 없는 별도 Meson target으로 분리합니다. Math는 alias 위주라 header-only dependency여도 됩니다.
 - `render/`와 `app/`만 ThorVG를 link합니다.
 - `tests/math`와 `tests/graphics`는 ThorVG 없이 해당 library만 link합니다. Graphics 코드에 ThorVG include가 생기면 이 test target의 build가 실패합니다.
 
@@ -217,12 +234,11 @@ red   (+X) : (0.69, 0.61)
 
 ### 1. Math module
 
-- [ ] `Vec2`, `Vec3`, `Vec4` 산술, dot, cross, length, normalize 구현
-- [ ] Zero-length normalize의 결과 정의 및 문서화
-- [ ] `Mat4` column-major 저장, 곱셈, factory 구현
-- [ ] `look_at` 구현
-- [ ] `perspective` 구현
-- [ ] `Quaternion` axis-angle, 곱셈, normalize, `Mat4` 변환 구현
+- [ ] linalg.h를 LICENSE와 함께 `engine/third_party/linalg/`에 vendoring
+- [ ] `rubiks::math` alias 계층 정의 (linalg 직접 include 금지 규칙 포함)
+- [ ] `Quaternion` axis-angle 생성과 `Mat4` 변환 wrapper 구현
+- [ ] `look_at` 직접 구현
+- [ ] `perspective` 직접 구현
 - [ ] `Transform` → `Mat4` 합성 구현
 - [ ] Math를 ThorVG 비의존 Meson target으로 분리
 
@@ -235,6 +251,7 @@ red   (+X) : (0.69, 0.61)
 - [ ] Near-plane guard 구현
 - [ ] NDC signed area back-face culling 구현
 - [ ] View-space z 평균 key와 stable tie-break의 depth sort 구현
+- [ ] Pass 합성 `operator|` 구현
 - [ ] Graphics를 ThorVG 비의존 Meson target으로 분리
 
 ### 3. Renderer and application integration
@@ -248,7 +265,7 @@ red   (+X) : (0.69, 0.61)
 
 ### 4. Verification
 
-- [ ] Vector, matrix 연산 golden-value unit test 추가
+- [ ] Alias 계층 규약(column vector 곱 방향, column-major 저장) 고정 test 추가
 - [ ] `look_at`, `perspective` 손계산 기대값 test 추가
 - [ ] Quaternion axis-angle 회전과 matrix 회전 일치 test 추가
 - [ ] `Transform` 합성 순서 test 추가
@@ -266,6 +283,8 @@ red   (+X) : (0.69, 0.61)
 ## Acceptance criteria
 
 - Math와 graphics build target이 ThorVG를 link하지 않고, 해당 test는 ThorVG 없이 build되고 통과합니다.
+- 기본 행렬 연산은 vendored linalg.h가 담당하고 engine 코드는 `rubiks::math` alias를 통해서만 사용합니다.
+- Pipeline은 `operator|` 합성으로 구성되며 각 pass는 pipeline 밖에서 독립적으로 test됩니다.
 - 좌표, winding, matrix 규약이 이 문서에 고정되어 있고 test가 규약대로 판정합니다.
 - 고정 camera에서 cube 세 면이 rendered scene contract v2의 sample pixel과 모서리 검증을 통과합니다.
 - Back face 세 면이 culling으로 제거되는 것이 pipeline unit test에서 검증됩니다.

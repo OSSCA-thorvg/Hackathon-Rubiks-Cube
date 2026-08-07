@@ -43,7 +43,7 @@ Model, view, projection, back-face culling, depth sorting을 거쳐 하나의 3D
 ## [ ] Phase 4: Rubik's Cube domain
 
 Rendering과 독립적인 3×3×3 Rubik's Cube logical state와 move system을 구현합니다.
-Cubie와 sticker 표현, axis와 layer 기반 move, quarter turn, inverse, notation parsing을 지원하고 render scene의 입력으로 연결합니다.
+면별로 독립적인 색을 칠할 수 있는 1×1×1 cubie 27개(중앙은 보이지 않아 생략 가능) 배치로 cube를 표현하고, axis와 layer 기반 move, quarter turn, inverse, notation parsing을 지원하며 render scene의 입력으로 연결합니다.
 
 ## [ ] Phase 5: Pointer interaction and animation
 

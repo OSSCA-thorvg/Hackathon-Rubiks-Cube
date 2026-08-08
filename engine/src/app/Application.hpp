@@ -2,6 +2,9 @@
 
 #include <cstdint>
 
+#include "cube/Cubie.hpp"
+#include "graphics/Layout.hpp"
+
 namespace rubiks::app {
 
 /**
@@ -80,6 +83,40 @@ void pointer_cancel() noexcept;
  * @return true while further frames still have to be drawn.
  */
 [[nodiscard]] bool advance(double elapsed_ms) noexcept;
+
+/** Replaces the cube with a deterministic unsolved scramble. */
+[[nodiscard]] bool scramble(std::uint32_t seed) noexcept;
+
+/** Restores the logical cube and clears the current solve session. */
+void reset_cube() noexcept;
+
+/** Returns whether the committed logical cube is solved. */
+[[nodiscard]] bool is_solved() noexcept;
+
+/** Returns the number of user moves committed since the latest scramble. */
+[[nodiscard]] std::uint32_t committed_move_count() noexcept;
+
+/**
+ * Starts one animated face-relative turn.
+ *
+ * `face_turns` is 1 clockwise, -1 counter-clockwise, or 2 for a half turn as
+ * seen from outside `face`.
+ *
+ * @return true when the command was accepted.
+ */
+[[nodiscard]] bool turn_face(cube::Face face, int face_turns) noexcept;
+
+/** Changes the rendered views while preserving cube, camera, and game state. */
+[[nodiscard]] bool set_view_mode(graphics::ViewMode mode) noexcept;
+
+/** Returns the current view mode, defaulting to Both outside a lifecycle. */
+[[nodiscard]] graphics::ViewMode view_mode() noexcept;
+
+/** Restores the home camera without changing cube or view mode. */
+void reset_view() noexcept;
+
+/** Returns whether a gesture, animation, or unconsumed commit is active. */
+[[nodiscard]] bool is_busy() noexcept;
 
 /**
  * Releases the renderer and the ThorVG runtime.

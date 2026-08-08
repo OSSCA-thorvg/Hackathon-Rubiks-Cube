@@ -116,6 +116,82 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_advance(double elapsed_ms) noexcept
     return rubiks::app::advance(elapsed_ms) ? 1 : 0;
 }
 
+/** Replaces the cube with a deterministic scramble for `seed`. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_scramble(std::uint32_t seed) noexcept
+{
+    return rubiks::app::scramble(seed) ? 1 : 0;
+}
+
+/** Restores the solved cube while preserving camera and view mode. */
+EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_reset_cube() noexcept
+{
+    rubiks::app::reset_cube();
+}
+
+/** Returns one when the committed logical cube is solved. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_is_solved() noexcept
+{
+    return rubiks::app::is_solved() ? 1 : 0;
+}
+
+/** Returns user moves committed since the latest scramble or reset. */
+EMSCRIPTEN_KEEPALIVE std::uint32_t
+thorvg_rubiks_committed_move_count() noexcept
+{
+    return rubiks::app::committed_move_count();
+}
+
+/**
+ * Starts an animated face-relative turn.
+ *
+ * Face follows cube::Face order and turns are -1, 1, or 2.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_turn_face(int face,
+                                                int face_turns) noexcept
+{
+    constexpr int kFirstFace = static_cast<int>(rubiks::cube::Face::Right);
+    constexpr int kLastFace = static_cast<int>(rubiks::cube::Face::Back);
+    if (face < kFirstFace || face > kLastFace) return 0;
+
+    return rubiks::app::turn_face(static_cast<rubiks::cube::Face>(face),
+                                  face_turns)
+               ? 1
+               : 0;
+}
+
+/** Changes the visible render regions; invalid integer values are rejected. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_view_mode(int mode) noexcept
+{
+    constexpr int kFirstMode =
+        static_cast<int>(rubiks::graphics::ViewMode::Cube3D);
+    constexpr int kLastMode =
+        static_cast<int>(rubiks::graphics::ViewMode::Net);
+    if (mode < kFirstMode || mode > kLastMode) return 0;
+
+    return rubiks::app::set_view_mode(
+               static_cast<rubiks::graphics::ViewMode>(mode))
+               ? 1
+               : 0;
+}
+
+/** Returns the current graphics::ViewMode integer. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_view_mode() noexcept
+{
+    return static_cast<int>(rubiks::app::view_mode());
+}
+
+/** Restores only the turntable camera. */
+EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_reset_view() noexcept
+{
+    rubiks::app::reset_view();
+}
+
+/** Returns one while a gesture, snap, or commit is active. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_is_busy() noexcept
+{
+    return rubiks::app::is_busy() ? 1 : 0;
+}
+
 /**
  * Releases the engine. Safe to call regardless of the initialization state.
  */

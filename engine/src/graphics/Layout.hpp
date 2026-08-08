@@ -6,6 +6,13 @@
 
 namespace rubiks::graphics {
 
+/** Which logical views are rendered into the canvas. */
+enum class ViewMode : std::uint8_t {
+    Cube3D = 0,
+    Both = 1,
+    Net = 2,
+};
+
 /**
  * Where the two views of the cube sit in the drawing buffer.
  *
@@ -32,10 +39,18 @@ inline constexpr float kNetFaceSide = 0.12f;
 /** Gap above the net block. */
 inline constexpr float kNetTop = 0.62f;
 
+/** Side of the square cube region when it is the only visible view. */
+inline constexpr float kCubeOnlyRegionSide = 0.84f;
+/** Maximum fraction of the canvas width used by a net-only block. */
+inline constexpr float kNetOnlyWidth = 0.88f;
+/** Maximum fraction of the canvas height used by a net-only block. */
+inline constexpr float kNetOnlyHeight = 0.78f;
+
 inline constexpr int kNetColumns = 4;
 inline constexpr int kNetRows = 3;
 
 [[nodiscard]] CanvasLayout layout(std::uint32_t width,
-                                  std::uint32_t height) noexcept;
+                                  std::uint32_t height,
+                                  ViewMode mode = ViewMode::Both) noexcept;
 
 }  // namespace rubiks::graphics

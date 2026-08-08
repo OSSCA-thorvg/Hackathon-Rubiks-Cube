@@ -76,6 +76,17 @@ public:
                                     const graphics::Camera& camera,
                                     const graphics::Rect& viewport) noexcept;
 
+    /**
+     * Starts an animated move without a pointer gesture.
+     *
+     * Used by keyboard and DOM controls so every input reaches the same snap
+     * and commit path. Layers outside the cube, whole-turn no-ops and input
+     * while busy are rejected; the turn keeps the direction it was asked for.
+     *
+     * @return true when the animation started.
+     */
+    [[nodiscard]] bool start_move(const cube::CubeMove& move) noexcept;
+
     /** Updates the turn angle, locking the axis once the drag is deliberate. */
     void pointer_move(float x, float y) noexcept;
 
@@ -116,6 +127,9 @@ public:
     /** The turn to draw, or nothing when the cube is at rest. */
     [[nodiscard]] std::optional<graphics::ActiveRotation> active_rotation()
         const noexcept;
+
+    /** Returns true while a gesture, snap, or unconsumed commit exists. */
+    [[nodiscard]] bool is_busy() const noexcept;
 
     /** Drops all interaction state, as after a shutdown. */
     void reset() noexcept;

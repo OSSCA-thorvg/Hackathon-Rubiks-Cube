@@ -225,3 +225,30 @@ TEST_CASE("the net scales with its rectangle")
             Approx(2.0f * (small.faces[0].points[1].x -
                            small.faces[0].points[0].x)));
 }
+
+TEST_CASE("view modes place only the regions they render")
+{
+    const CanvasLayout both = layout(1000, 800, ViewMode::Both);
+    REQUIRE(both.cube.width > 0.0f);
+    REQUIRE(both.net.width > 0.0f);
+    REQUIRE(both.cube.width == Approx(kCubeRegionSide * 800.0f));
+
+    const CanvasLayout cube = layout(1000, 800, ViewMode::Cube3D);
+    REQUIRE(cube.cube.width == Approx(kCubeOnlyRegionSide * 800.0f));
+    REQUIRE(cube.cube.width == Approx(cube.cube.height));
+    REQUIRE(cube.cube.x == Approx((1000.0f - cube.cube.width) * 0.5f));
+    REQUIRE(cube.cube.y == Approx((800.0f - cube.cube.height) * 0.5f));
+    REQUIRE(cube.net.width == 0.0f);
+    REQUIRE(cube.net.height == 0.0f);
+
+    const CanvasLayout net = layout(1000, 800, ViewMode::Net);
+    REQUIRE(net.cube.width == 0.0f);
+    REQUIRE(net.cube.height == 0.0f);
+    REQUIRE(net.net.width > 0.0f);
+    REQUIRE(net.net.height > 0.0f);
+    REQUIRE(net.net.width / net.net.height ==
+            Approx(static_cast<float>(kNetColumns) /
+                   static_cast<float>(kNetRows)));
+    REQUIRE(net.net.x == Approx((1000.0f - net.net.width) * 0.5f));
+    REQUIRE(net.net.y == Approx((800.0f - net.net.height) * 0.5f));
+}

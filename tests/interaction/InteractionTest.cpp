@@ -319,6 +319,70 @@ TEST_CASE("input during the snap is ignored")
     REQUIRE(settled.commits == 1);
 }
 
+TEST_CASE("a programmatic move uses the snap and commit path")
+{
+    InteractionController controller(kSize);
+    const CubeMove move = rubiks::cube::moves::R(kSize);
+
+    REQUIRE(controller.start_move(move));
+    REQUIRE(controller.is_busy());
+    REQUIRE(controller.active_rotation());
+    REQUIRE_FALSE(controller.take_committed_move());
+
+    const Settled settled = settle(controller);
+    REQUIRE(settled.commits == 1);
+    REQUIRE(settled.move == move);
+    REQUIRE_FALSE(controller.is_busy());
+}
+
+TEST_CASE("a programmatic turn keeps the direction it was asked for")
+{
+    // L, D and B are negative turns about their axis, so a half turn named
+    // after one of them has to animate that way too rather than take the
+    // mirror route to the same state.
+    for (const int quarter_turns : {-1, -2, -3}) {
+        INFO(quarter_turns << " quarter turns");
+
+        InteractionController controller(kSize);
+        const CubeMove move{Axis::X, rubiks::cube::layer(0), quarter_turns};
+
+        REQUIRE(controller.start_move(move));
+        const auto active = controller.active_rotation();
+        REQUIRE(active);
+        REQUIRE(active->angle_degrees == Approx(0.0f));
+
+        REQUIRE(controller.advance(kFrameMs));
+        const auto moving = controller.active_rotation();
+        REQUIRE(moving);
+        REQUIRE(moving->angle_degrees < 0.0f);
+
+        const Settled settled = settle(controller);
+        REQUIRE(settled.move == move);
+    }
+}
+
+TEST_CASE("programmatic moves reject invalid or concurrent work")
+{
+    InteractionController controller(kSize);
+    const CubeMove move = rubiks::cube::moves::U(kSize);
+
+    REQUIRE_FALSE(controller.start_move(CubeMove{Axis::X, 0, 1}));
+    REQUIRE_FALSE(controller.start_move(CubeMove{Axis::X,
+                                                 rubiks::cube::layer(2), 4}));
+
+    // A layer past the last one turns nothing, so it is not a move either.
+    REQUIRE_FALSE(controller.start_move(CubeMove{Axis::X,
+                                                 rubiks::cube::layer(kSize),
+                                                 1}));
+    REQUIRE(controller.start_move(move));
+    REQUIRE_FALSE(controller.start_move(move));
+
+    // A pointer cannot cut into the same animation either.
+    const Vec2 at = screen_of(kFrontCenter);
+    REQUIRE_FALSE(
+        controller.pointer_down(at.x, at.y, cube_camera(), cube_rect()));
+}
+
 TEST_CASE("cancelling a drag leaves the cube alone")
 {
     const Vec2 direction = direction_for(Axis::X, kFrontCenter);

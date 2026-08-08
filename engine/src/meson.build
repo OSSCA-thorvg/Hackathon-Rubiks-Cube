@@ -38,6 +38,15 @@ if host_machine.system() == 'emscripten'
     '_thorvg_rubiks_pointer_up',
     '_thorvg_rubiks_pointer_cancel',
     '_thorvg_rubiks_advance',
+    '_thorvg_rubiks_scramble',
+    '_thorvg_rubiks_reset_cube',
+    '_thorvg_rubiks_is_solved',
+    '_thorvg_rubiks_committed_move_count',
+    '_thorvg_rubiks_turn_face',
+    '_thorvg_rubiks_set_view_mode',
+    '_thorvg_rubiks_view_mode',
+    '_thorvg_rubiks_reset_view',
+    '_thorvg_rubiks_is_busy',
   ]
 
   executable(

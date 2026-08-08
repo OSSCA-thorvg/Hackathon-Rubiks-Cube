@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <utility>
 
 namespace rubiks::interaction {
@@ -74,6 +75,28 @@ bool InteractionController::pointer_down(
 
     gesture_ = Gesture{camera, viewport, *pick, math::Vec2{x, y},
                        std::nullopt, 0.0f};
+    return true;
+}
+
+bool InteractionController::start_move(const cube::CubeMove& move) noexcept
+{
+    if (is_busy()) return false;
+    if (move.layers == 0 || move.layers >= cube::layer(size_)) return false;
+
+    // Only the magnitude wraps at a full turn; the direction stays the
+    // caller's, so a half turn asked for as -2 still animates the way the
+    // face it was named after turns.
+    const int magnitude = std::abs(move.quarter_turns) % 4;
+    if (magnitude == 0) return false;
+
+    const int quarter_turns =
+        move.quarter_turns < 0 ? -magnitude : magnitude;
+    const float target =
+        static_cast<float>(quarter_turns) * kDegreesPerQuarterTurn;
+
+    // The turn starts at rest, so the whole target is still to travel.
+    snap_ = Snap{move.axis, move.layers, 0.0f, target, 0.0,
+                 snap_duration(target)};
     return true;
 }
 
@@ -225,6 +248,12 @@ std::optional<graphics::ActiveRotation> InteractionController::active_rotation()
     }
 
     return std::nullopt;
+}
+
+bool InteractionController::is_busy() const noexcept
+{
+    return gesture_.has_value() || orbit_.has_value() || snap_.has_value() ||
+           committed_.has_value();
 }
 
 void InteractionController::reset() noexcept

@@ -366,6 +366,32 @@ TEST_CASE("a resize keeps the viewpoint and applies the last sweep")
     rubiks::app::shutdown();
 }
 
+TEST_CASE("scramble and reset keep the viewpoint the drag left behind")
+{
+    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+
+    // A sweep no frame has published yet. Neither command owns the camera,
+    // so both have to keep it rather than drop it with the gesture state.
+    orbit_left(1.0f);
+    rubiks::app::pointer_up();
+    REQUIRE(rubiks::app::scramble(42U));
+    settle();
+
+    // Face centers never move under outer-face turns, so a scrambled cube
+    // still names the faces around the viewpoint by the same three colors.
+    require_visible_faces(kWhite, kRed, kBlue);
+
+    orbit_left(1.0f);
+    rubiks::app::pointer_up();
+    rubiks::app::reset_cube();
+    settle();
+
+    require_visible_faces(kWhite, kBlue, kOrange);
+    require_solved_net();
+
+    rubiks::app::shutdown();
+}
+
 TEST_CASE("shutdown returns the viewpoint home")
 {
     REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));

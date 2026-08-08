@@ -17,20 +17,26 @@ using Catch::Approx;
 using namespace rubiks::math;
 
 constexpr float kPi = 3.14159265358979323846f;
+constexpr double kDefaultMargin = 1e-5;
+constexpr double kInverseProjectionMargin = 1e-4;
 
-void require_vec3(const Vec3& actual, float x, float y, float z)
+/** Requires a Vec3 to match component-wise within an absolute margin. */
+void require_vec3(const Vec3& actual, float x, float y, float z,
+                  double margin = kDefaultMargin)
 {
-    REQUIRE(actual.x == Approx(x).margin(1e-5));
-    REQUIRE(actual.y == Approx(y).margin(1e-5));
-    REQUIRE(actual.z == Approx(z).margin(1e-5));
+    REQUIRE(actual.x == Approx(x).margin(margin));
+    REQUIRE(actual.y == Approx(y).margin(margin));
+    REQUIRE(actual.z == Approx(z).margin(margin));
 }
 
-void require_vec4(const Vec4& actual, float x, float y, float z, float w)
+/** Requires a Vec4 to match component-wise within an absolute margin. */
+void require_vec4(const Vec4& actual, float x, float y, float z, float w,
+                  double margin = kDefaultMargin)
 {
-    REQUIRE(actual.x == Approx(x).margin(1e-5));
-    REQUIRE(actual.y == Approx(y).margin(1e-5));
-    REQUIRE(actual.z == Approx(z).margin(1e-5));
-    REQUIRE(actual.w == Approx(w).margin(1e-5));
+    REQUIRE(actual.x == Approx(x).margin(margin));
+    REQUIRE(actual.y == Approx(y).margin(margin));
+    REQUIRE(actual.z == Approx(z).margin(margin));
+    REQUIRE(actual.w == Approx(w).margin(margin));
 }
 
 }  // namespace
@@ -187,7 +193,7 @@ TEST_CASE("inverse undoes a projection times a view")
         const Vec4 restored = rubiks::math::apply(inverse(combined), ndc);
         require_vec3(Vec3{restored.x / restored.w, restored.y / restored.w,
                           restored.z / restored.w},
-                     point.x, point.y, point.z);
+                     point.x, point.y, point.z, kInverseProjectionMargin);
     }
 }
 

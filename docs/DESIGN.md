@@ -5,7 +5,7 @@
 ThorVG를 활용해 브라우저에서 동작하는 3×3×3 루빅스 큐브를 직접 구현하는 프로젝트입니다.
 기존 `OSSCA-thorvg/wasm-example`을 clone하는 대신 **처음부터 직접 구축**하며, wasm-example의 Meson + Emscripten + ThorVG + GitHub Pages 구성은 참고 자료로만 활용합니다.
 
-> **Note.** 이 문서는 초기 설계 스케치이며, 세부 설계가 갈라질 때는 `docs/tasks/`의 phase 문서가 우선합니다. 지금까지의 차이: notation parser는 구현하지 않고([Phase 4](./tasks/04-rubiks-cube-domain.md)), pointer picking은 ThorVG hit test가 아니라 ray cast이며 drag API는 delta 없이 절대 좌표만 전달합니다([Phase 5](./tasks/05-pointer-interaction-and-animation.md)).
+> **Note.** 이 문서는 초기 설계 스케치이며, 세부 설계가 갈라질 때는 `docs/tasks/`의 phase 문서가 우선합니다. 지금까지의 차이: notation parser는 구현하지 않고([Phase 4](./tasks/04-rubiks-cube-domain.md)), pointer picking은 ThorVG hit test가 아니라 ray cast이며 drag API는 delta 없이 절대 좌표만 전달합니다([Phase 5](./tasks/05-pointer-interaction-and-animation.md)). Timer는 `<span>`이 아니라 `<output>`이고, `scramble()`은 engine이 난수를 만드는 대신 Browser가 만든 `uint32` seed를 받습니다([Phase 6](./tasks/06-gameplay-and-ui.md)).
 
 ## 핵심 원칙
 

@@ -56,7 +56,7 @@ Face picking, drag 중 transient rotation, pointer release 시 90° snapping과 
 빈 공간 drag를 turntable camera orbit으로 해석해 큐브의 여섯 면을 모두 둘러볼 수 있게 합니다.
 Picking과 drag 해석은 camera만 통하므로 수정되지 않고, 초기 시점의 rendered scene contract도 그대로 유지됩니다.
 
-## [ ] Phase 6: Gameplay and UI
+## [x] Phase 6: [Gameplay and UI](./06-gameplay-and-ui.md)
 
 Scramble, reset, solved-state 판정, timer와 접근 가능한 UI를 구현해 최소 gameplay flow를 완성합니다.
 Loading, error, unsupported state와 responsive layout을 포함하여 desktop과 mobile browser에서 사용할 수 있게 합니다.

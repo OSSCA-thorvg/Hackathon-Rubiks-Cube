@@ -30,7 +30,7 @@ thorvg-rubiks/
 │   ├── src/cube/           # Cube state, cubie, move (rendering과 무관)
 │   ├── src/math/           # vector, matrix, quaternion, projection
 │   ├── src/graphics/       # camera, pipeline passes, cube와 전개도 geometry
-│   ├── src/interaction/    # picking, drag 해석, snap animation
+│   ├── src/interaction/    # picking, drag 해석, snap animation, 시점 orbit
 │   ├── src/render/         # ThorVG rendering backend
 │   ├── src/app/            # engine lifecycle
 │   └── third_party/        # vendored headers (linalg.h)

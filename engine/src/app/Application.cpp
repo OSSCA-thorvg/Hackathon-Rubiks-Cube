@@ -8,6 +8,7 @@
 #include "graphics/Camera.hpp"
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
+#include "graphics/NetGeometry.hpp"
 #include "graphics/Pipeline.hpp"
 #include "graphics/RenderScene.hpp"
 #include "math/Transform.hpp"
@@ -81,13 +82,18 @@ bool render() noexcept
     // path so the quaternion-to-matrix step is exercised every frame.
     const math::Transform model;
 
-    const auto scene = graphics::build_cube_scene(cube_state)  //
+    auto scene = graphics::build_cube_scene(cube_state)  //
                  | graphics::transform(model)            //
                  | graphics::view(camera)                //
                  | graphics::project(camera)             //
                  | graphics::cull()                      //
                  | graphics::depth_sort()                //
                  | graphics::viewport(placement.cube);
+
+    // The net is already screen-space, so it only has to be appended. The two
+    // regions do not overlap, so the order between them does not matter.
+    const auto net = graphics::build_net_scene(cube_state, placement.net);
+    scene.faces.insert(scene.faces.end(), net.faces.begin(), net.faces.end());
 
     return renderer->render(scene);
 }

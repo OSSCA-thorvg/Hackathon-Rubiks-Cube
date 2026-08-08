@@ -5,3 +5,11 @@ pipeline_test = executable(
 )
 
 test('graphics pipeline', pipeline_test)
+
+net_test = executable(
+  'net-test',
+  files('NetTest.cpp'),
+  dependencies: [graphics_dep, catch2_dep],
+)
+
+test('net geometry', net_test)

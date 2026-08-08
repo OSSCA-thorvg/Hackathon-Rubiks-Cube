@@ -1,35 +1,72 @@
 #include "app/Application.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 
 #include <catch2/catch_test_macros.hpp>
 
-// Rendered scene contract v2: the fixed camera shows the +X, +Y, and +Z faces
-// of one cube, each a different color, over a solid background. Distinct face
-// colors make a winding, culling, or channel-order mistake show up as the
-// wrong color rather than as a plausible picture.
+// Rendered scene contract v3: the canvas is split into a square 3D region
+// showing the +X, +Y and +Z faces of a solved 3x3x3. Distinct face colors
+// make a winding, culling or channel-order mistake show up as the wrong color
+// rather than as a plausible picture, and the seam samples make a missing gap
+// show up as a wrong color rather than as a slightly fat sticker.
+//
+// The layout fractions are recomputed here from the numbers written in
+// docs/tasks/04-rubiks-cube-domain.md rather than read from the engine, so a
+// change to the layout has to be made in both places deliberately.
 
 namespace {
 
 // Contract colors as RGBA bytes on little-endian memory.
-constexpr std::uint8_t kBackgroundColor[4] = {32, 32, 32, 255};
-constexpr std::uint8_t kUpColor[4] = {255, 255, 255, 255};    // +Y white
-constexpr std::uint8_t kFrontColor[4] = {0, 155, 72, 255};    // +Z green
-constexpr std::uint8_t kRightColor[4] = {183, 18, 52, 255};   // +X red
+using Rgba = std::array<std::uint8_t, 4>;
 
-/** Sample point as a fraction of the drawing buffer. */
+constexpr Rgba kBackground{32, 32, 32, 255};
+constexpr Rgba kWhite{255, 255, 255, 255};  // +Y up
+constexpr Rgba kGreen{0, 155, 72, 255};     // +Z front
+constexpr Rgba kRed{183, 18, 52, 255};      // +X right
+
+struct Region {
+    float x;
+    float y;
+    float side;  // the 3D region is square
+};
+
+/** Fraction of a region, measured from its top left. */
 struct Sample {
     float x;
     float y;
 };
 
-// Derived from the projected centroid of each visible face. Only defined for
-// a square buffer, because the fractions depend on the aspect ratio.
+// Centers of the three visible faces, unchanged from contract v2. They
+// are fractions of the 3D region rather than of the canvas, which is what
+// makes them valid at any aspect ratio now that the region is always square.
 constexpr Sample kUpSample{0.50f, 0.29f};
 constexpr Sample kFrontSample{0.31f, 0.61f};
 constexpr Sample kRightSample{0.69f, 0.61f};
+
+// Gaps between neighbouring stickers. Nothing is drawn there, so they must be
+// exactly the background color.
+constexpr Sample kSeamSamples[]{
+    {0.377f, 0.645f},  // +Z, between the center and right stickers
+    {0.313f, 0.534f},  // +Z, between the center and top stickers
+    {0.564f, 0.321f},  // +Y, between the center and front-right stickers
+};
+
+float shorter_side(std::uint32_t width, std::uint32_t height)
+{
+    return static_cast<float>(std::min(width, height));
+}
+
+Region cube_region(std::uint32_t width, std::uint32_t height)
+{
+    const float unit = shorter_side(width, height);
+    const float side = 0.58f * unit;
+    return Region{(static_cast<float>(width) - side) * 0.5f, 0.01f * unit,
+                  side};
+}
 
 const std::uint8_t* pixel_at(std::uint32_t x, std::uint32_t y,
                              std::uint32_t width)
@@ -39,15 +76,26 @@ const std::uint8_t* pixel_at(std::uint32_t x, std::uint32_t y,
     return bytes + (static_cast<std::size_t>(y) * width + x) * 4;
 }
 
-const std::uint8_t* pixel_at(const Sample& sample, std::uint32_t size)
+const std::uint8_t* pixel_at(float x, float y, std::uint32_t width,
+                             std::uint32_t height)
 {
-    const auto extent = static_cast<float>(size - 1);
-    const auto x = static_cast<std::uint32_t>(std::lround(sample.x * extent));
-    const auto y = static_cast<std::uint32_t>(std::lround(sample.y * extent));
-    return pixel_at(x, y, size);
+    const auto column = static_cast<std::uint32_t>(
+        std::clamp(std::lround(x), 0L, static_cast<long>(width) - 1));
+    const auto row = static_cast<std::uint32_t>(
+        std::clamp(std::lround(y), 0L, static_cast<long>(height) - 1));
+    return pixel_at(column, row, width);
 }
 
-void require_pixel(const std::uint8_t* pixel, const std::uint8_t (&color)[4])
+/** Pixel at a fraction of the square 3D region. */
+const std::uint8_t* pixel_in_cube(const Sample& sample, std::uint32_t width,
+                                  std::uint32_t height)
+{
+    const Region region = cube_region(width, height);
+    return pixel_at(region.x + sample.x * region.side,
+                    region.y + sample.y * region.side, width, height);
+}
+
+void require_pixel(const std::uint8_t* pixel, const Rgba& color)
 {
     // Channel-by-channel exact match; a byte-order mistake cannot slip past.
     REQUIRE(pixel[0] == color[0]);
@@ -56,21 +104,29 @@ void require_pixel(const std::uint8_t* pixel, const std::uint8_t (&color)[4])
     REQUIRE(pixel[3] == color[3]);
 }
 
-void require_scene(std::uint32_t size)
+void require_cube_faces(std::uint32_t width, std::uint32_t height)
+{
+    require_pixel(pixel_in_cube(kUpSample, width, height), kWhite);
+    require_pixel(pixel_in_cube(kFrontSample, width, height), kGreen);
+    require_pixel(pixel_in_cube(kRightSample, width, height), kRed);
+}
+
+void require_corners(std::uint32_t width, std::uint32_t height)
+{
+    require_pixel(pixel_at(0, 0, width), kBackground);
+    require_pixel(pixel_at(width - 1, 0, width), kBackground);
+    require_pixel(pixel_at(0, height - 1, width), kBackground);
+    require_pixel(pixel_at(width - 1, height - 1, width), kBackground);
+}
+
+void require_scene(std::uint32_t width, std::uint32_t height)
 {
     REQUIRE(rubiks::app::pixel_buffer() != 0);
-    REQUIRE(rubiks::app::pixel_byte_length() == size * size * 4);
+    REQUIRE(rubiks::app::pixel_byte_length() == width * height * 4);
     REQUIRE(rubiks::app::render());
 
-    require_pixel(pixel_at(kUpSample, size), kUpColor);
-    require_pixel(pixel_at(kFrontSample, size), kFrontColor);
-    require_pixel(pixel_at(kRightSample, size), kRightColor);
-
-    // The silhouette never reaches the corners at this camera distance.
-    require_pixel(pixel_at(0, 0, size), kBackgroundColor);
-    require_pixel(pixel_at(size - 1, 0, size), kBackgroundColor);
-    require_pixel(pixel_at(0, size - 1, size), kBackgroundColor);
-    require_pixel(pixel_at(size - 1, size - 1, size), kBackgroundColor);
+    require_cube_faces(width, height);
+    require_corners(width, height);
 }
 
 }  // namespace
@@ -78,34 +134,52 @@ void require_scene(std::uint32_t size)
 TEST_CASE("face and corner pixels match the rendered scene contract")
 {
     REQUIRE(rubiks::app::initialize(256, 256));
-    require_scene(256);
+    require_scene(256, 256);
 
     SECTION("after resizing to a larger square buffer")
     {
         REQUIRE(rubiks::app::resize(512, 512));
-        require_scene(512);
+        require_scene(512, 512);
     }
 
     SECTION("after resizing to a smaller square buffer")
     {
         REQUIRE(rubiks::app::resize(129, 129));
-        require_scene(129);
+        require_scene(129, 129);
     }
 
     rubiks::app::shutdown();
 }
 
-TEST_CASE("a non-square buffer keeps the scene inside the image")
+TEST_CASE("the contract holds on non-square buffers")
 {
-    // The sample fractions are aspect-dependent, so a non-square target only
-    // has to render without failing and keep its corners clear.
+    // The 3D region is square whatever the canvas is, so unlike contract v2
+    // these fractions stay valid here.
     REQUIRE(rubiks::app::initialize(320, 200));
-    REQUIRE(rubiks::app::render());
+    require_scene(320, 200);
 
-    require_pixel(pixel_at(0, 0, 320), kBackgroundColor);
-    require_pixel(pixel_at(319, 0, 320), kBackgroundColor);
-    require_pixel(pixel_at(0, 199, 320), kBackgroundColor);
-    require_pixel(pixel_at(319, 199, 320), kBackgroundColor);
+    SECTION("and on a portrait buffer")
+    {
+        REQUIRE(rubiks::app::resize(200, 320));
+        require_scene(200, 320);
+    }
+
+    rubiks::app::shutdown();
+}
+
+TEST_CASE("the seams between stickers show the background")
+{
+    // A seam is about 5.5 pixels wide at this size. Below roughly 1024 the
+    // gap is thin enough that anti-aliasing reaches the sample point, so the
+    // smaller sizes above check faces and corners only.
+    constexpr std::uint32_t kSize = 1024;
+
+    REQUIRE(rubiks::app::initialize(kSize, kSize));
+    require_scene(kSize, kSize);
+
+    for (const auto& seam : kSeamSamples) {
+        require_pixel(pixel_in_cube(seam, kSize, kSize), kBackground);
+    }
 
     rubiks::app::shutdown();
 }

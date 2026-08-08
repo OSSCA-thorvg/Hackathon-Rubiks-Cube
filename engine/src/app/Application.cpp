@@ -4,8 +4,10 @@
 
 #include <thorvg.h>
 
+#include "cube/CubeState.hpp"
 #include "graphics/Camera.hpp"
 #include "graphics/CubeGeometry.hpp"
+#include "graphics/Layout.hpp"
 #include "graphics/Pipeline.hpp"
 #include "graphics/RenderScene.hpp"
 #include "math/Transform.hpp"
@@ -20,21 +22,20 @@ std::unique_ptr<render::Renderer> renderer;
 
 // Mirrors the renderer target size; only updated after a successful
 // initialize() or resize(), so it cannot drift from the actual target.
-std::uint32_t surface_width = 0;
-std::uint32_t surface_height = 0;
+graphics::CanvasLayout placement;
 
 graphics::Camera camera = graphics::default_camera(1.0f);
 
-float aspect_of(std::uint32_t width, std::uint32_t height) noexcept
-{
-    return static_cast<float>(width) / static_cast<float>(height);
-}
+// The logical cube. Interaction in Phase 5 mutates this and nothing else.
+cube::CubeState cube_state(3);
 
 void adopt_surface(std::uint32_t width, std::uint32_t height) noexcept
 {
-    surface_width = width;
-    surface_height = height;
-    camera.set_aspect(aspect_of(width, height));
+    placement = graphics::layout(width, height);
+    // Follows the cube region rather than the canvas. That region is square,
+    // so this is always 1, but deriving it keeps the two in step if the
+    // layout ever changes.
+    camera.set_aspect(placement.cube.width / placement.cube.height);
 }
 
 }  // namespace
@@ -80,13 +81,13 @@ bool render() noexcept
     // path so the quaternion-to-matrix step is exercised every frame.
     const math::Transform model;
 
-    const auto scene = graphics::build_scene()          //
-                       | graphics::transform(model)     //
-                       | graphics::view(camera)         //
-                       | graphics::project(camera)      //
-                       | graphics::cull()               //
-                       | graphics::depth_sort()         //
-                       | graphics::viewport(surface_width, surface_height);
+    const auto scene = graphics::build_cube_scene(cube_state)  //
+                 | graphics::transform(model)            //
+                 | graphics::view(camera)                //
+                 | graphics::project(camera)             //
+                 | graphics::cull()                      //
+                 | graphics::depth_sort()                //
+                 | graphics::viewport(placement.cube);
 
     return renderer->render(scene);
 }
@@ -111,8 +112,8 @@ void shutdown() noexcept
 
     renderer.reset();
     static_cast<void>(tvg::Initializer::term());
-    surface_width = 0;
-    surface_height = 0;
+    placement = graphics::CanvasLayout{};
+    cube_state = cube::CubeState(3);
     initialized = false;
 }
 

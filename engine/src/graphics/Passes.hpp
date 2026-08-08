@@ -1,8 +1,7 @@
 #pragma once
 
-#include <cstdint>
-
 #include "graphics/Camera.hpp"
+#include "graphics/Rect.hpp"
 #include "graphics/RenderScene.hpp"
 #include "graphics/Scene.hpp"
 #include "math/Transform.hpp"
@@ -78,15 +77,19 @@ struct DepthSortPass {
 
 [[nodiscard]] DepthSortPass depth_sort() noexcept;
 
-/** NDC to screen-space pixels, flipping Y to the top-left origin. */
+/**
+ * NDC to screen-space pixels, flipping Y to the top-left origin.
+ *
+ * The target is a sub-rectangle rather than the whole buffer, because the 3D
+ * cube shares the canvas with the net view. Keeping that rectangle square is
+ * also what frees the camera aspect from the canvas aspect.
+ */
 struct ViewportPass {
-    float width;
-    float height;
+    Rect rect;
 
     [[nodiscard]] RenderScene operator()(const ClipScene& scene) const;
 };
 
-[[nodiscard]] ViewportPass viewport(std::uint32_t width,
-                                    std::uint32_t height) noexcept;
+[[nodiscard]] ViewportPass viewport(const Rect& rect) noexcept;
 
 }  // namespace rubiks::graphics

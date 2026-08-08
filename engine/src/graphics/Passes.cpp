@@ -142,18 +142,18 @@ RenderScene ViewportPass::operator()(const ClipScene& scene) const
         RenderFace mapped;
         mapped.color = face.color;
         for (std::size_t i = 0; i < kCorners; ++i) {
-            mapped.points[i] =
-                math::Vec2{(face.ndc[i].x + 1.0f) * 0.5f * width,
-                           (1.0f - face.ndc[i].y) * 0.5f * height};
+            mapped.points[i] = math::Vec2{
+                rect.x + (face.ndc[i].x + 1.0f) * 0.5f * rect.width,
+                rect.y + (1.0f - face.ndc[i].y) * 0.5f * rect.height};
         }
         result.faces.push_back(mapped);
     }
     return result;
 }
 
-ViewportPass viewport(std::uint32_t width, std::uint32_t height) noexcept
+ViewportPass viewport(const Rect& rect) noexcept
 {
-    return ViewportPass{static_cast<float>(width), static_cast<float>(height)};
+    return ViewportPass{rect};
 }
 
 }  // namespace rubiks::graphics

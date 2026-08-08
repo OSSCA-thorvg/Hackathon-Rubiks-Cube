@@ -1,44 +1,47 @@
 #pragma once
 
+#include "cube/CubeState.hpp"
+#include "cube/Cubie.hpp"
 #include "graphics/Color.hpp"
 #include "graphics/Scene.hpp"
 #include "math/Types.hpp"
 
 namespace rubiks::graphics {
 
-/**
- * The six face colors of one cube, each independently assignable.
- *
- * Phase 4 gives every 1x1x1 cubie its own instance of this so a single cubie
- * can carry stickers of different colors; Phase 3 uses one cube with the
- * standard colors.
- */
-struct CubeFaceColors {
-    Color right;  // +X
-    Color left;   // -X
-    Color up;     // +Y
-    Color down;   // -Y
-    Color front;  // +Z
-    Color back;   // -Z
-};
-
-/** Standard Rubik's Cube colors used by the rendered scene contract. */
-[[nodiscard]] CubeFaceColors standard_cube_colors() noexcept;
+/** Half the edge length of the whole cube, whatever N is. */
+inline constexpr float kCubeHalfExtent = 1.0f;
 
 /**
- * Appends the six faces of an axis-aligned cube to `scene`.
+ * How much of its grid cell a sticker fills.
  *
- * Every face is wound counter-clockwise as seen from outside the cube, which
- * is what back-face culling relies on.
+ * The remainder is the seam. Because only surface stickers are emitted and
+ * cubies have no body faces, a seam always shows the background color, which
+ * is what makes seam pixels a decisive check rather than an approximate one.
  */
-void append_cube(WorldScene& scene, const math::Vec3& center, float half_extent,
-                 const CubeFaceColors& colors);
+inline constexpr float kStickerScale = 0.92f;
+
+/** Distance from a cubie's center to its sticker plane. */
+[[nodiscard]] float sticker_half_extent(int size) noexcept;
+
+/** Center of the cubie at index `i` along one axis, for an N of `size`. */
+[[nodiscard]] float cubie_center(int i, int size) noexcept;
 
 /**
- * Builds the Phase 3 scene: one cube of edge length 2 centered at the origin.
+ * Appends one sticker quad, wound counter-clockwise as seen from outside.
  *
- * This is the seam Phase 4 replaces with a CubeState-driven 3x3x3 layout.
+ * Back-face culling depends on that winding, so this function is the single
+ * place the six corner orders are written down.
  */
-[[nodiscard]] WorldScene build_scene();
+void append_sticker(WorldScene& scene, const math::Vec3& center,
+                    float half_extent, cube::Face face, const Color& color);
+
+/**
+ * Builds the world-space scene for a cube state.
+ *
+ * Only stickers on the outside of the cube are emitted: a cubie's face is
+ * visible exactly when that cubie sits in the outermost layer along the
+ * face's axis. At N = 3 that is 54 quads, of which the fixed camera keeps 27.
+ */
+[[nodiscard]] WorldScene build_cube_scene(const cube::CubeState& state);
 
 }  // namespace rubiks::graphics

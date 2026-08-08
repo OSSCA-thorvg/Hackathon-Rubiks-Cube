@@ -5,8 +5,12 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "cube/CubeMove.hpp"
+#include "cube/CubeState.hpp"
 #include "graphics/Camera.hpp"
 #include "graphics/CubeGeometry.hpp"
+#include "graphics/Layout.hpp"
+#include "graphics/Palette.hpp"
 #include "graphics/Passes.hpp"
 #include "graphics/Pipeline.hpp"
 #include "math/Transform.hpp"
@@ -18,10 +22,14 @@ namespace {
 
 using Catch::Approx;
 using namespace rubiks::graphics;
+using rubiks::cube::CubeState;
+using rubiks::cube::Face;
+using rubiks::cube::FaceColor;
 using rubiks::math::Vec2;
 using rubiks::math::Vec3;
 
 constexpr float kPi = 3.14159265358979323846f;
+constexpr std::uint32_t kCanvas = 1024;
 
 /** Square camera with a 90 degree vertical field of view at the origin. */
 Camera test_camera()
@@ -55,23 +63,59 @@ bool contains(const std::array<Vec2, 4>& quad, const Vec2& point)
     return !(positive && negative);
 }
 
-const RenderFace* find_face(const RenderScene& scene, const Color& color)
+/** The topmost face covering `point`, or null when the point shows through. */
+const RenderFace* face_at(const RenderScene& scene, const Vec2& point)
 {
+    const RenderFace* found = nullptr;
     for (const auto& face : scene.faces) {
-        if (face.color == color) return &face;
+        if (contains(face.points, point)) found = &face;
     }
-    return nullptr;
+    return found;
+}
+
+std::size_t count_color(const RenderScene& scene, const Color& color)
+{
+    std::size_t total = 0;
+    for (const auto& face : scene.faces) {
+        if (face.color == color) ++total;
+    }
+    return total;
+}
+
+/** Renders a cube state through the whole pipeline into the cube region. */
+RenderScene render_cube(const CubeState& state,
+                        const rubiks::math::Transform& model = {})
+{
+    const auto placement = layout(kCanvas, kCanvas);
+    const Camera camera =
+        default_camera(placement.cube.width / placement.cube.height);
+
+    return build_cube_scene(state)   //
+           | transform(model)        //
+           | view(camera)            //
+           | project(camera)         //
+           | cull()                  //
+           | depth_sort()            //
+           | viewport(placement.cube);
+}
+
+/** A point given as a fraction of the square 3D region. */
+Vec2 cube_sample(float fx, float fy)
+{
+    const auto region = layout(kCanvas, kCanvas).cube;
+    return Vec2{region.x + fx * region.width, region.y + fy * region.height};
 }
 
 }  // namespace
 
-TEST_CASE("build_scene emits one cube whose faces wind outward")
+TEST_CASE("build_cube_scene emits only surface stickers, wound outward")
 {
-    const WorldScene scene = build_scene();
-    REQUIRE(scene.faces.size() == 6);
+    const WorldScene scene = build_cube_scene(CubeState(3));
 
-    // Every face normal, taken from the first two edges, must point away from
-    // the cube center; that is what counter-clockwise-from-outside means.
+    // Six faces of a 3x3 sheet. Interior and side faces are deliberately
+    // absent, which is what makes every seam show the background.
+    REQUIRE(scene.faces.size() == 54);
+
     for (const auto& face : scene.faces) {
         const Vec3 first{face.points[1].x - face.points[0].x,
                          face.points[1].y - face.points[0].y,
@@ -87,26 +131,44 @@ TEST_CASE("build_scene emits one cube whose faces wind outward")
                             centroid.y + point.y * 0.25f,
                             centroid.z + point.z * 0.25f};
         }
+        // Every normal points away from the cube center; that is what
+        // counter-clockwise-from-outside means.
         REQUIRE(rubiks::math::dot(normal, centroid) > 0.0f);
     }
 }
 
-TEST_CASE("append_cube gives each face its own color")
+TEST_CASE("cubie geometry tiles the cube without overlapping")
 {
-    CubeFaceColors colors;
-    colors.right = Color{1, 0, 0, 255};
-    colors.left = Color{2, 0, 0, 255};
-    colors.up = Color{3, 0, 0, 255};
-    colors.down = Color{4, 0, 0, 255};
-    colors.front = Color{5, 0, 0, 255};
-    colors.back = Color{6, 0, 0, 255};
+    constexpr int kSize = 3;
 
+    // The outermost sticker plane sits just inside the nominal cube face,
+    // inset by the seam.
+    const float outer = cubie_center(kSize - 1, kSize) +
+                        sticker_half_extent(kSize);
+    REQUIRE(outer == Approx(kCubeHalfExtent * (kSize - 1 + kStickerScale) /
+                            static_cast<float>(kSize)));
+    REQUIRE(outer < kCubeHalfExtent);
+
+    // Neighbouring cubie centers are one pitch apart and symmetric about 0.
+    REQUIRE(cubie_center(0, kSize) == Approx(-cubie_center(kSize - 1, kSize)));
+    REQUIRE(cubie_center(1, kSize) - cubie_center(0, kSize) ==
+            Approx(2.0f * kCubeHalfExtent / static_cast<float>(kSize)));
+
+    // Adjacent stickers do not touch, so a seam always has positive width.
+    REQUIRE(2.0f * sticker_half_extent(kSize) <
+            cubie_center(1, kSize) - cubie_center(0, kSize));
+}
+
+TEST_CASE("append_sticker places one quad on the requested face")
+{
     WorldScene scene;
-    append_cube(scene, Vec3{0.0f, 0.0f, 0.0f}, 0.5f, colors);
+    append_sticker(scene, Vec3{0.0f, 0.0f, 0.0f}, 0.5f, Face::Right,
+                   Color{7, 0, 0, 255});
 
-    REQUIRE(scene.faces.size() == 6);
-    for (std::uint8_t expected = 1; expected <= 6; ++expected) {
-        REQUIRE(scene.faces[expected - 1].color.r == expected);
+    REQUIRE(scene.faces.size() == 1);
+    REQUIRE(scene.faces[0].color == Color{7, 0, 0, 255});
+    for (const auto& point : scene.faces[0].points) {
+        REQUIRE(point.x == Approx(0.5f));
     }
 }
 
@@ -225,7 +287,7 @@ TEST_CASE("depth_sort orders faces back to front and is stable")
     }
 }
 
-TEST_CASE("viewport maps NDC to pixels with the origin at the top left")
+TEST_CASE("viewport maps NDC into a sub-rectangle of the buffer")
 {
     const std::array<Vec2, 4> quad{Vec2{-1.0f, -1.0f}, Vec2{1.0f, -1.0f},
                                    Vec2{1.0f, 1.0f}, Vec2{0.0f, 0.0f}};
@@ -233,107 +295,160 @@ TEST_CASE("viewport maps NDC to pixels with the origin at the top left")
     ClipScene scene;
     scene.faces.push_back(clip_face(quad, -1.0f, Color{9, 9, 9, 255}));
 
-    const RenderScene mapped = viewport(200, 100)(scene);
+    const RenderScene mapped =
+        viewport(Rect{40.0f, 10.0f, 200.0f, 100.0f})(scene);
     REQUIRE(mapped.faces.size() == 1);
 
     const auto& points = mapped.faces[0].points;
-    // NDC -Y is the bottom of the image, which is the largest pixel row.
-    REQUIRE(points[0].x == Approx(0.0f).margin(1e-4));
-    REQUIRE(points[0].y == Approx(100.0f).margin(1e-4));
-    REQUIRE(points[2].x == Approx(200.0f).margin(1e-4));
-    REQUIRE(points[2].y == Approx(0.0f).margin(1e-4));
-    REQUIRE(points[3].x == Approx(100.0f).margin(1e-4));
-    REQUIRE(points[3].y == Approx(50.0f).margin(1e-4));
+    // NDC -Y is the bottom of the region, which is the largest pixel row, and
+    // the whole mapping is offset by the rectangle origin.
+    REQUIRE(points[0].x == Approx(40.0f).margin(1e-4));
+    REQUIRE(points[0].y == Approx(110.0f).margin(1e-4));
+    REQUIRE(points[2].x == Approx(240.0f).margin(1e-4));
+    REQUIRE(points[2].y == Approx(10.0f).margin(1e-4));
+    REQUIRE(points[3].x == Approx(140.0f).margin(1e-4));
+    REQUIRE(points[3].y == Approx(60.0f).margin(1e-4));
 
     REQUIRE(mapped.faces[0].color == Color{9, 9, 9, 255});
 }
 
-TEST_CASE("the cube pipeline yields the three faces of the scene contract")
+TEST_CASE("the layout splits the canvas into a square cube region and a net")
 {
-    constexpr std::uint32_t kSize = 512;
-    const Camera camera = default_camera(1.0f);
-    const rubiks::math::Transform model;
-
-    const RenderScene scene = build_scene()            //
-                              | transform(model)       //
-                              | view(camera)           //
-                              | project(camera)        //
-                              | cull()                 //
-                              | depth_sort()           //
-                              | viewport(kSize, kSize);
-
-    const CubeFaceColors colors = standard_cube_colors();
-
-    SECTION("only the three faces turned toward the camera survive")
+    SECTION("a square canvas matches the documented fractions")
     {
-        REQUIRE(scene.faces.size() == 3);
-        REQUIRE(find_face(scene, colors.right) != nullptr);
-        REQUIRE(find_face(scene, colors.up) != nullptr);
-        REQUIRE(find_face(scene, colors.front) != nullptr);
-        REQUIRE(find_face(scene, colors.left) == nullptr);
-        REQUIRE(find_face(scene, colors.down) == nullptr);
-        REQUIRE(find_face(scene, colors.back) == nullptr);
+        const auto placement = layout(1000, 1000);
+
+        REQUIRE(placement.cube.width == Approx(580.0f));
+        REQUIRE(placement.cube.height == Approx(580.0f));
+        REQUIRE(placement.cube.x == Approx(210.0f));
+        REQUIRE(placement.cube.y == Approx(10.0f));
+
+        REQUIRE(placement.net.width == Approx(480.0f));
+        REQUIRE(placement.net.height == Approx(360.0f));
+        REQUIRE(placement.net.x == Approx(260.0f));
+        REQUIRE(placement.net.y == Approx(620.0f));
+
+        // The two regions do not overlap, so appending one after the other
+        // cannot hide anything.
+        REQUIRE(placement.cube.y + placement.cube.height <= placement.net.y);
     }
 
-    SECTION("the rendered scene contract samples fall inside their faces")
+    SECTION("the cube region stays square on any aspect ratio")
     {
-        // Fractions of the drawing buffer, matching the contract in
-        // docs/tasks/03-math-and-graphics-foundation.md.
-        const auto sample = [](float fx, float fy) {
-            return Vec2{fx * static_cast<float>(kSize),
-                        fy * static_cast<float>(kSize)};
-        };
+        for (const auto& size : {std::pair<std::uint32_t, std::uint32_t>{320, 200},
+                                 {200, 320},
+                                 {1920, 1080}}) {
+            const auto placement = layout(size.first, size.second);
+            REQUIRE(placement.cube.width == Approx(placement.cube.height));
 
-        const auto* up_face = find_face(scene, colors.up);
-        const auto* front_face = find_face(scene, colors.front);
-        const auto* right_face = find_face(scene, colors.right);
-        REQUIRE(up_face != nullptr);
-        REQUIRE(front_face != nullptr);
-        REQUIRE(right_face != nullptr);
-
-        REQUIRE(contains(up_face->points, sample(0.50f, 0.29f)));
-        REQUIRE(contains(front_face->points, sample(0.31f, 0.61f)));
-        REQUIRE(contains(right_face->points, sample(0.69f, 0.61f)));
-
-        // Each sample identifies exactly one face, so a swapped color or
-        // winding cannot pass unnoticed.
-        REQUIRE(!contains(up_face->points, sample(0.31f, 0.61f)));
-        REQUIRE(!contains(front_face->points, sample(0.69f, 0.61f)));
-        REQUIRE(!contains(right_face->points, sample(0.50f, 0.29f)));
-    }
-
-    SECTION("the cube silhouette stays clear of the image corners")
-    {
-        for (const auto& face : scene.faces) {
-            REQUIRE(!contains(face.points, Vec2{0.0f, 0.0f}));
-            REQUIRE(!contains(face.points, Vec2{kSize - 1.0f, 0.0f}));
-            REQUIRE(!contains(face.points, Vec2{0.0f, kSize - 1.0f}));
-            REQUIRE(!contains(face.points, Vec2{kSize - 1.0f, kSize - 1.0f}));
+            // Both regions stay centered horizontally and inside the canvas.
+            const auto width = static_cast<float>(size.first);
+            REQUIRE(placement.cube.x ==
+                    Approx(width - placement.cube.x - placement.cube.width));
+            REQUIRE(placement.cube.x >= 0.0f);
+            REQUIRE(placement.net.x >= 0.0f);
         }
     }
 }
 
+TEST_CASE("a solved cube renders 27 stickers, nine of each visible color")
+{
+    const RenderScene scene = render_cube(CubeState(3));
+
+    // Three faces of a 3x3 sheet; the other 27 stickers face away.
+    REQUIRE(scene.faces.size() == 27);
+    REQUIRE(count_color(scene, to_color(FaceColor::White)) == 9);
+    REQUIRE(count_color(scene, to_color(FaceColor::Green)) == 9);
+    REQUIRE(count_color(scene, to_color(FaceColor::Red)) == 9);
+    REQUIRE(count_color(scene, to_color(FaceColor::Yellow)) == 0);
+    REQUIRE(count_color(scene, to_color(FaceColor::Orange)) == 0);
+    REQUIRE(count_color(scene, to_color(FaceColor::Blue)) == 0);
+}
+
+TEST_CASE("the contract samples land on the center sticker of each face")
+{
+    const RenderScene scene = render_cube(CubeState(3));
+
+    // Fractions of the square cube region, from the contract in
+    // docs/tasks/04-rubiks-cube-domain.md.
+    const auto* up = face_at(scene, cube_sample(0.50f, 0.29f));
+    const auto* front = face_at(scene, cube_sample(0.31f, 0.61f));
+    const auto* right = face_at(scene, cube_sample(0.69f, 0.61f));
+
+    REQUIRE(up != nullptr);
+    REQUIRE(front != nullptr);
+    REQUIRE(right != nullptr);
+    REQUIRE(up->color == to_color(FaceColor::White));
+    REQUIRE(front->color == to_color(FaceColor::Green));
+    REQUIRE(right->color == to_color(FaceColor::Red));
+}
+
+TEST_CASE("the seam samples fall between stickers")
+{
+    const RenderScene scene = render_cube(CubeState(3));
+
+    // Nothing is drawn in a seam, so these points show the background. This
+    // only holds because cubies have no body faces.
+    REQUIRE(face_at(scene, cube_sample(0.377f, 0.645f)) == nullptr);
+    REQUIRE(face_at(scene, cube_sample(0.313f, 0.534f)) == nullptr);
+    REQUIRE(face_at(scene, cube_sample(0.564f, 0.321f)) == nullptr);
+}
+
+TEST_CASE("the cube silhouette stays inside its region")
+{
+    const RenderScene scene = render_cube(CubeState(3));
+    const auto region = layout(kCanvas, kCanvas).cube;
+
+    for (const auto& face : scene.faces) {
+        for (const auto& point : face.points) {
+            REQUIRE(point.x >= region.x);
+            REQUIRE(point.x <= region.x + region.width);
+            REQUIRE(point.y >= region.y);
+            REQUIRE(point.y <= region.y + region.height);
+        }
+    }
+}
+
+TEST_CASE("a move changes the colors the pipeline puts on screen")
+{
+    CubeState state(3);
+    state.apply(rubiks::cube::moves::U(3));
+
+    const RenderScene scene = render_cube(state);
+
+    // U cycles the top row Front -> Left -> Back -> Right -> Front. Of the
+    // three visible faces the top face keeps its nine whites, the front row
+    // takes the right face's red, and the right row takes blue from the back
+    // face, which is itself culled along with the orange it received.
+    REQUIRE(scene.faces.size() == 27);
+    REQUIRE(count_color(scene, to_color(FaceColor::White)) == 9);
+    REQUIRE(count_color(scene, to_color(FaceColor::Green)) == 6);
+    REQUIRE(count_color(scene, to_color(FaceColor::Red)) == 6 + 3);
+    REQUIRE(count_color(scene, to_color(FaceColor::Blue)) == 3);
+    REQUIRE(count_color(scene, to_color(FaceColor::Orange)) == 0);
+
+    // Centers sit outside the turning layer, so the contract samples are
+    // unchanged; only the rows above them moved.
+    REQUIRE(face_at(scene, cube_sample(0.50f, 0.29f))->color ==
+            to_color(FaceColor::White));
+    REQUIRE(face_at(scene, cube_sample(0.31f, 0.61f))->color ==
+            to_color(FaceColor::Green));
+    REQUIRE(face_at(scene, cube_sample(0.69f, 0.61f))->color ==
+            to_color(FaceColor::Red));
+}
+
 TEST_CASE("the model transform reaches the pipeline output")
 {
-    const Camera camera = default_camera(1.0f);
-
     rubiks::math::Transform shrunk;
     shrunk.scale = 0.5f;
 
-    const RenderScene reference = build_scene()
-                                  | transform(rubiks::math::Transform{})
-                                  | view(camera) | project(camera) | cull()
-                                  | depth_sort() | viewport(512, 512);
-    const RenderScene scaled = build_scene() | transform(shrunk) | view(camera)
-                               | project(camera) | cull() | depth_sort()
-                               | viewport(512, 512);
+    const RenderScene reference = render_cube(CubeState(3));
+    const RenderScene scaled = render_cube(CubeState(3), shrunk);
 
     REQUIRE(reference.faces.size() == scaled.faces.size());
 
-    // A half-size cube covers strictly less of the image, so its top face
-    // cannot still contain the contract sample of the full-size cube.
-    const CubeFaceColors colors = standard_cube_colors();
-    const auto* scaled_up = find_face(scaled, colors.up);
-    REQUIRE(scaled_up != nullptr);
-    REQUIRE(!contains(scaled_up->points, Vec2{0.50f * 512.0f, 0.29f * 512.0f}));
+    // A half-size cube covers strictly less of the region, so the contract
+    // sample of the full-size cube now shows background.
+    REQUIRE(face_at(reference, cube_sample(0.50f, 0.29f)) != nullptr);
+    REQUIRE(face_at(scaled, cube_sample(0.50f, 0.29f)) == nullptr);
 }

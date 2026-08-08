@@ -1,9 +1,13 @@
 #pragma once
 
+#include <optional>
+
 #include "cube/CubeState.hpp"
 #include "cube/Cubie.hpp"
+#include "graphics/ActiveRotation.hpp"
 #include "graphics/Color.hpp"
 #include "graphics/Scene.hpp"
+#include "math/Quaternion.hpp"
 #include "math/Types.hpp"
 
 namespace rubiks::graphics {
@@ -36,12 +40,47 @@ void append_sticker(WorldScene& scene, const math::Vec3& center,
                     float half_extent, cube::Face face, const Color& color);
 
 /**
- * Builds the world-space scene for a cube state.
+ * Color of a cut surface exposed while a layer is turning.
+ *
+ * A cubie has no body faces at rest, so without this the inside of the cube
+ * would show through as background during a turn. Kept clearly apart from the
+ * background and from all six sticker colors so a test can tell them apart.
+ */
+inline constexpr Color kBodyColor{70, 74, 82, 255};
+
+/**
+ * Rotation of a turning layer, in the domain's sign convention.
+ *
+ * CubeMove counts a positive turn clockwise seen from the positive end of the
+ * axis, which is a negative right-handed rotation. That conversion happens
+ * here and nowhere else, so picking, drag resolution and rendering cannot
+ * disagree about which way a positive angle turns.
+ */
+[[nodiscard]] math::Quaternion layer_rotation(cube::Axis axis,
+                                              float degrees) noexcept;
+
+/**
+ * Builds the world-space scene for a cube state at rest.
  *
  * Only stickers on the outside of the cube are emitted: a cubie's face is
  * visible exactly when that cubie sits in the outermost layer along the
  * face's axis. At N = 3 that is 54 quads, of which the fixed camera keeps 27.
  */
 [[nodiscard]] WorldScene build_cube_scene(const cube::CubeState& state);
+
+/**
+ * Builds the scene for a cube state with a layer turn in progress.
+ *
+ * Without a turn this calls the function above verbatim, so the resting
+ * output stays the one the rendered scene contract was derived from rather
+ * than whatever a zero-angle rotation happens to produce.
+ *
+ * With a turn, the stickers of the selected layers rotate about the cube
+ * center, and the cut surfaces revealed at the boundary between turning and
+ * still layers are filled with kBodyColor.
+ */
+[[nodiscard]] WorldScene build_cube_scene(
+    const cube::CubeState& state,
+    const std::optional<ActiveRotation>& active);
 
 }  // namespace rubiks::graphics

@@ -13,3 +13,11 @@ net_test = executable(
 )
 
 test('net geometry', net_test)
+
+transient_test = executable(
+  'transient-test',
+  files('TransientTest.cpp'),
+  dependencies: [graphics_dep, catch2_dep],
+)
+
+test('transient rotation', transient_test)

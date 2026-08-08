@@ -2,7 +2,7 @@
 
 ## Status
 
-`Proposed`
+`Completed`
 
 ## Objective
 
@@ -241,6 +241,8 @@ white (+Y) : (0.50, 0.29)   green (+Z) : (0.31, 0.61)   red (+X) : (0.69, 0.61)
 
 Seam 폭은 canvas 512px에서 약 2.8px, 1008px에서 약 5.5px입니다. Anti-aliasing이 sample을 오염시키지 않도록 **seam 검증은 canvas 1024 이상에서만** 수행하고, 작은 크기와 resize 이후에는 3D sample과 모서리만 재검증합니다.
 
+Browser에서는 canvas가 `min(80vw, 70vh)`라 기본 viewport에서 504px에 그칩니다. E2E는 seam을 검증하기 전에 viewport를 키우고 **canvas 크기가 실제로 임계값을 넘었는지 먼저 단언**합니다. 그렇게 하지 않으면 stylesheet가 바뀌었을 때 seam 검증이 조용히 건너뛰어집니다.
+
 **3. 전개도 전수 검증** — N = 3에서 54칸의 중심 pixel을 모두 읽어 기대 색 격자와 비교합니다. Sample 3개보다 훨씬 강한 검증이며, 도메인 → 렌더 경로 전체를 덮습니다. 칸 하나가 canvas 1008px에서 약 40px이라 중심 pixel은 anti-aliasing에서 안전합니다.
 
 모서리 검증은 v2와 같습니다. Camera, cube 크기, `sticker_scale`, layout 상수 중 무엇이든 바꾸면 위 좌표를 다시 유도해야 합니다.
@@ -256,44 +258,44 @@ Native pipeline 검증 (pixel이 아니라 `RenderScene` 수준):
 
 ### 1. Cube domain
 
-- [ ] `Face`, `FaceColor`, `Cubie`, index 좌표와 `at(x, y, z)` 정의
-- [ ] Runtime N을 갖는 `CubeState` 생성자와 solved 초기화 구현
-- [ ] `CubeMove`, `LayerMask`, mod 4 정규화 구현
-- [ ] 축별 위치 순열과 sticker 순열로 `apply(CubeMove)` 구현
-- [ ] `inverse(CubeMove)`와 sequence 적용 helper 구현
-- [ ] `moves::R` 등 이름 있는 face move factory 구현
-- [ ] 동등 비교 연산자 구현
-- [ ] Cube를 무의존 Meson target으로 분리
+- [x] `Face`, `FaceColor`, `Cubie`, index 좌표와 `at(x, y, z)` 정의
+- [x] Runtime N을 갖는 `CubeState` 생성자와 solved 초기화 구현
+- [x] `CubeMove`, `LayerMask`, mod 4 정규화 구현
+- [x] 축별 위치 순열과 sticker 순열로 `apply(CubeMove)` 구현
+- [x] `inverse(CubeMove)`와 sequence 적용 helper 구현
+- [x] `moves::R` 등 이름 있는 face move factory 구현
+- [x] 동등 비교 연산자 구현
+- [x] Cube를 무의존 Meson target으로 분리
 
 ### 2. Render connection
 
-- [ ] `ViewportPass`를 sub-rectangle 기반으로 확장
-- [ ] `FaceColor → graphics::Color` 매핑 구현
-- [ ] Surface sticker 방출 규칙으로 `build_cube_scene(const CubeState&)` 교체
-- [ ] Cubie pitch, `sticker_scale` 상수를 N 기준으로 정의
-- [ ] 전개도 배치표대로 `build_net_scene(const CubeState&, Rect)` 구현
-- [ ] Layout 계산(cube 정사각 viewport, net rect)을 한 곳에 정의
-- [ ] Graphics target에 cube dependency 추가
-- [ ] Application이 `CubeState`를 소유하고 두 scene을 합쳐 전달
+- [x] `ViewportPass`를 sub-rectangle 기반으로 확장
+- [x] `FaceColor → graphics::Color` 매핑 구현
+- [x] Surface sticker 방출 규칙으로 `build_cube_scene(const CubeState&)` 교체
+- [x] Cubie pitch, `sticker_scale` 상수를 N 기준으로 정의
+- [x] 전개도 배치표대로 `build_net_scene(const CubeState&, Rect)` 구현
+- [x] Layout 계산(cube 정사각 viewport, net rect)을 한 곳에 정의
+- [x] Graphics target에 cube dependency 추가
+- [x] Application이 `CubeState`를 소유하고 두 scene을 합쳐 전달
 
 ### 3. Verification
 
-- [ ] 위치/sticker 매핑 known-answer test: `R` 후 `(2, 2, 0)` cubie의 Up=Green, Back=White, Right=Red
-- [ ] 모든 기본 move의 주기 4 test (`R⁴ = identity` 등)
-- [ ] `move + inverse = identity` test
-- [ ] `(R U R' U')⁶ = identity` test
-- [ ] 전체 회전 `x⁴ = y⁴ = z⁴ = identity` test
-- [ ] Scramble sequence 적용 후 역순 inverse로 solved 복귀 test
-- [ ] N = 2 smoke test: 저장 크기, `R⁴ = identity`, `R R' = identity`
-- [ ] Move factory가 표의 필드를 만드는지 test (특히 `L`·`D`·`B`의 부호)
-- [ ] Wide와 slice를 직접 구성한 `CubeMove`의 주기 4 test
-- [ ] Solved 상태의 face별 sticker 9개 동일 색 test
-- [ ] 전개도 배치표 test: 인접 변이 같은 모서리를 공유하는지, 54칸이 cubie face와 1:1인지
-- [ ] Native pipeline test: 3D 27개와 전개도 54개, 색 분포, sample/seam의 다각형 포함 관계
-- [ ] Move 적용 상태의 RenderScene 색 변화 test
-- [ ] Native contract test: 3D sample, seam(1024 이상), 전개도 54칸 전수, 모서리
-- [ ] Browser e2e에 전개도 54칸 전수 검증과 seam sample 추가
-- [ ] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
+- [x] 위치/sticker 매핑 known-answer test: `R` 후 `(2, 2, 0)` cubie의 Up=Green, Back=White, Right=Red
+- [x] 모든 기본 move의 주기 4 test (`R⁴ = identity` 등)
+- [x] `move + inverse = identity` test
+- [x] `(R U R' U')⁶ = identity` test
+- [x] 전체 회전 `x⁴ = y⁴ = z⁴ = identity` test
+- [x] Scramble sequence 적용 후 역순 inverse로 solved 복귀 test
+- [x] N = 2 smoke test: 저장 크기, `R⁴ = identity`, `R R' = identity`
+- [x] Move factory가 표의 필드를 만드는지 test (특히 `L`·`D`·`B`의 부호)
+- [x] Wide와 slice를 직접 구성한 `CubeMove`의 주기 4 test
+- [x] Solved 상태의 face별 sticker 9개 동일 색 test
+- [x] 전개도 배치표 test: 인접 변이 같은 모서리를 공유하는지, 54칸이 cubie face와 1:1인지
+- [x] Native pipeline test: 3D 27개와 전개도 54개, 색 분포, sample/seam의 다각형 포함 관계
+- [x] Move 적용 상태의 RenderScene 색 변화 test
+- [x] Native contract test: 3D sample, seam(1024 이상), 전개도 54칸 전수, 모서리
+- [x] Browser e2e에 전개도 54칸 전수 검증과 seam sample 추가
+- [x] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
 
 ## Acceptance criteria
 

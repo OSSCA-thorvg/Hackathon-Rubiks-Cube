@@ -27,8 +27,9 @@ git clone --recurse-submodules https://github.com/OSSCA-thorvg/Hackathon-Rubiks-
 thorvg-rubiks/
 ├── web/                    # Vite + TypeScript + HTML/CSS (Browser application)
 ├── engine/
+│   ├── src/cube/           # Cube state, cubie, move (rendering과 무관)
 │   ├── src/math/           # vector, matrix, quaternion, projection
-│   ├── src/graphics/       # camera, pipeline passes, RenderScene
+│   ├── src/graphics/       # camera, pipeline passes, cube와 전개도 geometry
 │   ├── src/render/         # ThorVG rendering backend
 │   ├── src/app/            # engine lifecycle
 │   └── third_party/        # vendored headers (linalg.h)
@@ -37,7 +38,7 @@ thorvg-rubiks/
 └── cross/                  # Emscripten cross configuration
 ```
 
-`math`와 `graphics`는 ThorVG를 link하지 않는 별도 build target입니다. Graphics pipeline이 rendering backend에 의존하지 못하도록 빌드 구조로 막아 둔 것이라, 해당 경계를 바꿀 때는 `engine/src/meson.build`를 함께 확인하세요.
+`cube`, `math`, `graphics`는 ThorVG를 link하지 않는 별도 build target이고, 그중 `cube`는 아무 dependency도 갖지 않습니다. Cube 도메인이 graphics를, graphics pipeline이 rendering backend를 알지 못하도록 빌드 구조로 막아 둔 것이라, 해당 경계를 바꿀 때는 `engine/src/meson.build`를 함께 확인하세요.
 
 ## 빌드 및 실행
 

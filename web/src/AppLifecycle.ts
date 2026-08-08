@@ -1,4 +1,9 @@
 import {
+  attachPointer,
+  type PointerController,
+  type PointerTarget,
+} from './input/PointerController.ts';
+import {
   computeDrawingBufferSize,
   CubeEngine,
   type CubeEngineSize,
@@ -8,10 +13,12 @@ import {
 export type AppState = 'loading' | 'ready' | 'error';
 
 /** Engine surface the lifecycle needs; CubeEngine satisfies it. */
-export type EngineLike = {
+export type EngineLike = PointerTarget & {
   resize(size: CubeEngineSize): void;
   render(): void;
   dispose(): void;
+  /** @returns true while further frames still have to be drawn. */
+  advance(elapsedMs: number): boolean;
 };
 
 /** Minimal ResizeObserver surface, injectable for unit tests. */
@@ -36,6 +43,8 @@ export type StartAppOptions = {
   readonly createEngine?: (canvas: HTMLCanvasElement) => Promise<EngineLike>;
   readonly createObserver?: (callback: () => void) => ObserverLike;
   readonly targetWindow?: WindowLike;
+  readonly requestFrame?: (callback: (timestamp: number) => void) => number;
+  readonly cancelFrame?: (handle: number) => void;
 };
 
 export type AppController = {
@@ -61,6 +70,12 @@ export async function startApp(
     options.createObserver ??
     ((callback: () => void) => new ResizeObserver(callback));
   const win: WindowLike = options.targetWindow ?? window;
+  const requestFrame =
+    options.requestFrame ??
+    ((callback: (timestamp: number) => void) =>
+      requestAnimationFrame(callback));
+  const cancelFrame =
+    options.cancelFrame ?? ((handle: number) => cancelAnimationFrame(handle));
 
   setState('loading', 'Loading engine…');
 
@@ -77,6 +92,45 @@ export async function startApp(
   // already queued by the observer or the event loop become no-ops.
   let active = true;
   let observer: ObserverLike | null = null;
+  let pointer: PointerController | null = null;
+  let frameHandle: number | null = null;
+  let previousTimestamp: number | null = null;
+
+  const drawFrame = (timestamp: number): void => {
+    frameHandle = null;
+    if (!active) return;
+
+    // The first frame of a run has no previous timestamp to measure from.
+    const elapsed =
+      previousTimestamp === null ? 0 : timestamp - previousTimestamp;
+    previousTimestamp = timestamp;
+
+    try {
+      const moreFrames = engine.advance(elapsed);
+      engine.render();
+
+      // One frame is drawn after the engine stops asking for them, so the
+      // final state of a turn always reaches the canvas.
+      if (moreFrames) frameHandle = requestFrame(drawFrame);
+      else previousTimestamp = null;
+    } catch (error) {
+      teardown();
+      onError(error);
+    }
+  };
+
+  /**
+   * Runs frames while the engine has work.
+   *
+   * Nothing animates at rest, so there is no loop then either: a still cube
+   * costs no frames at all.
+   */
+  const startFrameLoop = (): void => {
+    if (!active || frameHandle !== null) return;
+
+    previousTimestamp = null;
+    frameHandle = requestFrame(drawFrame);
+  };
 
   const applySize = (): void => {
     if (!active) return;
@@ -128,6 +182,12 @@ export async function startApp(
       }
     };
 
+    attempt(() => {
+      if (frameHandle !== null) cancelFrame(frameHandle);
+      frameHandle = null;
+    });
+    // Before the engine is disposed: cancelling a gesture calls into it.
+    attempt(() => pointer?.teardown());
     attempt(() => observer?.disconnect());
     attempt(() => win.removeEventListener('resize', applySize));
     attempt(() => win.removeEventListener('pagehide', onPageHide));
@@ -144,6 +204,11 @@ export async function startApp(
   // The engine is live from here on, so the remaining setup runs as one
   // transaction: any failure unwinds whatever was already installed.
   try {
+    pointer = attachPointer({
+      canvas,
+      engine,
+      onGestureStart: startFrameLoop,
+    });
     observer = createObserver(applySize);
     observer.observe(canvas);
     // Device pixel ratio changes arrive with window resize events.

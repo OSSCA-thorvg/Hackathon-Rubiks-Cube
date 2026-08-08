@@ -23,6 +23,8 @@ function createFakeModule() {
     initializeResult: 1,
     resizeResult: 1,
     renderResult: 1,
+    pointerDownResult: 1,
+    advanceResult: 0,
     pixelBufferOverride: null as number | null,
     pixelByteLengthOverride: null as number | null,
   };
@@ -62,6 +64,13 @@ function createFakeModule() {
     _thorvg_rubiks_shutdown: vi.fn((): void => {
       initialized = false;
     }),
+    _thorvg_rubiks_pointer_down: vi.fn(
+      (): number => behavior.pointerDownResult,
+    ),
+    _thorvg_rubiks_pointer_move: vi.fn((): void => {}),
+    _thorvg_rubiks_pointer_up: vi.fn((): void => {}),
+    _thorvg_rubiks_pointer_cancel: vi.fn((): void => {}),
+    _thorvg_rubiks_advance: vi.fn((): number => behavior.advanceResult),
   } satisfies ThorvgRubiksModule;
 
   /** Simulates WASM memory growth: the old ArrayBuffer is replaced. */
@@ -300,6 +309,41 @@ describe('CubeEngine.resize', () => {
   });
 });
 
+describe('CubeEngine pointer and animation', () => {
+  it('passes pointer events straight through', async () => {
+    const { engine, module } = await createEngine();
+
+    expect(engine.pointerDown(12, 34)).toBe(true);
+    expect(module._thorvg_rubiks_pointer_down).toHaveBeenCalledWith(12, 34);
+
+    engine.pointerMove(56, 78);
+    expect(module._thorvg_rubiks_pointer_move).toHaveBeenCalledWith(56, 78);
+
+    engine.pointerUp();
+    expect(module._thorvg_rubiks_pointer_up).toHaveBeenCalledTimes(1);
+
+    engine.pointerCancel();
+    expect(module._thorvg_rubiks_pointer_cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a missed press as false', async () => {
+    const { engine, behavior } = await createEngine();
+
+    behavior.pointerDownResult = 0;
+    expect(engine.pointerDown(1, 2)).toBe(false);
+  });
+
+  it('turns the advance return code into whether frames remain', async () => {
+    const { engine, module, behavior } = await createEngine();
+
+    expect(engine.advance(16)).toBe(false);
+    expect(module._thorvg_rubiks_advance).toHaveBeenCalledWith(16);
+
+    behavior.advanceResult = 1;
+    expect(engine.advance(16)).toBe(true);
+  });
+});
+
 describe('CubeEngine.dispose', () => {
   it('is idempotent and rejects later calls', async () => {
     const { engine, module } = await createEngine();
@@ -310,5 +354,7 @@ describe('CubeEngine.dispose', () => {
     expect(module._thorvg_rubiks_shutdown).toHaveBeenCalledTimes(1);
     expect(() => engine.render()).toThrow('disposed');
     expect(() => engine.resize({ width: 40, height: 40 })).toThrow('disposed');
+    expect(() => engine.pointerDown(1, 2)).toThrow('disposed');
+    expect(() => engine.advance(16)).toThrow('disposed');
   });
 });

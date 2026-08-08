@@ -14,11 +14,27 @@ import {
 function createHarness(overrides: {
   createObserver?: (callback: () => void) => ObserverLike;
 } = {}) {
+  const canvasListeners = new Map<string, Set<(event: Event) => void>>();
+
   const canvasState = {
     width: 100,
     height: 50,
     clientWidth: 100,
     clientHeight: 50,
+    addEventListener: vi.fn((type: string, listener: (event: Event) => void) => {
+      const bucket = canvasListeners.get(type) ?? new Set();
+      bucket.add(listener);
+      canvasListeners.set(type, bucket);
+    }),
+    removeEventListener: vi.fn(
+      (type: string, listener: (event: Event) => void) => {
+        canvasListeners.get(type)?.delete(listener);
+      },
+    ),
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 50 }),
+    hasPointerCapture: vi.fn(() => true),
+    setPointerCapture: vi.fn(),
+    releasePointerCapture: vi.fn(),
   };
   const canvas = canvasState as unknown as HTMLCanvasElement;
 
@@ -29,7 +45,23 @@ function createHarness(overrides: {
     }),
     render: vi.fn(),
     dispose: vi.fn(),
+    advance: vi.fn(() => false),
+    pointerDown: vi.fn(() => true),
+    pointerMove: vi.fn(),
+    pointerUp: vi.fn(),
+    pointerCancel: vi.fn(),
   } satisfies EngineLike;
+
+  // A hand-cranked animation frame queue, so tests decide when frames run.
+  let pendingFrame: ((timestamp: number) => void) | null = null;
+  let nextFrameHandle = 0;
+  const requestFrame = vi.fn((callback: (timestamp: number) => void) => {
+    pendingFrame = callback;
+    return ++nextFrameHandle;
+  });
+  const cancelFrame = vi.fn(() => {
+    pendingFrame = null;
+  });
 
   let observerCallback: () => void = () => {};
   const observer = { observe: vi.fn(), disconnect: vi.fn() };
@@ -65,6 +97,8 @@ function createHarness(overrides: {
           return observer;
         }),
       targetWindow,
+      requestFrame,
+      cancelFrame,
     });
 
   const dispatch = (type: string, event: Event): void => {
@@ -74,6 +108,26 @@ function createHarness(overrides: {
   const listenerCount = (type: string): number =>
     listeners.get(type)?.size ?? 0;
 
+  const dispatchPointer = (type: string, event: Partial<PointerEvent>): void => {
+    const full = {
+      pointerId: 1,
+      isPrimary: true,
+      button: 0,
+      clientX: 10,
+      clientY: 10,
+      ...event,
+    } as PointerEvent;
+    for (const listener of canvasListeners.get(type) ?? []) {
+      listener(full as unknown as Event);
+    }
+  };
+
+  const runFrame = (timestamp: number): void => {
+    const callback = pendingFrame;
+    pendingFrame = null;
+    callback?.(timestamp);
+  };
+
   return {
     start,
     canvasState,
@@ -82,6 +136,11 @@ function createHarness(overrides: {
     triggerObserver: () => observerCallback(),
     dispatch,
     listenerCount,
+    dispatchPointer,
+    runFrame,
+    hasPendingFrame: () => pendingFrame !== null,
+    requestFrame,
+    cancelFrame,
     states,
     onError,
   };
@@ -299,6 +358,88 @@ describe('startApp', () => {
     expect(errorSpy).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'dispose failed' }),
     );
+  });
+
+  it('runs no frames while the cube is at rest', async () => {
+    const harness = createHarness();
+    await harness.start();
+
+    // A still cube costs nothing: no loop is scheduled just by being ready.
+    expect(harness.requestFrame).not.toHaveBeenCalled();
+    expect(harness.engine.advance).not.toHaveBeenCalled();
+  });
+
+  it('starts a frame loop when a press grabs the cube', async () => {
+    const harness = createHarness();
+    await harness.start();
+
+    harness.dispatchPointer('pointerdown', {});
+
+    expect(harness.engine.pointerDown).toHaveBeenCalledTimes(1);
+    expect(harness.hasPendingFrame()).toBe(true);
+  });
+
+  it('leaves the page alone when a press misses the cube', async () => {
+    const harness = createHarness();
+    harness.engine.pointerDown.mockReturnValueOnce(false);
+    await harness.start();
+
+    harness.dispatchPointer('pointerdown', {});
+
+    expect(harness.canvasState.setPointerCapture).not.toHaveBeenCalled();
+    expect(harness.hasPendingFrame()).toBe(false);
+  });
+
+  it('keeps drawing while the engine asks for frames and then stops', async () => {
+    const harness = createHarness();
+    await harness.start();
+
+    harness.engine.advance.mockReturnValueOnce(true);
+    harness.dispatchPointer('pointerdown', {});
+
+    // The first frame of a run measures no elapsed time.
+    harness.runFrame(1000);
+    expect(harness.engine.advance).toHaveBeenLastCalledWith(0);
+    expect(harness.hasPendingFrame()).toBe(true);
+
+    harness.runFrame(1016);
+    expect(harness.engine.advance).toHaveBeenLastCalledWith(16);
+
+    // advance() returned false, so this was the last frame drawn.
+    expect(harness.hasPendingFrame()).toBe(false);
+    expect(harness.engine.render).toHaveBeenCalledTimes(3);
+  });
+
+  it('tears down and reports when a frame fails', async () => {
+    const harness = createHarness();
+    await harness.start();
+
+    harness.engine.advance.mockImplementationOnce(() => {
+      throw new Error('advance failed');
+    });
+    harness.dispatchPointer('pointerdown', {});
+    harness.runFrame(1000);
+
+    expect(harness.engine.dispose).toHaveBeenCalledTimes(1);
+    expect(harness.onError).toHaveBeenCalledTimes(1);
+    expect(harness.hasPendingFrame()).toBe(false);
+  });
+
+  it('cancels a pending frame and the gesture on teardown', async () => {
+    const harness = createHarness();
+    const controller = await harness.start();
+
+    harness.engine.advance.mockReturnValue(true);
+    harness.dispatchPointer('pointerdown', {});
+    expect(harness.hasPendingFrame()).toBe(true);
+
+    controller.teardown();
+
+    expect(harness.cancelFrame).toHaveBeenCalledTimes(1);
+    // A gesture cut short by teardown must not commit a turn.
+    expect(harness.engine.pointerCancel).toHaveBeenCalledTimes(1);
+    expect(harness.engine.pointerUp).not.toHaveBeenCalled();
+    expect(harness.engine.dispose).toHaveBeenCalledTimes(1);
   });
 
   it('treats repeated teardown as a no-op', async () => {

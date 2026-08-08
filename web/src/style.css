@@ -33,6 +33,8 @@ body {
   width: min(80vw, 70vh);
   aspect-ratio: 1 / 1;
   background: #202020;
+  /* Dragging a layer must not scroll or zoom the page instead. */
+  touch-action: none;
 }
 
 #app[data-state='loading'] canvas {

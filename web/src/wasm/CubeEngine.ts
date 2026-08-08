@@ -196,6 +196,57 @@ export class CubeEngine {
   }
 
   /**
+   * Begins a gesture at a point in drawing buffer pixels.
+   *
+   * @returns true when the press grabbed the cube.
+   * @throws Error when disposed.
+   */
+  pointerDown(x: number, y: number): boolean {
+    this.assertUsable();
+
+    return this.module._thorvg_rubiks_pointer_down(x, y) !== 0;
+  }
+
+  /** Continues the active gesture. @throws Error when disposed. */
+  pointerMove(x: number, y: number): void {
+    this.assertUsable();
+
+    this.module._thorvg_rubiks_pointer_move(x, y);
+  }
+
+  /** Releases the active gesture. @throws Error when disposed. */
+  pointerUp(): void {
+    this.assertUsable();
+
+    this.module._thorvg_rubiks_pointer_up();
+  }
+
+  /**
+   * Abandons the active gesture without turning the cube.
+   *
+   * @throws Error when disposed.
+   */
+  pointerCancel(): void {
+    this.assertUsable();
+
+    this.module._thorvg_rubiks_pointer_cancel();
+  }
+
+  /**
+   * Advances animation by an elapsed time in milliseconds.
+   *
+   * The engine reads no clock, so this is where time enters it.
+   *
+   * @returns true while further frames still have to be drawn.
+   * @throws Error when disposed.
+   */
+  advance(elapsedMs: number): boolean {
+    this.assertUsable();
+
+    return this.module._thorvg_rubiks_advance(elapsedMs) !== 0;
+  }
+
+  /**
    * Shuts the engine down and drops the borrowed pixel buffer views.
    *
    * Safe to call more than once; other methods fail afterwards.

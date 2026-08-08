@@ -20,6 +20,13 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_pixel_buffer(): number;
   _thorvg_rubiks_pixel_byte_length(): number;
   _thorvg_rubiks_shutdown(): void;
+  /** Coordinates are drawing buffer pixels; returns 1 when the cube was hit. */
+  _thorvg_rubiks_pointer_down(x: number, y: number): number;
+  _thorvg_rubiks_pointer_move(x: number, y: number): void;
+  _thorvg_rubiks_pointer_up(): void;
+  _thorvg_rubiks_pointer_cancel(): void;
+  /** Returns 1 while further frames still have to be drawn. */
+  _thorvg_rubiks_advance(elapsedMs: number): number;
 };
 
 /** Factory that creates one engine module instance. */

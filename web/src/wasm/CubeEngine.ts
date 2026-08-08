@@ -25,6 +25,33 @@ export type CubeEngineOptions = {
   readonly loadModule?: () => Promise<ThorvgRubiksModule>;
 };
 
+/** External faces in the same stable order as the C++ cube domain. */
+export const CubeFace = {
+  Right: 0,
+  Left: 1,
+  Up: 2,
+  Down: 3,
+  Front: 4,
+  Back: 5,
+} as const;
+
+/** One stable external face value. */
+export type CubeFace = (typeof CubeFace)[keyof typeof CubeFace];
+
+/** Render regions available to the browser UI. */
+export const CubeViewMode = {
+  Cube3D: 0,
+  Both: 1,
+  Net: 2,
+} as const;
+
+/** One render-region mode value. */
+export type CubeViewMode =
+  (typeof CubeViewMode)[keyof typeof CubeViewMode];
+
+/** Face-relative turns accepted by programmatic move controls. */
+export type FaceTurns = -1 | 1 | 2;
+
 async function loadGeneratedModule(): Promise<ThorvgRubiksModule> {
   // The generated module lives in the Vite module graph, so this literal
   // dynamic import is code-split and the WASM binary referenced through
@@ -246,6 +273,79 @@ export class CubeEngine {
     this.assertUsable();
 
     return this.module._thorvg_rubiks_advance(elapsedMs) !== 0;
+  }
+
+  /** Replaces the cube with a deterministic scramble for `seed`. */
+  scramble(seed: number): void {
+    this.assertUsable();
+    if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) {
+      throw new Error(`Invalid scramble seed ${seed}.`);
+    }
+    if (this.module._thorvg_rubiks_scramble(seed) === 0) {
+      throw new Error('Engine rejected the scramble.');
+    }
+  }
+
+  /** Restores the solved cube while preserving camera and view mode. */
+  resetCube(): void {
+    this.assertUsable();
+    this.module._thorvg_rubiks_reset_cube();
+  }
+
+  /** Reports whether the committed logical cube is solved. */
+  isSolved(): boolean {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_is_solved() !== 0;
+  }
+
+  /** Returns user moves committed since the latest scramble or reset. */
+  committedMoveCount(): number {
+    this.assertUsable();
+    const count = this.module._thorvg_rubiks_committed_move_count();
+    if (!Number.isSafeInteger(count) || count < 0) {
+      throw new Error(`Engine returned an invalid move count ${count}.`);
+    }
+    return count;
+  }
+
+  /** Starts one animated face turn, returning false while the engine is busy. */
+  turnFace(face: CubeFace, faceTurns: FaceTurns): boolean {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_turn_face(face, faceTurns) !== 0;
+  }
+
+  /** Changes which cube views are rendered. */
+  setViewMode(mode: CubeViewMode): void {
+    this.assertUsable();
+    if (this.module._thorvg_rubiks_set_view_mode(mode) === 0) {
+      throw new Error(`Engine rejected view mode ${mode}.`);
+    }
+  }
+
+  /** Returns the currently selected render mode. */
+  viewMode(): CubeViewMode {
+    this.assertUsable();
+    const mode = this.module._thorvg_rubiks_view_mode();
+    if (
+      mode !== CubeViewMode.Cube3D &&
+      mode !== CubeViewMode.Both &&
+      mode !== CubeViewMode.Net
+    ) {
+      throw new Error(`Engine returned an invalid view mode ${mode}.`);
+    }
+    return mode;
+  }
+
+  /** Restores only the turntable camera. */
+  resetView(): void {
+    this.assertUsable();
+    this.module._thorvg_rubiks_reset_view();
+  }
+
+  /** Reports whether a gesture, animation, or pending commit is active. */
+  isBusy(): boolean {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_is_busy() !== 0;
   }
 
   /**

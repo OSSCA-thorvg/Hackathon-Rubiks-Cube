@@ -5,6 +5,30 @@ import {
   type EngineLike,
   type ObserverLike,
 } from '../../src/AppLifecycle.ts';
+import type {
+  GameController,
+  GameControllerOptions,
+  GameUi,
+} from '../../src/game/GameController.ts';
+
+/**
+ * The gameplay DOM the lifecycle forwards. GameController owns what the
+ * elements mean; here they only have to exist.
+ */
+function createGameUi(): GameUi {
+  const button = (): HTMLButtonElement => document.createElement('button');
+  return {
+    root: document.createElement('main'),
+    canvas: document.createElement('canvas'),
+    timer: document.createElement('output'),
+    status: document.createElement('p'),
+    scrambleButton: button(),
+    resetButton: button(),
+    homeViewButton: button(),
+    viewButtons: [],
+    moveButtons: [],
+  };
+}
 
 /**
  * Builds a lifecycle harness with a mock engine, observer, and window.
@@ -13,6 +37,7 @@ import {
  */
 function createHarness(overrides: {
   createObserver?: (callback: () => void) => ObserverLike;
+  createGameController?: (options: GameControllerOptions) => GameController;
 } = {}) {
   const canvasListeners = new Map<string, Set<(event: Event) => void>>();
 
@@ -46,6 +71,15 @@ function createHarness(overrides: {
     render: vi.fn(),
     dispose: vi.fn(),
     advance: vi.fn(() => false),
+    scramble: vi.fn(),
+    resetCube: vi.fn(),
+    isSolved: vi.fn(() => true),
+    committedMoveCount: vi.fn(() => 0),
+    turnFace: vi.fn(() => true),
+    setViewMode: vi.fn(),
+    viewMode: vi.fn(() => 1),
+    resetView: vi.fn(),
+    isBusy: vi.fn(() => false),
     pointerDown: vi.fn(() => true),
     pointerMove: vi.fn(),
     pointerUp: vi.fn(),
@@ -84,9 +118,20 @@ function createHarness(overrides: {
   const states: Array<[string, string]> = [];
   const onError = vi.fn();
 
+  // A stand-in for the game controller: the lifecycle only has to build it,
+  // call it once per frame, and release it in the right order.
+  const game = {
+    state: 'idle' as const,
+    afterEngineFrame: vi.fn(),
+    teardown: vi.fn(),
+  };
+  let gameOptions: GameControllerOptions | null = null;
+
+  const gameUi = createGameUi();
   const start = () =>
     startApp({
       canvas,
+      gameUi,
       setState: (state, message) => states.push([state, message]),
       onError,
       createEngine: async () => engine,
@@ -95,6 +140,12 @@ function createHarness(overrides: {
         ((callback) => {
           observerCallback = callback;
           return observer;
+        }),
+      createGameController:
+        overrides.createGameController ??
+        ((options) => {
+          gameOptions = options;
+          return game;
         }),
       targetWindow,
       requestFrame,
@@ -133,6 +184,9 @@ function createHarness(overrides: {
     canvasState,
     engine,
     observer,
+    game,
+    gameUi,
+    gameOptions: () => gameOptions,
     triggerObserver: () => observerCallback(),
     dispatch,
     listenerCount,
@@ -440,6 +494,77 @@ describe('startApp', () => {
     expect(harness.engine.pointerCancel).toHaveBeenCalledTimes(1);
     expect(harness.engine.pointerUp).not.toHaveBeenCalled();
     expect(harness.engine.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives the gameplay controller the engine, the DOM, and the loop', async () => {
+    const harness = createHarness();
+    await harness.start();
+
+    expect(harness.gameOptions()?.engine).toBe(harness.engine);
+    expect(harness.gameOptions()?.ui).toBe(harness.gameUi);
+
+    // A command the engine accepted has to be able to animate.
+    harness.gameOptions()?.startFrameLoop();
+    expect(harness.hasPendingFrame()).toBe(true);
+  });
+
+  it('lets the gameplay controller observe every drawn frame', async () => {
+    const harness = createHarness();
+    await harness.start();
+
+    expect(harness.game.afterEngineFrame).not.toHaveBeenCalled();
+
+    harness.engine.advance.mockReturnValueOnce(true);
+    harness.dispatchPointer('pointerdown', {});
+    harness.runFrame(1000);
+    harness.runFrame(1016);
+
+    // Once per frame, and after the frame reached the canvas: what it reads
+    // back from the engine is what the user is looking at.
+    expect(harness.game.afterEngineFrame).toHaveBeenCalledTimes(2);
+    expect(
+      harness.game.afterEngineFrame.mock.invocationCallOrder.at(-1)!,
+    ).toBeGreaterThan(harness.engine.render.mock.invocationCallOrder.at(-1)!);
+  });
+
+  it('releases the gameplay controller before the engine', async () => {
+    const harness = createHarness();
+    const controller = await harness.start();
+
+    controller.teardown();
+
+    // Its listeners still call into the engine, so it has to go first.
+    expect(harness.game.teardown).toHaveBeenCalledTimes(1);
+    expect(harness.game.teardown.mock.invocationCallOrder[0]!).toBeLessThan(
+      harness.engine.dispose.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('tears everything down when a gameplay command fails', async () => {
+    const harness = createHarness();
+    await harness.start();
+
+    harness.gameOptions()?.onError(new Error('command failed'));
+
+    expect(harness.engine.dispose).toHaveBeenCalledTimes(1);
+    expect(harness.game.teardown).toHaveBeenCalledTimes(1);
+    expect(harness.listenerCount('resize')).toBe(0);
+    expect(harness.onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'command failed' }),
+    );
+  });
+
+  it('unwinds the engine when the gameplay controller fails to attach', async () => {
+    const harness = createHarness({
+      createGameController: () => {
+        throw new Error('no controls');
+      },
+    });
+
+    await expect(harness.start()).rejects.toThrow('no controls');
+    expect(harness.engine.dispose).toHaveBeenCalledTimes(1);
+    expect(harness.observer.observe).not.toHaveBeenCalled();
+    expect(harness.listenerCount('resize')).toBe(0);
   });
 
   it('treats repeated teardown as a no-op', async () => {

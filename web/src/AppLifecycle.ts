@@ -8,18 +8,26 @@ import {
   CubeEngine,
   type CubeEngineSize,
 } from './wasm/CubeEngine.ts';
+import {
+  attachGameController,
+  type GameController,
+  type GameControllerOptions,
+  type GameEngine,
+  type GameUi,
+} from './game/GameController.ts';
 
-/** UI states surfaced by the Phase 1 page. */
-export type AppState = 'loading' | 'ready' | 'error';
+/** Top-level availability of the page. */
+export type AppState = 'loading' | 'ready' | 'unsupported' | 'error';
 
 /** Engine surface the lifecycle needs; CubeEngine satisfies it. */
-export type EngineLike = PointerTarget & {
-  resize(size: CubeEngineSize): void;
-  render(): void;
-  dispose(): void;
-  /** @returns true while further frames still have to be drawn. */
-  advance(elapsedMs: number): boolean;
-};
+export type EngineLike = PointerTarget &
+  GameEngine & {
+    resize(size: CubeEngineSize): void;
+    render(): void;
+    dispose(): void;
+    /** @returns true while further frames still have to be drawn. */
+    advance(elapsedMs: number): boolean;
+  };
 
 /** Minimal ResizeObserver surface, injectable for unit tests. */
 export type ObserverLike = {
@@ -36,6 +44,8 @@ export type WindowLike = {
 
 export type StartAppOptions = {
   readonly canvas: HTMLCanvasElement;
+  /** Gameplay controls the lifecycle hands to the game controller. */
+  readonly gameUi: GameUi;
   readonly setState: (state: AppState, message: string) => void;
   /** Called for failures after the app reached the ready state. */
   readonly onError: (error: unknown) => void;
@@ -45,6 +55,9 @@ export type StartAppOptions = {
   readonly targetWindow?: WindowLike;
   readonly requestFrame?: (callback: (timestamp: number) => void) => number;
   readonly cancelFrame?: (handle: number) => void;
+  readonly createGameController?: (
+    options: GameControllerOptions,
+  ) => GameController;
 };
 
 export type AppController = {
@@ -76,6 +89,8 @@ export async function startApp(
       requestAnimationFrame(callback));
   const cancelFrame =
     options.cancelFrame ?? ((handle: number) => cancelAnimationFrame(handle));
+  const createGameController =
+    options.createGameController ?? attachGameController;
 
   setState('loading', 'Loading engine…');
 
@@ -93,6 +108,7 @@ export async function startApp(
   let active = true;
   let observer: ObserverLike | null = null;
   let pointer: PointerController | null = null;
+  let game: GameController | null = null;
   let frameHandle: number | null = null;
   let previousTimestamp: number | null = null;
 
@@ -108,6 +124,7 @@ export async function startApp(
     try {
       const moreFrames = engine.advance(elapsed);
       engine.render();
+      game?.afterEngineFrame();
 
       // One frame is drawn after the engine stops asking for them, so the
       // final state of a turn always reaches the canvas.
@@ -186,8 +203,10 @@ export async function startApp(
       if (frameHandle !== null) cancelFrame(frameHandle);
       frameHandle = null;
     });
-    // Before the engine is disposed: cancelling a gesture calls into it.
+    // Before the engine is disposed: cancelling a gesture calls into it,
+    // and so does every control the game controller still has wired up.
     attempt(() => pointer?.teardown());
+    attempt(() => game?.teardown());
     attempt(() => observer?.disconnect());
     attempt(() => win.removeEventListener('resize', applySize));
     attempt(() => win.removeEventListener('pagehide', onPageHide));
@@ -209,6 +228,17 @@ export async function startApp(
       engine,
       onGestureStart: startFrameLoop,
     });
+    game = createGameController({
+      engine,
+      ui: options.gameUi,
+      startFrameLoop,
+      // A failed gameplay command leaves the engine in an unknown state, so
+      // it takes the same route out as a failed frame.
+      onError: (error: unknown): void => {
+        teardown();
+        onError(error);
+      },
+    });
     observer = createObserver(applySize);
     observer.observe(canvas);
     // Device pixel ratio changes arrive with window resize events.
@@ -216,7 +246,7 @@ export async function startApp(
     win.addEventListener('pagehide', onPageHide);
     win.addEventListener('pageshow', onPageShow);
 
-    setState('ready', 'ThorVG software renderer');
+    setState('ready', 'Ready. Scramble the cube to begin.');
   } catch (error) {
     teardown();
     throw error;

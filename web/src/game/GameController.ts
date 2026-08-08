@@ -1,0 +1,337 @@
+import {
+  CubeFace,
+  CubeViewMode,
+  type FaceTurns,
+} from '../wasm/CubeEngine.ts';
+import {
+  formatElapsed,
+  SolveTimer,
+  type TimerEnvironment,
+} from './SolveTimer.ts';
+
+/** One local solve session inside a ready application. */
+export type GameState = 'idle' | 'ready' | 'running' | 'completed';
+
+/** Engine surface required by gameplay controls. */
+export type GameEngine = {
+  scramble(seed: number): void;
+  resetCube(): void;
+  isSolved(): boolean;
+  committedMoveCount(): number;
+  turnFace(face: CubeFace, faceTurns: FaceTurns): boolean;
+  setViewMode(mode: CubeViewMode): void;
+  viewMode(): CubeViewMode;
+  resetView(): void;
+  isBusy(): boolean;
+  render(): void;
+};
+
+/** Typed DOM elements owned by the gameplay controller. */
+export type GameUi = {
+  readonly root: HTMLElement;
+  readonly canvas: HTMLCanvasElement;
+  readonly timer: HTMLOutputElement;
+  readonly status: HTMLParagraphElement;
+  readonly scrambleButton: HTMLButtonElement;
+  readonly resetButton: HTMLButtonElement;
+  readonly homeViewButton: HTMLButtonElement;
+  readonly viewButtons: readonly HTMLButtonElement[];
+  readonly moveButtons: readonly HTMLButtonElement[];
+};
+
+/** Minimal keyboard event target, injectable for tests. */
+export type KeyboardTarget = {
+  addEventListener(type: 'keydown', listener: (event: KeyboardEvent) => void): void;
+  removeEventListener(
+    type: 'keydown',
+    listener: (event: KeyboardEvent) => void,
+  ): void;
+};
+
+/** Options for attaching one gameplay controller. */
+export type GameControllerOptions = {
+  readonly engine: GameEngine;
+  readonly ui: GameUi;
+  readonly startFrameLoop: () => void;
+  readonly onError: (error: unknown) => void;
+  readonly seedSource?: () => number;
+  readonly timerEnvironment?: TimerEnvironment;
+  readonly keyboardTarget?: KeyboardTarget;
+};
+
+/** Controller surface consumed by AppLifecycle. */
+export type GameController = {
+  readonly state: GameState;
+  /** Observes status after one engine animation frame. */
+  afterEngineFrame(): void;
+  /** Removes listeners and stops the timer DOM loop. */
+  teardown(): void;
+};
+
+/** Faces by their standard letter, shared by keys and `data-face`. */
+const FACE_BY_LETTER: Readonly<Record<string, CubeFace>> = {
+  r: CubeFace.Right,
+  l: CubeFace.Left,
+  u: CubeFace.Up,
+  d: CubeFace.Down,
+  f: CubeFace.Front,
+  b: CubeFace.Back,
+};
+
+const VIEW_BY_NAME: Readonly<Record<string, CubeViewMode>> = {
+  '3d': CubeViewMode.Cube3D,
+  both: CubeViewMode.Both,
+  net: CubeViewMode.Net,
+};
+
+const VIEW_NAME_BY_MODE: Readonly<Record<CubeViewMode, string>> = {
+  [CubeViewMode.Cube3D]: '3d',
+  [CubeViewMode.Both]: 'both',
+  [CubeViewMode.Net]: 'net',
+};
+
+/** Produces a uint32 seed using Web Crypto. */
+export function randomSeed(): number {
+  const value = new Uint32Array(1);
+  crypto.getRandomValues(value);
+  return value[0] ?? 0;
+}
+
+/** Returns whether a keyboard event belongs to an editable control. */
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target.isContentEditable ||
+    target.matches('input, textarea, select, option')
+  );
+}
+
+/** Parses a data-view value into the primitive engine enum. */
+function viewModeOf(button: HTMLButtonElement): CubeViewMode | null {
+  return VIEW_BY_NAME[button.dataset.view ?? ''] ?? null;
+}
+
+/** Parses a DOM move button into one typed face turn. */
+function moveOf(
+  button: HTMLButtonElement,
+): { readonly face: CubeFace; readonly turns: FaceTurns } | null {
+  const face = FACE_BY_LETTER[(button.dataset.face ?? '').toLowerCase()];
+  const turns = Number(button.dataset.turn);
+  if (face === undefined || (turns !== -1 && turns !== 1 && turns !== 2)) {
+    return null;
+  }
+  return { face, turns };
+}
+
+/**
+ * Connects DOM controls, keyboard commands, timer state, and one engine.
+ *
+ * Every listener is installed here and removed by the returned controller,
+ * keeping AppLifecycle's single teardown path intact.
+ */
+export function attachGameController(
+  options: GameControllerOptions,
+): GameController {
+  const { engine, ui, startFrameLoop, onError } = options;
+  const seedSource = options.seedSource ?? randomSeed;
+  const keyboardTarget: KeyboardTarget = options.keyboardTarget ?? {
+    addEventListener: (_type, listener): void => {
+      window.addEventListener('keydown', listener);
+    },
+    removeEventListener: (_type, listener): void => {
+      window.removeEventListener('keydown', listener);
+    },
+  };
+
+  let active = true;
+  let gameState: GameState = 'idle';
+  let previousMoveCount = engine.committedMoveCount();
+
+  // Assigning value on an <output> publishes the text too, so the DOM only
+  // has to be written once per tick.
+  const timer = new SolveTimer((elapsedMs: number): void => {
+    ui.timer.value = formatElapsed(elapsedMs);
+  }, options.timerEnvironment);
+
+  const setGameState = (state: GameState): void => {
+    gameState = state;
+    ui.root.dataset.gameState = state;
+  };
+
+  const announce = (message: string): void => {
+    ui.status.textContent = message;
+  };
+
+  const updateViewButtons = (): void => {
+    const selected = engine.viewMode();
+    for (const button of ui.viewButtons) {
+      const mode = viewModeOf(button);
+      button.setAttribute('aria-pressed', String(mode === selected));
+    }
+    ui.canvas.dataset.viewMode = VIEW_NAME_BY_MODE[selected];
+  };
+
+  const updateMoveAvailability = (): void => {
+    const disabled = engine.isBusy();
+    for (const button of ui.moveButtons) button.disabled = disabled;
+  };
+
+  const run = (command: () => void): void => {
+    if (!active) return;
+    try {
+      command();
+    } catch (error) {
+      onError(error);
+    }
+  };
+
+  const startFaceTurn = (face: CubeFace, turns: FaceTurns): void => {
+    run((): void => {
+      if (!engine.turnFace(face, turns)) return;
+      updateMoveAvailability();
+      startFrameLoop();
+    });
+  };
+
+  const onScramble = (): void => {
+    run((): void => {
+      engine.scramble(seedSource());
+      engine.render();
+      previousMoveCount = 0;
+      timer.arm();
+      setGameState('ready');
+      updateMoveAvailability();
+      announce('Scramble ready. The timer starts after your first move.');
+    });
+  };
+
+  const onReset = (): void => {
+    run((): void => {
+      engine.resetCube();
+      engine.render();
+      previousMoveCount = 0;
+      timer.reset();
+      setGameState('idle');
+      updateMoveAvailability();
+      announce('Cube reset.');
+    });
+  };
+
+  const onHomeView = (): void => {
+    run((): void => {
+      engine.resetView();
+      engine.render();
+      announce('View returned home.');
+    });
+  };
+
+  const viewListeners = new Map<HTMLButtonElement, () => void>();
+  for (const button of ui.viewButtons) {
+    const listener = (): void => {
+      const mode = viewModeOf(button);
+      if (mode === null) return;
+      run((): void => {
+        engine.setViewMode(mode);
+        engine.render();
+        updateViewButtons();
+      });
+    };
+    viewListeners.set(button, listener);
+    button.addEventListener('click', listener);
+  }
+
+  const moveListeners = new Map<HTMLButtonElement, () => void>();
+  for (const button of ui.moveButtons) {
+    const listener = (): void => {
+      const move = moveOf(button);
+      if (move !== null) startFaceTurn(move.face, move.turns);
+    };
+    moveListeners.set(button, listener);
+    button.addEventListener('click', listener);
+  }
+
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (
+      event.repeat ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      isEditableTarget(event.target)
+    ) {
+      return;
+    }
+
+    const face = FACE_BY_LETTER[event.key.toLowerCase()];
+    if (face === undefined) return;
+
+    event.preventDefault();
+    startFaceTurn(face, event.shiftKey ? -1 : 1);
+  };
+
+  ui.scrambleButton.addEventListener('click', onScramble);
+  ui.resetButton.addEventListener('click', onReset);
+  ui.homeViewButton.addEventListener('click', onHomeView);
+  keyboardTarget.addEventListener('keydown', onKeyDown);
+
+  timer.reset();
+  setGameState('idle');
+  ui.scrambleButton.disabled = false;
+  ui.resetButton.disabled = false;
+  ui.homeViewButton.disabled = false;
+  for (const button of ui.viewButtons) button.disabled = false;
+  updateViewButtons();
+  updateMoveAvailability();
+
+  return {
+    get state(): GameState {
+      return gameState;
+    },
+
+    afterEngineFrame(): void {
+      if (!active) return;
+      run((): void => {
+        const moveCount = engine.committedMoveCount();
+        const committed = moveCount > previousMoveCount;
+        previousMoveCount = moveCount;
+
+        if (committed && gameState === 'ready') {
+          timer.start();
+          setGameState('running');
+        }
+
+        if (
+          committed &&
+          gameState === 'running' &&
+          engine.isSolved()
+        ) {
+          const finalMs = timer.stop();
+          setGameState('completed');
+          announce(`Solved in ${formatElapsed(finalMs)}.`);
+        }
+
+        updateMoveAvailability();
+      });
+    },
+
+    teardown(): void {
+      if (!active) return;
+      active = false;
+      timer.teardown();
+      ui.scrambleButton.disabled = true;
+      ui.resetButton.disabled = true;
+      ui.homeViewButton.disabled = true;
+      for (const button of ui.viewButtons) button.disabled = true;
+      for (const button of ui.moveButtons) button.disabled = true;
+      ui.scrambleButton.removeEventListener('click', onScramble);
+      ui.resetButton.removeEventListener('click', onReset);
+      ui.homeViewButton.removeEventListener('click', onHomeView);
+      for (const [button, listener] of viewListeners) {
+        button.removeEventListener('click', listener);
+      }
+      for (const [button, listener] of moveListeners) {
+        button.removeEventListener('click', listener);
+      }
+      keyboardTarget.removeEventListener('keydown', onKeyDown);
+    },
+  };
+}

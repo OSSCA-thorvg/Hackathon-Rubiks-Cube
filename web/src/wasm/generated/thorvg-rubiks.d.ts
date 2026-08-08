@@ -27,6 +27,24 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_pointer_cancel(): void;
   /** Returns 1 while further frames still have to be drawn. */
   _thorvg_rubiks_advance(elapsedMs: number): number;
+  /** Returns 1 when the cube was replaced by the scramble for `seed`. */
+  _thorvg_rubiks_scramble(seed: number): number;
+  /** Restores the solved cube, keeping the camera and the view mode. */
+  _thorvg_rubiks_reset_cube(): void;
+  /** Returns 1 when the committed logical cube is solved. */
+  _thorvg_rubiks_is_solved(): number;
+  /** User moves committed since the latest scramble or reset. */
+  _thorvg_rubiks_committed_move_count(): number;
+  /** Returns 1 when the turn started; face and turns follow cube::Face. */
+  _thorvg_rubiks_turn_face(face: number, faceTurns: number): number;
+  /** Returns 1 when the mode was accepted; invalid values are rejected. */
+  _thorvg_rubiks_set_view_mode(mode: number): number;
+  /** The current graphics::ViewMode as an integer. */
+  _thorvg_rubiks_view_mode(): number;
+  /** Restores the turntable camera and nothing else. */
+  _thorvg_rubiks_reset_view(): void;
+  /** Returns 1 while a gesture, animation, or pending commit is active. */
+  _thorvg_rubiks_is_busy(): number;
 };
 
 /** Factory that creates one engine module instance. */

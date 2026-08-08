@@ -22,12 +22,18 @@ describe('bootstrap', () => {
   it('renders the stage and reaches the ready UI on success', async () => {
     const app = createApp();
 
-    await bootstrap(app, async (options) => {
-      options.setState('ready', 'ThorVG software renderer');
-      return { teardown: () => {} };
-    });
+    await bootstrap(
+      app,
+      async (options) => {
+        options.setState('ready', 'ThorVG software renderer');
+        return { teardown: () => {} };
+      },
+      () => true,
+    );
 
     expect(app.querySelector('canvas')).not.toBeNull();
+    expect(app.querySelector('#reset')).not.toBeNull();
+    expect(app.querySelector('[data-view="both"]')?.getAttribute('aria-pressed')).toBe('true');
     expect(app.dataset.state).toBe('ready');
     expect(app.querySelector('#status')?.textContent).toBe(
       'ThorVG software renderer',
@@ -37,9 +43,13 @@ describe('bootstrap', () => {
   it('shows the error UI when startup rejects', async () => {
     const app = createApp();
 
-    await bootstrap(app, async () => {
-      throw new Error('startup failed');
-    });
+    await bootstrap(
+      app,
+      async () => {
+        throw new Error('startup failed');
+      },
+      () => true,
+    );
 
     expect(app.dataset.state).toBe('error');
     expect(app.querySelector('#status')?.textContent).toBe(
@@ -51,11 +61,15 @@ describe('bootstrap', () => {
     const app = createApp();
     let reportError: StartAppOptions['onError'] = () => {};
 
-    await bootstrap(app, async (options) => {
-      options.setState('ready', 'ThorVG software renderer');
-      reportError = options.onError;
-      return { teardown: () => {} };
-    });
+    await bootstrap(
+      app,
+      async (options) => {
+        options.setState('ready', 'ThorVG software renderer');
+        reportError = options.onError;
+        return { teardown: () => {} };
+      },
+      () => true,
+    );
     expect(app.dataset.state).toBe('ready');
 
     reportError(new Error('lost the engine'));
@@ -63,6 +77,19 @@ describe('bootstrap', () => {
     expect(app.dataset.state).toBe('error');
     expect(app.querySelector('#status')?.textContent).toBe(
       'Failed to start the ThorVG engine.',
+    );
+  });
+
+  it('shows unsupported without starting the engine', async () => {
+    const app = createApp();
+    const start = vi.fn();
+
+    await bootstrap(app, start, () => false);
+
+    expect(start).not.toHaveBeenCalled();
+    expect(app.dataset.state).toBe('unsupported');
+    expect(app.querySelector('#status')?.textContent).toContain(
+      'does not support',
     );
   });
 });

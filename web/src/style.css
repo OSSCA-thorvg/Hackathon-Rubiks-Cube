@@ -1,5 +1,11 @@
 :root {
   color-scheme: dark;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  color: #f7f7f8;
+  background: #090a0d;
+  font-synthesis: none;
 }
 
 * {
@@ -8,43 +14,331 @@
 
 body {
   margin: 0;
+  min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at 50% 10%, #252833 0, #111319 42%, #090a0d 78%);
+}
+
+button,
+summary {
+  font: inherit;
+}
+
+button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  color: #f7f7f8;
+  background: rgb(20 22 28 / 88%);
+  box-shadow: 0 0.35rem 1rem rgb(0 0 0 / 25%);
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms ease;
+}
+
+button:hover:not(:disabled) {
+  border-color: rgb(255 255 255 / 42%);
+  background: rgb(39 43 53 / 94%);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:focus-visible,
+summary:focus-visible {
+  outline: 3px solid #8bc5ff;
+  outline-offset: 3px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+}
+
+button[aria-pressed="true"] {
+  border-color: #f7f7f8;
+  color: #111319;
+  background: #f7f7f8;
+}
+
+#app {
+  width: 100%;
+}
+
+.game-shell {
+  --shell-inline-padding: max(1rem, env(safe-area-inset-left));
+  --side-panel-width: clamp(6.75rem, 10vw, 8.5rem);
+  --side-panel-gap: clamp(0.65rem, 1.5vw, 1rem);
+
+  /* What the two absolutely positioned rails take outside the stage. The
+     stage subtracts it so the rails stay on screen; deriving it here keeps
+     the two from drifting apart when a rail is resized. */
+  --side-rails: calc(
+    2 * (var(--side-panel-width) + var(--side-panel-gap) +
+      var(--shell-inline-padding))
+  );
+
+  width: min(100%, 64rem);
+  margin: 0 auto;
+  padding:
+    max(1rem, env(safe-area-inset-top))
+    var(--shell-inline-padding)
+    max(1rem, env(safe-area-inset-bottom))
+    var(--shell-inline-padding);
   display: grid;
-  place-items: center;
-  background: #111;
-  color: #eee;
-  font-family: system-ui, sans-serif;
+  justify-items: center;
+  gap: 0.85rem;
 }
 
-#app .stage {
-  display: grid;
-  place-items: center;
-  gap: 1rem;
-  padding: 1rem;
+.game-stage {
+  position: relative;
+  width: min(calc(100vw - var(--side-rails)), 82dvh, 70rem);
+  aspect-ratio: 1;
 }
 
-#app #status {
-  margin: 0;
-  font-size: 0.875rem;
-  color: #aaa;
-}
-
-#app canvas {
-  width: min(80vw, 70vh);
-  aspect-ratio: 1 / 1;
+#view {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 1.25rem;
   background: #202020;
-  /* Dragging a layer must not scroll or zoom the page instead. */
+  box-shadow:
+    0 1.5rem 4rem rgb(0 0 0 / 42%),
+    inset 0 0 0 1px rgb(255 255 255 / 3%);
   touch-action: none;
 }
 
-#app[data-state='loading'] canvas {
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hud button,
+.hud output {
+  pointer-events: auto;
+}
+
+.hud__header {
+  position: absolute;
+  inset: 1rem 1rem auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+#game-title {
+  width: 18%;
+  margin: 0;
+  font-size: clamp(0.72rem, 1.6vw, 1.05rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: rgb(255 255 255 / 72%);
+}
+
+#timer {
+  min-width: 7.5ch;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 0.65rem;
+  font-size: clamp(0.9rem, 2vw, 1.25rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  color: #fff;
+  background: rgb(10 11 14 / 78%);
+  backdrop-filter: blur(0.6rem);
+}
+
+.view-switch,
+.game-actions {
+  position: absolute;
+  top: 50%;
+  width: var(--side-panel-width);
+  display: grid;
+  gap: 0.45rem;
+  transform: translateY(-50%);
+}
+
+.view-switch {
+  right: calc(100% + var(--side-panel-gap));
+}
+
+.game-actions {
+  left: calc(100% + var(--side-panel-gap));
+}
+
+.view-switch button,
+.game-actions button {
+  width: 100%;
+  padding-inline: 0.4rem;
+  font-size: clamp(0.72rem, 1.5vw, 0.92rem);
+}
+
+.move-controls {
+  width: min(100%, 48rem);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 0.9rem;
+  padding: 0.75rem 1rem;
+  color: rgb(255 255 255 / 78%);
+  background: rgb(20 22 28 / 72%);
+}
+
+.move-controls summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.move-controls summary::before {
+  content: "+";
+  width: 1.5rem;
+  font-size: 1.25rem;
+}
+
+.move-controls[open] summary::before {
+  content: "−";
+}
+
+.move-controls p {
+  margin: 0 0 0.75rem;
+  color: rgb(255 255 255 / 58%);
+  font-size: 0.875rem;
+}
+
+.move-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(44px, 1fr));
+  gap: 0.5rem;
+}
+
+#status {
+  min-height: 1.35rem;
+  margin: 0;
+  color: rgb(255 255 255 / 62%);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+#app[data-state="loading"] #view {
   visibility: hidden;
 }
 
-#app[data-state='error'] canvas {
+#app[data-state="loading"] .move-controls,
+#app[data-state="unsupported"] .move-controls,
+#app[data-state="error"] .move-controls {
   display: none;
 }
 
-#app[data-state='error'] #status {
-  color: #e63946;
+#app[data-state="unsupported"] .game-stage,
+#app[data-state="error"] .game-stage {
+  display: none;
+}
+
+#app[data-state="unsupported"] #status,
+#app[data-state="error"] #status {
+  max-width: 36rem;
+  padding: 1rem;
+  border: 1px solid rgb(230 57 70 / 42%);
+  border-radius: 0.8rem;
+  color: #ff9ca5;
+  background: rgb(74 15 22 / 35%);
+}
+
+@media (max-width: 720px), (max-height: 640px) {
+  .game-shell {
+    gap: 0.75rem;
+  }
+
+  .game-stage {
+    width: min(100%, 38rem);
+    aspect-ratio: auto;
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  #view {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+  }
+
+  .hud {
+    position: static;
+    display: grid;
+    gap: 0.6rem;
+    pointer-events: auto;
+  }
+
+  .hud__header,
+  .view-switch,
+  .game-actions {
+    position: static;
+    width: 100%;
+    transform: none;
+  }
+
+  .hud__header {
+    align-items: center;
+    order: -1;
+  }
+
+  #game-title {
+    width: auto;
+    font-size: 1rem;
+  }
+
+  .view-switch,
+  .game-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .view-switch button,
+  .game-actions button {
+    font-size: 0.84rem;
+  }
+
+  .move-grid {
+    grid-template-columns: repeat(4, minmax(44px, 1fr));
+  }
+}
+
+@media (max-width: 400px) {
+  .game-shell {
+    --shell-inline-padding: max(0.65rem, env(safe-area-inset-left));
+  }
+
+  .game-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  #home-view {
+    grid-column: 1 / -1;
+  }
+
+  .move-grid {
+    grid-template-columns: repeat(3, minmax(44px, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

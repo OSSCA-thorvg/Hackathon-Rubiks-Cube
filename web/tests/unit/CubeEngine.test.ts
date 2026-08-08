@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   computeDrawingBufferSize,
+  CubeFace,
   CubeEngine,
+  CubeViewMode,
   MAX_DIMENSION,
 } from '../../src/wasm/CubeEngine.ts';
 import type { ThorvgRubiksModule } from '../../src/wasm/generated/thorvg-rubiks.js';
@@ -25,6 +27,13 @@ function createFakeModule() {
     renderResult: 1,
     pointerDownResult: 1,
     advanceResult: 0,
+    scrambleResult: 1,
+    solvedResult: 1,
+    moveCount: 0,
+    turnFaceResult: 1,
+    setViewModeResult: 1,
+    viewMode: CubeViewMode.Both,
+    busyResult: 0,
     pixelBufferOverride: null as number | null,
     pixelByteLengthOverride: null as number | null,
   };
@@ -71,6 +80,22 @@ function createFakeModule() {
     _thorvg_rubiks_pointer_up: vi.fn((): void => {}),
     _thorvg_rubiks_pointer_cancel: vi.fn((): void => {}),
     _thorvg_rubiks_advance: vi.fn((): number => behavior.advanceResult),
+    _thorvg_rubiks_scramble: vi.fn((): number => behavior.scrambleResult),
+    _thorvg_rubiks_reset_cube: vi.fn((): void => {}),
+    _thorvg_rubiks_is_solved: vi.fn((): number => behavior.solvedResult),
+    _thorvg_rubiks_committed_move_count: vi.fn(
+      (): number => behavior.moveCount,
+    ),
+    _thorvg_rubiks_turn_face: vi.fn((): number => behavior.turnFaceResult),
+    _thorvg_rubiks_set_view_mode: vi.fn(
+      (mode: number): number => {
+        if (behavior.setViewModeResult !== 0) behavior.viewMode = mode;
+        return behavior.setViewModeResult;
+      },
+    ),
+    _thorvg_rubiks_view_mode: vi.fn((): number => behavior.viewMode),
+    _thorvg_rubiks_reset_view: vi.fn((): void => {}),
+    _thorvg_rubiks_is_busy: vi.fn((): number => behavior.busyResult),
   } satisfies ThorvgRubiksModule;
 
   /** Simulates WASM memory growth: the old ArrayBuffer is replaced. */
@@ -341,6 +366,71 @@ describe('CubeEngine pointer and animation', () => {
 
     behavior.advanceResult = 1;
     expect(engine.advance(16)).toBe(true);
+  });
+});
+
+describe('CubeEngine gameplay and view controls', () => {
+  it('passes scramble, reset, status, and camera commands through', async () => {
+    const { engine, module, behavior } = await createEngine();
+
+    engine.scramble(0x12345678);
+    expect(module._thorvg_rubiks_scramble).toHaveBeenCalledWith(0x12345678);
+
+    behavior.solvedResult = 0;
+    behavior.moveCount = 7;
+    behavior.busyResult = 1;
+    expect(engine.isSolved()).toBe(false);
+    expect(engine.committedMoveCount()).toBe(7);
+    expect(engine.isBusy()).toBe(true);
+
+    engine.resetCube();
+    engine.resetView();
+    expect(module._thorvg_rubiks_reset_cube).toHaveBeenCalledTimes(1);
+    expect(module._thorvg_rubiks_reset_view).toHaveBeenCalledTimes(1);
+  });
+
+  it('validates scramble seeds before crossing the C ABI', async () => {
+    const { engine, module } = await createEngine();
+
+    for (const seed of [-1, 1.5, Number.NaN, 0x1_0000_0000]) {
+      expect(() => engine.scramble(seed)).toThrow('Invalid scramble seed');
+    }
+    expect(module._thorvg_rubiks_scramble).not.toHaveBeenCalled();
+  });
+
+  it('starts face turns and reports busy rejection', async () => {
+    const { engine, module, behavior } = await createEngine();
+
+    expect(engine.turnFace(CubeFace.Right, 1)).toBe(true);
+    expect(module._thorvg_rubiks_turn_face).toHaveBeenCalledWith(
+      CubeFace.Right,
+      1,
+    );
+
+    behavior.turnFaceResult = 0;
+    expect(engine.turnFace(CubeFace.Up, -1)).toBe(false);
+  });
+
+  it('sets and validates the current view mode', async () => {
+    const { engine, behavior } = await createEngine();
+
+    expect(engine.viewMode()).toBe(CubeViewMode.Both);
+    engine.setViewMode(CubeViewMode.Net);
+    expect(engine.viewMode()).toBe(CubeViewMode.Net);
+
+    behavior.viewMode = 99;
+    expect(() => engine.viewMode()).toThrow('invalid view mode');
+    behavior.setViewModeResult = 0;
+    expect(() => engine.setViewMode(CubeViewMode.Cube3D)).toThrow(
+      'rejected view mode',
+    );
+  });
+
+  it('rejects invalid native query values', async () => {
+    const { engine, behavior } = await createEngine();
+
+    behavior.moveCount = -1;
+    expect(() => engine.committedMoveCount()).toThrow('invalid move count');
   });
 });
 

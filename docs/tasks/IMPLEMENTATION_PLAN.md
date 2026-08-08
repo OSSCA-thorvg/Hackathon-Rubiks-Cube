@@ -46,7 +46,7 @@ Rendering과 독립적인 3×3×3 Rubik's Cube logical state와 move system을 �
 면별로 독립적인 색을 칠할 수 있는 1×1×1 cubie를 N×N×N 격자에 저장하고, axis와 layer 기반 move, quarter turn, inverse를 지원합니다.
 같은 상태를 3D cube와 6면 전개도 두 가지로 함께 렌더링하여 큐브 전체를 한눈에 확인할 수 있게 합니다.
 
-## [ ] Phase 5: Pointer interaction and animation
+## [ ] Phase 5: [Pointer interaction and animation](./05-pointer-interaction-and-animation.md)
 
 Browser pointer 입력을 cube-local move로 해석하는 interaction state machine을 구현합니다.
 Face picking, drag 중 transient rotation, pointer release 시 90° snapping과 animation 완료 후 logical state commit을 처리합니다.

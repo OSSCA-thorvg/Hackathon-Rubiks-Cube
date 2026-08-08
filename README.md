@@ -30,6 +30,7 @@ thorvg-rubiks/
 │   ├── src/cube/           # Cube state, cubie, move (rendering과 무관)
 │   ├── src/math/           # vector, matrix, quaternion, projection
 │   ├── src/graphics/       # camera, pipeline passes, cube와 전개도 geometry
+│   ├── src/interaction/    # picking, drag 해석, snap animation
 │   ├── src/render/         # ThorVG rendering backend
 │   ├── src/app/            # engine lifecycle
 │   └── third_party/        # vendored headers (linalg.h)
@@ -38,7 +39,7 @@ thorvg-rubiks/
 └── cross/                  # Emscripten cross configuration
 ```
 
-`cube`, `math`, `graphics`는 ThorVG를 link하지 않는 별도 build target이고, 그중 `cube`는 아무 dependency도 갖지 않습니다. Cube 도메인이 graphics를, graphics pipeline이 rendering backend를 알지 못하도록 빌드 구조로 막아 둔 것이라, 해당 경계를 바꿀 때는 `engine/src/meson.build`를 함께 확인하세요.
+`cube`, `math`, `graphics`, `interaction`은 ThorVG를 link하지 않는 별도 build target이고, 그중 `cube`는 아무 dependency도 갖지 않습니다. Cube 도메인이 graphics를, graphics pipeline이 rendering backend를 알지 못하도록 빌드 구조로 막아 둔 것이라, 해당 경계를 바꿀 때는 `engine/src/meson.build`를 함께 확인하세요. Pointer picking을 ThorVG hit test가 아니라 ray cast로 구현한 것도 같은 이유로, 덕분에 interaction test가 renderer 없이 돕니다.
 
 ## 빌드 및 실행
 

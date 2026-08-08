@@ -2,7 +2,7 @@
 
 ## Status
 
-`Not started`
+`Completed`
 
 ## Objective
 
@@ -189,8 +189,8 @@ DESIGN.md 8절의 "visual state는 graphics 소유"를 그대로 따릅니다. I
 
 비활성 상태는 `angle == 0`이 아니라 **`std::optional<ActiveRotation>`의 `nullopt`**입니다. `angle == 0`에 "transient 없음"과 "활성 gesture가 마침 0°"라는 두 의미를 실으면 기본 생성된 `axis`·`layers`가 의미 없는 값으로 흘러 다니게 됩니다. 계약:
 
-- `nullopt`: transient rotation 없음 (`Idle`)
-- 값 있음: `Dragging` 또는 `Snapping` (0°인 순간 포함)
+- `nullopt`: 돌아가는 layer 없음 — `Idle`, 그리고 **axis lock 이전의 `Dragging`**. Lock 전에는 어느 layer인지 아직 정해지지 않았으므로 값을 만들 수 없습니다.
+- 값 있음: axis lock 이후의 `Dragging`, 또는 `Snapping` (각도가 0°인 순간 포함)
 
 ### Transient rendering과 body face
 
@@ -198,7 +198,8 @@ DESIGN.md 8절의 "visual state는 graphics 소유"를 그대로 따릅니다. I
 
 - **`nullopt`이면 기존 `build_cube_scene(state)`를 그대로 호출합니다.** 단일 인자 함수가 정지 상태의 canonical 구현으로 남으므로, contract v3의 byte 단위 동일성이 "회전 수학이 0°에서 항등이길 바라는 것"이 아니라 코드 경로 자체로 보장됩니다.
 - **Sticker 회전**: `layers`에 속한 cubie의 sticker quad는 world 좌표에서 cube 중심 기준으로 `angle`만큼 회전한 뒤 pipeline에 들어갑니다. 회전은 `math::Quaternion`으로 만들며 부호 변환은 이 한 곳에서만 일어납니다.
-- **Body face**: 회전 중에는 절단면이 노출됩니다. 축 방향으로 이웃한 두 layer의 mask 소속이 다르면 그 사이가 절단면이고, 절단면에 접한 cubie마다 그쪽을 향한 사각형을 방출합니다. Sticker와 같은 footprint(`kStickerScale`)로 그려 `append_sticker`를 재사용하고, 색은 배경과 여섯 sticker 색 모두와 구분되는 어두운 중립색 상수입니다. 회전하는 쪽의 body face는 sticker처럼 함께 회전합니다.
+- **Body face**: 회전 중에는 절단면이 노출됩니다. 축 방향으로 이웃한 두 layer의 mask 소속이 다르면 그 사이가 절단면이고, 절단면에 접한 cubie마다 그쪽을 향한 사각형을 방출합니다. Sticker와 같은 footprint(`kStickerScale`)로 그려 `append_sticker`를 재사용하고, 색은 배경과 여섯 sticker 색 모두와 구분되는 어두운 중립색 상수(`kBodyColor`)입니다. 회전하는 쪽의 body face는 sticker처럼 함께 회전합니다.
+- 그 결과 **회전 중에는 seam이 배경색이 아니라 body 색으로 보입니다** — 절단면이 sticker 뒤를 막기 때문입니다. 이는 의도된 것이며, seam이 배경색이라는 contract v3의 성질은 정지 상태에만 해당합니다.
 - 회전 중인 scene은 non-convex이지만, Phase 3가 바로 이 경우를 위해 depth sort를 미리 넣어 두었습니다. 평균 view-space z 정렬이라 45° 부근에서 이론적 edge case가 있지만 실제 camera 각도에서 관찰되는 결함이 있을 때만 대응합니다.
 - 전개도는 **논리 상태만** 그립니다. 회전 중에도 전개도는 commit 전 상태를 보여주고, commit 순간 새 상태로 바뀝니다. 전개도는 "큐브의 이산 상태를 한눈에"가 목적이라 연속 각도를 섞을 이유가 없고, 덕분에 e2e에서 gesture 결과 검증 도구로 그대로 쓸 수 있습니다.
 
@@ -208,7 +209,7 @@ Engine은 시계를 직접 읽지 않습니다. 시간은 boundary에서 `advanc
 
 - Snap은 release 시점 angle에서 목표 angle까지 smoothstep easing으로 보간합니다. Duration은 남은 각도에 비례(90°당 200ms 내외, 최소값 있음)하는 튜닝 가능한 상수입니다.
 - **Duration 상한은 필요 없습니다.** 목표가 가장 가까운 90° 배수이므로 남은 각도는 구조적으로 항상 45° 이하이고, duration은 그에 비례해 자동으로 유계입니다. 이 유도 성질을 test로 고정합니다.
-- **정확히 ±45°는 0에서 먼 쪽으로 반올림합니다** (`std::round`의 half-away-from-zero): `+45° → +90°`, `−45° → −90°`.
+- **정확히 ±45°는 0에서 먼 쪽으로 반올림합니다** (`std::round`의 half-away-from-zero): `+45° → +90°`, `−45° → −90°`. 다만 각도는 pixel 차이에서 나오므로 실제 drag가 정확히 45°에 착지할 수는 없습니다. Test는 도달 불가능한 동점 대신 45°를 사이에 둔 양쪽 값으로 규칙을 고정합니다.
 - Release 시점 angle이 이미 목표와 같아도 즉시 commit하지 않고 **다음 `advance()`에서** commit합니다. Commit 경로를 "animation 종료 frame" 하나로 유지하기 위해서입니다.
 - `advance`는 "다시 그릴 필요가 있는가"를 반환합니다. `Dragging`과 `Snapping`에서 true(commit이 발생한 종료 frame 포함), `Idle`에서 false입니다.
 - **dt 검증**: 음수이거나 non-finite인 `elapsed_ms`는 0으로 취급합니다. 상한(수백 ms, 상수)으로 clamp합니다 — clamp 없이도 큰 dt는 "animation 즉시 완료"라는 올바른 결과를 내지만, BFCache 복귀나 background tab처럼 비정상적으로 큰 값이 한 번에 들어와도 거동이 예측 가능하도록 고정합니다.
@@ -257,53 +258,53 @@ Drag 좌표는 contract의 cube viewport 비율에서 유도하므로, camera나
 
 ### 1. Interaction 도메인
 
-- [ ] `math::inverse` wrapper 추가 (`inverse(M) × M = I` known-answer test 포함)
-- [ ] Viewport 역변환과 unprojection으로 pointer ray 생성
-- [ ] Ray와 cube 바깥 평면의 교차로 `(face, cell)` picking 구현 (`t > ε`, half-open cell 규칙, `[0, N−1]` clamp)
-- [ ] 후보 축 화면 투영과 점수화, dead zone, axis lock, tie-break 구현
-- [ ] Down 지점 기준 전체 변위 투영으로 angle 계산 구현 (감도 상수 포함)
-- [ ] `Idle / Dragging / Snapping` state machine 구현
-- [ ] `cancel()` 경로 구현: Dragging에서 commit 없이 transient 즉시 제거, Snapping에서 no-op
-- [ ] Snap 목표 산출(half-away-from-zero 반올림)과 smoothstep animation 구현
-- [ ] Animation 종료 frame에서 commit을 보관하고 `take_committed_move()`로 전달
-- [ ] 입력 검증 구현: non-finite 좌표 무시, dt 정규화와 clamp
-- [ ] Interaction을 `cube`·`math`·`graphics` 의존 Meson target으로 분리
+- [x] `math::inverse` wrapper 추가 (`inverse(M) × M = I` known-answer test 포함)
+- [x] Viewport 역변환과 unprojection으로 pointer ray 생성
+- [x] Ray와 cube 바깥 평면의 교차로 `(face, cell)` picking 구현 (`t > ε`, half-open cell 규칙, `[0, N−1]` clamp)
+- [x] 후보 축 화면 투영과 점수화, dead zone, axis lock, tie-break 구현
+- [x] Down 지점 기준 전체 변위 투영으로 angle 계산 구현 (감도 상수 포함)
+- [x] `Idle / Dragging / Snapping` state machine 구현
+- [x] `cancel()` 경로 구현: Dragging에서 commit 없이 transient 즉시 제거, Snapping에서 no-op
+- [x] Snap 목표 산출(half-away-from-zero 반올림)과 smoothstep animation 구현
+- [x] Animation 종료 frame에서 commit을 보관하고 `take_committed_move()`로 전달
+- [x] 입력 검증 구현: non-finite 좌표 무시, dt 정규화와 clamp
+- [x] Interaction을 `cube`·`math`·`graphics` 의존 Meson target으로 분리
 
 ### 2. Transient rendering
 
-- [ ] `graphics::ActiveRotation` 정의
-- [ ] `build_cube_scene(state, optional<ActiveRotation>)` overload: `nullopt`이면 기존 함수 위임, 값이 있으면 회전 layer의 sticker 회전
-- [ ] Mask 경계에서 body face 방출
-- [ ] Body 색 상수 추가 (배경·sticker 색과 구분)
-- [ ] Application이 `InteractionController`를 소유: pointer 전달, `advance` 후 commit 적용, `ActiveRotation` 전달
-- [ ] Engine `resize()`가 Dragging을 취소하고, `shutdown()`이 interaction state를 초기화
+- [x] `graphics::ActiveRotation` 정의
+- [x] `build_cube_scene(state, optional<ActiveRotation>)` overload: `nullopt`이면 기존 함수 위임, 값이 있으면 회전 layer의 sticker 회전
+- [x] Mask 경계에서 body face 방출
+- [x] Body 색 상수 추가 (배경·sticker 색과 구분)
+- [x] Application이 `InteractionController`를 소유: pointer 전달, `advance` 후 commit 적용, `ActiveRotation` 전달
+- [x] Engine `resize()`가 Dragging을 취소하고, `shutdown()`이 interaction state를 초기화
 
 ### 3. Boundary 연결
 
-- [ ] C ABI에 `pointer_down/move/up/cancel`, `advance` 추가 (초기화 전 안전)
-- [ ] `PointerController.ts`: primary pointer 필터, capture, 좌표 변환, cancel·lostpointercapture 처리
-- [ ] Canvas에 `touch-action: none` 적용
-- [ ] `AppLifecycle.ts`: 활성 시에만 도는 rAF loop와 teardown 통합 (rAF 취소 포함)
-- [ ] `CubeEngine.ts`에 새 ABI wrapper 추가
+- [x] C ABI에 `pointer_down/move/up/cancel`, `advance` 추가 (초기화 전 안전)
+- [x] `PointerController.ts`: primary pointer 필터, capture, 좌표 변환, cancel·lostpointercapture 처리
+- [x] Canvas에 `touch-action: none` 적용
+- [x] `AppLifecycle.ts`: 활성 시에만 도는 rAF loop와 teardown 통합 (rAF 취소 포함)
+- [x] `CubeEngine.ts`에 새 ABI wrapper 추가
 
 ### 4. Verification
 
-- [ ] Picking known-answer test: contract sample 3점이 각 면 중앙 cell을 잡는지
-- [ ] Picking 경계 test: 배경 miss, viewport 밖 miss, seam grab, `+kCubeHalfExtent` 경계 clamp
-- [ ] Drag resolver table-driven test: 보이는 3면 × 후보 2축 × 양·음 = 12 케이스 부호 전수 검증
-- [ ] 축 선택 test: lock 후 안정성, 점수 동률 tie-break
-- [ ] State machine test: 빈 공간 down 무시, lock 전 up은 no-commit, Snapping 중 입력 무시
-- [ ] Cancel test: Dragging 중 cancel 후 `CubeState` 불변·`active_rotation() == nullopt`, Snapping 중 cancel은 animation 계속
-- [ ] Lifecycle test: Dragging 중 resize는 commit 없이 취소, Snapping 중 resize는 계속, shutdown 후 초기화
-- [ ] Snap test: `37° → 0`, `67° → 90°`, `143° → 180°`, 음수 각도, `±45°` half-away-from-zero
-- [ ] Commit 동치 test: 90°로 끝난 gesture 후 상태 == `apply(moves::R(3))` 상태, `take_committed_move()`가 정확히 한 번 값을 반환
-- [ ] Animation test: 고정 dt 주입으로 유한 시간 내 종료, 남은 각도 ≤ 45° 유도 성질, `advance` 반환값 전이
-- [ ] 입력 검증 test: non-finite 좌표·dt, 음수 dt, 거대 dt clamp
-- [ ] Transient scene test: `nullopt`이면 기존 scene과 동일, 45°에서 sticker 회전과 body face 수(N = 3 단일 layer 절단면 18개) 확인
-- [ ] ABI test: 초기화 전 `pointer_down`·`advance`는 0 반환, `pointer_move`·`pointer_up`·`pointer_cancel`은 안전한 no-op
-- [ ] TS unit test: 좌표 변환, hit일 때만 capture·loop 시작, 다른 pointer 무시, cancel·lostpointercapture 전달, teardown의 rAF 취소
-- [ ] e2e: R gesture 후 전개도 전수 검증, 작은 drag snap-back, drag 중 pixel 변화
-- [ ] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
+- [x] Picking known-answer test: contract sample 3점이 각 면 중앙 cell을 잡는지
+- [x] Picking 경계 test: 배경 miss, viewport 밖 miss, seam grab, `+kCubeHalfExtent` 경계 clamp
+- [x] Drag resolver table-driven test: 보이는 3면 × 후보 2축 × 양·음 = 12 케이스 부호 전수 검증
+- [x] 축 선택 test: lock 후 안정성, 점수 동률 tie-break
+- [x] State machine test: 빈 공간 down 무시, lock 전 up은 no-commit, Snapping 중 입력 무시
+- [x] Cancel test: Dragging 중 cancel 후 `CubeState` 불변·`active_rotation() == nullopt`, Snapping 중 cancel은 animation 계속
+- [x] Lifecycle test: Dragging 중 resize는 commit 없이 취소, Snapping 중 resize는 계속, shutdown 후 초기화
+- [x] Snap test: `37° → 0`, `67° → 90°`, `143° → 180°`, 음수 각도, `±45°` half-away-from-zero
+- [x] Commit 동치 test: 90°로 끝난 gesture 후 상태 == `apply(moves::R(3))` 상태, `take_committed_move()`가 정확히 한 번 값을 반환
+- [x] Animation test: 고정 dt 주입으로 유한 시간 내 종료, 남은 각도 ≤ 45° 유도 성질, `advance` 반환값 전이
+- [x] 입력 검증 test: non-finite 좌표·dt, 음수 dt, 거대 dt clamp
+- [x] Transient scene test: `nullopt`이면 기존 scene과 동일, 45°에서 sticker 회전과 body face 수(N = 3 단일 layer 절단면 18개) 확인
+- [x] ABI test: 초기화 전 `pointer_down`·`advance`는 0 반환, `pointer_move`·`pointer_up`·`pointer_cancel`은 안전한 no-op
+- [x] TS unit test: 좌표 변환, hit일 때만 capture·loop 시작, 다른 pointer 무시, cancel·lostpointercapture 전달, teardown의 rAF 취소
+- [x] e2e: R gesture 후 전개도 전수 검증, 작은 drag snap-back, drag 중 pixel 변화
+- [x] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
 
 ## Acceptance criteria
 

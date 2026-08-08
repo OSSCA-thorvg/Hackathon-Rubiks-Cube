@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import {
   assertFacesAndCorners,
   assertSceneContract,
+  assertVisibleFaces,
   BLUE,
   BODY,
   expectedNet,
@@ -149,18 +150,61 @@ test('a drag too short to commit springs back', async ({ page }) => {
   assertSceneContract(await probeCanvas(page));
 });
 
-test('pressing the background leaves the cube alone', async ({ page }) => {
+test('dragging the background sweeps the viewpoint, not the cube', async ({
+  page,
+}) => {
+  await page.goto('./');
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+
+  const atRest = await probeCanvas(page);
+  assertSceneContract(atRest);
+
+  // A corner of the 3D region, clear of the cube's silhouette. Dragging left
+  // by a quarter turn's worth brings the next corner of the cube round: the
+  // right-hand face slides across and the back face takes its place.
+  const corner = pagePointInCube(atRest, [0.94, 0.06]);
+  await page.mouse.move(corner.x, corner.y);
+  await page.mouse.down();
+  await page.mouse.move(corner.x - dragFor(atRest, 1), corner.y, { steps: 12 });
+  await page.mouse.up();
+
+  await expect
+    .poll(async () => (await probeCanvas(page)).left)
+    .toEqual(RED);
+
+  const turned = await probeCanvas(page);
+  assertVisibleFaces(turned, WHITE, RED, BLUE);
+
+  // The viewpoint moved; the cube did not.
+  expect(turned.net).toEqual(expectedNet());
+});
+
+test('a layer still turns after the viewpoint comes back round', async ({
+  page,
+}) => {
   await page.goto('./');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 
   const atRest = await probeCanvas(page);
 
-  // A corner of the 3D region, outside the cube's silhouette.
-  const corner = pagePointInCube(atRest, [0.02, 0.02]);
+  // Four quarter turns of the viewpoint land back where they started, so the
+  // gesture that meant R before has to mean it again.
+  const corner = pagePointInCube(atRest, [0.94, 0.06]);
   await page.mouse.move(corner.x, corner.y);
   await page.mouse.down();
-  await page.mouse.move(corner.x, corner.y - dragFor(atRest, 1), { steps: 8 });
+  await page.mouse.move(corner.x - dragFor(atRest, 4), corner.y, { steps: 24 });
   await page.mouse.up();
 
-  assertSceneContract(await probeCanvas(page));
+  await expect
+    .poll(async () => (await probeCanvas(page)).left)
+    .toEqual(GREEN);
+
+  const home = await probeCanvas(page);
+  const grab = await grabRightColumn(page, home);
+  await page.mouse.move(grab.x, grab.y - dragFor(home, 1), { steps: 12 });
+  await page.mouse.up();
+
+  await expect.poll(async () => (await probeCanvas(page)).net).toEqual(
+    NET_AFTER_R,
+  );
 });

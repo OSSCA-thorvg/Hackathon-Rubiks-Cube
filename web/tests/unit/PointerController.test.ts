@@ -88,7 +88,7 @@ describe('attachPointer', () => {
     expect(harness.engine.pointerDown).toHaveBeenCalledWith(100, 100);
   });
 
-  it('captures the pointer and starts the loop only when the cube is hit', () => {
+  it('stays out of the way when the engine declines the press', () => {
     const harness = createHarness();
     harness.engine.pointerDown.mockReturnValueOnce(false);
 
@@ -102,7 +102,9 @@ describe('attachPointer', () => {
     expect(harness.engine.pointerMove).not.toHaveBeenCalled();
   });
 
-  it('captures the pointer and starts the loop on a hit', () => {
+  it('captures the pointer and starts the loop once a gesture begins', () => {
+    // Whether the press landed on the cube is the engine's business: a miss
+    // sweeps the viewpoint, which needs capture and frames just the same.
     const harness = createHarness();
 
     harness.dispatch('pointerdown');

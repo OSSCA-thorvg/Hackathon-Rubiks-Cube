@@ -8,7 +8,13 @@
 
 /** The engine calls this module needs; CubeEngine satisfies it. */
 export type PointerTarget = {
-  /** @returns true when the press grabbed the cube. */
+  /**
+   * Begins a gesture: a layer drag over the cube, a viewpoint sweep
+   * elsewhere.
+   *
+   * @returns true when a gesture began, which is what this module gates
+   *          pointer capture and the frame loop on.
+   */
   pointerDown(x: number, y: number): boolean;
   pointerMove(x: number, y: number): void;
   pointerUp(): void;
@@ -18,7 +24,7 @@ export type PointerTarget = {
 export type PointerControllerOptions = {
   readonly canvas: HTMLCanvasElement;
   readonly engine: PointerTarget;
-  /** Called when a press grabs the cube, so a frame loop can start. */
+  /** Called when a press begins a gesture, so a frame loop can start. */
   readonly onGestureStart: () => void;
 };
 
@@ -50,7 +56,7 @@ function toBufferPixels(
 /**
  * Routes pointer events on a canvas to the engine.
  *
- * One gesture at a time: the first primary pointer that grabs the cube owns
+ * One gesture at a time: the first primary pointer the engine accepts owns
  * the canvas until it ends, and every other pointer is ignored meanwhile.
  * Everything that ends a gesture without a deliberate release — a cancelled
  * pointer, lost capture, teardown — goes to pointerCancel(), so the engine
@@ -78,8 +84,8 @@ export function attachPointer(
     const point = toBufferPixels(canvas, event);
     if (point === null) return;
 
-    // Capture and the frame loop start only for a press that actually landed
-    // on the cube, so pressing the background leaves the page alone.
+    // Capture and the frame loop start only for a press the engine turned
+    // into a gesture, so a press it declines leaves the page alone.
     if (!engine.pointerDown(point.x, point.y)) return;
 
     activePointerId = event.pointerId;

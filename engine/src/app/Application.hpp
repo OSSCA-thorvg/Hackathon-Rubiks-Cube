@@ -48,25 +48,28 @@ namespace rubiks::app {
 /**
  * Begins a pointer gesture at a point in drawing-buffer pixels.
  *
- * Converting CSS pixels and the device pixel ratio is the caller's job, the
- * same split the resize path uses.
+ * Pressing the cube drags a layer; pressing anywhere else sweeps the
+ * viewpoint around it. Converting CSS pixels and the device pixel ratio is the
+ * caller's job, the same split the resize path uses.
  *
- * @return true when the pointer grabbed the cube; false for a miss, for
- *         non-finite coordinates, and before initialization.
+ * @return true when a gesture began. False only when none could: before
+ *         initialization, for non-finite coordinates, and while another
+ *         gesture or a snap is already running.
  */
 [[nodiscard]] bool pointer_down(float x, float y) noexcept;
 
 /** Continues the active gesture. Ignored without one. */
 void pointer_move(float x, float y) noexcept;
 
-/** Releases the active gesture, which is the only path that turns the cube. */
+/** Releases the active gesture, the only path that can turn a layer. */
 void pointer_up() noexcept;
 
 /**
  * Abandons the active gesture without turning the cube.
  *
  * For a cancelled pointer or lost capture: the user never let go, so nothing
- * should be committed.
+ * should be committed. A viewpoint sweep has nothing to withhold, so for it
+ * this is the same as a release.
  */
 void pointer_cancel() noexcept;
 

@@ -9,6 +9,7 @@
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/NetGeometry.hpp"
+#include "graphics/OrbitCamera.hpp"
 #include "graphics/Pipeline.hpp"
 #include "graphics/RenderScene.hpp"
 #include "interaction/InteractionController.hpp"
@@ -26,7 +27,10 @@ std::unique_ptr<render::Renderer> renderer;
 // initialize() or resize(), so it cannot drift from the actual target.
 graphics::CanvasLayout placement;
 
-graphics::Camera camera = graphics::default_camera(1.0f);
+// The whole of the viewpoint state. The Camera is derived from this and the
+// layout whenever one is needed rather than stored, so there is no second copy
+// to keep in step and no way to forget to rebuild it.
+graphics::OrbitCamera orbit = graphics::home_orbit();
 
 // The logical cube, only ever holding quarter turns. A drag in progress lives
 // in the controller instead, and reaches this through a committed move.
@@ -37,10 +41,28 @@ interaction::InteractionController interaction(kCubeSize);
 void adopt_surface(std::uint32_t width, std::uint32_t height) noexcept
 {
     placement = graphics::layout(width, height);
+}
+
+[[nodiscard]] graphics::Camera current_camera() noexcept
+{
     // Follows the cube region rather than the canvas. That region is square,
-    // so this is always 1, but deriving it keeps the two in step if the
+    // so the aspect is always 1, but deriving it keeps the two in step if the
     // layout ever changes.
-    camera.set_aspect(placement.cube.width / placement.cube.height);
+    return orbit.to_camera(placement.cube.width / placement.cube.height);
+}
+
+/**
+ * Applies whatever sweep the controller has accumulated.
+ *
+ * Called from every point where a camera is about to be used, so the camera
+ * rendered with, the camera picked against, and the camera a gesture captures
+ * are always the same one.
+ */
+void drain_orbit() noexcept
+{
+    if (const auto delta = interaction.take_orbit_delta()) {
+        orbit.turn(delta->yaw_degrees, delta->pitch_degrees);
+    }
 }
 
 }  // namespace
@@ -74,6 +96,10 @@ bool resize(std::uint32_t width, std::uint32_t height) noexcept
 
     if (!renderer->resize(width, height)) return false;
 
+    // Whatever the gesture swept before the resize still counts; only the
+    // gesture itself cannot continue.
+    drain_orbit();
+
     // A drag holds screen directions derived from the old viewport, so it
     // cannot survive the change; dropping it leaves the cube untouched. A snap
     // only animates an angle, so it is unaffected and keeps running.
@@ -87,7 +113,11 @@ bool pointer_down(float x, float y) noexcept
 {
     if (!initialized) return false;
 
-    return interaction.pointer_down(x, y, camera, placement.cube);
+    // Before the camera is captured, never after: a press arriving between
+    // two frames must aim at the viewpoint the last one produced.
+    drain_orbit();
+
+    return interaction.pointer_down(x, y, current_camera(), placement.cube);
 }
 
 void pointer_move(float x, float y) noexcept
@@ -117,6 +147,8 @@ bool advance(double elapsed_ms) noexcept
 
     const bool more_frames = interaction.advance(elapsed_ms);
 
+    drain_orbit();
+
     // The one place a gesture becomes a change to the logical cube.
     if (const auto move = interaction.take_committed_move()) {
         cube_state.apply(*move);
@@ -132,14 +164,15 @@ bool render() noexcept
     // The model transform is identity for now, but it goes through the real
     // path so the quaternion-to-matrix step is exercised every frame.
     const math::Transform model;
+    const graphics::Camera camera = current_camera();
 
     auto scene = graphics::build_cube_scene(cube_state,
                                             interaction.active_rotation())  //
                  | graphics::transform(model)                               //
-                 | graphics::view(camera)                //
-                 | graphics::project(camera)             //
-                 | graphics::cull()                      //
-                 | graphics::depth_sort()                //
+                 | graphics::view(camera)                                   //
+                 | graphics::project(camera)                                //
+                 | graphics::cull()                                         //
+                 | graphics::depth_sort()                                   //
                  | graphics::viewport(placement.cube);
 
     // The net is already screen-space, so it only has to be appended. The two
@@ -172,6 +205,8 @@ void shutdown() noexcept
     static_cast<void>(tvg::Initializer::term());
     placement = graphics::CanvasLayout{};
     cube_state = cube::CubeState(kCubeSize);
+    orbit = graphics::home_orbit();
+    // Drops any sweep still pending along with the rest of the gesture state.
     interaction.reset();
     initialized = false;
 }

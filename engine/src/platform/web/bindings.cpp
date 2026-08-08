@@ -70,7 +70,10 @@ EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_pixel_byte_length() noexcept
 /**
  * Begins a pointer gesture. Coordinates are drawing-buffer pixels.
  *
- * @return one when the pointer grabbed the cube; otherwise zero.
+ * Pressing the cube drags a layer, pressing elsewhere sweeps the viewpoint.
+ *
+ * @return one when a gesture began; zero before initialization, for
+ *         non-finite coordinates, and while another gesture is running.
  */
 EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_pointer_down(float x, float y) noexcept
 {

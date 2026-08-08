@@ -19,9 +19,10 @@ export const BODY = [70, 74, 82, 255];
 // Sample points as fractions of the square 3D region, derived from the
 // projected centroid of each visible face. They are region-relative rather
 // than canvas-relative, which is what makes them independent of the canvas
-// aspect ratio.
-export const UP_SAMPLE = [0.5, 0.29] as const;
-export const FRONT_SAMPLE = [0.31, 0.61] as const;
+// aspect ratio, and named for where they sit on screen rather than for a face,
+// because which face shows there depends on the viewpoint.
+export const TOP_SAMPLE = [0.5, 0.29] as const;
+export const LEFT_SAMPLE = [0.31, 0.61] as const;
 export const RIGHT_SAMPLE = [0.69, 0.61] as const;
 
 /**
@@ -80,8 +81,8 @@ export type CanvasProbe = {
   readonly cssHeight: number;
   readonly devicePixelRatio: number;
   readonly box: { left: number; top: number; width: number; height: number };
-  readonly up: number[];
-  readonly front: number[];
+  readonly top: number[];
+  readonly left: number[];
   readonly right: number[];
   readonly seams: number[][];
   readonly net: number[][];
@@ -158,8 +159,8 @@ export async function probeCanvas(page: Page): Promise<CanvasProbe> {
           width: box.width,
           height: box.height,
         },
-        up: inCube(config.upSample),
-        front: inCube(config.frontSample),
+        top: inCube(config.topSample),
+        left: inCube(config.leftSample),
         right: inCube(config.rightSample),
         seams: config.seamSamples.map(inCube),
         net,
@@ -173,8 +174,8 @@ export async function probeCanvas(page: Page): Promise<CanvasProbe> {
       };
     },
     {
-      upSample: UP_SAMPLE,
-      frontSample: FRONT_SAMPLE,
+      topSample: TOP_SAMPLE,
+      leftSample: LEFT_SAMPLE,
       rightSample: RIGHT_SAMPLE,
       seamSamples: SEAM_SAMPLES,
       netBlocks: NET_BLOCKS,
@@ -215,10 +216,21 @@ export function pagePointInCube(
   };
 }
 
+/** The faces showing at the three screen positions, whatever the viewpoint. */
+export function assertVisibleFaces(
+  probe: CanvasProbe,
+  top: number[],
+  left: number[],
+  right: number[],
+): void {
+  expect(probe.top).toEqual(top);
+  expect(probe.left).toEqual(left);
+  expect(probe.right).toEqual(right);
+}
+
 export function assertFacesAndCorners(probe: CanvasProbe): void {
-  expect(probe.up).toEqual(WHITE);
-  expect(probe.front).toEqual(GREEN);
-  expect(probe.right).toEqual(RED);
+  // The home viewpoint, looking down the (1, 1, 1) diagonal.
+  assertVisibleFaces(probe, WHITE, GREEN, RED);
 
   for (const corner of probe.corners) {
     expect(corner).toEqual(BACKGROUND);

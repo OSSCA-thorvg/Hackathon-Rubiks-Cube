@@ -31,9 +31,6 @@ public:
     {
     }
 
-    /** Updates the viewport aspect ratio; other parameters are unchanged. */
-    void set_aspect(float aspect) noexcept { aspect_ = aspect; }
-
     [[nodiscard]] math::Mat4 view() const noexcept
     {
         return math::look_at(eye_, target_, up_);

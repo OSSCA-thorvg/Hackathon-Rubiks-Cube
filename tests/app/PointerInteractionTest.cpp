@@ -21,6 +21,16 @@ using Rgba = std::array<std::uint8_t, 4>;
 
 constexpr Rgba kGreen{0, 155, 72, 255};
 constexpr Rgba kWhite{255, 255, 255, 255};
+constexpr Rgba kRed{183, 18, 52, 255};
+constexpr Rgba kBlue{0, 70, 173, 255};
+constexpr Rgba kOrange{255, 88, 0, 255};
+
+// The three face centers of the rendered scene contract, as fractions of the
+// square 3D region. Which colors they read depends on the viewpoint, which is
+// exactly what makes them useful for checking an orbit.
+constexpr float kUpSample[]{0.50f, 0.29f};
+constexpr float kLeftSample[]{0.31f, 0.61f};
+constexpr float kRightSample[]{0.69f, 0.61f};
 
 constexpr std::uint32_t kCanvas = 1024;
 constexpr int kCubeSize = 3;
@@ -109,6 +119,50 @@ void require_up_right_column(const Rgba& color)
     for (int row = 0; row < kCubeSize; ++row) {
         require_pixel(up_face_cell(2, row, kCanvas, kCanvas), color);
     }
+}
+
+/** Reads a point given as a fraction of the square 3D region. */
+const std::uint8_t* cube_sample(const float (&sample)[2], std::uint32_t width,
+                                std::uint32_t height)
+{
+    const auto rect = cube_rect(width, height);
+    return pixel_at(rect.x + sample[0] * rect.width,
+                    rect.y + sample[1] * rect.height, width);
+}
+
+/** The three visible face centers, in screen order. */
+void require_visible_faces(const Rgba& top, const Rgba& left,
+                           const Rgba& right)
+{
+    REQUIRE(rubiks::app::render());
+    require_pixel(cube_sample(kUpSample, kCanvas, kCanvas), top);
+    require_pixel(cube_sample(kLeftSample, kCanvas, kCanvas), left);
+    require_pixel(cube_sample(kRightSample, kCanvas, kCanvas), right);
+}
+
+/** The whole solved net, which no viewpoint change may disturb. */
+void require_solved_net()
+{
+    REQUIRE(rubiks::app::render());
+    for (int column = 0; column < kCubeSize; ++column) {
+        for (int row = 0; row < kCubeSize; ++row) {
+            require_pixel(up_face_cell(column, row, kCanvas, kCanvas), kWhite);
+        }
+    }
+}
+
+/** Drags the background sideways, sweeping the viewpoint by `quarter_turns`. */
+void orbit_left(float quarter_turns)
+{
+    const auto rect = cube_rect(kCanvas, kCanvas);
+    const float from_x = rect.x + rect.width * 0.02f;
+    const float from_y = rect.y + rect.height * 0.02f;
+
+    REQUIRE(rubiks::app::pointer_down(from_x, from_y));
+    rubiks::app::pointer_move(
+        from_x - rubiks::interaction::kOrbitQuarterTurnFraction * rect.width *
+                     quarter_turns,
+        from_y);
 }
 
 /** Presses the front right column and drags upward, without releasing. */
@@ -232,6 +286,118 @@ TEST_CASE("resizing during the snap lets it finish")
     REQUIRE(settle() >= 1);
 
     REQUIRE(rubiks::app::resize(kCanvas, kCanvas));
+    require_up_right_column(kGreen);
+
+    rubiks::app::shutdown();
+}
+
+TEST_CASE("dragging the background sweeps the viewpoint")
+{
+    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+
+    // Home shows the +Z, +X and +Y faces around the (1, 1, 1) diagonal.
+    require_visible_faces(kWhite, kGreen, kRed);
+
+    // A quarter turn brings the next corner round, so the face that was on
+    // the right moves to the left and the back face takes its place.
+    orbit_left(1.0f);
+    rubiks::app::pointer_up();
+    settle();
+
+    require_visible_faces(kWhite, kRed, kBlue);
+
+    // The cube itself never moved.
+    require_solved_net();
+
+    rubiks::app::shutdown();
+}
+
+TEST_CASE("sweeping the other way brings the opposite corner round")
+{
+    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+
+    // The other neighbouring corner: the front face slides right and the left
+    // face comes into view beside it.
+    orbit_left(-1.0f);
+    rubiks::app::pointer_up();
+    settle();
+
+    require_visible_faces(kWhite, kOrange, kGreen);
+    require_solved_net();
+
+    rubiks::app::shutdown();
+}
+
+TEST_CASE("a press between two frames sees the viewpoint it was aimed at")
+{
+    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+
+    orbit_left(1.0f);
+    rubiks::app::pointer_up();
+
+    // No frame has run, so the sweep is still waiting. Pressing now has to
+    // apply it exactly once: not zero times, which would pick against a
+    // viewpoint the user never saw, and not twice.
+    const auto rect = cube_rect(kCanvas, kCanvas);
+    REQUIRE(rubiks::app::pointer_down(rect.x + rect.width * 0.02f,
+                                      rect.y + rect.height * 0.02f));
+    rubiks::app::pointer_up();
+    settle();
+
+    require_visible_faces(kWhite, kRed, kBlue);
+
+    rubiks::app::shutdown();
+}
+
+TEST_CASE("a resize keeps the viewpoint and applies the last sweep")
+{
+    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+
+    orbit_left(1.0f);
+
+    // The gesture cannot continue across a resize, but what it already swept
+    // still counts.
+    REQUIRE(rubiks::app::resize(800, 600));
+    REQUIRE(rubiks::app::resize(kCanvas, kCanvas));
+    settle();
+
+    require_visible_faces(kWhite, kRed, kBlue);
+
+    rubiks::app::shutdown();
+}
+
+TEST_CASE("shutdown returns the viewpoint home")
+{
+    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+    orbit_left(1.0f);
+    rubiks::app::pointer_up();
+    settle();
+    require_visible_faces(kWhite, kRed, kBlue);
+
+    rubiks::app::shutdown();
+    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+
+    // Back to the viewpoint the rendered scene contract was derived from.
+    require_visible_faces(kWhite, kGreen, kRed);
+
+    rubiks::app::shutdown();
+}
+
+TEST_CASE("a layer still turns correctly after the viewpoint moves")
+{
+    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+
+    // A whole turn of the viewpoint lands back where it started, so the
+    // gesture that means R at home has to still mean R here.
+    orbit_left(4.0f);
+    rubiks::app::pointer_up();
+    settle();
+    require_visible_faces(kWhite, kGreen, kRed);
+
+    drag_upward(kQuarterTurnDrag);
+    rubiks::app::pointer_up();
+    settle();
+
     require_up_right_column(kGreen);
 
     rubiks::app::shutdown();

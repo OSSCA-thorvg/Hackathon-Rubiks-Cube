@@ -369,7 +369,7 @@ describe('startApp', () => {
     expect(harness.engine.advance).not.toHaveBeenCalled();
   });
 
-  it('starts a frame loop when a press grabs the cube', async () => {
+  it('starts a frame loop when a press begins a gesture', async () => {
     const harness = createHarness();
     await harness.start();
 
@@ -379,7 +379,7 @@ describe('startApp', () => {
     expect(harness.hasPendingFrame()).toBe(true);
   });
 
-  it('leaves the page alone when a press misses the cube', async () => {
+  it('leaves the page alone when the engine declines the press', async () => {
     const harness = createHarness();
     harness.engine.pointerDown.mockReturnValueOnce(false);
     await harness.start();

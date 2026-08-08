@@ -198,7 +198,9 @@ export class CubeEngine {
   /**
    * Begins a gesture at a point in drawing buffer pixels.
    *
-   * @returns true when the press grabbed the cube.
+   * Over the cube that is a layer drag, elsewhere a viewpoint sweep.
+   *
+   * @returns true when a gesture began.
    * @throws Error when disposed.
    */
   pointerDown(x: number, y: number): boolean {

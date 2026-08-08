@@ -1,20 +1,15 @@
 #include "graphics/Camera.hpp"
 
+#include "graphics/OrbitCamera.hpp"
+
 namespace rubiks::graphics {
-namespace {
-
-constexpr float kPi = 3.14159265358979323846f;
-constexpr float kVerticalFov = kPi / 4.0f;  // 45 degrees
-constexpr float kNearPlane = 1.0f;
-constexpr float kFarPlane = 10.0f;
-
-}  // namespace
 
 Camera default_camera(float aspect) noexcept
 {
-    return Camera{math::Vec3{3.0f, 3.0f, 3.0f}, math::Vec3{0.0f, 0.0f, 0.0f},
-                  math::Vec3{0.0f, 1.0f, 0.0f}, kVerticalFov,   aspect,
-                  kNearPlane,                   kFarPlane};
+    // One definition of the home viewpoint. Building the eye here instead
+    // would leave two cameras that agree only to within a rounding error, and
+    // the one the application renders with would be the orbit's anyway.
+    return home_orbit().to_camera(aspect);
 }
 
 }  // namespace rubiks::graphics

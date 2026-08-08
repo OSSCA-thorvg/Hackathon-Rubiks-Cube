@@ -60,12 +60,35 @@ private:
 };
 
 /**
- * Camera pinned by the Phase 3 spec.
+ * Lens and depth range shared by every viewpoint of the cube.
  *
- * The eye sits on the (1, 1, 1) diagonal so the +X, +Y, and +Z faces are
- * visible and symmetric, far enough that the cube silhouette stays inside a
- * square viewport with margin. The rendered scene contract samples are derived
- * from these values, so changing them means changing the contract too.
+ * Named here rather than kept in the implementation because a viewpoint that
+ * moves has to build cameras differing from the home one in the eye alone.
+ */
+inline constexpr float kVerticalFov = 3.14159265358979323846f / 4.0f;
+inline constexpr float kNearPlane = 1.0f;
+inline constexpr float kFarPlane = 10.0f;
+
+/** Where the cube sits, and which way is up from every viewpoint. */
+inline constexpr math::Vec3 kCubeCenter{0.0f, 0.0f, 0.0f};
+inline constexpr math::Vec3 kWorldUp{0.0f, 1.0f, 0.0f};
+
+/**
+ * The eye of the home viewpoint, which also fixes the orbit radius.
+ *
+ * On the (1, 1, 1) diagonal so the +X, +Y and +Z faces are visible and
+ * symmetric, far enough that the cube silhouette stays inside a square
+ * viewport with margin. The rendered scene contract samples are derived from
+ * this viewpoint, so moving it means changing the contract too.
+ */
+inline constexpr math::Vec3 kHomeEye{3.0f, 3.0f, 3.0f};
+
+/**
+ * The camera of the home viewpoint.
+ *
+ * Delegates to the orbit at home rather than building its own camera, so the
+ * viewpoint the contract was derived from has one definition instead of two
+ * that agree only as far as floating point lets them.
  */
 [[nodiscard]] Camera default_camera(float aspect) noexcept;
 

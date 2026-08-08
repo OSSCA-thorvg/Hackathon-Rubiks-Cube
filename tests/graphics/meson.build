@@ -14,6 +14,14 @@ net_test = executable(
 
 test('net geometry', net_test)
 
+orbit_camera_test = executable(
+  'orbit-camera-test',
+  files('OrbitCameraTest.cpp'),
+  dependencies: [graphics_dep, catch2_dep],
+)
+
+test('orbit camera', orbit_camera_test)
+
 transient_test = executable(
   'transient-test',
   files('TransientTest.cpp'),

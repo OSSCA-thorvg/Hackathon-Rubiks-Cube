@@ -8,6 +8,7 @@ graphics_lib = static_library(
     'CubeGeometry.cpp',
     'Layout.cpp',
     'NetGeometry.cpp',
+    'OrbitCamera.cpp',
     'Palette.cpp',
     'Passes.cpp',
   ),

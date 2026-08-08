@@ -268,17 +268,18 @@ TEST_CASE("an undecidable drag resolves deterministically")
     REQUIRE(first->axis == Axis::X);
 }
 
-TEST_CASE("pressing away from the cube starts nothing")
+TEST_CASE("pressing away from the cube starts no layer turn")
 {
     InteractionController controller(kSize);
     const Rect rect = cube_rect();
 
-    // A corner of the viewport, outside the silhouette.
-    REQUIRE_FALSE(controller.pointer_down(rect.x + rect.width * 0.02f,
-                                          rect.y + rect.height * 0.02f,
-                                          cube_camera(), rect));
+    // A corner of the viewport, outside the silhouette. A gesture does begin
+    // there -- it sweeps the viewpoint -- but no layer is involved.
+    REQUIRE(controller.pointer_down(rect.x + rect.width * 0.02f,
+                                    rect.y + rect.height * 0.02f,
+                                    cube_camera(), rect));
     REQUIRE_FALSE(controller.active_rotation());
-    REQUIRE_FALSE(controller.advance(kFrameMs));
+    REQUIRE_FALSE(controller.take_committed_move());
 }
 
 TEST_CASE("a second pointer during a gesture is ignored")

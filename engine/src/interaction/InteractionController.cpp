@@ -16,6 +16,14 @@ constexpr float kDegreesPerQuarterTurn = 90.0f;
            (kQuarterTurnFraction * viewport.width);
 }
 
+/** Degrees of viewpoint sweep per pixel of drag. */
+[[nodiscard]] float orbit_degrees_per_pixel(
+    const graphics::Rect& viewport) noexcept
+{
+    return kDegreesPerQuarterTurn /
+           (kOrbitQuarterTurnFraction * viewport.width);
+}
+
 [[nodiscard]] double snap_duration(float remaining_degrees) noexcept
 {
     const float magnitude = std::abs(remaining_degrees);
@@ -47,15 +55,22 @@ bool InteractionController::pointer_down(
     const graphics::Rect& viewport) noexcept
 {
     // A snap owns the cube until it finishes, and a second pointer during a
-    // drag is not a second gesture.
-    if (snap_ || gesture_) return false;
+    // gesture is not a second gesture.
+    if (snap_ || gesture_ || orbit_) return false;
     if (!finite_point(x, y)) return false;
+    if (viewport.width <= 0.0f || viewport.height <= 0.0f) return false;
 
-    const auto ray = pointer_ray(x, y, camera, viewport);
-    if (!ray) return false;
+    std::optional<Pick> pick;
+    if (const auto ray = pointer_ray(x, y, camera, viewport)) {
+        pick = pick_cube(*ray, size_);
+    }
 
-    const auto pick = pick_cube(*ray, size_);
-    if (!pick) return false;
+    // Missing the cube is not nothing: it is a request to look around it.
+    // Where the press landed does not matter, only that it was not the cube.
+    if (!pick) {
+        orbit_ = Orbit{viewport, math::Vec2{x, y}};
+        return true;
+    }
 
     gesture_ = Gesture{camera, viewport, *pick, math::Vec2{x, y},
                        std::nullopt, 0.0f};
@@ -64,6 +79,21 @@ bool InteractionController::pointer_down(
 
 void InteractionController::pointer_move(float x, float y) noexcept
 {
+    if (orbit_) {
+        if (!finite_point(x, y)) return;
+
+        // A step since the last position, not a total from the press. The
+        // viewpoint integrates these against a clamped store, so a pitch
+        // resting on its limit moves away on the first opposite step instead
+        // of waiting for a total displacement to come back into range.
+        const math::Vec2 step{x - orbit_->previous.x, y - orbit_->previous.y};
+        orbit_->previous = math::Vec2{x, y};
+
+        const float degrees = orbit_degrees_per_pixel(orbit_->viewport);
+        accumulate_orbit(-step.x * degrees, step.y * degrees);
+        return;
+    }
+
     if (!gesture_ || !finite_point(x, y)) return;
 
     const math::Vec2 drag{x - gesture_->start.x, y - gesture_->start.y};
@@ -88,6 +118,13 @@ void InteractionController::pointer_move(float x, float y) noexcept
 
 void InteractionController::pointer_up() noexcept
 {
+    // Nothing to settle or commit, and the accumulated sweep stays behind to
+    // be taken: a viewpoint is where the user left it, not something to undo.
+    if (orbit_) {
+        orbit_.reset();
+        return;
+    }
+
     if (!gesture_) return;
 
     if (!gesture_->lock) {
@@ -109,11 +146,15 @@ void InteractionController::pointer_up() noexcept
 void InteractionController::cancel() noexcept
 {
     gesture_.reset();
+
+    // Same as a release for an orbit: there is no commit to withhold, and the
+    // sweep already made stays pending rather than being thrown away.
+    orbit_.reset();
 }
 
 bool InteractionController::advance(double elapsed_ms) noexcept
 {
-    if (!snap_) return gesture_.has_value();
+    if (!snap_) return gesture_.has_value() || orbit_.has_value();
 
     snap_->elapsed_ms += sanitized_delta(elapsed_ms);
     if (snap_->elapsed_ms < snap_->duration_ms) return true;
@@ -133,6 +174,25 @@ std::optional<cube::CubeMove>
 InteractionController::take_committed_move() noexcept
 {
     return std::exchange(committed_, std::nullopt);
+}
+
+std::optional<OrbitDelta> InteractionController::take_orbit_delta() noexcept
+{
+    return std::exchange(pending_orbit_, std::nullopt);
+}
+
+void InteractionController::accumulate_orbit(float yaw_degrees,
+                                             float pitch_degrees) noexcept
+{
+    if (!pending_orbit_) {
+        pending_orbit_ = OrbitDelta{yaw_degrees, pitch_degrees};
+        return;
+    }
+
+    // Several moves can land between two frames; they add up rather than
+    // replacing one another, or the movement between them would be lost.
+    pending_orbit_->yaw_degrees += yaw_degrees;
+    pending_orbit_->pitch_degrees += pitch_degrees;
 }
 
 float InteractionController::snap_angle() const noexcept
@@ -170,8 +230,10 @@ std::optional<graphics::ActiveRotation> InteractionController::active_rotation()
 void InteractionController::reset() noexcept
 {
     gesture_.reset();
+    orbit_.reset();
     snap_.reset();
     committed_.reset();
+    pending_orbit_.reset();
 }
 
 }  // namespace rubiks::interaction

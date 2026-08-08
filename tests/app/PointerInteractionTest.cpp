@@ -158,14 +158,23 @@ TEST_CASE("a drag gesture turns the cube")
     rubiks::app::shutdown();
 }
 
-TEST_CASE("pressing away from the cube starts nothing")
+TEST_CASE("pressing away from the cube never turns a layer")
 {
     REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
 
+    // A corner of the 3D region, outside the silhouette. This starts a
+    // viewpoint sweep rather than nothing, but the cube itself is untouched
+    // however far it is dragged.
     const auto rect = cube_rect(kCanvas, kCanvas);
-    REQUIRE_FALSE(rubiks::app::pointer_down(rect.x + rect.width * 0.02f,
-                                            rect.y + rect.height * 0.02f));
-    REQUIRE_FALSE(rubiks::app::advance(kFrameMs));
+    const float corner_x = rect.x + rect.width * 0.02f;
+    const float corner_y = rect.y + rect.height * 0.02f;
+
+    REQUIRE(rubiks::app::pointer_down(corner_x, corner_y));
+    rubiks::app::pointer_move(corner_x - 300.0f, corner_y);
+    rubiks::app::pointer_up();
+    settle();
+
+    require_up_right_column(kWhite);
 
     rubiks::app::shutdown();
 }

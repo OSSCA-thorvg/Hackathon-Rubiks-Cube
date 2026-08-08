@@ -18,6 +18,14 @@ inline constexpr float kDeadZoneFraction = 0.01f;
 /** Dragging across this fraction of the viewport width is one quarter turn. */
 inline constexpr float kQuarterTurnFraction = 0.5f;
 
+/**
+ * The same for a drag that sweeps the viewpoint rather than a layer.
+ *
+ * A separate constant despite the matching value: the two are unrelated feels
+ * that happen to start out equal, and tuning one should not move the other.
+ */
+inline constexpr float kOrbitQuarterTurnFraction = 0.5f;
+
 /** Snap pacing: time for a full quarter turn, and a floor for short snaps. */
 inline constexpr double kSnapMsPerQuarterTurn = 200.0;
 inline constexpr double kMinSnapMs = 60.0;
@@ -31,28 +39,38 @@ inline constexpr double kMinSnapMs = 60.0;
  */
 inline constexpr double kMaxFrameMs = 250.0;
 
+/** How far a drag swept the viewpoint, in degrees. */
+struct OrbitDelta {
+    float yaw_degrees;
+    float pitch_degrees;
+};
+
 /**
- * Turns pointer events into layer turns.
+ * Turns pointer events into layer turns and viewpoint changes.
  *
- * Three states: idle, dragging a layer at a continuous angle, and snapping
- * that angle to the nearest quarter turn. Only a genuine release can reach the
- * snap, so an interrupted gesture can never change the cube.
+ * Pressing the cube drags a layer at a continuous angle, which snaps to the
+ * nearest quarter turn on release; pressing anywhere else sweeps the
+ * viewpoint, which has nothing to snap to and commits nothing. Only a genuine
+ * release of a layer drag can reach the snap, so an interrupted gesture can
+ * never change the cube.
  *
- * The controller does not own the CubeState. A finished snap hands back a
- * CubeMove for the caller to apply, which keeps every state change visible at
- * the call site instead of hidden behind a reference.
+ * The controller owns neither the CubeState nor the camera. A finished snap
+ * hands back a CubeMove and an orbit hands back angles, which keeps every
+ * state change visible at the call site instead of hidden behind a reference.
  */
 class InteractionController {
 public:
     explicit InteractionController(int size = 3) noexcept : size_(size) {}
 
     /**
-     * Starts a gesture if the pointer is over the cube.
+     * Starts a gesture: a layer drag over the cube, an orbit anywhere else.
      *
-     * The camera and viewport are captured for the rest of the gesture; a
+     * The camera and viewport are captured for the rest of a layer drag; a
      * resize cancels the gesture rather than letting them go stale.
      *
-     * @return true when the cube was grabbed, and only then.
+     * @return true when a gesture began. False only before a gesture is
+     *         possible at all: non-finite coordinates, or another gesture or
+     *         a snap already running.
      */
     [[nodiscard]] bool pointer_down(float x, float y,
                                     const graphics::Camera& camera,
@@ -85,6 +103,16 @@ public:
     /** Takes the move a finished snap produced, once. */
     [[nodiscard]] std::optional<cube::CubeMove> take_committed_move() noexcept;
 
+    /**
+     * Takes the viewpoint change accumulated since the last call, once.
+     *
+     * Pointer events arrive more often than frames, so moves accumulate here
+     * rather than replacing one another. A delta outlives the gesture that
+     * produced it: releasing or cancelling an orbit leaves the last movement
+     * to be taken, because there is nothing about a viewpoint to undo.
+     */
+    [[nodiscard]] std::optional<OrbitDelta> take_orbit_delta() noexcept;
+
     /** The turn to draw, or nothing when the cube is at rest. */
     [[nodiscard]] std::optional<graphics::ActiveRotation> active_rotation()
         const noexcept;
@@ -103,6 +131,13 @@ private:
         float angle_degrees = 0.0f;
     };
 
+    /** A drag sweeping the viewpoint. */
+    struct Orbit {
+        graphics::Rect viewport;
+        /** The last position seen, so a move is a step rather than a total. */
+        math::Vec2 previous;
+    };
+
     /** A release running down to the nearest quarter turn. */
     struct Snap {
         cube::Axis axis;
@@ -114,11 +149,14 @@ private:
     };
 
     [[nodiscard]] float snap_angle() const noexcept;
+    void accumulate_orbit(float yaw_degrees, float pitch_degrees) noexcept;
 
     int size_;
     std::optional<Gesture> gesture_;
+    std::optional<Orbit> orbit_;
     std::optional<Snap> snap_;
     std::optional<cube::CubeMove> committed_;
+    std::optional<OrbitDelta> pending_orbit_;
 };
 
 }  // namespace rubiks::interaction

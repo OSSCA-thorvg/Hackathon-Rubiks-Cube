@@ -13,3 +13,11 @@ interaction_test = executable(
 )
 
 test('pointer interaction', interaction_test)
+
+orbit_test = executable(
+  'orbit-test',
+  files('OrbitTest.cpp'),
+  dependencies: [interaction_dep, catch2_dep],
+)
+
+test('viewpoint orbit', orbit_test)

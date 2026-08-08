@@ -3,7 +3,9 @@ catch2_dep = dependency(
   default_options: ['tests=false'],
 )
 
-# math and graphics link without ThorVG on purpose; see engine/src/meson.build.
+# cube, math and graphics link without ThorVG on purpose, and cube links
+# nothing else either; see engine/src/meson.build.
+subdir('cube')
 subdir('math')
 subdir('graphics')
 

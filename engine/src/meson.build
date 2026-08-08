@@ -3,6 +3,7 @@ engine_inc = include_directories('.')
 # is_system keeps the vendored header's warnings out of our -Wall build.
 linalg_inc = include_directories('../third_party/linalg', is_system: true)
 
+subdir('cube')
 subdir('math')
 subdir('graphics')
 

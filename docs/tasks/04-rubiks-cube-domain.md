@@ -1,0 +1,341 @@
+# Phase 4: Rubik's Cube Domain
+
+## Status
+
+`Proposed`
+
+## Objective
+
+Rendering과 독립적인 Rubik's Cube 도메인을 구현합니다.
+면별로 독립적인 색을 갖는 1×1×1 cubie를 N×N×N 격자에 저장하고, axis와 layer 기반 `CubeMove`, quarter turn 적용, inverse, sequence를 지원합니다.
+Graphics pipeline의 입력을 Phase 3의 하드코딩된 단일 cube에서 `CubeState`로 교체하고, 같은 상태를 **전개도(net)** 로도 함께 렌더링하여 큐브 전체를 한눈에 볼 수 있게 합니다.
+
+```text
+                 CubeState (N³ cubies, 면별 색)
+                    │
+        ┌───────────┴────────────┐
+        ▼                        ▼
+  build_cube_scene()       build_net_scene()
+  world-space quads         screen-space quads
+        │                        │
+        ▼                        │
+  Phase 3 pipeline               │  (파이프라인 불필요:
+  transform│view│project│        │   이미 2D, 가릴 면 없음)
+  cull│depth_sort│viewport       │
+        │                        │
+        └───────────┬────────────┘
+                    ▼
+              RenderScene (합쳐진 quad 목록)
+                    ▼
+           ThorVGSoftwareRenderer
+```
+
+Phase 4가 끝나면 화면 위쪽에는 seam이 보이는 3×3×3 cube가, 아래쪽에는 6면 전개도가 표시되고, Phase 5의 interaction은 "어느 layer를 얼마나 돌릴지"만 결정하면 됩니다.
+
+## Scope
+
+- `engine/src/cube/`: `CubeState`, `Cubie`, `CubeMove`
+- N×N×N 격자 저장과 face-color 표현 (orientation 수학 없이 색 순열로)
+- Axis + layer + quarter turn 기반 move 적용, inverse, sequence
+- 이름 있는 표준 move를 만드는 factory (`moves::R(size)` 등) — 문자열 파싱이 아니라 생성자
+- Graphics의 `build_cube_scene(const CubeState&)` 교체 (surface sticker만 방출)
+- 전개도 `build_net_scene(const CubeState&, Rect)` 추가
+- `ViewportPass`가 전체 buffer가 아니라 sub-rectangle로 매핑하도록 확장
+- Cube 도메인을 완전 독립 Meson target으로 분리
+- Rendered scene contract v3: split layout, seam 검증, 전개도 54칸 전수 검증
+
+## Out of scope
+
+- Pointer interaction, picking, drag (Phase 5)
+- Drag 중 transient rotation과 `ActiveRotation` (Phase 5) — 도메인은 90° 단위 discrete 상태만 가집니다
+- Layer 회전 중의 cubie 옆면(body) 렌더링 (Phase 5)
+- View mode 전환 UI(3D만 / 전개도만 / 둘 다) (Phase 6) — 이 phase는 고정 split layout입니다
+- Scramble, reset, solved 판정, timer (Phase 6)
+- N ≠ 3의 실제 출시. 저장과 move 엔진은 N-generic이지만 engine이 만드는 것은 N = 3뿐입니다
+- 문자열 notation parsing (`"R U R' U'"` → `CubeMove[]`). 아래 참고
+- C ABI와 TypeScript boundary 변경
+- 성능 최적화 (sticker 수는 N = 3에서 최대 54 + 전개도 54)
+
+## Architecture decisions
+
+### Domain purity and build structure
+
+DESIGN.md의 원칙대로 cube 도메인은 graphics, math, ThorVG를 알지 못합니다.
+
+- `engine/src/cube`는 **아무 dependency도 없는** Meson target입니다. `math_dep`조차 쓰지 않습니다 — 도메인 좌표가 정수라 float vector가 필요 없습니다.
+- `tests/cube`는 cube target만 link합니다. 도메인에 graphics나 linalg include가 생기면 빌드가 깨집니다.
+- 의존 방향은 단방향입니다: `graphics → cube`, `cube → 없음`.
+
+### N×N×N storage with index coordinates
+
+Cubie는 N³ 격자에 저장하고 각 축 좌표는 **`0 … N−1`의 index**입니다.
+
+```cpp
+enum class Face { Right, Left, Up, Down, Front, Back };  // +X -X +Y -Y +Z -Z
+enum class FaceColor { Red, Orange, White, Yellow, Green, Blue };
+
+struct Cubie {
+    std::array<FaceColor, 6> stickers;  // Face로 index
+};
+
+class CubeState {
+public:
+    explicit CubeState(int size = 3);            // solved
+    [[nodiscard]] int size() const noexcept;
+    [[nodiscard]] const Cubie& at(int x, int y, int z) const noexcept;
+    void apply(const CubeMove& move) noexcept;
+    // ...
+private:
+    int size_;
+    std::vector<Cubie> cubies_;  // size_³, index (x*size_ + y)*size_ + z
+};
+```
+
+Phase 3 스펙 초안은 `{−1, 0, +1}` 부호 좌표에 `std::array<Cubie, 27>`를 쓰려 했지만, index 좌표로 바꾸면 **짝수 N에서도 같은 식이 성립합니다**. 부호 좌표는 N = 3처럼 홀수일 때만 정수로 떨어지고 N = 2·4에서는 반정수가 되어 갈라집니다.
+
+- 저장은 `std::vector<Cubie>`이고 크기는 runtime N입니다. Template `CubeState<N>`도 가능하지만, 그러면 `build_cube_scene`을 포함한 모든 소비자가 template이 되고 헤더로 올라가야 합니다. Runtime N은 소비자를 단순하게 두고, Phase 6에서 UI로 크기를 바꾸는 길도 열어 둡니다.
+- 중앙 cubie와 내부 cubie도 격자에 자리를 차지합니다. 빈 칸을 특별 취급하는 것보다 uniform indexing이 단순하고, N = 3에서 낭비는 cubie 1개입니다.
+- `at(x, y, z)`가 3차원 접근의 공개 인터페이스이며, 내부 flat 저장은 구현 세부입니다.
+
+**이 phase가 만드는 것은 N = 3뿐입니다.** N-generic은 구조로만 확보하고, 실제로 다른 N이 성립하는지는 N = 2 smoke test 하나로 고정합니다. 2×2×2와 4×4×4를 제품으로 지원하려면 UI와 크기별 layout 조정이 더 필요하므로 그것은 별도 작업입니다.
+
+### Cubie representation: 색 순열, orientation 수학 없음
+
+Quarter turn은 (a) layer에 속한 cubie들의 **위치 순열**과 (b) 각 cubie 내부의 **sticker 색 순열**로 구현합니다.
+Quaternion이나 회전 행렬로 orientation을 추적하지 않는 이유는 두 가지입니다.
+
+- 도메인이 math 모듈을 알면 안 되고, 90° 단위 회전에서 색 순열은 회전과 정확히 동치입니다.
+- 연속 각도(drag 중의 `23.7°`)는 DESIGN.md 8절의 visual state이며 Phase 5에서 graphics가 소유합니다. Logical state는 항상 discrete합니다.
+
+전개도 렌더링이 이 선택을 한 번 더 정당화합니다. 전개도는 "위치 P의 cubie에서 면 F가 무슨 색인가"만 필요한데, 그것이 바로 이 표현이 직접 답하는 질문입니다. Orientation을 quaternion으로 들고 있었다면 전개도를 그릴 때마다 색을 역산해야 합니다.
+
+Solved 상태는 모든 cubie가 `stickers[f] == color_of(f)`인 상태입니다 (`Right`=Red, `Left`=Orange, `Up`=White, `Down`=Yellow, `Front`=Green, `Back`=Blue — Phase 3 contract와 같은 배색).
+
+### CubeMove semantics
+
+```cpp
+enum class Axis { X, Y, Z };
+
+struct CubeMove {
+    Axis axis;
+    LayerMask layers;   // 0 … N−1 layer index에 대한 bitmask
+    int quarter_turns;  // 양수 = 축의 양의 끝에서 원점을 바라볼 때 시계 방향
+};
+```
+
+`quarter_turns`는 mod 4로 정규화하고 0이면 no-op입니다. `inverse(move)`는 부호만 뒤집습니다.
+
++1 quarter turn의 위치 매핑과, 같은 회전을 face normal에 적용한 sticker 순열:
+
+| Axis | 위치 매핑 (index 좌표) | Sticker cycle (축 face는 고정) |
+| --- | --- | --- |
+| X | `(x, y, z) → (x, z, N−1−y)` | Up → Back → Down → Front → Up |
+| Y | `(x, y, z) → (N−1−z, y, x)` | Front → Left → Back → Right → Front |
+| Z | `(x, y, z) → (y, N−1−x, z)` | Up → Right → Down → Left → Up |
+
+이 표는 프로토타입으로 검증했습니다. N = 3에서 `R`(`{X, {N−1}, +1}`)을 적용하면 UFR 자리의 cubie가 UBR 자리 `(2, 2, 0)`로 이동하고, 그 자리의 Up sticker는 Green(원래 Front), Back sticker는 White(원래 Up), Right sticker는 Red입니다. 실물 큐브의 R과 일치합니다.
+
+### Named move factories, and why there is no parser
+
+문자열 notation parsing은 이 phase에서 구현하지 않습니다.
+
+`CubeMove` 자체가 이미 일반화된 표현이기 때문입니다. `{axis, layers, quarter_turns}`는 층을 숫자로 지목하는 구조체이고, `R`이나 `3Rw` 같은 표기는 그것을 사람이 읽고 쓰기 위한 직렬화 형식일 뿐입니다. 큐브 크기가 커지면 표기 체계도 실제로 갈라지지만(`M E S`는 가운데 층이 있는 홀수 N에서만 존재하고, 큰 큐브는 WCA의 `2R`·`3Rw`처럼 층 번호를 쓰는 숫자 표기가 필요합니다) `CubeMove`는 그 차이를 이미 흡수합니다.
+
+그리고 파서를 필요로 하는 소비자가 없습니다. Phase 5의 interaction은 drag에서 곧바로 `CubeMove`를 만들고, Phase 6의 scramble도 랜덤 move를 직접 생성하면 됩니다. 문자열이 필요해지는 것은 solve 기록이나 알고리즘 입력 UI를 붙일 때이고, 그때 이 표현 위에 얹으면 됩니다.
+
+대신 읽기 쉬운 **factory**를 둡니다. 파싱이 아니라 생성자이므로 실패 경로가 없습니다.
+
+```cpp
+namespace moves {
+CubeMove R(int size);  CubeMove L(int size);
+CubeMove U(int size);  CubeMove D(int size);
+CubeMove F(int size);  CubeMove B(int size);
+}
+```
+
+| Factory | Axis | Layers | quarter_turns |
+| --- | --- | --- | --- |
+| `R` / `L` | X | {N−1} / {0} | +1 / −1 |
+| `U` / `D` | Y | {N−1} / {0} | +1 / −1 |
+| `F` / `B` | Z | {N−1} / {0} | +1 / −1 |
+
+음의 face(`L`, `D`, `B`)는 자기 face 기준 시계 방향이 축 기준으로는 반대라서 `quarter_turns`가 −1입니다.
+Wide, slice, 전체 회전은 factory 없이 `CubeMove`를 직접 구성합니다 — layer 집합을 지정하는 것이 전부입니다.
+
+### Canvas layout
+
+Canvas를 두 영역으로 나눕니다. 좌표는 canvas의 짧은 변에 대한 비율이며 두 영역 모두 가로 중앙 정렬입니다.
+
+```text
+┌──────────────────────────┐
+│      3D cube viewport    │  정사각형, 한 변 0.58, 위쪽 여백 0.01
+│         (square)         │
+├──────────────────────────┤
+│    net: 4×3 faces        │  face 한 칸 0.12 → 블록 0.48 × 0.36
+│                          │  아래쪽 여백 0.02
+└──────────────────────────┘
+```
+
+**Cube viewport는 항상 정사각형**입니다. 그래서 camera aspect가 canvas 비율과 무관하게 1로 고정되고, Phase 3 contract의 sample 비율이 "정사각형 canvas에서만 유효"하다는 v2의 제약이 사라집니다. Sample은 이제 canvas가 아니라 **cube viewport 기준 비율**로 정의됩니다.
+
+이를 위해 `ViewportPass`가 `width`/`height` 대신 sub-rectangle을 받습니다.
+
+```text
+x_screen = rect.x + (ndc_x + 1) / 2 * rect.width
+y_screen = rect.y + (1 − ndc_y) / 2 * rect.height
+```
+
+### Net view
+
+전개도는 `CubeState`에서 곧바로 screen-space quad를 만들며 **파이프라인을 거치지 않습니다**. 이미 2D이고, 가려지는 면도 원근도 없기 때문입니다. `RenderScene`이 순수한 2D quad 목록이라 두 출처의 scene을 이어 붙이기만 하면 되는데, 이것 자체가 Phase 3에서 정한 renderer 경계가 옳았다는 근거입니다.
+
+배치는 표준 cross net이며 위 이미지와 같습니다: 위 White(U), 가운데 줄 왼쪽부터 Orange(L) · Green(F) · Red(R) · Blue(B), 아래 Yellow(D).
+
+각 면의 net 칸 `(col, row)`(둘 다 `0 … N−1`)가 어느 cubie의 어느 face인지는 다음과 같습니다. F를 정면으로 두고 펼친 표준 전개이며, 인접 변이 실제로 맞닿도록 정해집니다.
+
+| Net face | Cubie 위치 | Face |
+| --- | --- | --- |
+| U | `(col, N−1, row)` | Up |
+| L | `(0, N−1−row, col)` | Left |
+| F | `(col, N−1−row, N−1)` | Front |
+| R | `(N−1, N−1−row, N−1−col)` | Right |
+| B | `(N−1−col, N−1−row, 0)` | Back |
+| D | `(col, 0, N−1−row)` | Down |
+
+검산: F의 오른쪽 끝(`col = N−1`)은 `x = N−1`이고 R의 왼쪽 끝(`col = 0`)은 `z = N−1`이라, 두 칸은 실제 큐브에서 같은 모서리를 공유합니다.
+
+Sticker는 칸 크기의 `0.88`로 축소해 그리며, 남는 부분이 seam으로 배경색이 보입니다. 3D 쪽 seam과 목적이 같습니다.
+
+### Render connection
+
+`graphics`가 `cube`에 의존하게 되고 `FaceColor → graphics::Color` 매핑도 graphics 쪽에 둡니다.
+
+3D 기하는 Phase 3 계약을 보존하도록 정합니다.
+
+- 전체 cube는 여전히 edge 2, 원점 중심입니다. Cubie pitch는 `2/N`, 중심은 `(2i/N) − (N−1)/N × ... ` 즉 index `i`에 대해 `(2i − (N−1)) / N`입니다.
+- 각 cubie는 `sticker_scale = 0.92`로 축소되어 half extent가 `(1/N) × 0.92`입니다. N = 3에서 seam 폭은 world 기준 약 `0.053`입니다.
+- **Surface sticker만 방출합니다**: cubie의 face 중 위치가 그 face 방향의 바깥 layer와 일치하는 것만 quad가 됩니다. N = 3에서 54개이고 고정 camera에서 culling 후 27개가 남습니다.
+- Cubie의 안쪽 면과 옆면은 방출하지 않습니다. 그래서 seam으로 보이는 것은 항상 배경색이며 seam pixel 검증이 결정적입니다. Layer 분리 시 옆면이 필요한 것은 Phase 5에서 body face를 추가하며 해결합니다.
+
+Application은 `CubeState`를 소유하고, 매 frame 두 scene을 만들어 이어 붙입니다. 전개도 quad를 뒤에 붙여 3D 위에 그리지만 두 영역은 겹치지 않으므로 순서는 결과에 영향을 주지 않습니다.
+
+## Rendered scene contract v3
+
+배경색과 면 색은 v2와 같고, 검증 지점이 세 종류로 늘어납니다. Browser 출력은 solved cube입니다.
+
+**1. 3D cube sample** — cube viewport 기준 비율이며 v2 값을 그대로 씁니다. 각 면 중앙 cubie의 sticker 안에 들어가는 것을 projection으로 확인했습니다.
+
+```text
+white (+Y) : (0.50, 0.29)   green (+Z) : (0.31, 0.61)   red (+X) : (0.69, 0.61)
+```
+
+정사각형 canvas에서 canvas 절대 비율로는 `(0.500, 0.178)`, `(0.390, 0.364)`, `(0.610, 0.364)`입니다.
+
+**2. Seam sample** — sticker 사이 틈이므로 배경색과 정확히 일치해야 합니다. Cube viewport 기준 비율이고, seam이 좁아 소수 3자리로 고정합니다.
+
+```text
+(0.377, 0.645)  +Z face, 중앙과 오른쪽 sticker 사이
+(0.313, 0.534)  +Z face, 중앙과 위쪽 sticker 사이
+(0.564, 0.321)  +Y face, 중앙과 앞오른쪽 사이
+```
+
+Seam 폭은 canvas 512px에서 약 2.8px, 1008px에서 약 5.5px입니다. Anti-aliasing이 sample을 오염시키지 않도록 **seam 검증은 canvas 1024 이상에서만** 수행하고, 작은 크기와 resize 이후에는 3D sample과 모서리만 재검증합니다.
+
+**3. 전개도 전수 검증** — N = 3에서 54칸의 중심 pixel을 모두 읽어 기대 색 격자와 비교합니다. Sample 3개보다 훨씬 강한 검증이며, 도메인 → 렌더 경로 전체를 덮습니다. 칸 하나가 canvas 1008px에서 약 40px이라 중심 pixel은 anti-aliasing에서 안전합니다.
+
+모서리 검증은 v2와 같습니다. Camera, cube 크기, `sticker_scale`, layout 상수 중 무엇이든 바꾸면 위 좌표를 다시 유도해야 합니다.
+
+Native pipeline 검증 (pixel이 아니라 `RenderScene` 수준):
+
+- Solved 상태에서 3D face 27개, 색별 정확히 9개씩
+- 전개도 face 54개, 색별 정확히 9개씩
+- 3D sample은 각 면 중앙 sticker 다각형 내부, seam sample은 어떤 sticker에도 속하지 않음
+- Move 적용 후 두 scene 모두에 색 변화가 반영됨
+
+## Implementation steps
+
+### 1. Cube domain
+
+- [ ] `Face`, `FaceColor`, `Cubie`, index 좌표와 `at(x, y, z)` 정의
+- [ ] Runtime N을 갖는 `CubeState` 생성자와 solved 초기화 구현
+- [ ] `CubeMove`, `LayerMask`, mod 4 정규화 구현
+- [ ] 축별 위치 순열과 sticker 순열로 `apply(CubeMove)` 구현
+- [ ] `inverse(CubeMove)`와 sequence 적용 helper 구현
+- [ ] `moves::R` 등 이름 있는 face move factory 구현
+- [ ] 동등 비교 연산자 구현
+- [ ] Cube를 무의존 Meson target으로 분리
+
+### 2. Render connection
+
+- [ ] `ViewportPass`를 sub-rectangle 기반으로 확장
+- [ ] `FaceColor → graphics::Color` 매핑 구현
+- [ ] Surface sticker 방출 규칙으로 `build_cube_scene(const CubeState&)` 교체
+- [ ] Cubie pitch, `sticker_scale` 상수를 N 기준으로 정의
+- [ ] 전개도 배치표대로 `build_net_scene(const CubeState&, Rect)` 구현
+- [ ] Layout 계산(cube 정사각 viewport, net rect)을 한 곳에 정의
+- [ ] Graphics target에 cube dependency 추가
+- [ ] Application이 `CubeState`를 소유하고 두 scene을 합쳐 전달
+
+### 3. Verification
+
+- [ ] 위치/sticker 매핑 known-answer test: `R` 후 `(2, 2, 0)` cubie의 Up=Green, Back=White, Right=Red
+- [ ] 모든 기본 move의 주기 4 test (`R⁴ = identity` 등)
+- [ ] `move + inverse = identity` test
+- [ ] `(R U R' U')⁶ = identity` test
+- [ ] 전체 회전 `x⁴ = y⁴ = z⁴ = identity` test
+- [ ] Scramble sequence 적용 후 역순 inverse로 solved 복귀 test
+- [ ] N = 2 smoke test: 저장 크기, `R⁴ = identity`, `R R' = identity`
+- [ ] Move factory가 표의 필드를 만드는지 test (특히 `L`·`D`·`B`의 부호)
+- [ ] Wide와 slice를 직접 구성한 `CubeMove`의 주기 4 test
+- [ ] Solved 상태의 face별 sticker 9개 동일 색 test
+- [ ] 전개도 배치표 test: 인접 변이 같은 모서리를 공유하는지, 54칸이 cubie face와 1:1인지
+- [ ] Native pipeline test: 3D 27개와 전개도 54개, 색 분포, sample/seam의 다각형 포함 관계
+- [ ] Move 적용 상태의 RenderScene 색 변화 test
+- [ ] Native contract test: 3D sample, seam(1024 이상), 전개도 54칸 전수, 모서리
+- [ ] Browser e2e에 전개도 54칸 전수 검증과 seam sample 추가
+- [ ] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
+
+## Acceptance criteria
+
+- Cube target은 어떤 dependency도 없이 빌드되고, cube test는 cube target만 link합니다.
+- `CubeState`는 90° 단위 discrete 상태만 가지며 float, quaternion, graphics type을 포함하지 않습니다.
+- 저장과 move 엔진이 N-generic이고 N = 2에서도 동작함이 test로 확인됩니다.
+- 표의 위치/sticker 매핑이 known-answer test와 property test(주기, inverse, 교환자 주기 6)로 검증됩니다.
+- 이름 있는 move factory가 표대로 `CubeMove`를 만들고, wide와 slice는 layer 집합만 지정해 직접 구성됩니다.
+- Solved `CubeState`가 seam이 보이는 3×3×3과 6면 전개도로 함께 렌더링되고 contract v3의 세 검증을 모두 통과합니다.
+- 전개도 54칸이 pixel 수준에서 전수 검증됩니다.
+- Cube viewport가 정사각형이므로 3D sample 비율이 canvas 비율과 무관하게 유효합니다.
+- Camera, 전체 cube 크기, v2 sample 비율은 변하지 않습니다.
+- C ABI와 TypeScript boundary는 변경되지 않습니다.
+- Native unit test, TypeScript unit test, WASM build, browser e2e와 Vite production build가 모두 통과합니다.
+- Pointer interaction, animation, scramble, view mode UI 코드는 이 phase에 포함되지 않습니다.
+
+## Verification commands
+
+```bash
+# Native build and tests
+meson setup build/native
+meson compile -C build/native
+meson test -C build/native --print-errorlogs
+
+# WASM build
+source /path/to/emsdk/emsdk_env.sh
+./build_wasm.sh
+
+# TypeScript boundary unit tests
+npm --prefix web run test:unit
+
+# Browser e2e (build_wasm.sh 이후)
+npm --prefix web run test:e2e
+
+# Vite production build
+npm --prefix web run build
+```
+
+## Completion
+
+모든 acceptance criteria와 verification command를 통과한 뒤 다음 작업을 수행합니다.
+
+- 이 문서의 status를 `Completed`로 변경합니다.
+- 상위 [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md)의 Phase 4를 완료 처리합니다.
+- Phase 5 pointer interaction and animation 세부 문서를 작성합니다.

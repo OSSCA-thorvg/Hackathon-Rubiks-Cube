@@ -40,10 +40,11 @@ GitHub Actions에서 submodule checkout, native test, WASM build, Vite build와 
 ThorVG와 독립적인 vector, matrix, quaternion, transform, camera와 graphics pipeline을 구축합니다.
 Model, view, projection, back-face culling, depth sorting을 거쳐 하나의 3D cube를 2D render scene으로 변환하고 ThorVG로 렌더링합니다.
 
-## [ ] Phase 4: Rubik's Cube domain
+## [ ] Phase 4: [Rubik's Cube domain](./04-rubiks-cube-domain.md)
 
 Rendering과 독립적인 3×3×3 Rubik's Cube logical state와 move system을 구현합니다.
-면별로 독립적인 색을 칠할 수 있는 1×1×1 cubie 27개(중앙은 보이지 않아 생략 가능) 배치로 cube를 표현하고, axis와 layer 기반 move, quarter turn, inverse, notation parsing을 지원하며 render scene의 입력으로 연결합니다.
+면별로 독립적인 색을 칠할 수 있는 1×1×1 cubie를 N×N×N 격자에 저장하고, axis와 layer 기반 move, quarter turn, inverse를 지원합니다.
+같은 상태를 3D cube와 6면 전개도 두 가지로 함께 렌더링하여 큐브 전체를 한눈에 확인할 수 있게 합니다.
 
 ## [ ] Phase 5: Pointer interaction and animation
 

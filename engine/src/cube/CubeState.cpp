@@ -112,6 +112,32 @@ const Cubie& CubeState::at(int x, int y, int z) const noexcept
     return cubies_[index(x, y, z)];
 }
 
+bool CubeState::is_solved() const noexcept
+{
+    const int last = size_ - 1;
+
+    for (int a = 0; a < size_; ++a) {
+        for (int b = 0; b < size_; ++b) {
+            if (at(last, a, b).sticker(Face::Right) !=
+                    solved_color(Face::Right) ||
+                at(0, a, b).sticker(Face::Left) !=
+                    solved_color(Face::Left) ||
+                at(a, last, b).sticker(Face::Up) !=
+                    solved_color(Face::Up) ||
+                at(a, 0, b).sticker(Face::Down) !=
+                    solved_color(Face::Down) ||
+                at(a, b, last).sticker(Face::Front) !=
+                    solved_color(Face::Front) ||
+                at(a, b, 0).sticker(Face::Back) !=
+                    solved_color(Face::Back)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 void CubeState::rotate_quarter(Axis axis, LayerMask layers) noexcept
 {
     // Cubies outside the turning layers keep their slot, so the copy starts

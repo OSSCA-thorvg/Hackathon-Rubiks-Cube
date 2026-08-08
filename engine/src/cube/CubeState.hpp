@@ -29,6 +29,9 @@ public:
     /** The cubie at an index coordinate; each of x, y, z is 0 ... N-1. */
     [[nodiscard]] const Cubie& at(int x, int y, int z) const noexcept;
 
+    /** Returns true when every exposed sticker matches its solved face. */
+    [[nodiscard]] bool is_solved() const noexcept;
+
     void apply(const CubeMove& move) noexcept;
     void apply(const std::vector<CubeMove>& sequence) noexcept;
 

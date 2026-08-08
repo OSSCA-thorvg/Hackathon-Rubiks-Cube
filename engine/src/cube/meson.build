@@ -7,6 +7,7 @@ cube_lib = static_library(
   files(
     'CubeMove.cpp',
     'CubeState.cpp',
+    'Scramble.cpp',
   ),
   include_directories: engine_inc,
 )

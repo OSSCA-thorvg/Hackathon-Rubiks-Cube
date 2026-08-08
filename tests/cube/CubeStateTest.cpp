@@ -5,6 +5,7 @@
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
 #include "cube/Cubie.hpp"
+#include "cube/Scramble.hpp"
 
 // The cube domain in isolation. This executable links the cube target alone,
 // so anything that reaches for graphics, math or ThorVG fails to build here
@@ -48,6 +49,7 @@ TEST_CASE("a fresh cube is solved")
     const CubeState state(kSize);
 
     REQUIRE(state.size() == kSize);
+    REQUIRE(state.is_solved());
     REQUIRE(state.at(0, 0, 0).sticker(Face::Left) == FaceColor::Orange);
     REQUIRE(state.at(kLast, kLast, kLast).sticker(Face::Right) ==
             FaceColor::Red);
@@ -117,9 +119,11 @@ TEST_CASE("every face move has order four")
     for (const auto& move : {R(kSize), L(kSize), U(kSize), D(kSize), F(kSize),
                              B(kSize)}) {
         REQUIRE(after(move, 1) != solved);
+        REQUIRE_FALSE(after(move, 1).is_solved());
         REQUIRE(after(move, 2) != solved);
         REQUIRE(after(move, 3) != solved);
         REQUIRE(after(move, 4) == solved);
+        REQUIRE(after(move, 4).is_solved());
     }
 }
 
@@ -215,9 +219,70 @@ TEST_CASE("a scramble is undone by the reversed inverse sequence")
     CubeState state(kSize);
     state.apply(scramble);
     REQUIRE(state != CubeState(kSize));
+    REQUIRE_FALSE(state.is_solved());
 
     state.apply(inverse(scramble));
     REQUIRE(state == CubeState(kSize));
+    REQUIRE(state.is_solved());
+}
+
+TEST_CASE("seeded scrambles are reproducible and structurally valid")
+{
+    constexpr std::uint32_t kSeed = 0x12345678U;
+    const auto first = rubiks::cube::make_scramble(kSize, kSeed);
+    const auto again = rubiks::cube::make_scramble(kSize, kSeed);
+    const auto different = rubiks::cube::make_scramble(kSize, kSeed + 1U);
+
+    REQUIRE(first == again);
+    REQUIRE(first != different);
+    REQUIRE(first.size() == rubiks::cube::kScrambleMoveCount);
+
+    for (std::size_t index = 0; index < first.size(); ++index) {
+        const CubeMove& move = first[index];
+        REQUIRE((move.layers == layer(0) || move.layers == layer(kLast)));
+        REQUIRE((move.quarter_turns == -1 || move.quarter_turns == 1 ||
+                 move.quarter_turns == 2));
+        if (index > 0) REQUIRE(move.axis != first[index - 1].axis);
+    }
+}
+
+TEST_CASE("seed 42 has a stable cross-platform known answer")
+{
+    const std::vector<CubeMove> expected{
+        {Axis::X, layer(0), -1},     {Axis::Y, layer(0), -1},
+        {Axis::X, layer(0), 1},      {Axis::Z, layer(0), 1},
+        {Axis::X, layer(0), 1},      {Axis::Z, layer(0), -1},
+        {Axis::Y, layer(0), -1},     {Axis::Z, layer(0), 2},
+        {Axis::X, layer(kLast), -1}, {Axis::Z, layer(kLast), -1},
+        {Axis::X, layer(0), -1},     {Axis::Y, layer(kLast), -1},
+        {Axis::Z, layer(0), -1},     {Axis::X, layer(0), 2},
+        {Axis::Y, layer(kLast), 1},  {Axis::Z, layer(kLast), 1},
+        {Axis::Y, layer(kLast), 1},  {Axis::Z, layer(0), -1},
+        {Axis::Y, layer(kLast), 2},  {Axis::Z, layer(0), 2},
+    };
+
+    REQUIRE(rubiks::cube::make_scramble(kSize, 42U) == expected);
+}
+
+TEST_CASE("a generated scramble is restored by its inverse")
+{
+    const auto scramble = rubiks::cube::make_scramble(kSize, 42U);
+    CubeState state(kSize);
+
+    state.apply(scramble);
+    REQUIRE_FALSE(state.is_solved());
+
+    state.apply(inverse(scramble));
+    REQUIRE(state.is_solved());
+}
+
+TEST_CASE("zero seed is deterministic and invalid scramble sizes are empty")
+{
+    REQUIRE(rubiks::cube::make_scramble(kSize, 0U) ==
+            rubiks::cube::make_scramble(kSize, 0U));
+    REQUIRE(rubiks::cube::make_scramble(0, 7U).empty());
+    REQUIRE(rubiks::cube::make_scramble(-1, 7U).empty());
+    REQUIRE(rubiks::cube::make_scramble(kSize, 7U, 0).empty());
 }
 
 TEST_CASE("the move engine holds for an even cube size")

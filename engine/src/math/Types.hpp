@@ -52,6 +52,17 @@ using linalg::length;
     return linalg::mul(a, b);
 }
 
+/**
+ * Matrix inverse, used to turn a screen point back into a world-space ray.
+ *
+ * Undefined for a singular matrix; callers invert a projection times a view,
+ * which is invertible for any camera the engine can build.
+ */
+[[nodiscard]] inline Mat4 inverse(const Mat4& m) noexcept
+{
+    return linalg::inverse(m);
+}
+
 /** Applies a matrix to a homogeneous vector. */
 [[nodiscard]] inline Vec4 apply(const Mat4& m, const Vec4& v) noexcept
 {

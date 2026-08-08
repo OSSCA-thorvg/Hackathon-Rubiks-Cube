@@ -46,6 +46,39 @@ namespace rubiks::app {
 [[nodiscard]] std::uint32_t pixel_byte_length() noexcept;
 
 /**
+ * Begins a pointer gesture at a point in drawing-buffer pixels.
+ *
+ * Converting CSS pixels and the device pixel ratio is the caller's job, the
+ * same split the resize path uses.
+ *
+ * @return true when the pointer grabbed the cube; false for a miss, for
+ *         non-finite coordinates, and before initialization.
+ */
+[[nodiscard]] bool pointer_down(float x, float y) noexcept;
+
+/** Continues the active gesture. Ignored without one. */
+void pointer_move(float x, float y) noexcept;
+
+/** Releases the active gesture, which is the only path that turns the cube. */
+void pointer_up() noexcept;
+
+/**
+ * Abandons the active gesture without turning the cube.
+ *
+ * For a cancelled pointer or lost capture: the user never let go, so nothing
+ * should be committed.
+ */
+void pointer_cancel() noexcept;
+
+/**
+ * Advances animation by an elapsed time in milliseconds and applies a turn
+ * that has finished.
+ *
+ * @return true while further frames still have to be drawn.
+ */
+[[nodiscard]] bool advance(double elapsed_ms) noexcept;
+
+/**
  * Releases the renderer and the ThorVG runtime.
  *
  * Safe to call regardless of the initialization state.

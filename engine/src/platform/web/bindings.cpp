@@ -68,6 +68,52 @@ EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_pixel_byte_length() noexcept
 }
 
 /**
+ * Begins a pointer gesture. Coordinates are drawing-buffer pixels.
+ *
+ * @return one when the pointer grabbed the cube; otherwise zero.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_pointer_down(float x, float y) noexcept
+{
+    return rubiks::app::pointer_down(x, y) ? 1 : 0;
+}
+
+/**
+ * Continues the active gesture. A no-op without one.
+ */
+EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_pointer_move(float x, float y) noexcept
+{
+    rubiks::app::pointer_move(x, y);
+}
+
+/**
+ * Releases the active gesture, the only path that can turn the cube.
+ */
+EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_pointer_up() noexcept
+{
+    rubiks::app::pointer_up();
+}
+
+/**
+ * Abandons the active gesture without turning the cube.
+ */
+EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_pointer_cancel() noexcept
+{
+    rubiks::app::pointer_cancel();
+}
+
+/**
+ * Advances animation by an elapsed time in milliseconds.
+ *
+ * The engine reads no clock of its own, so this is the only source of time.
+ *
+ * @return one while further frames still have to be drawn; otherwise zero.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_advance(double elapsed_ms) noexcept
+{
+    return rubiks::app::advance(elapsed_ms) ? 1 : 0;
+}
+
+/**
  * Releases the engine. Safe to call regardless of the initialization state.
  */
 EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_shutdown() noexcept

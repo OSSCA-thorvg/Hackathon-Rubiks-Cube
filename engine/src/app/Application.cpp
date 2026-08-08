@@ -11,6 +11,7 @@
 #include "graphics/NetGeometry.hpp"
 #include "graphics/Pipeline.hpp"
 #include "graphics/RenderScene.hpp"
+#include "interaction/InteractionController.hpp"
 #include "math/Transform.hpp"
 #include "render/Renderer.hpp"
 #include "render/ThorVGSoftwareRenderer.hpp"
@@ -27,8 +28,11 @@ graphics::CanvasLayout placement;
 
 graphics::Camera camera = graphics::default_camera(1.0f);
 
-// The logical cube. Interaction in Phase 5 mutates this and nothing else.
-cube::CubeState cube_state(3);
+// The logical cube, only ever holding quarter turns. A drag in progress lives
+// in the controller instead, and reaches this through a committed move.
+constexpr int kCubeSize = 3;
+cube::CubeState cube_state(kCubeSize);
+interaction::InteractionController interaction(kCubeSize);
 
 void adopt_surface(std::uint32_t width, std::uint32_t height) noexcept
 {
@@ -70,8 +74,55 @@ bool resize(std::uint32_t width, std::uint32_t height) noexcept
 
     if (!renderer->resize(width, height)) return false;
 
+    // A drag holds screen directions derived from the old viewport, so it
+    // cannot survive the change; dropping it leaves the cube untouched. A snap
+    // only animates an angle, so it is unaffected and keeps running.
+    interaction.cancel();
+
     adopt_surface(width, height);
     return true;
+}
+
+bool pointer_down(float x, float y) noexcept
+{
+    if (!initialized) return false;
+
+    return interaction.pointer_down(x, y, camera, placement.cube);
+}
+
+void pointer_move(float x, float y) noexcept
+{
+    if (!initialized) return;
+
+    interaction.pointer_move(x, y);
+}
+
+void pointer_up() noexcept
+{
+    if (!initialized) return;
+
+    interaction.pointer_up();
+}
+
+void pointer_cancel() noexcept
+{
+    if (!initialized) return;
+
+    interaction.cancel();
+}
+
+bool advance(double elapsed_ms) noexcept
+{
+    if (!initialized) return false;
+
+    const bool more_frames = interaction.advance(elapsed_ms);
+
+    // The one place a gesture becomes a change to the logical cube.
+    if (const auto move = interaction.take_committed_move()) {
+        cube_state.apply(*move);
+    }
+
+    return more_frames;
 }
 
 bool render() noexcept
@@ -82,8 +133,9 @@ bool render() noexcept
     // path so the quaternion-to-matrix step is exercised every frame.
     const math::Transform model;
 
-    auto scene = graphics::build_cube_scene(cube_state)  //
-                 | graphics::transform(model)            //
+    auto scene = graphics::build_cube_scene(cube_state,
+                                            interaction.active_rotation())  //
+                 | graphics::transform(model)                               //
                  | graphics::view(camera)                //
                  | graphics::project(camera)             //
                  | graphics::cull()                      //
@@ -119,7 +171,8 @@ void shutdown() noexcept
     renderer.reset();
     static_cast<void>(tvg::Initializer::term());
     placement = graphics::CanvasLayout{};
-    cube_state = cube::CubeState(3);
+    cube_state = cube::CubeState(kCubeSize);
+    interaction.reset();
     initialized = false;
 }
 

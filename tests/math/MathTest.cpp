@@ -150,6 +150,47 @@ TEST_CASE("perspective maps the frustum onto the NDC cube")
     }
 }
 
+TEST_CASE("inverse undoes a projection times a view")
+{
+    // The combination pointer picking has to invert to turn a point on the
+    // screen back into a ray through the scene.
+    const Mat4 view =
+        look_at(Vec3{3.0f, 4.0f, 5.0f}, Vec3{0.0f, 0.0f, 0.0f},
+                Vec3{0.0f, 1.0f, 0.0f});
+    const Mat4 projection = perspective(kPi / 3.0f, 1.5f, 0.1f, 100.0f);
+    const Mat4 combined = multiply(projection, view);
+
+    SECTION("the product with the original is the identity")
+    {
+        const Mat4 product = multiply(inverse(combined), combined);
+        const Mat4 expected = identity();
+
+        // A wider margin than the rest of this file: a projection spanning
+        // near 0.1 to far 100 is poorly conditioned in z, so single precision
+        // leaves residue in the fifth decimal.
+        for (int column = 0; column < 4; ++column) {
+            for (int row = 0; row < 4; ++row) {
+                REQUIRE(product[column][row] ==
+                        Approx(expected[column][row]).margin(1e-4));
+            }
+        }
+    }
+
+    SECTION("a projected point comes back where it started")
+    {
+        const Vec3 point{0.25f, -0.5f, 0.75f};
+        const Vec4 clip = apply_point(combined, point);
+        const Vec4 ndc{clip.x / clip.w, clip.y / clip.w, clip.z / clip.w, 1.0f};
+
+        // Qualified: unqualified apply() would find linalg's own elementwise
+        // apply through argument-dependent lookup.
+        const Vec4 restored = rubiks::math::apply(inverse(combined), ndc);
+        require_vec3(Vec3{restored.x / restored.w, restored.y / restored.w,
+                          restored.z / restored.w},
+                     point.x, point.y, point.z);
+    }
+}
+
 TEST_CASE("quaternion rotation agrees with its matrix")
 {
     const Quaternion turn =

@@ -6,6 +6,7 @@ linalg_inc = include_directories('../third_party/linalg', is_system: true)
 subdir('cube')
 subdir('math')
 subdir('graphics')
+subdir('interaction')
 
 # ThorVG enters here and nowhere earlier: app/ and render/ are the only parts
 # of the engine allowed to know about the rendering backend.
@@ -15,11 +16,11 @@ application_lib = static_library(
     'app/Application.cpp',
     'render/ThorVGSoftwareRenderer.cpp',
   ),
-  dependencies: [graphics_dep, thorvg_dep],
+  dependencies: [interaction_dep, thorvg_dep],
 )
 
 application_dep = declare_dependency(
-  dependencies: [graphics_dep, thorvg_dep],
+  dependencies: [interaction_dep, thorvg_dep],
   link_with: application_lib,
 )
 
@@ -32,6 +33,11 @@ if host_machine.system() == 'emscripten'
     '_thorvg_rubiks_pixel_buffer',
     '_thorvg_rubiks_pixel_byte_length',
     '_thorvg_rubiks_shutdown',
+    '_thorvg_rubiks_pointer_down',
+    '_thorvg_rubiks_pointer_move',
+    '_thorvg_rubiks_pointer_up',
+    '_thorvg_rubiks_pointer_cancel',
+    '_thorvg_rubiks_advance',
   ]
 
   executable(

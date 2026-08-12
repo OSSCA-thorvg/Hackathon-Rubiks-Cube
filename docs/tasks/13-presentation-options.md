@@ -6,16 +6,20 @@
 
 ## Objective
 
-들리는 방식과 재생 속도를 사용자가 고를 수 있게 합니다. 서로 독립적인 두 옵션입니다.
+보이고 들리는 방식을 사용자가 고를 수 있게 합니다. 서로 독립적인 세 옵션이고, 하나의 옵션 면에 함께 놓입니다.
 
-1. **회전 효과음**: 회전이 commit되는 순간의 짧은 소리를 더합니다.
-2. **Animation 속도**: 90°당 시간을 슬라이더로 조절합니다. 사용자 snap, scramble, 되감기 재생이 하나의 control을 공유합니다.
+1. **색맹 palette**: 적록색약에서 구분되는 대체 palette를 더하고 두 벌 중 하나를 고르게 합니다.
+2. **회전 효과음**: 회전이 commit되는 순간의 짧은 소리를 더합니다.
+3. **Animation 속도**: 90°당 시간을 슬라이더로 조절합니다. 사용자 snap, scramble, 되감기 재생이 하나의 control을 공유합니다.
 
-색맹 palette는 원래 이 phase의 세 번째 옵션이었지만 [Phase 7.5](./07.5-colorblind-palette.md)로 옮겼습니다. 다른 두 옵션은 Phase 9의 tempo와 Phase 11의 timeline 관찰이 있어야 하지만 palette는 어디에도 의존하지 않는 접근성 항목이라, 계획의 뒤쪽에 둘 이유가 없었기 때문입니다.
+Palette는 나머지 둘과 달리 선행 phase에 의존하지 않아 한때 Phase 7.5로 분리되어 있었으나, 이 문서로 되돌렸습니다. 근거는 [개정 기록](#개정-기록)에 있습니다.
 
 ## Scope
 
+- Engine: `Palette` enum(`Classic`, `HighContrast`)과 대체 palette 상수, `to_color(color, palette)` 시그니처 확장
 - Engine: tempo 배율 `set_speed_scale(float)` ABI — tempo를 `start_move`에 넘기는 두 지점에 공통 적용
+- C ABI: `set_palette`, `palette`, `set_speed_scale`
+- Web: palette toggle과 `aria-pressed`
 - Web: WebAudio로 합성하는 효과음(외부 asset 없음), mute toggle, autoplay 정책 대응
 - Web: 속도 슬라이더 UI
 - Native/TS unit test와 e2e
@@ -23,11 +27,35 @@
 ## Out of scope
 
 - 옵션의 저장과 복원 — 브라우저 저장소를 쓰지 않기로 했으므로(Phase 14) 설정은 세션 안에서만 유지됩니다
-- 색맹 palette (Phase 7.5)
+- **Theme editor와 임의 색 지정** — 아래 개정 기록에서 기각합니다. Palette는 검증된 두 벌뿐입니다
+- 배경·UI chrome의 테마 — palette가 바꾸는 것은 sticker 색뿐입니다
+- 색 외의 구분 수단(패턴, 기호 오버레이) — sticker quad에 문양을 그리는 일이라 rendering 작업이 별개로 커집니다
 - Haptic feedback
 - 효과음의 종류 선택 — 소리는 하나, on/off만 둡니다
 
 ## Architecture decisions
+
+### 색맹 palette: 교체 지점은 한 곳
+
+현재 palette의 Red `(183, 18, 52)`와 Orange `(255, 88, 0)`은 적록색약에게 가장 구분하기 어려운 조합입니다. 큐브는 색으로만 상태를 읽는 게임이라, 이 두 면이 섞이면 판을 읽는 것 자체가 불가능해집니다.
+
+- `to_color`(`engine/src/graphics/Palette.cpp`)는 도메인의 `FaceColor`가 픽셀이 되는 유일한 지점입니다. `Palette` enum을 인자로 더하고 Application이 현재 값을 소유해 넘기면, 분기가 그 함수 안에서 끝납니다. Cube·interaction·history 어디에도 닿지 않습니다.
+- Palette 변경은 다음 render부터 적용되는 **순수 상태 변경**입니다. Cube, timeline, timer, camera 어디에도 닿지 않으므로 busy 중에도 허용되고, 진행 중인 animation을 방해하지 않습니다.
+- 3D cube와 전개도가 같은 함수를 쓰므로 두 view가 자동으로 함께 바뀝니다. Renderer는 변경되지 않습니다.
+
+### 색맹 palette: 대체 palette의 기준
+
+- 문제는 Red/Orange 축이므로, 그 둘을 **색상만이 아니라 명도로도** 벌립니다. Orange를 흰색 계열로 옮기면 White와 새로 충돌하므로 그 방향은 쓰지 않고, 청색 편이와 명도 차를 함께 주는 조합을 상수로 고정합니다.
+- **검증은 일반 명도 대비가 아니라 색각 변환을 거친 색 거리로 합니다.** 명도 대비만 보면 Red와 Orange가 deuteranopia에서 같은 색으로 무너져도 test가 통과합니다. 이 항목의 목적이 정확히 그 무너짐을 막는 것이므로, 목적을 검증하지 못하는 test를 두면 통과했다는 신호만 남습니다.
+- 그래서 **HighContrast에만** 고정된 deuteranopia 변환을 적용하고, 변환 후 여섯 색의 **모든 쌍이 최소 색 거리 이상**임을 검사합니다. 변환 행렬은 결정적이고 열 줄 남짓입니다. Protanopia를 따로 보지 않는 것은 Red/Orange 축에 대한 두 변환의 효과가 사실상 같아서, 하나를 통과하면 다른 하나도 통과하기 때문입니다.
+- **Classic에는 이 기준을 적용하지 않습니다.** Classic은 표준 큐브 색을 그대로 쓰는 것이 존재 이유이고, 통과할 수 없는 기준을 걸면 test가 "Classic은 예외"라는 조항을 달게 됩니다. Classic은 RGB known-answer로만 고정해 색이 의도치 않게 바뀌는 것을 막습니다.
+
+```text
+thorvg_rubiks_set_palette(palette: int) -> int   // 유효하지 않은 값 거절
+thorvg_rubiks_palette() -> int
+```
+
+- 초기화 전에는 `set_palette`가 거절하고 `palette`는 기본값을 반환합니다.
 
 ### 회전 효과음
 
@@ -51,14 +79,26 @@ thorvg_rubiks_set_speed_scale(scale: float) -> int
 
 ## Implementation steps
 
-### 1. 효과음
+### 1. Palette
+
+- [ ] `Palette` enum과 대체 palette 상수, `to_color(color, palette)` 분기 구현
+- [ ] Application의 palette 상태와 두 scene builder 경로 연결
+- [ ] Classic의 여섯 색 RGB known-answer test
+- [ ] Deuteranopia 변환 구현과 known-answer test
+- [ ] HighContrast의 변환 후 여섯 색 상호 색 거리 test (Red/Orange 쌍 포함)
+- [ ] Palette 변경이 cube·camera·timeline·timer 상태를 바꾸지 않는 test
+- [ ] C ABI 추가와 유효성 검증, generated 산출물과 fake fixture 갱신
+- [ ] Palette toggle과 `aria-pressed`, TS unit test(전이와 초기 상태)
+- [ ] e2e: toggle 후 전개도 픽셀 색이 대체 palette와 일치하고, 3D cube와 전개도가 함께 바뀌는지
+
+### 2. 효과음
 
 - [ ] WebAudio 합성 클릭과 gain 제한 구현 (injectable audio seam)
 - [ ] 첫 gesture에서의 context 생성/resume과 실패 시 무음 강등
 - [ ] `timeline_cursor` 관찰 연결과 mute toggle
 - [ ] TS unit test: cursor가 변한 frame마다 한 번 재생, reset·ambient에서 무음, mute 시 무음, context 부재 안전 (복원 무음은 복원이 생기는 Phase 14에서 검증)
 
-### 2. 속도
+### 3. 속도
 
 - [ ] Engine 배율 상태와 두 tempo 지점 적용, clamp·검증
 - [ ] 진행 중 snap의 duration 불변 test
@@ -69,11 +109,20 @@ thorvg_rubiks_set_speed_scale(scale: float) -> int
 
 ## Acceptance criteria
 
-- 속도와 소리 설정은 cube, timeline, timer 상태에 영향을 주지 않습니다.
+- 색 매핑 분기는 `to_color` 한 곳에만 존재하며, Application과 scene builder는 palette 값을 전달만 합니다.
+- 대체 palette의 여섯 색은 deuteranopia 변환을 거친 뒤에도 모든 쌍이 최소 색 거리 이상 떨어져 있으며, 그 성질이 test로 고정됩니다. Classic은 RGB known-answer로만 고정되고 이 기준의 대상이 아닙니다.
+- 3D cube와 전개도가 같은 palette로 함께 렌더링되고, palette 변경은 busy 중에도 허용됩니다.
+- 세 옵션 모두 cube, timeline, timer 상태에 영향을 주지 않습니다.
 - Cursor가 변한 frame마다 효과음이 한 번 재생되고, reset에서는 울리지 않으며, ambient 관람은 무음이고, mute가 즉시 적용됩니다. 복원에서의 무음은 복원이 생기는 Phase 14가 확인합니다.
 - 소리는 외부 asset 없이 합성되고, WebAudio가 없는 환경에서도 앱이 정상 동작합니다.
 - 속도 슬라이더 하나가 사용자 snap, scramble, 되감기 재생의 tempo를 함께 바꾸고, 진행 중인 animation은 튀지 않습니다.
+- ThorVG 경계와 renderer는 변경되지 않습니다.
 - Native, WASM, TypeScript unit, browser e2e와 production build가 모두 통과합니다.
+
+## 개정 기록
+
+- **Palette를 Phase 7.5에서 이 문서로 되돌립니다.** 의존이 없다는 이유로 앞으로 당겨 두었으나, 그 근거는 "지금 바로 할 수 있다"였지 "지금 해야 한다"가 아니었습니다. 실제로 앞당겨 하면 HUD에 palette toggle을 단독으로 붙였다가 이 phase가 옵션 면을 만들 때 그리로 옮기게 되므로, UI를 한 번만 만들도록 셋을 함께 둡니다. Engine 쪽 작업량(`to_color` 분기, 색 거리 test)은 시점과 무관하게 같습니다. 세 옵션은 여전히 서로 독립이므로 구현 단계도 분리되어 있습니다.
+- **임의 색 지정(theme editor)은 검토 후 기각했습니다.** 첫째, 이 항목의 유일한 보장인 "변환 후 여섯 색의 상호 거리" test가 성립하지 않게 됩니다 — 사용자가 빨강 계열 여섯을 고를 수 있으므로 고정할 성질이 없어지고, 값을 지키려면 실시간 경고라는 별개 기능이 붙습니다. 둘째, 저장 계층을 두지 않기로 했으므로(Phase 14) 직접 고른 여섯 색이 reload마다 사라져 잘라낸 저장 계층을 되살리자는 압력이 됩니다. 셋째, 손으로 설정해야 하는 접근성은 검증된 preset보다 나쁜 접근성입니다. "고를 수 있다"가 목적이라면 preset을 하나 더 두는 것이 enum 값 하나와 거리 test 한 줄로 끝나며 검증도 ABI도 그대로입니다.
 
 ## Verification commands
 

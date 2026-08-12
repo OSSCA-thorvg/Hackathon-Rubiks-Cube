@@ -84,12 +84,6 @@ Snap animation이 도는 동안 새 gesture가 시작되지 못해 drag 전체�
 전자는 pointer down 시점에 진행 중인 snap을 즉시 확정하고 새 gesture를 시작하는 방식으로, 후자는 snap 경계를 배수 사이의 중간(45°)에서 낮은 배수 + 30° 내외 상수로 옮기는 것으로 해결합니다.
 경계는 모든 배수에서 같은 지점이라 "면 하나를 넘기면 다음 칸"이 어느 칸에서나 참입니다 — 첫 칸에만 문턱을 두는 혼합 규칙 대신, 입력이 무시되는 오류(사용자가 앱 탓으로 느낍니다)보다 덜 돌려도 동작하는 오류가 낫다는 방향으로 전체를 일관되게 기울입니다. 이는 Phase 5의 "가장 가까운 배수" 계약 개정이며 원 문서에 기록합니다. 각속도 판정은 기각했습니다. 시간이 `advance`로만 들어오는 구조에서는 마지막 pointer 구간이 분모에서 빠져 판정이 주사율에 좌우되고, 정확히 하려면 pointer ABI에 timestamp를 더해야 하는데 경계 이동 하나가 같은 문제를 해결합니다. 시간도 속도도 새 상태도 없으므로 C ABI와 web 코드는 이 phase에서 바뀌지 않습니다.
 
-## [ ] Phase 7.5: [Colorblind palette](./07.5-colorblind-palette.md)
-
-적록색약에서 구분되는 대체 palette를 더하고 두 벌 중 하나를 고를 수 있게 합니다.
-검증은 명도 대비가 아니라 deuteranopia 변환을 거친 뒤의 색 거리로 합니다. 명도만 보면 두 색이 색약에서 무너져도 test가 통과해, phase의 목적을 확인하지 못하기 때문입니다.
-Palette는 `to_color` 한 곳에 모여 있고 cube·interaction·history 어디에도 닿지 않아 의존이 없습니다. 원래 Phase 13의 옵션 중 하나였지만, 나머지 둘과 달리 선행 phase를 필요로 하지 않으므로 접근성 항목을 뒤에 둘 근거가 없어 앞으로 당겼습니다.
-
 ## [ ] Phase 8: [Net rotation and interaction](./08-net-rotation-and-interaction.md)
 
 2D 전개도를 표시 전용에서 회전이 보이고 직접 조작할 수 있는 면으로 올립니다.
@@ -147,7 +141,8 @@ C ABI는 primitive type만 사용하므로 engine은 layer mask와 회전량을 
 
 ## [ ] Phase 13: [Presentation options](./13-presentation-options.md)
 
-들리는 방식과 재생 속도를 사용자가 고를 수 있게 합니다. Palette는 의존이 없어 Phase 7.5로 옮겼고, 여기 남는 둘은 선행 phase가 만든 것을 소비합니다.
+보이고 들리는 방식을 사용자가 고를 수 있게 합니다. 서로 독립적인 세 옵션이 하나의 옵션 면에 함께 놓입니다.
+적록색약에서 구분되는 대체 palette를 더하고 두 벌 중 하나를 고르게 합니다. 검증은 명도 대비가 아니라 deuteranopia 변환을 거친 뒤의 색 거리로 합니다. 명도만 보면 두 색이 색약에서 무너져도 test가 통과해, 목적 자체를 확인하지 못하기 때문입니다. Palette는 `to_color` 한 곳에 모여 있고 cube·interaction·history 어디에도 닿지 않아 나머지 둘과 달리 의존이 없습니다 — 한때 Phase 7.5로 앞당겨 두었으나, 그러면 toggle을 단독으로 붙였다가 이 phase의 옵션 면으로 옮기게 되므로 UI를 한 번만 만들도록 되돌렸습니다. 임의 색 지정은 기각했습니다: 색 거리 test가 성립하지 않게 되고, 저장 계층이 없어 매번 사라지며, 손으로 설정하는 접근성은 검증된 preset보다 나쁩니다.
 회전이 commit되는 순간의 효과음을 더합니다. 모든 commit이 timeline cursor를 정확히 ±1 움직이므로, game controller가 완료 판정에 쓰는 cursor 관찰이 곧 소리를 낼 지점이고 별도의 commit counter가 없습니다. 소리는 cursor가 변한 frame에 한 번입니다.
 Animation 속도를 조절할 수 있게 합니다. Phase 9가 tempo를 `start_move`의 인자로 모아 두므로 그 인자에 배율을 곱하는 일이고, 사용자 snap과 scramble, Phase 11의 되감기 재생이 슬라이더 하나를 함께 씁니다.
 

@@ -1,0 +1,121 @@
+# Phase 12: Move Notation and Move Log
+
+## Status
+
+`Not started`
+
+## Objective
+
+Phase 11의 timeline을 표준 표기법으로 렌더링해 수순 목록으로 보여 줍니다.
+
+별도의 기록 자료구조를 만들지 않고 Phase 11의 timeline을 그대로 읽으므로, 이 phase의 engine 작업은 move를 인덱스로 조회하는 ABI와 기록 시점의 turns 정규화에 한정됩니다. C ABI는 primitive type만 사용하므로 engine은 move를 packed integer로 넘기고, 표기 문자열 조립은 TypeScript가 담당합니다. 표기는 move의 성질이 아니라 표현이므로, 표기 스타일이 바뀌어도 engine에 닿지 않습니다.
+
+## Scope
+
+- C ABI: `timeline_move(index)` — move 한 개를 packed `uint32`로 반환
+- Packed 포맷의 명시적 정의와 양쪽(C++/TS) 상수 고정, 기록 시점의 turns 정규화
+- TS `notation` module: packed → `CubeMove` 구조 → 3×3 표기 문자열(`R`, `R'`, `R2`)
+- 3×3 가운데 layer의 M/E/S 표기
+- Move log UI: timeline 전체 목록, cursor 위치 강조, commit마다 갱신
+- Native/TS unit test와 e2e
+
+## Out of scope
+
+- 문자열 notation parser와 algorithm 입력 — 표기는 출력 전용입니다
+- **N×N numbered 표기(`Rw`, `3Rw`, `2R`, `2-3Rw`)와 그 유도에 필요한 mask 구간 판정** — 제품이 3×3뿐인 동안은 만들 수 없는 표기이고, N×N 자체가 Phase 15입니다. 구간 판정도 함께 Phase 15로 미룹니다. 소비자가 그때 처음 생기고, 3×3의 변환은 9칸 표로 끝나기 때문입니다
+- 수순 목록의 클릭 탐색(cursor jump) — 되감기 UI는 Phase 11의 undo/redo/solve로 충분합니다
+- History 직렬화 (Phase 14)
+
+## Architecture decisions
+
+### Packed move 포맷
+
+```text
+bits 0-1  axis          (0 = X, 1 = Y, 2 = Z)
+bits 2-3  turns code    (0 = -1, 1 = +1, 2 = +2)
+bits 4-31 layer mask    (bit 4 = layer 0, ... 최대 28 layers)
+```
+
+- Commit되는 quarter turn은 기록 시점에 `{-1, +1, +2}`로 정규화합니다(mod 4, `±2`는 `+2`, `+3`은 `-1`). 시각적 결과가 같은 move는 표기도 같아야 하므로 정규화는 표현이 아니라 기록의 책임입니다.
+- Layer mask는 항상 0이 아니므로 packed 값도 0이 될 수 없습니다. 따라서 **0이 곧 invalid index sentinel**입니다.
+- 포맷 상수는 C++와 TS 양쪽에 정의하고, 같은 값을 쓰는지 fixed known-answer(예: `R` = axis X, turns +1, mask layer 2)를 양쪽 test로 고정합니다.
+
+```text
+thorvg_rubiks_timeline_move(index: uint32) -> uint32   // 0 = invalid index
+```
+
+Phase 11의 기록이 timeline 하나이므로 조회도 하나입니다. 목록은 인덱스 순서 그대로이고, scramble 구간과 사용자 구간의 구분은 `timeline_scramble_end` 하나에서 파생됩니다 — 이어 붙이는 코드도, 경계를 계산하는 코드도 없습니다.
+
+### TS notation module
+
+**3×3에서 만들어질 수 있는 mask는 단일 layer 세 개뿐입니다.** 그래서 변환은 구간을 찾는 알고리즘이 아니라 **9칸짜리 표 하나**입니다: `(axis, layer) → {문자, 부호}`.
+
+| axis | layer 0 | layer 1 | layer 2 |
+|---|---|---|---|
+| X | `L`, 부호 반전 | `M`, 부호 반전 | `R`, 그대로 |
+| Y | `D`, 부호 반전 | `E`, 부호 반전 | `U`, 그대로 |
+| Z | `B`, 부호 반전 | `S`, 그대로 | `F`, 그대로 |
+
+- **음의 face 부호 반전과 M/E/S 방향 규약이 전부 이 표의 부호 칸에 들어갑니다.** 별도의 분기도, "축의 어느 끝에 붙었는지"를 판정하는 코드도 없습니다. 표기는 문자 + turns 접미사(`''`, `'`, `2`)로 끝납니다.
+- **표에 없는 mask는 예외 없이 null입니다.** 여러 layer, 불연속, 범위 밖이 모두 같은 경로입니다. 다만 3×3의 입력 경로가 단일 layer만 만들므로 **이 null을 화면에 그리는 코드는 두지 않습니다** — 도달할 수 없는 표시를 위해 UI에 분기를 만들 이유가 없고, 표기가 필요해지는 것은 Phase 15에서입니다. 함수의 반환 타입에만 남깁니다.
+- **연속 구간 `[first, last]`를 찾는 뼈대는 이 phase에서 만들지 않습니다.** 그 코드의 유일한 소비자는 numbered 표기(`Rw`, `2-3Rw`)이고 그것은 Phase 15의 일인데, Phase 15는 계획의 마지막 구간에 있어 오지 않을 수도 있습니다. 3×3만 있는 동안 구간 탐색은 입력이 세 가지뿐인 함수를 일반화한 것에 지나지 않습니다. 함수가 크기를 인자로 받아 두므로, Phase 15는 위의 실패 경로에 구간 판정과 numbered 조립을 함께 얹으면 됩니다.
+- 순수 함수 module로 두고 DOM을 만지지 않습니다. 표가 9칸이라 3축 × 3layer × 3turns = 27개를 전수 test로 고정할 수 있습니다.
+
+### Move log UI
+
+- `GameController`가 frame 후 관찰에서 세 query(`timeline_length`/`timeline_cursor`/`timeline_scramble_end`)의 변화를 감지하면 목록을 다시 그립니다. 목록 항목은 index → `timeline_move` → notation의 파이프라인입니다.
+- 적용된 위치(`timeline_cursor`)를 강조해 undo/redo/solve가 어디까지 되감았는지 보여 줍니다. 그 뒤(재진행 가능 구간)는 흐리게 표시하며, scramble 구간이 반쯤 되감긴 경우도 같은 방식으로 자연히 표현됩니다.
+- Scramble 구간과 사용자 구간은 `timeline_scramble_end` 앞뒤로 시각적으로 구분합니다. `GameController`가 scramble 직후의 길이를 기억할 필요가 없고, 공유 URL로 복원된 세션(Phase 14)도 같은 query를 읽으므로 live와 표시가 같습니다.
+- 목록은 `aria-live`로 읽지 않습니다. 스크린 리더에는 마지막 move 하나가 아니라 목록 자체가 탐색 가능한 semantic list로 제공됩니다.
+
+## Implementation steps
+
+### 1. Engine ABI
+
+- [ ] Packed 포맷 상수와 pack 함수, 기록 시점 turns 정규화
+- [ ] `timeline_move(index)` 구현: 범위 밖·초기화 전 0 반환
+- [ ] Pack known-answer test와 정규화 test (native)
+
+### 2. TS notation
+
+- [ ] Unpack과 포맷 상수 known-answer test (C++ 결과와 대조)
+- [ ] `(axis, layer) → {문자, 부호}` 9칸 표와 turns 접미사 조립
+- [ ] 표에 없는 mask(여러 layer, 불연속, 범위 밖)의 null 경로
+- [ ] 전수 test: 3축 × 3layer × 3turns = 27개 표기와, 표 밖 mask의 null 경로
+
+### 3. Move log UI
+
+- [ ] Timeline 목록 렌더링과 적용 위치 강조, `timeline_scramble_end` 기준의 구간 구분 표시
+- [ ] Scramble이 반쯤 되감긴 상태의 표시 test
+- [ ] Commit/undo/redo 후 갱신 test (TS unit)
+- [ ] e2e: scramble 후 목록에 scramble 수순이 보이고, drag move가 표기로 추가되고, undo 시 cursor 강조가 이동
+- [ ] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
+
+## Acceptance criteria
+
+- Engine의 추가 작업은 packed 조회 ABI와 기록 시점의 turns 정규화뿐이고, Phase 11의 timeline 외에 새 자료구조가 없습니다.
+- 두 구간의 구분은 `timeline_scramble_end`에서 파생되며, 이어 붙이거나 경계를 계산하는 코드가 어디에도 없습니다.
+- C ABI는 계속 primitive type만 사용하며, 문자열은 boundary를 넘지 않습니다.
+- 같은 packed 값은 C++와 TS에서 같은 move로 해석되고, known-answer test가 양쪽에서 고정합니다.
+- Drag로 만든 가운데 layer move가 M/E/S로, 바깥 face move가 표준 표기로 정확히 표시됩니다.
+- 9칸 표에 없는 mask는 예외 없이 null을 반환하며, 구간 판정 코드도 그 null을 그리는 UI 분기도 이 phase에 존재하지 않습니다.
+- 수순 목록이 cursor 위치와 redo 구간을 구분해 보여 주고, 표기 스타일 변경이 engine 코드에 닿지 않습니다.
+- Native, WASM, TypeScript unit, browser e2e와 production build가 모두 통과합니다.
+
+## Verification commands
+
+```bash
+meson test -C build/native --print-errorlogs
+source /path/to/emsdk/emsdk_env.sh && ./build_wasm.sh
+npm --prefix web run test:unit
+npm --prefix web run test:e2e
+npm --prefix web run build
+```
+
+## Completion
+
+모든 acceptance criteria와 verification command를 통과한 뒤 다음 작업을 수행합니다.
+
+- 이 문서의 status를 `Completed`로 변경합니다.
+- 상위 [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md)의 Phase 12를 완료 처리합니다.
+- 실제 구현과 차이가 생긴 결정을 이 문서에 기록합니다.

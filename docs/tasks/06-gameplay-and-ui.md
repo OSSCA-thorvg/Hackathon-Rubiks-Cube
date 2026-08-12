@@ -501,6 +501,12 @@ npm --prefix web run build
 - 스케치의 `engine.scramble()`은 인자가 없지만 구현은 `uint32` seed를 받습니다. Engine이 스스로 난수를 만들면 native와 WASM이 갈라지고 재현 가능한 test가 불가능합니다. Seed 생성은 Browser(`crypto.getRandomValues()`)가 맡습니다.
 - 스케치의 toolbar는 canvas 아래 한 줄이지만 구현은 desktop에서 canvas 좌우 rail, mobile에서 canvas 아래 normal flow로 나뉩니다. 정사각형 canvas를 최대한 크게 유지하기 위해서입니다.
 
+## 개정 기록
+
+- **`committed_move_count()`가 저장 counter에서 파생값이 됩니다 ([Phase 11](./11-move-history-solve-and-undo.md)의 결정).** 이름과 시그니처는 그대로이고 반환값이 timeline의 `cursor - scramble_end`(cursor가 그 위일 때, 아니면 0)가 됩니다. 되감기가 생기면 저장 counter가 timeline과 어긋나기 때문입니다 — undo는 재생이라 count에서 빠지므로 5수 뒤 두 번 undo한 판이 counter 5, 실제 적용 3이 됩니다. 감소 규칙을 더하는 대신 파생으로 옮기면 절단·solve·복원에서의 보정도 함께 필요 없어집니다. Phase 10까지는 저장 counter가 정확하므로 이 개정은 Phase 11에서 일어납니다. Web과 ABI 시그니처는 바뀌지 않습니다.
+
+- **`is_busy()`에서 orbit 포함을 제거합니다 ([Phase 9](./09-move-queue-and-animated-scramble.md)의 결정, [Phase 6.5](./06.5-pre-enhancement-cleanup.md)가 선행 적용).** 이 phase의 busy가 지키려는 것은 "cube를 바꾸는 입력이 겹치지 않는다"인데 orbit은 commit이 없어(Phase 5.5의 "up == cancel") 막을 대상이 아니고, orbit이 포함된 것은 `InteractionController::is_busy()` 구현의 조합이 그대로 노출된 결과였습니다. 이 포함을 고정하는 test는 없으며, 개정 후에는 orbit drag 중에도 `turn_face`와 move 버튼이 동작합니다. Phase 9의 queue 재생을 orbit이 멈추지 않게 하는 것이 계기입니다.
+
 ## Completion
 
 모든 acceptance criteria와 verification command를 통과한 뒤 다음 작업을 수행합니다.

@@ -73,9 +73,9 @@ Phase 6까지로 최소 gameplay flow가 완성되었습니다. 이후 phase는 
 
 ## [x] Phase 6.5: [Pre-enhancement cleanup](./06.5-pre-enhancement-cleanup.md)
 
-고도화에 들어가기 전에, 이후 phase가 걷어내기로 결정한 기존 코드 두 곳을 선행 정리합니다.
-scramble의 solved 검사와 R 덧붙임을 제거합니다 — `make_scramble`은 연속한 두 수가 같은 축을 쓰지 않아 짧은 수에서 identity가 구조적으로 불가능하고, 도달하지 않는 분기는 검증할 수 없는 코드로만 남습니다.
-`is_busy()`에서 orbit을 뺍니다 — busy가 막는 대상은 cube를 바꾸는 입력인데 orbit은 commit이 없어 막을 이유가 없고, 포함은 구현의 우연이었습니다. 두 건 모두 결정은 Phase 9의 것이고 이 phase는 적용 시점만 앞당깁니다. 어느 쪽도 고정하는 test가 없음을 확인했습니다.
+고도화에 들어가기 전에 기존 코드를 정리합니다.
+1차(완료): scramble의 solved 검사와 R 덧붙임 제거 — 축 제약으로 identity가 구조적으로 불가능해 도달하지 않는 분기였습니다 — 와 `is_busy()`의 orbit 제외 — busy가 막는 대상은 cube를 바꾸는 입력인데 orbit은 commit이 없습니다. 두 건 모두 Phase 9의 결정을 앞당긴 것이고, 고정하는 test가 없음을 확인했습니다.
+2차: 이후 phase가 상태를 얹기 전에 그 자리를 안전하게 만듭니다. Application의 흩어진 전역을 `unique_ptr<ApplicationState>` 하나로 묶어 shutdown의 수동 초기화 목록을 없애고, 유일한 소비자(web)가 fail-stop으로만 쓰는 renderer resize rollback을 test 전용 fault seam과 함께 제거하고(Phase 1 계약 개정), timer의 스크린 리더 소음(`aria-live`)과 busy 주석을 정리합니다.
 
 ## [ ] Phase 7: [Interaction robustness](./07-interaction-robustness.md)
 
@@ -129,7 +129,7 @@ Cube에 적용된 move를 되감을 수 있게 기록하고, 그 위에 solve와
 기록은 하나의 선형 timeline입니다: scramble 수순과 사용자 move가 한 배열에 이어지고, cursor(적용된 개수)와 scramble_end(scramble 구간의 끝) 두 인덱스가 그 위를 가리킵니다. 큐브에 일어나는 일이 언제나 선형 수순이므로 자료구조도 그 모양을 따르고, "사용자 수는 완성된 scramble 위에서만 존재한다"는 불변식은 지킬 규칙이 아니라 **표현 불가능한 상태**가 됩니다 — cursor가 하나면 뒤의 수가 적용됐는데 앞의 수가 안 된 상태를 적을 방법이 없습니다. 화면과 공유의 두 구간 구분은 scramble_end 하나로 파생됩니다.
 되감기는 cursor를 목표로 내리는 수순이고, undo(한 수)와 solve(0까지)는 같은 함수에 준 인자의 차이입니다. Undo의 하한이 scramble_end라 "undo는 자기 수 안에서만"이 조건문이 아니라 표의 한 칸이 됩니다. 새 move가 들어오면 cursor 뒤가 통째로 잘려, 사용자 redo tail과 미적용 scramble 구간이 한 규칙으로 함께 폐기됩니다.
 명령은 재생할 수순을 그 자리에서 계산해 Phase 9의 Player에 넘깁니다. 목표값을 들고 commit마다 다음 수를 고르는 공급도 방향을 유도하는 규칙도 없습니다. 재생 경로가 하나로 통일되고, Phase 16의 solver는 같은 자리에 생산자를 하나 더 얹는 일이 됩니다.
-Commit의 분기는 재생 여부 두 갈래이고, timeline 반영은 Player가 든 `cursor_step`(+1 재생·재진행, −1 되감기, 0 관람)이 정합니다. 적용된 사용자 수도 `cursor − scramble_end`로 파생해, 되감기가 생기면 어긋나는 저장 counter를 이 phase에서 은퇴시킵니다.
+Commit의 분기는 재생 여부 두 갈래이고, timeline 반영은 Player가 든 `TimelineEffect`(Advance 재생·재진행, Rewind 되감기, None 관람)가 정합니다. 적용된 사용자 수도 `cursor − scramble_end`로 파생해, 되감기가 생기면 어긋나는 저장 counter를 이 phase에서 은퇴시킵니다. Timer의 시작만은 cursor가 아니라 이 파생값의 증가를 봅니다 — 아니면 ready에서의 Solve 재생이 timer를 시작합니다.
 Solve가 끝났거나 중단된 상태에서 사용자가 수를 두면 cursor 뒤가 잘리며 받아들여집니다. 거절하면 방금 푼 큐브를 만질 수 없게 됩니다.
 재생 중 pointer는 camera orbit만 합니다. 수십 초짜리 solve를 돌려 가며 볼 수 있고, layer picking에 닿지 않으므로 진행 중인 snap의 소유자를 따지는 조건도 필요 없어집니다.
 되감을 move는 상쇄 축약하지 않고 그대로 재생합니다. 자기가 둔 수순이 되짚어지는 편이 보기 좋고, 축약은 필요해지면 나중에 얹을 수 있는 최적화이지 이 phase의 요구사항이 아닙니다.
@@ -140,7 +140,7 @@ Timer 측정 중의 undo는 그대로 허용하고 기록을 무효로 처리하
 ## [ ] Phase 12: [Move notation and move log](./12-move-notation-and-move-log.md)
 
 Phase 11의 기록을 표준 표기법으로 렌더링해 수순 목록으로 보여 줍니다.
-별도의 기록 자료구조를 만들지 않고 Phase 11의 timeline을 인덱스로 조회하므로, 이 phase의 engine 작업은 조회 ABI 하나와 기록 시점의 turns 정규화에 한정됩니다. Scramble 구간과 사용자 구간의 구분은 timeline의 scramble 경계 query에서 파생되어, 이어 붙이거나 경계를 계산하는 코드가 없습니다.
+별도의 기록 자료구조를 만들지 않고 Phase 11의 timeline을 인덱스로 조회하므로, 이 phase의 engine 작업은 조회 ABI 하나와 pack 시점의 turns 정규화에 한정됩니다. Timeline은 raw 수순을 보관합니다 — 기록 시점에 정규화하면 `-180°`로 돈 수의 redo가 반대 방향으로 돕니다. Scramble 구간과 사용자 구간의 구분은 timeline의 scramble 경계 query에서 파생되어, 이어 붙이거나 경계를 계산하는 코드가 없습니다.
 C ABI는 primitive type만 사용하므로 engine은 layer mask와 회전량을 packed integer로 넘기고, 표기 문자열 조립은 TypeScript가 담당합니다. 표기는 move의 성질이 아니라 표현이므로 표기 스타일 변경이 engine에 닿지 않습니다.
 3×3에서 만들어질 수 있는 mask는 단일 layer 세 개뿐이므로, 변환은 구간을 찾는 알고리즘이 아니라 `(axis, layer) → {문자, 부호}` 9칸 표입니다. 음의 face 부호 반전과 M/E/S 방향 규약이 전부 그 표의 부호 칸에 들어가므로 별도 분기가 없고, M/E/S는 N×N 이야기가 아니라 3×3에서도 가운데 줄을 drag하면 바로 나오므로 처음부터 필요합니다.
 표에 없는 mask는 예외 없이 실패 경로입니다. 구간 판정과 numbered 표기는 소비자가 Phase 15에서 처음 생기므로 그때 함께 만듭니다.
@@ -177,7 +177,7 @@ Phase 16의 solver interface는 지원 크기를 스스로 밝히므로 다른 �
 ## [ ] Phase 16: Cube solver
 
 Timeline과 무관하게 현재 CubeState만으로 해법을 계산하는 solver를 추가하되, 구현을 교체할 수 있는 형태로 둡니다.
-Solver는 아무 dependency도 갖지 않는 cube target 아래 별도 하위 target으로 두어 rendering과 interaction은 물론 cube 도메인 자체와도 섞이지 않게 합니다. Phase 11이 solve를 "수순 벡터를 만들어 Player에 넘기기"로 구현해 두므로 재생 경로와 UI는 그대로 재사용합니다. 다만 solver의 수는 timeline에 없는 새 수라 `cursor_step`의 세 값 중 어느 것도 맞지 않습니다 — 기록 여부와 완주 판정에서 갖는 의미는 소비자가 처음 생기는 이 phase에서 정합니다.
+Solver는 아무 dependency도 갖지 않는 cube target 아래 별도 하위 target으로 두어 rendering과 interaction은 물론 cube 도메인 자체와도 섞이지 않게 합니다. Phase 11이 solve를 "수순 벡터를 만들어 Player에 넘기기"로 구현해 두므로 재생 경로와 UI는 그대로 재사용합니다. 다만 solver의 수는 timeline에 없는 새 수라 `TimelineEffect`의 세 값 중 어느 것도 맞지 않습니다 — 기록 여부와 완주 판정에서 갖는 의미는 소비자가 처음 생기는 이 phase에서 정합니다.
 사용자가 직접 섞은 큐브나 공유받은 상태처럼 되감을 기록이 없는 큐브까지 풀 수 있게 되어, Phase 11의 되감기가 닿지 못하는 곳을 메웁니다.
 
 교체 가능한 형태는 renderer와 같은 방식입니다. CubeState를 받아 move 목록을 내는 interface를 정의하고 application이 하나를 소유합니다. 자유 함수 대신 객체인 이유는 알고리즘마다 지원하는 cube 크기가 다르고, 탐색 계열은 pruning table 같은 준비 상태를 생성자에서 만들어 들고 있어야 하기 때문입니다. 지원 크기를 solver 자신이 밝히므로 Phase 15에서 크기가 늘어날 때 지원 여부가 그대로 드러납니다.

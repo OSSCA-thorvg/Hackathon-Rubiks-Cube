@@ -21,6 +21,7 @@ Scramble 수는 `make_scramble`이 이미 `move_count` 인자로 받고 있으�
 - Scramble의 animated 재생과 재생 move의 count/timer 제외
 - Scramble 수를 C ABI와 UI 정수 입력으로 노출
 - `GameController`의 `scrambling` 상태와 frame loop 시작 수정
+- `GameSession` 분리: timer·게임 상태 전이·완주 판정을 `GameController`에서 모듈로 분리 — Phase 11~14가 관찰·log·sound·기록을 계속 얹으므로, web 코드가 쌓이기 시작하는 이 phase의 첫 단계로 절단합니다. DOM listener 배선과 frame 소유권은 지금처럼 각각 `GameController`와 `AppLifecycle`에 남습니다
 - Native/TS unit test와 e2e
 
 ## Out of scope
@@ -50,11 +51,12 @@ std::optional<Player> playback_;
 
 - **재생에 관한 상태가 값 하나입니다.** 초안은 FIFO와 `playback_origin_`을 나란히 둔 두 상태였지만, 둘은 언제나 함께 세워지고 함께 죽습니다 — 같은 수명을 가진 상태 둘은 객체 하나입니다. 폐기가 `playback_.reset()` 한 줄이 되고, "queue는 비었는데 origin이 남았다" 같은 조합이 표현되지 않습니다.
 - **`advance()`에서 `!interaction.is_busy()`이고 `playback_`에 남은 수가 있으면** `plan[next++]`을 `start_move`로 시작합니다. Orbit이 `is_busy()`에서 빠지므로(아래 개정) 사용자가 재생을 보며 orbit을 잡고 있어도 다음 수가 시작됩니다.
+- **`advance()`의 반환 의미를 "interaction이 더 그릴 frame이 있거나 `playback_`이 남아 있음"으로 고정합니다.** 새 move를 시작한 frame과 move 사이의 frame에도 true여야 하며, 그렇지 않으면 재생 중간에 frame loop가 멈춥니다.
 - **Player가 받는 것은 언제나 완성된 수순입니다.** 이 phase의 scramble, Phase 10의 ambient 패턴, Phase 11의 undo/solve/redo가 모두 `std::vector<CubeMove>`를 만들어 넘깁니다. 한 수씩 흘려보내는 공급자는 어디에도 없으므로 재생 경로가 하나뿐입니다.
 - **재생 성질은 이름이 아니라 값으로 듭니다.** 초안은 `MoveOrigin` enum(`User`/`Scramble`/`Ambient`/`Rewind`/`Redo`)으로 출처를 이름 붙이고, tempo·count·timeline 반영·정지 가능 여부를 그 이름에서 유도하는 표들을 두는 방식이었습니다. 그러나 그 성질들을 이름으로 요구하는 소비자가 하나도 없습니다 — 필요한 것은 "지금 재생 중인가"라는 bit 하나와, 재생 세션이 든 성질 값들뿐입니다. 이름을 두면 phase마다 값이 늘고 그때마다 이름→성질 변환표가 원격지에서 함께 자라므로, 성질을 Player가 직접 들게 합니다. 의미의 이름은 코드에서 사라지지 않고 원래 자리인 생산자 함수 이름(`scramble()`, `ambient_start()`, `undo()`)으로 돌아갑니다.
-- **이후 phase는 값을 더하는 대신 필드를 더합니다.** Phase 10이 `loop`(기본 false)를, Phase 11이 `cursor_step`(기본 +1)과 `stoppable`(기본 false)을 더합니다. 각 필드는 그것을 처음 필요로 하는 생산자와 그것을 읽는 한 지점에서 함께 생기므로, 소비자가 없는 필드를 미리 두지 않습니다.
-- 기본값은 **대부분의** 생산자를 그대로 두기 위한 것이지 전부는 아닙니다. `stoppable`은 Phase 11이 더할 때 기존 생산자를 손대지 않지만, `cursor_step`은 ambient가 `0`이어야 하므로 **Phase 11이 Phase 10의 생산자 한 줄을 함께 고칩니다** — 관람은 timeline을 움직이면 안 되는데 기본값 `+1`이면 cursor가 `size`를 넘어섭니다. 그 수정은 Phase 11 문서에 명시되어 있습니다.
-- `start_move`가 duration 인자를 받도록 확장하고(기본값은 기존 `kSnapMsPerQuarterTurn`) 소비 loop가 `playback_->tempo_ms`를 넘깁니다. Tempo를 정하는 것은 개별 move가 아니라 재생 세션이므로, Phase 13이 배율을 얹을 자리도 이 값을 읽는 한 지점입니다.
+- **이후 phase는 값을 더하는 대신 필드를 더합니다.** Phase 10이 `loop`(기본 false)를, Phase 11이 `timeline_effect`(기본값 없음)와 `stoppable`(기본 false)을 더합니다. 각 필드는 그것을 처음 필요로 하는 생산자와 그것을 읽는 한 지점에서 함께 생기므로, 소비자가 없는 필드를 미리 두지 않습니다.
+- 기본값의 유무는 오용의 결과로 정합니다. `stoppable`의 기본 false는 틀려도 "버튼이 안 먹는" 정도라 기본값을 두고 기존 생산자를 손대지 않지만, `timeline_effect`는 잘못 받으면 timeline이 손상되므로 기본값 없이 **Phase 11이 이 phase의 scramble 생산자에도 명시를 더합니다.** 상세는 Phase 11 문서에 있습니다.
+- `start_move`가 tempo 인자를 받도록 확장하고(기본값은 기존 `kSnapMsPerQuarterTurn`) 소비 loop가 `playback_->tempo_ms`를 넘깁니다. **인자의 단위는 duration이 아니라 90°당 ms입니다** — 실제 duration은 기존 `snap_duration()`처럼 각도에 비례해 유도하므로, half turn은 quarter turn의 두 배 시간으로 돕니다. 총 duration을 넘기면 그 비례가 조용히 사라집니다. Tempo를 정하는 것은 개별 move가 아니라 재생 세션이므로, Phase 13이 배율을 얹을 자리도 이 값을 읽는 한 지점입니다.
 - **Drag release의 snap도 같은 자리를 지나게 합니다.** 지금 `pointer_up()`은 `snap_duration()`을 직접 불러 tempo가 상수에 박혀 있으므로, `pointer_up`이 90°당 tempo 인자를 받고(기본값은 기존 상수) `Application::pointer_up()`이 사용자 tempo 상수를 넘깁니다. 이 phase에서는 같은 값이라 동작이 변하지 않지만, 이 배관이 없으면 Phase 13의 속도 배율이 재생에만 적용되고 사용자 snap에는 닿지 않습니다.
 - **재생 판정은 `playback_.has_value()` 하나이고, count 규칙도 그것 하나입니다.** 재생 중의 commit은 `user_move_count`를 증가시키지 않습니다. `commit_move(move)`가 이 값을 스스로 읽으므로 출처 인자가 필요 없고, 재생 중에는 layer 입력이 막혀 사용자 commit이 생길 수 없으므로 판정이 어느 시점에도 맞습니다.
 - **`playback_`은 마지막 수의 commit까지 살아 있습니다.** 그래서 "마지막 수를 꺼내면 queue가 비어 판정이 뒤집힌다"는 구멍이 없습니다. 지워지는 곳은 둘뿐입니다: 재생의 마지막 commit(`next == plan.size()`이고 진행 중인 snap이 없어지는 그 지점)과 아래의 폐기 helper.
@@ -95,7 +97,9 @@ thorvg_rubiks_scramble(seed: uint32, move_count: uint32) -> int
 
 ### 1. Player
 
-- [ ] `start_move`에 duration 인자 추가 (기본값 유지, 기존 test 무수정 통과)
+- [ ] `start_move`에 90°당 tempo 인자 추가 — duration은 각도 비례 유도 (기본값 유지, 기존 test 무수정 통과)
+- [ ] Half turn이 quarter turn의 두 배 duration으로 도는 test
+- [ ] 재생 중 매 frame(`start_move` 직후와 move 사이 포함) `advance()`가 true를 반환하는 test
 - [ ] `pointer_up`에 tempo 인자 추가와 `Application::pointer_up()`의 사용자 tempo 연결 (기본값 유지, 기존 test 무수정 통과)
 - [ ] `Player` 정의(`plan`, `next`, `tempo_ms`)와 `std::optional<Player> playback_`, `advance()`의 소비 loop 구현
 - [ ] `commit_move(move)`가 `playback_`을 스스로 읽어 count를 가르는 구현 (출처 인자 없음)

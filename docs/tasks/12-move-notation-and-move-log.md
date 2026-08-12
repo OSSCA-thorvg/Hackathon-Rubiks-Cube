@@ -8,12 +8,12 @@
 
 Phase 11의 timeline을 표준 표기법으로 렌더링해 수순 목록으로 보여 줍니다.
 
-별도의 기록 자료구조를 만들지 않고 Phase 11의 timeline을 그대로 읽으므로, 이 phase의 engine 작업은 move를 인덱스로 조회하는 ABI와 기록 시점의 turns 정규화에 한정됩니다. C ABI는 primitive type만 사용하므로 engine은 move를 packed integer로 넘기고, 표기 문자열 조립은 TypeScript가 담당합니다. 표기는 move의 성질이 아니라 표현이므로, 표기 스타일이 바뀌어도 engine에 닿지 않습니다.
+별도의 기록 자료구조를 만들지 않고 Phase 11의 timeline을 그대로 읽으므로, 이 phase의 engine 작업은 move를 인덱스로 조회하는 ABI와 pack 시점의 turns 정규화에 한정됩니다. C ABI는 primitive type만 사용하므로 engine은 move를 packed integer로 넘기고, 표기 문자열 조립은 TypeScript가 담당합니다. 표기는 move의 성질이 아니라 표현이므로, 표기 스타일이 바뀌어도 engine에 닿지 않습니다.
 
 ## Scope
 
 - C ABI: `timeline_move(index)` — move 한 개를 packed `uint32`로 반환
-- Packed 포맷의 명시적 정의와 양쪽(C++/TS) 상수 고정, 기록 시점의 turns 정규화
+- Packed 포맷의 명시적 정의와 양쪽(C++/TS) 상수 고정, pack 시점의 turns 정규화
 - TS `notation` module: packed → `CubeMove` 구조 → 3×3 표기 문자열(`R`, `R'`, `R2`)
 - 3×3 가운데 layer의 M/E/S 표기
 - Move log UI: timeline 전체 목록, cursor 위치 강조, commit마다 갱신
@@ -36,7 +36,7 @@ bits 2-3  turns code    (0 = -1, 1 = +1, 2 = +2)
 bits 4-31 layer mask    (bit 4 = layer 0, ... 최대 28 layers)
 ```
 
-- Commit되는 quarter turn은 기록 시점에 `{-1, +1, +2}`로 정규화합니다(mod 4, `±2`는 `+2`, `+3`은 `-1`). 시각적 결과가 같은 move는 표기도 같아야 하므로 정규화는 표현이 아니라 기록의 책임입니다.
+- Quarter turn은 **pack 시점에** `{-1, +1, +2}`로 정규화합니다(mod 4, `±2`는 `+2`, `+3`은 `-1`). Timeline 자체는 Phase 11의 계약대로 raw 수순을 보관합니다 — 기록 시점에 정규화하면 `-180°`로 돈 수가 `+2`로 저장되어 redo 재생이 반대 방향으로 돌고, "재진행은 되감기의 정확한 역순"이라는 Phase 11의 성질이 깨집니다. 표기와 공유에는 회전 방향이 무의미하므로(같은 결과 = 같은 표기), 방향을 지우는 일은 방향을 쓰는 소비자(재생)가 지나가지 않는 pack에서만 합니다.
 - Layer mask는 항상 0이 아니므로 packed 값도 0이 될 수 없습니다. 따라서 **0이 곧 invalid index sentinel**입니다.
 - 포맷 상수는 C++와 TS 양쪽에 정의하고, 같은 값을 쓰는지 fixed known-answer(예: `R` = axis X, turns +1, mask layer 2)를 양쪽 test로 고정합니다.
 
@@ -72,7 +72,8 @@ Phase 11의 기록이 timeline 하나이므로 조회도 하나입니다. 목록
 
 ### 1. Engine ABI
 
-- [ ] Packed 포맷 상수와 pack 함수, 기록 시점 turns 정규화
+- [ ] Packed 포맷 상수와 pack 함수, pack 시점 turns 정규화
+- [ ] `-2`로 기록된 수가 packed로는 `+2`, redo 재생으로는 `-180°` 그대로인 test (정규화가 timeline에 새지 않는지)
 - [ ] `timeline_move(index)` 구현: 범위 밖·초기화 전 0 반환
 - [ ] Pack known-answer test와 정규화 test (native)
 
@@ -93,7 +94,7 @@ Phase 11의 기록이 timeline 하나이므로 조회도 하나입니다. 목록
 
 ## Acceptance criteria
 
-- Engine의 추가 작업은 packed 조회 ABI와 기록 시점의 turns 정규화뿐이고, Phase 11의 timeline 외에 새 자료구조가 없습니다.
+- Engine의 추가 작업은 packed 조회 ABI와 pack 시점의 turns 정규화뿐이고, Phase 11의 timeline 외에 새 자료구조가 없습니다. Timeline의 raw 보관 계약은 이 phase가 건드리지 않습니다.
 - 두 구간의 구분은 `timeline_scramble_end`에서 파생되며, 이어 붙이거나 경계를 계산하는 코드가 어디에도 없습니다.
 - C ABI는 계속 primitive type만 사용하며, 문자열은 boundary를 넘지 않습니다.
 - 같은 packed 값은 C++와 TS에서 같은 move로 해석되고, known-answer test가 양쪽에서 고정합니다.

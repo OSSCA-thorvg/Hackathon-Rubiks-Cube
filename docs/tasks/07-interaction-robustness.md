@@ -44,11 +44,14 @@
 
 ```cpp
 // Application::pointer_down
+if (!std::isfinite(x) || !std::isfinite(y)) return false;
 if (const auto move = interaction.finish_snap()) {
     commit_move(*move);
 }
 return interaction.pointer_down(x, y, current_camera(), placement.cube);
 ```
+
+- **좌표 검증이 확정보다 앞입니다.** 순서를 바꾸면 non-finite 좌표의 press가 새 gesture는 거절되면서 진행 중인 snap만 확정합니다 — 아무것도 시작하지 못하는 press가 상태를 바꾸는 일은 없어야 합니다. Controller의 finite 검사와 겹치지만, 이 중복은 검사의 반복이 아니라 확정의 전제 조건입니다.
 
 - Controller는 목표 quarter turn을 계산해 `snap_`을 비우고 move를 **반환**하며, 목표가 0(snap-back)이면 `nullopt`입니다. 확정된 move를 controller 안에 쌓아 두지 않으므로 `committed_`는 지금처럼 `std::optional` 하나로 남고 `advance()`의 commit 경로도 변하지 않습니다.
 - 이 구조를 고른 이유는 순서 추론을 없애기 위해서입니다. 확정된 move를 보관했다가 다음 frame에 꺼내면 "새 gesture가 먼저 끝나면 어느 쪽이 먼저 적용되는가"를 저장소가 답해야 하지만, 호출 지점에서 즉시 적용하면 그런 상태가 애초에 생기지 않습니다.
@@ -70,6 +73,7 @@ target = round((|angle| + 45° − kCommitDegrees) / 90°) × sign(angle)
 - **경계는 모든 배수 사이에서 같은 지점입니다: 낮은 배수에서 `kCommitDegrees` 지난 곳.** "면 하나를 30° 넘기면 다음 칸"이 어느 칸에서나 참인 한 문장이 되고, 어느 경계든 전진 1 대 후퇴 2의 같은 비율입니다. 90°를 넘겨 계속 끌고 있는 손가락은 더 돌릴 의도이므로, 첫 칸은 30°에 열어 주면서 둘째 칸에 45°를 요구하는 것이 오히려 마찰의 비일관입니다.
 - 처음 안은 반올림이 0일 때만 문턱을 보는 첫 칸 한정 분기였으나 개정했습니다. 그 안은 첫 칸 1:2, 나머지 1:1의 혼합 규칙이라 한 문장으로 서술되지 않습니다. 오류의 방향도 근거입니다: 이 phase가 고치려는 것이 "돌렸는데 무시됐다"(사용자가 앱 탓으로 느끼는 false negative)이므로, 덜 돌려도 동작하는 쪽으로 모든 경계를 일관되게 기울입니다. 과회전(false positive)은 transient 회전으로 release 전에 보이고, 자기 행동의 결과로 읽히며, 한 gesture로 되돌릴 수 있습니다.
 - **이것은 Phase 5의 "가장 가까운 90° 배수" 계약의 개정입니다.** [Phase 5 문서](./05-pointer-interaction-and-animation.md)의 개정 기록에 남기며, 그 phase의 snap known-answer 표, canonical 120° drag 상수, "남은 각도 ≤ 45°" 유도 성질이 재고정 대상입니다.
+- **한 바퀴로 끝난 snap(quarter turns mod 4 == 0)은 commit을 만들지 않습니다.** Viewport 폭 두 배를 끄는 drag는 목표가 360°에 닿을 수 있는데, 지금 commit 조건은 `quarter_turns != 0`이라 그 수가 `CubeState`는 불변이면서 count와 (Phase 11부터는) timeline에 한 수로 남습니다. 논리적 no-op이므로 snap animation은 360°까지 그대로 돌고 commit 단계에서만 폐기합니다.
 - **각속도 판정은 검토 후 기각했습니다.** 속도를 재려면 시간이 필요한데, 시간의 유일한 입구인 `advance()`는 rAF 주기로만 흘러 마지막 `pointer_move → pointer_up` 구간이 분모에서 빠지고, 그 오차는 주사율에 비례해(120Hz ≤8ms, 30Hz ≤33ms) 같은 gesture의 판정이 기기마다 달라집니다. 정확히 하려면 pointer event timestamp를 ABI로 주입해야 하는데 — pointer 함수 셋 변경, `PointerController` 수정, 임계값·최소 시간 상수와 강등 규칙 — 경계 이동 하나가 같은 문제를 해결하므로 그 비용을 들이지 않습니다.
 
 받아들이는 손실은 셋이고 모두 좁습니다.
@@ -89,6 +93,7 @@ target = round((|angle| + 45° − kCommitDegrees) / 90°) × sign(angle)
 - [ ] 확정된 상태 위에서 새 gesture의 pick이 올바른 cell을 잡는 test
 - [ ] Snap-back(목표 0) 확정이 `CubeState`를 바꾸지 않는 test
 - [ ] 빈 공간 press로 orbit을 시작할 때도 확정이 일어나는 test
+- [ ] Non-finite 좌표의 pointer down이 snap을 확정하지 않는 test (좌표 검증이 확정보다 앞)
 - [ ] **기존 controller test의 유지 확인**: "input during the snap is ignored"는 controller 수준 계약이라 그대로 유효합니다 — `finish_snap()`은 Application이 snap을 먼저 비우고 나서 `pointer_down`을 부르는 상위 계층의 일이므로, 이 test는 교체 대상이 아니라 그 분업의 근거로 유지하고 의도를 주석으로 명시합니다
 
 ### 2. Snap 경계
@@ -98,6 +103,7 @@ target = round((|angle| + 45° − kCommitDegrees) / 90°) × sign(angle)
 - [ ] **기존 "nearest quarter turn" known-answer 표의 교체**: `37° → 0`과 `±45°` 동점 straddle 쌍은 새 규칙에서 결과가 바뀌고, `143° → 2`와 `270° → 3`은 그대로입니다. 표를 새 경계의 straddle 쌍으로 재고정하고 test 이름의 "nearest"도 규칙 서술로 바꿉니다
 - [ ] **Canonical drag 상수 이동**: test 전반이 "명백한 한 칸"으로 쓰는 120°가 정확히 새 경계에 얹히므로(`round(1.5)` 동점이 부동소수 노이즈에 걸림), 한 칸 구간의 중앙(예: 75°)으로 일괄 이동
 - [ ] Snap duration 유계 test 갱신: 남은 각도의 유도 상한이 45°에서 90° − `kCommitDegrees`로 커진 것을 반영
+- [ ] Commit의 mod 4 폐기: 360° 목표로 끝난 drag가 상태도 count도 바꾸지 않는 test
 
 ### 3. Verification
 

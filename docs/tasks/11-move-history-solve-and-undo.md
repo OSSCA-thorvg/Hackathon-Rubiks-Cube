@@ -19,7 +19,7 @@ Cube에 적용된 move를 되감을 수 있게 기록하고, 그 위에 solve와
 ## Scope
 
 - `cube::MoveTimeline`: 한 배열과 두 인덱스(cursor, scramble_end)를 가진 순수 컨테이너
-- Application의 timeline 연결: Player에 더하는 `cursor_step`과 `stoppable` 두 필드
+- Application의 timeline 연결: Player에 더하는 `timeline_effect`와 `stoppable` 두 필드
 - 저장하던 `user_move_count`의 은퇴 — 적용된 사용자 수는 timeline에서 파생됩니다
 - Undo/redo: 한 칸 되감기/재진행 (재생 중에는 거절)
 - Solve: cursor가 0이 될 때까지 되감는 수순을 Player로 재생, 중단 가능
@@ -44,6 +44,9 @@ Cube에 적용된 move를 되감을 수 있게 기록하고, 그 위에 solve와
 ```cpp
 namespace rubiks::cube {
 
+/** What one committed move does to the timeline cursor. */
+enum class TimelineEffect { Advance, Rewind, None };
+
 /** One linear record of the moves a cube session is made of. */
 class MoveTimeline {
 public:
@@ -56,11 +59,8 @@ public:
     /** The recorded move at an index, as it was played. */
     [[nodiscard]] const CubeMove& at(std::size_t index) const noexcept;
 
-    /**
-     * Moves the cursor after a planned move was actually committed.
-     * `delta` is -1, 0, or +1, and must keep the cursor within [0, size()].
-     */
-    void step(int delta) noexcept;
+    /** Moves the cursor after a planned move was actually committed. */
+    void step(TimelineEffect effect) noexcept;
 
     [[nodiscard]] std::size_t size() const noexcept;
     [[nodiscard]] std::size_t cursor() const noexcept;
@@ -71,11 +71,11 @@ public:
 }  // namespace rubiks::cube
 ```
 
-- `begin_scramble()`은 전체를 새 수순으로 교체하고 `cursor = 0`, `scramble_end = size`로 둡니다. 재생은 commit마다 `step(+1)`로 cursor만 전진합니다.
+- `begin_scramble()`은 전체를 새 수순으로 교체하고 `cursor = 0`, `scramble_end = size`로 둡니다. 재생은 commit마다 `step(Advance)`로 cursor만 전진합니다.
 - `record()`는 cursor 뒤를 전부 버리고(`resize(cursor)`, `scramble_end = min(scramble_end, cursor)`) 덧붙인 뒤 cursor를 전진합니다. **"새 수가 redo 구간을 버린다"는 한 규칙이 사용자 redo tail과 미적용 scramble 구간에 똑같이 적용되는 것이, 두 개의 절단 규칙이 아니라 `min` 한 번입니다.**
 - `cursor() < scramble_end()`는 되감기 도중의 정상 상태입니다(redo를 기다리는 구간). Solve의 정상 종료가 정확히 이 모양(`cursor = 0 < scramble_end`)이므로, 그 위의 사용자 move는 거절이 아니라 `record()`의 절단으로 받아들입니다 — 거절하면 "방금 푼 큐브를 만질 수 없다"가 됩니다.
 - **접근자는 `at(index)` 하나이고 뒤집지 않습니다.** Cursor는 commit에만 움직이므로 "cursor 위치의 한 수"를 주는 접근자는 계획을 만드는 동안 같은 수만 반복해 돌려줍니다. 뒤집는 일은 plan을 만드는 곳 한 군데로 모아, 이중 inverse로 원래 수가 재실행될 자리를 없앱니다.
-- **복원 전용 API는 없습니다.** Phase 14의 복원은 `begin_scramble()` 후 scramble 구간을 cube에 적용하며 `step(+1)`, 이어 사용자 구간을 적용하며 `record()` — 일반 연산의 재사용이고, cursor는 자연히 끝에 옵니다.
+- **복원 전용 API는 없습니다.** Phase 14의 복원은 `begin_scramble()` 후 scramble 구간을 cube에 적용하며 `step(Advance)`, 이어 사용자 구간을 적용하며 `record()` — 일반 연산의 재사용이고, cursor는 자연히 끝에 옵니다.
 - 다른 target에 의존하지 않는 cube 안의 순수 자료구조라 native test만으로 전부 검증됩니다.
 
 ### 기록 규칙은 두 갈래와 정수 하나
@@ -84,13 +84,15 @@ public:
 
 ```cpp
 // Application::commit_move
-if (playback_) timeline_.step(playback_->cursor_step);  // +1 / -1 / 0
-else           timeline_.record(move);                  // 뒤 구간 절단 포함
+if (playback_) timeline_.step(playback_->timeline_effect);
+else           timeline_.record(move);  // 뒤 구간 절단 포함
 ```
 
-- Player에 `cursor_step`(기본 `+1`)을 더합니다. Scramble과 redo는 기본값 그대로이고, 되감기가 `-1`, ambient가 `0`을 세웁니다. **Ambient의 `0`은 이 phase가 Phase 10의 생산자에 넣는 수정입니다** — 기본값 `+1`이면 관람 첫 commit부터 cursor가 timeline 길이를 넘어 기록이 즉시 손상되므로, 이 필드를 더하는 것과 그 한 줄을 고치는 것은 분리할 수 없습니다. **Scramble 재생과 redo가 같은 값인 것은 우연이 아닙니다** — 둘 다 "timeline의 다음 수를 적용"하는 같은 일입니다. 되감기 commit이 어느 기록을 움직일지 고르는 규칙도 없습니다. Cursor가 하나이기 때문입니다.
-- `step_back()`/`step_forward()` 대신 `step(int)` 하나를 두면 위 분기가 부호 선택 없이 값 전달로 끝나고, ambient의 "기록하지 않음"도 별도 행이 아니라 `0`이라는 값이 됩니다.
-- `step`의 계약(`delta ∈ {-1, 0, +1}`, cursor가 `[0, size()]` 안에 남을 것)은 docstring과 debug assertion으로만 고정합니다. 호출자가 Application 하나뿐이라 런타임 거절 경로나 회복 구조를 두면 검증할 수 없는 코드가 남고, 위반은 개발 중 assertion으로 잡히는 편이 정확합니다.
+- Player에 `TimelineEffect timeline_effect`를 더합니다 — **기본값 없이**, 모든 생산자가 명시합니다. Scramble과 redo가 `Advance`, 되감기가 `Rewind`, ambient가 `None`입니다. 정수 `-1/0/+1` 대신 이름 있는 값을 쓰는 이유는 오용의 결과가 크기 때문입니다: ambient가 `Advance`를 받으면 관람 첫 commit부터 cursor가 timeline 길이를 넘어 기록이 즉시 손상됩니다. 값 이름이 효과를 그대로 말하므로 산술 오용의 자리가 없고, `step`의 "delta는 ±1 아니면 0" docstring 계약이 타입으로 대체됩니다.
+- 기본값이 없어도 컴파일러가 명시를 강제하지는 못하므로(빠진 초기화는 첫 enumerator로 조용히 값-초기화됩니다), 각 생산자의 timeline 효과는 test가 고정합니다 — scramble 재생의 전진, 되감기의 후진, ambient의 불변이 모두 이 phase의 test 목록에 있습니다.
+- **Scramble 재생과 redo가 같은 값인 것은 우연이 아닙니다** — 둘 다 "timeline의 다음 수를 적용"하는 같은 일입니다. 되감기 commit이 어느 기록을 움직일지 고르는 규칙도 없습니다. Cursor가 하나이기 때문입니다.
+- `step_back()`/`step_forward()` 대신 `step(effect)` 하나를 두면 위 분기가 부호 선택 없이 값 전달로 끝나고, ambient의 "기록하지 않음"도 별도 행이 아니라 `None`이라는 값이 됩니다.
+- Cursor가 `[0, size()]`를 벗어나지 않을 것은 debug assertion으로만 고정합니다. 호출자가 Application 하나뿐이라 런타임 거절 경로나 회복 구조를 두면 검증할 수 없는 코드가 남고, 위반은 개발 중 assertion으로 잡히는 편이 정확합니다.
 - 진입점은 `advance()`의 animation 종료 지점과 Phase 7의 `finish_snap()` 확정 지점 둘이지만, 둘 다 이 함수를 부릅니다.
 - Reset은 `clear()`, scramble은 `begin_scramble()`입니다.
 
@@ -110,6 +112,7 @@ else           timeline_.record(move);                  // 뒤 구간 절단 포
 - Cursor를 통째로 바꾸는 명령(reset, scramble)은 **GameController 자신이 부르는 것**이라, 그 handler에서 기준값을 갱신하면 됩니다 — 지금 코드의 `onScramble`이 `previousMoveCount = 0`으로 이미 쓰는 패턴입니다. Phase 14의 복원은 controller 부착 전에 끝나므로 부착 시점의 초기화로 충분합니다.
 - Ambient는 cursor를 움직이지 않습니다. 덕분에 "관람은 무음"이 자료구조의 결과로 굳고, web이 ambient 여부를 조회해 분기할 필요가 없습니다.
 - 재생 중에는 pointer가 차단되어 +1과 −1이 한 frame에 섞일 수 없으므로, 관찰은 "달라졌는가" 판정만으로 안전합니다. 한 관찰 창에 commit이 둘 들어와도(빠른 연속 입력에서 `finish_snap()` 확정이 frame 사이에 끼는 경우) 그 창은 16ms라 소리 하나로 들리는 것이 자연스럽고, 개수까지 세는 계약은 두지 않습니다.
+- **예외는 timer의 시작 하나입니다 — cursor가 아니라 파생 사용자 수의 증가를 봅니다.** Cursor 변화만 보면 ready 상태에서 Solve를 눌렀을 때 scripted rewind의 첫 commit이 timer를 시작합니다. 적용된 사용자 수(`cursor − scramble_end` 파생)는 사용자 move에서만 늘어나므로 timer 시작의 관찰값은 그것이고, solved 판정·수순 목록·효과음은 계속 cursor 변화를 봅니다. 관찰 소스는 둘 다 이미 노출된 query라 새 상태는 없습니다.
 
 ### 되감기는 수순을 만들어 Player에 넘깁니다
 
@@ -147,7 +150,7 @@ for (std::size_t i = timeline_.cursor(); i < to; ++i) {
 - **Cursor는 계획이 아니라 commit이 움직입니다.** 그래서 중간에 멈춰도 cursor와 cube 상태가 정확히 일치합니다.
 - **계획이 Player에 있는 동안 timeline은 바뀌지 않습니다.** 실제로 timeline을 바꾸는 명령(scramble, reset, ambient 진입)은 폐기 helper가 Player를 함께 버리고, 사용자 move는 busy라 거절되므로 이미 성립합니다. 그래서 Player가 든 수순이 timeline의 사본이어도 둘이 어긋나지 않습니다.
 - **`rewind_target_`도, commit마다 다음 수를 고르는 공급 규칙도, 방향을 대소로 유도하는 규칙도 두지 않습니다.** 수순을 미리 만들면 undo와 solve의 차이가 벡터 길이로만 남습니다.
-- **Phase 16이 재사용하는 것은 재생 경로까지입니다.** Solve는 이미 "`vector<CubeMove>`를 만들어 Player에 넘기는" 모양이므로 solver도 같은 자리에 수순을 넣을 수 있습니다. 다만 **solver move가 timeline에서 갖는 의미는 이 phase가 정하지 않습니다** — `cursor_step`의 세 값 중 어느 것도 맞지 않기 때문입니다: `+1`은 timeline에 이미 있는 다음 수를 적용한다는 뜻이고, `-1`은 기록된 수를 되감는다는 뜻이며, `0`은 cube만 바뀌어 timeline과 상태가 어긋납니다. Solver의 수는 timeline에 없는 새 수라 네 번째 답이 필요한데, 그 답(기록할지, 완주로 칠지, 기록한다면 어느 구간인지)은 소비자가 생기는 Phase 16에서 정합니다. 이 phase에서 미리 정책을 만들면 검증할 소비자 없이 규칙만 남습니다.
+- **Phase 16이 재사용하는 것은 재생 경로까지입니다.** Solve는 이미 "`vector<CubeMove>`를 만들어 Player에 넘기는" 모양이므로 solver도 같은 자리에 수순을 넣을 수 있습니다. 다만 **solver move가 timeline에서 갖는 의미는 이 phase가 정하지 않습니다** — `TimelineEffect`의 세 값 중 어느 것도 맞지 않기 때문입니다: `Advance`는 timeline에 이미 있는 다음 수를 적용한다는 뜻이고, `Rewind`는 기록된 수를 되감는다는 뜻이며, `None`은 cube만 바뀌어 timeline과 상태가 어긋납니다. Solver의 수는 timeline에 없는 새 수라 네 번째 답이 필요한데, 그 답(기록할지, 완주로 칠지, 기록한다면 어느 구간인지)은 소비자가 생기는 Phase 16에서 정합니다. 이 phase에서 미리 정책을 만들면 검증할 소비자 없이 규칙만 남습니다.
 - **중단**(`stop_playback`)은 남은 수순을 버리고 진행 중인 snap을 Phase 7의 `finish_snap()`으로 확정합니다. 확정 commit은 아직 살아 있는 `playback_`을 보고 `commit_move`를 타므로 cursor 이동까지 따라옵니다. Solve는 수십 초가 걸릴 수 있어 중단이 필요하고, 구현은 이미 있는 두 조각의 조합입니다.
 - **`stop_playback`이 보는 것은 Player의 `stoppable`(기본 `false`)이고, 되감기·재진행만 그것을 `true`로 세웁니다.** 같은 Player를 scramble과 ambient도 쓰므로, 제한하지 않으면 UI 갱신이 한 frame 늦은 사이의 입력이 scramble을 반쯤에서 끊거나 ambient를 snapshot 복원 없이 멈춥니다. 기본값이 `false`라 Phase 9·10의 생산자는 손대지 않습니다.
 - 재생 여부를 나타내는 별도 상태나 ABI는 두지 않습니다. 밖에서 보이는 것은 기존 busy뿐입니다.
@@ -189,7 +192,7 @@ thorvg_rubiks_timeline_scramble_end() -> uint32
 
 ### 1. MoveTimeline
 
-- [ ] `MoveTimeline` 구현과 `begin_scramble`/`record`/`at`/`step(delta)`/`clear` 전수 test
+- [ ] `TimelineEffect`와 `MoveTimeline` 구현, `begin_scramble`/`record`/`at`/`step(effect)`/`clear` 전수 test
 - [ ] `record()`가 cursor 뒤를 버리고 `scramble_end`를 함께 내리는 test (`min` 한 번으로 두 절단이 처리되는지)
 - [ ] `at(index)`가 기록된 그대로의 수를 반환함을 고정하는 test (뒤집지 않음)
 - [ ] 표현 불가능성을 이용한 단순화 확인: 두-기록 모델의 cursor 조합 불변식 test에 해당하는 것이 **존재하지 않음**을 문서로 남김 (배열 하나 + cursor 하나로는 위반 상태를 만들 수 없음)
@@ -204,8 +207,8 @@ thorvg_rubiks_timeline_scramble_end() -> uint32
 
 ### 3. Commit과 되감기 공급
 
-- [ ] Player에 `cursor_step`(기본 +1)과 `stoppable`(기본 false) 추가, `commit_move(move)`의 두 갈래 분기 구현
-- [ ] **Phase 10의 ambient 생산자에 `cursor_step = 0` 설정** (기본값이면 cursor가 길이를 넘어섬)
+- [ ] Player에 `timeline_effect`(기본값 없음)와 `stoppable`(기본 false) 추가, `commit_move(move)`의 두 갈래 분기 구현
+- [ ] **모든 생산자의 `timeline_effect` 명시**: Phase 9의 scramble에 `Advance`, Phase 10의 ambient에 `None` (ambient가 전진하면 cursor가 길이를 넘어섬)
 - [ ] 관람을 길게 돌린 뒤에도 `timeline_cursor`와 `timeline_length`가 진입 시점 그대로인 test
 - [ ] **저장 `user_move_count` 제거와 파생값 전환**: 기존 count ABI가 `cursor - scramble_end`를 반환하도록 바꾸고, undo 두 번 뒤의 count가 실제 적용 수와 일치하는 test (저장 counter였다면 어긋나는 시나리오)
 - [ ] Phase 7의 `finish_snap()` 확정 경로가 같은 함수를 통과하는 test (즉시 확정된 move가 timeline에 남는지)
@@ -231,6 +234,7 @@ thorvg_rubiks_timeline_scramble_end() -> uint32
 - [ ] **판별 TS unit test**: solve 완주는 기록에서 제외, 사용자가 직접 완성한 판과 solve 중단 후 직접 완성한 판은 정상 기록
 - [ ] Completion 안내 구분
 - [ ] TS unit test: `timeline_cursor` 관찰 기반 상태 전이와 reset/scramble handler의 기준값 갱신, undo로 solved 도달
+- [ ] **Timer 시작 관찰 test**: ready에서 Solve 재생이 timer를 시작하지 않고, 파생 사용자 수를 늘리는 첫 사용자 move만 시작하는지
 - [ ] e2e: scramble → 몇 수 → undo 두 번 → redo → Solve로 완주 → solved 전개도 검증
 - [ ] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
 
@@ -248,7 +252,7 @@ thorvg_rubiks_timeline_scramble_end() -> uint32
 - Commit의 관찰은 `timeline_cursor`의 변화이며 별도 counter ABI가 없습니다. Reset·scramble handler는 기준값을 스스로 갱신하고, ambient는 cursor를 움직이지 않아 무음이 유지됩니다. 복원이 관찰되지 않음은 Phase 14가 확인합니다.
 - Solve가 푼 판의 판별은 완주 시점의 `cursor() == 0 && scramble_end() > 0` 파생 값이며, 보관되는 flag도 그 전이 규칙도 없습니다. 중단한 뒤 사용자가 직접 완성한 판은 정상 기록으로 남습니다.
 - 재생은 언제든 중단할 수 있고, 중단 시점의 cursor와 cube 상태가 정확히 일치합니다.
-- 새 상태를 만드는 명령은 Phase 9의 폐기 helper를 그대로 부르며, 이 phase가 그 목록에 더하는 항목이 없습니다. 이 phase가 Player에 더하는 것은 필드 둘이고, 그중 `stoppable`은 기본값이 기존 생산자를 그대로 두지만 `cursor_step`은 ambient 생산자 한 줄(`= 0`)을 함께 고칩니다.
+- 새 상태를 만드는 명령은 Phase 9의 폐기 helper를 그대로 부르며, 이 phase가 그 목록에 더하는 항목이 없습니다. 이 phase가 Player에 더하는 것은 필드 둘이고, 그중 `stoppable`은 기본값이 기존 생산자를 그대로 두지만 `timeline_effect`는 기본값이 없어 기존 생산자(scramble, ambient)에 명시 한 줄씩을 함께 더합니다.
 - Solve로 끝난 판은 timer가 정지하되 완주 기록으로 취급되지 않으며, undo가 섞인 판은 무효화되지 않습니다.
 - Ambient 관람은 timeline에 흔적을 남기지 않습니다.
 - Native, WASM, TypeScript unit, browser e2e와 production build가 모두 통과합니다.

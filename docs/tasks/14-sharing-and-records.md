@@ -45,7 +45,7 @@ payload = version(1) ‖ scramble_count(4) ‖ packed_move(4) × scramble_count
           ‖ user_count(4) ‖ packed_move(4) × user_count
 encoded = base64url(payload)
 
-모든 uint32 필드와 packed move는 little-endian입니다.
+모든 uint32 필드와 packed move는 little-endian입니다. TS 구현은 `DataView`의 명시적 little-endian 인자를 씁니다 — `Uint32Array`는 platform byte order를 따르므로 영구 포맷의 근거가 되지 못합니다.
 ```
 
 Byte order는 영구 포맷의 계약이므로 known-answer test에 맡기지 않고 명시합니다. Little-endian은 WASM heap의 `Uint32Array` 관례와 같아 변환 코드가 없습니다.
@@ -58,7 +58,7 @@ Byte order는 영구 포맷의 계약이므로 known-answer test에 맡기지 �
 - 사용자 목록에는 **적용된 move만** 싣습니다(`user_count = timeline_cursor() - timeline_scramble_end()`). **Redo tail은 싣지 않습니다** — 공유는 명시적 1회 행위이고, 받는 쪽에 보내는 사람이 무른 수까지 전달할 이유가 없습니다.
 - **공유 조건은 `!busy && cursor > 0 && cursor ≥ scramble_end`입니다.** `cursor ≥ scramble_end`는 solve를 scramble 구간에서 멈춘 중간 상태를 빼는 것이고 — 허용하면 cursor 필드와 검증 규칙이 따라붙습니다 — `cursor > 0`은 빈 timeline을 뺍니다. **Scramble 없는 세션은 정상적인 공유 대상입니다**: idle에서 직접 돌린 판이나 solve 완주 뒤 새 수를 둔 판은 `scramble_end == 0, cursor > 0`이며, `scramble_count = 0, user_count > 0`으로 문제없이 복원됩니다. Decode는 `scramble_count + user_count > 0`을 검사하므로 복원 경로에 개수 0이 존재하지 않고, `restore_buffer(0)`의 "빈 버퍼인가 거절인가" 모호성도 생기지 않습니다. 버튼은 busy 중에도 비활성이라 재생 중간 상태도 실리지 않습니다.
 - **개수 필드는 4바이트입니다.** 2바이트로 두면 상한을 넘는 경우를 거절하는 규칙과 안내와 test가 따라붙는데, 그 값에 닿으려면 초당 한 수로 18시간을 둬야 합니다. 도달할 수 없는 경우를 처리하는 대신 바이트를 더 써서 그 경우를 없앱니다. 남는 상한은 decode의 payload 길이 상한 하나입니다.
-- TS는 조립뿐 아니라 decode 시에도 payload 전체를 검증합니다: 길이 상한, trailing bytes 없음, version, `scramble_count + user_count > 0`, 각 packed의 **axis code(`0`~`2`, `3`은 무효)**·turns code·mask입니다. Axis는 2비트라 packed 값 자체가 만들 수 있는 무효 코드가 하나 있으므로, 조작된 URL이 그것을 들여오지 못하게 세 필드를 같은 자리에서 함께 봅니다.
+- TS는 조립뿐 아니라 decode 시에도 payload 전체를 검증합니다: **encoded fragment 문자열의 길이 상한(base64 decode 전에 먼저)**, trailing bytes 없음, version, `scramble_count + user_count > 0`, 각 packed의 **axis code(`0`~`2`, `3`은 무효)**·turns code·mask입니다. 길이를 decode 뒤에 재면 거대한 fragment가 먼저 메모리로 펼쳐집니다. Axis는 2비트라 packed 값 자체가 만들 수 있는 무효 코드가 하나 있으므로, 조작된 URL이 그것을 들여오지 못하게 세 필드를 같은 자리에서 함께 봅니다.
 - **v1 payload의 mask는 단일 layer 셋(`layer(0)`, `layer(1)`, `layer(2)`) 중 하나로 제한하고, TS decode와 `restore_apply()`가 같은 규칙을 검사합니다.** `CubeMove` 자체는 multi-layer mask를 지원하므로 단순 범위 검증만 하면 조작된 URL이 wide move를 들여올 수 있는데, 그 move는 Phase 12의 표기에서 null이고 UI에 null을 그리는 경로는 "도달 불가"라는 근거로 두지 않았습니다. 입구를 제한해 그 전제를 지킵니다. Phase 15가 N×N을 직렬화할 때 version과 함께 확장합니다.
 - v1 payload의 known-answer fixture(고정 세션 → 고정 문자열)를 영구 test로 남겨, 이후 어떤 리팩터링도 기존 공유 URL을 깨뜨리면 test가 잡게 합니다.
 
@@ -74,11 +74,11 @@ restore_apply(scramble_count, user_count)   // 전체 검증 → timeline 구성
 TS는 반환된 주소에 `Uint32Array` view를 만들어 packed move를 scramble 수순, 사용자 move 순으로 써 넣습니다. Buffer가 `std::vector<std::uint32_t>`라 4바이트 정렬이 보장되고, 두 호출 사이에 다른 engine 호출이 없으므로 memory growth로 view가 낡을 일도 없습니다.
 
 - **기존 상태를 보존하지 않습니다.** 복원 시점은 startup이고 그때의 "기존 상태"는 갓 초기화된 solved cube뿐이라, 지킬 값이 없습니다. Staging에 쌓았다가 교체하는 구조는 그 없는 값을 지키려고 swap과 회복 계약을 들이는 일이었습니다.
-- **실패하면 회복하지 않고 초기화를 중단합니다.** `restore_apply()`가 거절하면 TS는 복원을 다시 시도하지 않고 `reset_cube()`로 깨끗한 초기 상태에서 시작하며, `role="status"`로 "공유 링크를 불러오지 못했습니다"를 한 번 알립니다. 손상된 링크에 새 세션을 주는 것이 사용자가 할 수 있는 유일한 일이므로 갈래를 하나로 둡니다. Rollback도 "같은 instance에서 재시도"라는 계약도 필요 없습니다.
+- **실패하면 회복하지 않고 초기화를 중단합니다.** `restore_apply()`가 거절하면 TS는 복원을 다시 시도하지 않고 `reset_cube()`로 깨끗한 초기 상태에서 시작하며, `role="status"`로 "공유 링크를 불러오지 못했습니다"를 한 번 알립니다. 이 안내가 startup 마지막의 "Ready" 메시지에 덮이지 않도록, 복원 결과는 `startApp`의 상태 메시지를 만드는 쪽으로 전달되어 ready 문구에 합쳐집니다 — 순서에 기대는 별도 announce를 두지 않습니다. 손상된 링크에 새 세션을 주는 것이 사용자가 할 수 있는 유일한 일이므로 갈래를 하나로 둡니다. Rollback도 "같은 instance에서 재시도"라는 계약도 필요 없습니다.
 - 그래서 `restore_allowed_` gate도 두지 않습니다. 복원은 startup에서 한 번 호출된다는 **호출 순서 계약**으로 충분합니다: `engine 생성 → fragment decode → restore → 최초 render → controller/listener 연결`. Gate는 우리가 직접 쓰는 호출 순서를 우리 코드로부터 지키는 장치였고, 사용자가 닿는 경로가 아닙니다.
 - **최초 render가 restore 뒤인 것이 순서의 요점입니다.** 지금 `startApp`은 engine 생성 직후 solved cube를 render하는데, 그 뒤에 복원만 하고 render하지 않으면 frame loop가 도는 계기가 없어(정지 화면은 frame을 쓰지 않는 설계) **논리 상태는 복원됐지만 canvas에는 solved cube가 남습니다.** Restore를 최초 render 앞으로 두면 별도의 재렌더 호출도 필요 없습니다.
-- **쓰는 동안의 검증은 없습니다.** 검증은 `restore_apply`가 한 번에 합니다: 두 구간의 합이 `restore_buffer`에 선언한 개수와 일치하는지, 그리고 모든 packed의 형식(axis code, turns code, mask)입니다. TS와 같은 세 필드를 봅니다 — 무효 axis는 `CubeMove`가 표현할 수 없는 값이라 engine 쪽에서도 막아야 합니다. C++ 쪽 검증의 목적은 상태 보존이 아니라 **범위 밖 접근과 UB를 막는 것**이고, 의미 수준의 검증은 TS가 decode에서 이미 합니다.
-- `restore_apply()`가 하는 일: scramble 구간으로 `begin_scramble()`한 뒤 각 수를 cube에 적용하며 `step(+1)`, 이어 사용자 구간을 cube에 적용하며 `record()`합니다. 일반 timeline 연산의 재사용이라 복원 전용 API가 없고, cursor는 자연히 끝에 옵니다.
+- **쓰는 동안의 검증은 없습니다.** 검증은 `restore_apply`가 한 번에 합니다: 두 구간의 합이 `restore_buffer`에 선언한 개수와 일치하는지, 그리고 모든 packed의 형식(axis code, turns code, mask)입니다. **개수 비교는 `std::uint64_t`로 승격해서 합니다** — wasm32에서는 `size_t`가 32비트라 `scramble_count + user_count`가 wrap하면 합이 선언 개수와 같아 보이면서 한 구간의 loop가 buffer 밖을 읽습니다. TS와 같은 세 필드를 봅니다 — 무효 axis는 `CubeMove`가 표현할 수 없는 값이라 engine 쪽에서도 막아야 합니다. C++ 쪽 검증의 목적은 상태 보존이 아니라 **범위 밖 접근과 UB를 막는 것**이고, 의미 수준의 검증은 TS가 decode에서 이미 합니다.
+- `restore_apply()`가 하는 일: scramble 구간으로 `begin_scramble()`한 뒤 각 수를 cube에 적용하며 `step(Advance)`, 이어 사용자 구간을 cube에 적용하며 `record()`합니다. 일반 timeline 연산의 재사용이라 복원 전용 API가 없고, cursor는 자연히 끝에 옵니다.
 - `restore_apply`는 `restore_buffer` 없이 호출되면 거절합니다. 이건 상태 기계가 아니라 null 검사이고, 정상 앱 경로에 없으므로 전용 test 대신 ABI smoke test에서 함께 확인합니다.
 - **사용자 수를 따로 세우는 코드가 없습니다.** Phase 11이 저장 counter를 은퇴시키고 `cursor - scramble_end`로 파생하므로, timeline을 구성하고 나면 값이 이미 맞습니다. 복원된 세션의 count는 payload에 실린 사용자 구간의 길이입니다.
 - 초안은 이 자리에서 `user_move_count = 0`으로 초기화하며 "복원은 commit이 아니므로 0이 정의상 맞다"고 했지만, 파생 이후에는 0으로 만들려면 오히려 예외 규칙이 필요해집니다. 그리고 "그 큐브가 지금까지 몇 수를 거쳤는가"는 복원된 판에서도 정확한 값이라, 기록에 남기기에 0보다 낫습니다. 화면에 live counter가 없다는 점(HUD는 timer와 status뿐)은 그대로여서 표시를 구분할 규칙은 어느 쪽이든 필요 없습니다.
@@ -101,7 +101,7 @@ Redo tail을 싣지 않기로 했으므로 "원본과 똑같이 동작한다"고
 - URL은 fragment(`#s=...`)를 씁니다. Fragment는 서버로 전송되지 않고, GitHub Pages 배포에서 라우팅에도 걸리지 않습니다.
 - Load 시 fragment에 상태가 있으면 복원하고, 없으면 새 시작입니다. **Fragment를 발견하면 성공·실패와 무관하게 history API로 한 번 지웁니다** — decode나 `restore_apply()`가 거절했을 때 fragment가 남으면 reload할 때마다 같은 오류를 반복하게 되고, "reload는 언제나 새 시작"이라는 규칙과도 어긋납니다.
 - **복원은 commit으로 관찰되지 않습니다.** Commit 관찰은 `timeline_cursor` 변화인데(Phase 11) 복원은 `GameController` 부착 전에 끝나므로, 부착 시점의 기준값이 이미 복원된 cursor입니다. 완료 판정과 효과음(Phase 13)이 복원을 commit으로 오인할 창이 없습니다. 공유로 연 세션은 `idle`이므로 그 판을 완주해도 기록이 생기지 않습니다 — Phase 6의 완주 조건이 그대로 문지기입니다.
-- 공유 버튼은 현재 상태의 URL을 만들어 clipboard에 복사하고 `role="status"`로 알립니다. Ambient 관람 중의 버튼 press는 먼저 관람을 끝내므로(Phase 10) 공유되는 것은 언제나 실제 세션 상태이고, busy 중에는 비활성이라 재생 중간 상태가 실릴 일이 없습니다.
+- 공유 버튼은 현재 상태의 URL을 만들어 clipboard에 복사하고 `role="status"`로 알립니다. **URL은 `location.hash`를 바꾸지 않고 `new URL(location.href)`에 fragment를 붙여 분리 생성합니다** — 주소창을 건드리면 history entry와 scroll 부작용이 생기고, "내 화면의 fragment는 언제나 비어 있다"는 위 규칙과도 어긋납니다. Clipboard API가 없거나(비보안 컨텍스트) write promise가 거절되면 같은 `role="status"`로 복사 실패를 알립니다 — 공유는 부가 기능이라 실패가 앱 오류로 승격되지 않습니다. Ambient 관람 중의 버튼 press는 먼저 관람을 끝내므로(Phase 10) 공유되는 것은 언제나 실제 세션 상태이고, busy 중에는 비활성이라 재생 중간 상태가 실릴 일이 없습니다.
 
 ```text
 thorvg_rubiks_restore_buffer(total_count: uint32) -> uintptr   // 0 = 거절 (상한 초과 등)
@@ -113,7 +113,7 @@ thorvg_rubiks_restore_apply(scramble_count: uint32, user_count: uint32) -> int
 ### 1. 직렬화와 복원 ABI
 
 - [ ] Packed payload 인코딩/디코딩과 전체 선검증 (TS): 길이 상한, trailing bytes, version, packed 형식
-- [ ] `restore_buffer`/`restore_apply` 구현: 상한 검증과 buffer 확보, apply의 일괄 검증, `begin_scramble` + `step(+1)`/`record`로 timeline 구성과 cube 적용 (사용자 수는 timeline에서 파생되므로 따로 세울 counter가 없습니다)
+- [ ] `restore_buffer`/`restore_apply` 구현: 상한 검증과 buffer 확보, apply의 일괄 검증, `begin_scramble` + `step(Advance)`/`record`로 timeline 구성과 cube 적용 (사용자 수는 timeline에서 파생되므로 따로 세울 counter가 없습니다)
 - [ ] 왕복 test: 세션 직렬화 → 복원 → cube 상태 동치 + 적용된 두 구간 동치 (전체 기록 동치가 아님)
 - [ ] **통합 test: 부분 solve → 사용자 move로 scramble 절단 → 공유 → 복원** (정상 조작으로 닿는 경로이고, 절단된 scramble이 그대로 실려 복원되는지 확인)
 - [ ] Redo tail이 있는 세션을 공유하면 받는 쪽에 tail이 없고 undo/solve는 정상인 test

@@ -66,7 +66,7 @@
 - 관람 중 어떤 입력이든(canvas pointer down, face key, 아무 버튼) 먼저 `ambient_stop`을 호출해 복원한 뒤 원래 동작을 수행합니다. Pointer down 자체는 이탈로만 쓰고 gesture를 시작하지 않습니다(복원 직후의 첫 press는 버려지는 편이 예측 가능합니다).
 - **관람 toggle 버튼만은 예외로, ambient 중이면 stop하고 거기서 끝냅니다.** "stop 후 원래 동작"을 그대로 적용하면 toggle의 원래 동작이 `ambient_start`라서 관람이 꺼졌다가 곧바로 다시 켜집니다.
 - 관람 중 frame loop는 계속 돌아야 하므로 `advance`가 ambient 동안 true를 유지합니다.
-- `document.visibilitychange`에서 hidden이면 frame loop를 멈추고 visible이면 재개합니다. Engine은 시계를 읽지 않으므로 멈춤은 그저 `advance`가 호출되지 않는 것이고, 복귀 시 큰 dt는 기존 `kMaxFrameMs` clamp가 처리합니다.
+- `document.visibilitychange`에서 hidden이면 frame loop를 멈추고 visible이면 재개합니다. **이 listener와 멈춤·재개는 rAF를 실제로 소유한 `AppLifecycle`의 일이고**, GameController나 engine에 새 상태가 생기지 않습니다. Engine은 시계를 읽지 않으므로 멈춤은 그저 `advance`가 호출되지 않는 것이고, 재개 첫 frame의 elapsed는 기존 `startFrameLoop`가 `previousTimestamp`를 비우므로 0입니다 — 자리 비운 시간이 dt로 들어오지 않고, 혹시 모를 큰 dt도 `kMaxFrameMs` clamp가 받습니다.
 
 ### C ABI
 

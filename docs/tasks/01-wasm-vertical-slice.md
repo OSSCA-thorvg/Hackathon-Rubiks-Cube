@@ -430,6 +430,10 @@ CI에서의 Playwright browser 설치는 Phase 2 production and deployment에서
 - Native unit test, TypeScript unit test, WASM build, browser smoke test와 Vite production build가 모두 통과합니다.
 - Cube domain, 3D math, pointer interaction 코드는 이 phase에 포함되지 않습니다.
 
+## 개정 기록
+
+- **Resize failure semantics의 rollback을 fail-stop으로 개정합니다 ([Phase 6.5](./06.5-pre-enhancement-cleanup.md)의 결정).** 이 문서의 4(rollback 시도)를 없애고, target 교체 실패는 곧바로 unusable로 갑니다. 유일한 소비자인 web이 resize 실패를 언제나 전체 teardown으로 처리해 rollback의 성공 여부를 관찰하지 않고, rollback 분기는 production에서 도달할 수 없어 test 전용 virtual seam(`allocate_pixels`/`set_target` override)으로만 검증되고 있었습니다. 검증·allocation 선검사 실패 시 기존 target 보존(1~3)과 render 경로의 unusable 처리는 그대로입니다. Fault-injection seam과 그 전용 test는 rollback과 함께 제거됩니다.
+
 ## Verification commands
 
 ```bash

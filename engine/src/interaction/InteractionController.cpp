@@ -252,8 +252,9 @@ std::optional<graphics::ActiveRotation> InteractionController::active_rotation()
 
 bool InteractionController::is_busy() const noexcept
 {
-    return gesture_.has_value() || orbit_.has_value() || snap_.has_value() ||
-           committed_.has_value();
+    // An orbit is deliberately absent: it has no commit to protect, so a
+    // sweep in progress blocks neither moves nor, later, queued playback.
+    return gesture_.has_value() || snap_.has_value() || committed_.has_value();
 }
 
 void InteractionController::reset() noexcept

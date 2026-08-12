@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <limits>
+#include <optional>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -223,4 +224,39 @@ TEST_CASE("an orbit never turns a layer")
     controller.pointer_up();
     REQUIRE_FALSE(controller.take_committed_move());
     REQUIRE_FALSE(controller.active_rotation());
+}
+
+TEST_CASE("an orbit is not busy and coexists with a programmatic move")
+{
+    // A sweep has no commit to protect, so it must block neither a keyboard
+    // turn now nor queued playback later. Busy is about changing the cube.
+    const auto turn = rubiks::cube::moves::R(kSize);
+
+    InteractionController controller(kSize);
+    press_background(controller);
+    REQUIRE_FALSE(controller.is_busy());
+
+    REQUIRE(controller.start_move(turn));
+    REQUIRE(controller.is_busy());
+
+    // The snap animates while the orbit keeps sweeping underneath it.
+    const auto turning = controller.active_rotation();
+    REQUIRE(turning);
+    REQUIRE(turning->axis == turn.axis);
+    REQUIRE(turning->layers == turn.layers);
+
+    controller.pointer_move(corner_x() - quarter_turn_pixels(), corner_y());
+    const auto swept = controller.take_orbit_delta();
+    REQUIRE(swept);
+    REQUIRE(swept->yaw_degrees == Approx(90.0f));
+
+    // The move still commits exactly once, untouched by the sweep.
+    std::optional<rubiks::cube::CubeMove> committed;
+    for (int frame = 0; frame < 100 && !committed; ++frame) {
+        REQUIRE(controller.advance(kFrameMs));
+        committed = controller.take_committed_move();
+    }
+    REQUIRE(committed);
+    REQUIRE(*committed == turn);
+    REQUIRE_FALSE(controller.take_committed_move());
 }

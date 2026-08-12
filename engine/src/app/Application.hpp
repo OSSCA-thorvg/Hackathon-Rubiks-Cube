@@ -84,7 +84,7 @@ void pointer_cancel() noexcept;
  */
 [[nodiscard]] bool advance(double elapsed_ms) noexcept;
 
-/** Replaces the cube with a deterministic unsolved scramble. */
+/** Replaces the cube with the deterministic scramble for `seed`. */
 [[nodiscard]] bool scramble(std::uint32_t seed) noexcept;
 
 /** Restores the logical cube and clears the current solve session. */

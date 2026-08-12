@@ -258,9 +258,6 @@ bool scramble(std::uint32_t seed) noexcept
     interaction.reset();
     cube_state = cube::CubeState(kCubeSize);
     cube_state.apply(cube::make_scramble(kCubeSize, seed));
-    if (cube_state.is_solved()) {
-        cube_state.apply(cube::moves::R(kCubeSize));
-    }
     user_move_count = 0;
     return true;
 }

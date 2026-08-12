@@ -71,6 +71,7 @@ EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_pixel_byte_length() noexcept
  * Begins a pointer gesture. Coordinates are drawing-buffer pixels.
  *
  * Pressing the cube drags a layer, pressing elsewhere sweeps the viewpoint.
+ * A snap still animating is confirmed rather than allowed to block the press.
  *
  * @return one when a gesture began; zero before initialization, for
  *         non-finite coordinates, and while another gesture is running.

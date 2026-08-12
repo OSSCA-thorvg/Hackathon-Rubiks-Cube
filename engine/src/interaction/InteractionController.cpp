@@ -25,6 +25,24 @@ constexpr float kDegreesPerQuarterTurn = 90.0f;
            (kOrbitQuarterTurnFraction * viewport.width);
 }
 
+/**
+ * The angle a release settles on, in degrees.
+ *
+ * The boundary between two targets is `kCommitDegrees` past the lower one
+ * rather than halfway, uniformly, so that under-rotating still turns and the
+ * rule reads the same at every multiple. Nothing but the angle is consulted:
+ * no time, no speed, no state the gesture had to carry.
+ */
+[[nodiscard]] float snap_target(float angle_degrees) noexcept
+{
+    const float magnitude = std::abs(angle_degrees);
+    const float biased =
+        magnitude + 0.5f * kDegreesPerQuarterTurn - kCommitDegrees;
+    const float turns = std::round(biased / kDegreesPerQuarterTurn);
+
+    return std::copysign(turns * kDegreesPerQuarterTurn, angle_degrees);
+}
+
 [[nodiscard]] double snap_duration(float remaining_degrees) noexcept
 {
     const float magnitude = std::abs(remaining_degrees);
@@ -157,13 +175,19 @@ void InteractionController::pointer_up() noexcept
     }
 
     const float angle = gesture_->angle_degrees;
-    const float target =
-        std::round(angle / kDegreesPerQuarterTurn) * kDegreesPerQuarterTurn;
+    const float target = snap_target(angle);
 
     snap_ = Snap{gesture_->lock->axis,
                  cube::layer(layer_of(gesture_->pick, gesture_->lock->axis)),
                  angle, target, 0.0, snap_duration(target - angle)};
     gesture_.reset();
+}
+
+std::optional<cube::CubeMove> InteractionController::finish_snap() noexcept
+{
+    const auto move = settled_move();
+    snap_.reset();
+    return move;
 }
 
 void InteractionController::cancel() noexcept
@@ -182,11 +206,7 @@ bool InteractionController::advance(double elapsed_ms) noexcept
     snap_->elapsed_ms += sanitized_delta(elapsed_ms);
     if (snap_->elapsed_ms < snap_->duration_ms) return true;
 
-    const auto quarter_turns = static_cast<int>(
-        std::lround(snap_->target_degrees / kDegreesPerQuarterTurn));
-    if (quarter_turns != 0) {
-        committed_ = cube::CubeMove{snap_->axis, snap_->layers, quarter_turns};
-    }
+    if (const auto move = settled_move()) committed_ = *move;
     snap_.reset();
 
     // The frame that lands on the quarter turn still has to be drawn.
@@ -228,6 +248,22 @@ float InteractionController::snap_angle() const noexcept
 
     return snap_->start_degrees +
            (snap_->target_degrees - snap_->start_degrees) * eased;
+}
+
+std::optional<cube::CubeMove> InteractionController::settled_move()
+    const noexcept
+{
+    if (!snap_) return std::nullopt;
+
+    const auto quarter_turns = static_cast<int>(
+        std::lround(snap_->target_degrees / kDegreesPerQuarterTurn));
+
+    // A drag that came the whole way round leaves the cube exactly as it was.
+    // The animation still runs to 360, because that is what the finger did,
+    // but there is no move to report at the end of it.
+    if (quarter_turns % 4 == 0) return std::nullopt;
+
+    return cube::CubeMove{snap_->axis, snap_->layers, quarter_turns};
 }
 
 std::optional<graphics::ActiveRotation> InteractionController::active_rotation()

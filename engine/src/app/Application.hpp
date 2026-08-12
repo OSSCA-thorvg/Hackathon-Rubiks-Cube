@@ -55,9 +55,12 @@ namespace rubiks::app {
  * viewpoint around it. Converting CSS pixels and the device pixel ratio is the
  * caller's job, the same split the resize path uses.
  *
+ * A snap left running by the previous release is confirmed here rather than
+ * blocking the press, so drags in quick succession all reach the cube.
+ *
  * @return true when a gesture began. False only when none could: before
- *         initialization, for non-finite coordinates, and while another
- *         gesture or a snap is already running.
+ *         initialization, in net-only view, for non-finite coordinates, and
+ *         while another gesture is already running.
  */
 [[nodiscard]] bool pointer_down(float x, float y) noexcept;
 

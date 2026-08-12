@@ -51,6 +51,47 @@ const NET_AFTER_R = [
   YELLOW, YELLOW, BLUE,
 ];
 
+// The same net after a second R. Each column the turn moves is one solid
+// color in the grid above, so the cycle can be read straight off it: the top
+// takes yellow from the front, the front blue from the bottom, the bottom
+// white from the back, and the back green from the top.
+const NET_AFTER_R2 = [
+  // Up
+  WHITE, WHITE, YELLOW,
+  WHITE, WHITE, YELLOW,
+  WHITE, WHITE, YELLOW,
+  // Left, untouched
+  ORANGE, ORANGE, ORANGE,
+  ORANGE, ORANGE, ORANGE,
+  ORANGE, ORANGE, ORANGE,
+  // Front
+  GREEN, GREEN, BLUE,
+  GREEN, GREEN, BLUE,
+  GREEN, GREEN, BLUE,
+  // Right, the turning face itself
+  RED, RED, RED,
+  RED, RED, RED,
+  RED, RED, RED,
+  // Back
+  GREEN, BLUE, BLUE,
+  GREEN, BLUE, BLUE,
+  GREEN, BLUE, BLUE,
+  // Down
+  YELLOW, YELLOW, WHITE,
+  YELLOW, YELLOW, WHITE,
+  YELLOW, YELLOW, WHITE,
+];
+
+/**
+ * A drag that commits one turn without going near a boundary.
+ *
+ * Half a quarter turn: well past the threshold that commits, and well short
+ * of the one that would commit two. e2e goes through CSS sizes and rounded
+ * pointer coordinates, so the boundaries themselves are pinned by the native
+ * tests and left alone here.
+ */
+const SHORT_TURN = 0.5;
+
 /** A viewport tall enough that the canvas is comfortably large to aim at. */
 const VIEWPORT = { width: 1200, height: 1200 };
 
@@ -127,6 +168,46 @@ test('dragging the right column turns the cube and the net follows', async ({
   expect(pageErrors).toEqual([]);
 });
 
+test('a short drag past the threshold turns the cube', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+
+  const atRest = await probeCanvas(page);
+
+  // Nothing like a full quarter turn of travel, but the release settles on
+  // one all the same: carrying the face past the threshold is what commits.
+  const grab = await grabRightColumn(page, atRest);
+  await page.mouse.move(grab.x, grab.y - dragFor(atRest, SHORT_TURN), {
+    steps: 8,
+  });
+  await page.mouse.up();
+
+  await expect.poll(async () => (await probeCanvas(page)).net).toEqual(
+    NET_AFTER_R,
+  );
+});
+
+test('two drags in quick succession both turn the cube', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+
+  const atRest = await probeCanvas(page);
+
+  // The second press arrives while the first release is still snapping. That
+  // press used to be refused, and with it the whole stroke that followed.
+  for (let turn = 0; turn < 2; turn += 1) {
+    const grab = await grabRightColumn(page, atRest);
+    await page.mouse.move(grab.x, grab.y - dragFor(atRest, SHORT_TURN), {
+      steps: 4,
+    });
+    await page.mouse.up();
+  }
+
+  await expect.poll(async () => (await probeCanvas(page)).net).toEqual(
+    NET_AFTER_R2,
+  );
+});
+
 test('a drag too short to commit springs back', async ({ page }) => {
   await page.goto('./');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
@@ -134,8 +215,8 @@ test('a drag too short to commit springs back', async ({ page }) => {
   const atRest = await probeCanvas(page);
 
   const grab = await grabRightColumn(page, atRest);
-  // Past the dead zone, but not far enough to round up to a quarter turn.
-  await page.mouse.move(grab.x, grab.y - dragFor(atRest, 0.3), { steps: 8 });
+  // Past the dead zone, but nowhere near carrying the face far enough round.
+  await page.mouse.move(grab.x, grab.y - dragFor(atRest, 0.15), { steps: 8 });
 
   expect(sameGrid((await probeCanvas(page)).cubeGrid, atRest.cubeGrid)).toBe(
     false,

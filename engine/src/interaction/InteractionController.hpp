@@ -31,6 +31,19 @@ inline constexpr double kSnapMsPerQuarterTurn = 200.0;
 inline constexpr double kMinSnapMs = 60.0;
 
 /**
+ * How far past a quarter turn a release commits the next one.
+ *
+ * The boundary between two snap targets sits here rather than halfway, and at
+ * the same place between every pair, so "carry a face past this and it turns"
+ * reads the same whichever multiple the finger is near. At the sensitivity
+ * above this is a sixth of the viewport width, about a thumb flick.
+ *
+ * Fixed rather than tunable: the known-answer tests straddle this value, so
+ * moving it means recomputing them, and both belong in one change.
+ */
+inline constexpr float kCommitDegrees = 30.0f;
+
+/**
  * Upper bound on one injected frame delta.
  *
  * A tab returning from the background reports a delta covering the whole time
@@ -48,11 +61,11 @@ struct OrbitDelta {
 /**
  * Turns pointer events into layer turns and viewpoint changes.
  *
- * Pressing the cube drags a layer at a continuous angle, which snaps to the
- * nearest quarter turn on release; pressing anywhere else sweeps the
- * viewpoint, which has nothing to snap to and commits nothing. Only a genuine
- * release of a layer drag can reach the snap, so an interrupted gesture can
- * never change the cube.
+ * Pressing the cube drags a layer at a continuous angle, which snaps on
+ * release to the last quarter turn the drag carried it `kCommitDegrees` past;
+ * pressing anywhere else sweeps the viewpoint, which has nothing to snap to
+ * and commits nothing. Only a genuine release of a layer drag can reach the
+ * snap, so an interrupted gesture can never change the cube.
  *
  * The controller owns neither the CubeState nor the camera. A finished snap
  * hands back a CubeMove and an orbit hands back angles, which keeps every
@@ -92,6 +105,20 @@ public:
 
     /** Releases the gesture, starting the snap when an axis was locked. */
     void pointer_up() noexcept;
+
+    /**
+     * Ends a snap at its target, handing back the move it had decided.
+     *
+     * For a press arriving while the previous release is still animating: the
+     * turn is already decided, so it is applied at once rather than blocking
+     * the new gesture. The move is returned rather than stored, so the caller
+     * applies it before the next gesture starts and no ordering question
+     * between the two can arise.
+     *
+     * @return the settled move, or nothing when no snap was running or its
+     *         target leaves the cube unchanged.
+     */
+    [[nodiscard]] std::optional<cube::CubeMove> finish_snap() noexcept;
 
     /**
      * Abandons a drag without changing the cube.
@@ -157,7 +184,7 @@ private:
         math::Vec2 previous;
     };
 
-    /** A release running down to the nearest quarter turn. */
+    /** A release running down to the quarter turn it settled on. */
     struct Snap {
         cube::Axis axis;
         cube::LayerMask layers;
@@ -168,6 +195,15 @@ private:
     };
 
     [[nodiscard]] float snap_angle() const noexcept;
+
+    /**
+     * The move the running snap has decided on, if it changes the cube.
+     *
+     * Whole circles are dropped here: a drag long enough to come back round
+     * animates all the way, but a turn of four is not a turn.
+     */
+    [[nodiscard]] std::optional<cube::CubeMove> settled_move() const noexcept;
+
     void accumulate_orbit(float yaw_degrees, float pitch_degrees) noexcept;
 
     int size_;

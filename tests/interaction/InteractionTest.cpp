@@ -31,6 +31,16 @@ constexpr int kSize = 3;
 constexpr std::uint32_t kCanvas = 1024;
 constexpr double kFrameMs = 16.0;
 
+/**
+ * An unmistakable one quarter turn of drag.
+ *
+ * The middle of the slot that commits one turn, which runs from
+ * kCommitDegrees to a quarter turn past it. Tests that care about anything
+ * other than the boundary use this, so that moving the boundary later cannot
+ * quietly change what they are asking about.
+ */
+constexpr float kOneTurnDrag = 75.0f;
+
 Rect cube_rect()
 {
     return rubiks::graphics::layout(kCanvas, kCanvas).cube;
@@ -172,7 +182,7 @@ TEST_CASE("dragging the front face's right column upward performs R")
 
     InteractionController controller(kSize);
     press(controller, grab);
-    drag(controller, grab, Vec2{0.0f, -1.0f}, 120.0f);
+    drag(controller, grab, Vec2{0.0f, -1.0f}, kOneTurnDrag);
 
     const auto turning = controller.active_rotation();
     REQUIRE(turning);
@@ -198,12 +208,12 @@ TEST_CASE("every grabbable face turns both ways about both of its axes")
         // it can turn about.
         const auto middle = rubiks::cube::layer(1);
 
-        const Settled forward = perform(handle.grab, direction, 120.0f);
+        const Settled forward = perform(handle.grab, direction, kOneTurnDrag);
         REQUIRE(forward.move);
         REQUIRE(*forward.move == CubeMove{handle.axis, middle, 1});
 
-        const Settled backward =
-            perform(handle.grab, Vec2{-direction.x, -direction.y}, 120.0f);
+        const Settled backward = perform(
+            handle.grab, Vec2{-direction.x, -direction.y}, kOneTurnDrag);
         REQUIRE(backward.move);
         REQUIRE(*backward.move == CubeMove{handle.axis, middle, -1});
     }
@@ -294,11 +304,16 @@ TEST_CASE("a second pointer during a gesture is ignored")
 
 TEST_CASE("input during the snap is ignored")
 {
+    // A controller-level contract, and still the right one: a snap owns the
+    // cube until something ends it. Confirming a running snap so that a fast
+    // second drag is not lost belongs one layer up, where Application calls
+    // finish_snap() before this pointer_down() ever runs.
+
     const Vec2 direction = direction_for(Axis::X, kFrontCenter);
 
     InteractionController controller(kSize);
     press(controller, kFrontCenter);
-    drag(controller, kFrontCenter, direction, 120.0f);
+    drag(controller, kFrontCenter, direction, kOneTurnDrag);
     controller.pointer_up();
 
     const Vec2 at = screen_of(kFrontCenter);
@@ -389,7 +404,7 @@ TEST_CASE("cancelling a drag leaves the cube alone")
 
     InteractionController controller(kSize);
     press(controller, kFrontCenter);
-    drag(controller, kFrontCenter, direction, 120.0f);
+    drag(controller, kFrontCenter, direction, kOneTurnDrag);
     REQUIRE(controller.active_rotation());
 
     controller.cancel();
@@ -407,7 +422,7 @@ TEST_CASE("cancelling during the snap does not stop it")
 
     InteractionController controller(kSize);
     press(controller, kFrontCenter);
-    drag(controller, kFrontCenter, direction, 120.0f);
+    drag(controller, kFrontCenter, direction, kOneTurnDrag);
     controller.pointer_up();
 
     // The release already said what the user wanted, so a late cancel from a
@@ -421,26 +436,30 @@ TEST_CASE("cancelling during the snap does not stop it")
     REQUIRE(settled.move->quarter_turns == 1);
 }
 
-TEST_CASE("a release snaps to the nearest quarter turn")
+TEST_CASE("a release snaps to the last quarter turn it was carried past")
 {
     struct Case {
         float dragged;
         int quarter_turns;
     };
 
-    // The examples from the design document, both directions, and both sides
-    // of the halfway point. A drag cannot land on exactly 45 degrees -- the
-    // angle comes from a pixel difference -- so the rule is pinned by the
-    // pair straddling it rather than by the unreachable tie itself.
-    constexpr std::array<Case, 9> kCases{{
-        {37.0f, 0},
-        {67.0f, 1},
+    // Pairs straddling the first two boundaries, at kCommitDegrees and one
+    // quarter turn past it, in both directions: the boundary itself is never
+    // dragged to exactly, since the angle comes from a pixel difference, so
+    // the rule is pinned by the pair around it. The rest are drags well inside
+    // a slot, including one -- 37 degrees -- that the old halfway rule threw
+    // away and this one commits.
+    constexpr std::array<Case, 11> kCases{{
+        {29.0f, 0},
+        {31.0f, 1},
+        {119.0f, 1},
+        {121.0f, 2},
+        {-29.0f, 0},
+        {-31.0f, -1},
+        {-119.0f, -1},
+        {-121.0f, -2},
+        {37.0f, 1},
         {143.0f, 2},
-        {-37.0f, 0},
-        {-67.0f, -1},
-        {-143.0f, -2},
-        {44.5f, 0},
-        {45.5f, 1},
         {270.0f, 3},
     }};
 
@@ -461,6 +480,82 @@ TEST_CASE("a release snaps to the nearest quarter turn")
         REQUIRE(settled.move);
         REQUIRE(settled.move->quarter_turns == sample.quarter_turns);
     }
+}
+
+TEST_CASE("a drag that comes the whole way round commits nothing")
+{
+    const Vec2 direction = direction_for(Axis::X, kFrontCenter);
+
+    InteractionController controller(kSize);
+    press(controller, kFrontCenter);
+
+    // Far enough that the target is a full circle. The layer is back where it
+    // started, so however far the finger travelled there is no turn to report.
+    drag(controller, kFrontCenter, direction, 350.0f);
+    controller.pointer_up();
+
+    const auto snapping = controller.active_rotation();
+    REQUIRE(snapping);
+    REQUIRE(snapping->angle_degrees == Approx(350.0f).margin(1.0f));
+
+    const Settled settled = settle(controller);
+    REQUIRE(settled.commits == 0);
+    REQUIRE_FALSE(settled.move);
+    REQUIRE_FALSE(controller.active_rotation());
+}
+
+TEST_CASE("finishing a snap early hands back the move it decided")
+{
+    const Vec2 direction = direction_for(Axis::X, kFrontCenter);
+
+    InteractionController controller(kSize);
+    press(controller, kFrontCenter);
+    drag(controller, kFrontCenter, direction, kOneTurnDrag);
+    controller.pointer_up();
+    REQUIRE(controller.advance(kFrameMs));
+
+    const auto finished = controller.finish_snap();
+    REQUIRE(finished);
+    REQUIRE(*finished == CubeMove{Axis::X, rubiks::cube::layer(1), 1});
+
+    // Handed back rather than kept: the snap is over, nothing is left to draw,
+    // and the ordinary commit path has nothing to hand out a second time.
+    REQUIRE_FALSE(controller.active_rotation());
+    REQUIRE_FALSE(controller.advance(kFrameMs));
+    REQUIRE_FALSE(controller.take_committed_move());
+    REQUIRE_FALSE(controller.is_busy());
+}
+
+TEST_CASE("finishing a snap that settled on no turn hands back nothing")
+{
+    const Vec2 direction = direction_for(Axis::X, kFrontCenter);
+
+    InteractionController controller(kSize);
+    press(controller, kFrontCenter);
+
+    // Short of kCommitDegrees, so the release was already going to spring
+    // back. Confirming it early must not invent a turn out of that.
+    drag(controller, kFrontCenter, direction, 20.0f);
+    controller.pointer_up();
+
+    REQUIRE_FALSE(controller.finish_snap());
+    REQUIRE_FALSE(controller.active_rotation());
+    REQUIRE_FALSE(controller.advance(kFrameMs));
+}
+
+TEST_CASE("finishing with no snap running hands back nothing")
+{
+    const Vec2 direction = direction_for(Axis::X, kFrontCenter);
+
+    InteractionController controller(kSize);
+    REQUIRE_FALSE(controller.finish_snap());
+
+    // A drag still under the finger has decided nothing yet, so there is
+    // nothing to confirm either.
+    press(controller, kFrontCenter);
+    drag(controller, kFrontCenter, direction, kOneTurnDrag);
+    REQUIRE_FALSE(controller.finish_snap());
+    REQUIRE(controller.active_rotation());
 }
 
 TEST_CASE("a committed gesture agrees with the named move")
@@ -490,16 +585,19 @@ TEST_CASE("the snap runs for a bounded number of frames and commits once")
     // While a finger is down there is always another frame to draw.
     REQUIRE(controller.advance(kFrameMs));
 
-    drag(controller, kFrontCenter, direction, 120.0f);
+    drag(controller, kFrontCenter, direction, kOneTurnDrag);
     controller.pointer_up();
 
     const Settled settled = settle(controller);
     REQUIRE(settled.commits == 1);
 
-    // Snapping never travels more than a half quarter turn, so the animation
-    // is bounded without needing a cap on its duration.
-    const auto longest = static_cast<int>(
-        kSnapMsPerQuarterTurn * 0.5 / kFrameMs) + 2;
+    // A release is at most kCommitDegrees short of its target and at most a
+    // quarter turn less kCommitDegrees beyond it, so the animation is bounded
+    // without needing a cap on its duration.
+    const auto longest =
+        static_cast<int>(kSnapMsPerQuarterTurn * (90.0 - kCommitDegrees) /
+                         90.0 / kFrameMs) +
+        2;
     REQUIRE(settled.frames <= longest);
     REQUIRE(settled.frames >= 1);
 
@@ -515,7 +613,7 @@ TEST_CASE("releasing alone commits nothing")
 
     InteractionController controller(kSize);
     press(controller, kFrontCenter);
-    drag(controller, kFrontCenter, direction, 120.0f);
+    drag(controller, kFrontCenter, direction, kOneTurnDrag);
     controller.pointer_up();
 
     // There is one commit path, the frame the animation ends on, so letting
@@ -533,7 +631,7 @@ TEST_CASE("a snap with nothing left to travel ends on the next frame")
 
     InteractionController controller(kSize);
     press(controller, kFrontCenter);
-    drag(controller, kFrontCenter, direction, 120.0f);
+    drag(controller, kFrontCenter, direction, kOneTurnDrag);
 
     // Back to where the finger went down: the angle is exactly zero again,
     // which is the one case where the snap has no distance to cover.
@@ -558,7 +656,7 @@ TEST_CASE("odd elapsed times cannot break the animation")
 
     InteractionController controller(kSize);
     press(controller, kFrontCenter);
-    drag(controller, kFrontCenter, direction, 120.0f);
+    drag(controller, kFrontCenter, direction, kOneTurnDrag);
     controller.pointer_up();
 
     const auto start = controller.active_rotation();
@@ -593,7 +691,7 @@ TEST_CASE("non-finite pointer coordinates are ignored")
         controller.pointer_down(nan, nan, cube_camera(), cube_rect()));
 
     press(controller, kFrontCenter);
-    drag(controller, kFrontCenter, direction, 120.0f);
+    drag(controller, kFrontCenter, direction, kOneTurnDrag);
 
     const auto before = controller.active_rotation();
     REQUIRE(before);
@@ -610,7 +708,7 @@ TEST_CASE("reset returns the controller to rest")
 
     InteractionController controller(kSize);
     press(controller, kFrontCenter);
-    drag(controller, kFrontCenter, direction, 120.0f);
+    drag(controller, kFrontCenter, direction, kOneTurnDrag);
     controller.pointer_up();
     REQUIRE(controller.active_rotation());
 
@@ -620,3 +718,4 @@ TEST_CASE("reset returns the controller to rest")
     REQUIRE_FALSE(controller.advance(kFrameMs));
     REQUIRE_FALSE(controller.take_committed_move());
 }
+

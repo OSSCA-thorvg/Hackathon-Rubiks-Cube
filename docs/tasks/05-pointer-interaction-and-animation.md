@@ -324,6 +324,9 @@ Drag 좌표는 contract의 cube viewport 비율에서 유도하므로, camera나
 ## 개정 기록
 
 - **Snap 목표의 "가장 가까운 90° 배수" 규칙을 개정합니다 ([Phase 7](./07-interaction-robustness.md)의 결정).** 경계가 배수 사이의 중간(45°)이 아니라 낮은 배수에서 `kCommitDegrees`(30° 내외) 지난 지점으로 옮겨지고, 모든 배수에서 같습니다. 짧은 flick이 45°를 못 채워 제자리로 돌아가는 문제가 계기이며, 첫 칸에만 문턱을 두는 대신 "면 하나를 넘기면 다음 칸"을 어느 칸에서나 참이 되게 해 덜 돌려도 동작하는 방향으로 일관되게 기울였습니다. 이 문서의 계약 중 재고정 대상: snap known-answer 표(`37° → 0`, `±45°` 동점 쌍), "명백한 한 칸"으로 test 전반이 쓰는 canonical 120° drag 상수(정확히 새 경계에 얹힘), "남은 각도 ≤ 45°" 유도 성질과 그 animation test(상한이 90° − `kCommitDegrees`로 완화), "작은 drag snap-back" e2e의 각도 전제. Duration이 남은 각도에 비례해 유계라는 성질 자체는 유지됩니다.
+  - 반영 완료: `kCommitDegrees`는 30°로 확정되었고, known-answer 표는 30°와 120°를
+    straddle하는 쌍으로 재고정되었으며, canonical drag 상수는 한 칸 구간의 중앙인
+    75°로 옮겼습니다. Snap-back e2e는 27°에서 13.5°로 내렸습니다.
 
 ## Verification commands
 

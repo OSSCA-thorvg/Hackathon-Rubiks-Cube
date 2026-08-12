@@ -1,5 +1,6 @@
 #include "app/Application.hpp"
 
+#include <cmath>
 #include <memory>
 
 #include <thorvg.h>
@@ -121,6 +122,19 @@ void adopt_surface(std::uint32_t width, std::uint32_t height) noexcept
 }
 
 /**
+ * The one place a settled turn becomes a change to the logical cube.
+ *
+ * Two paths reach it -- a snap ending on its own frame, and one confirmed
+ * early by the next press -- and later phases hang the history, the move log
+ * and the sound off this function, so neither path can be left out of them.
+ */
+void commit_move(const cube::CubeMove& move) noexcept
+{
+    state->cube_state.apply(move);
+    ++state->user_move_count;
+}
+
+/**
  * Applies whatever sweep the controller has accumulated.
  *
  * Called from every point where a camera is about to be used, so the camera
@@ -184,6 +198,18 @@ bool pointer_down(float x, float y) noexcept
     if (!state) return false;
     if (state->view_mode == graphics::ViewMode::Net) return false;
 
+    // Everything that could reject the press comes first. A press that starts
+    // nothing must not change anything either, and confirming the snap below
+    // is a change.
+    if (!std::isfinite(x) || !std::isfinite(y)) return false;
+
+    // A snap still animating already knows its turn, so it is applied here
+    // rather than made to block the new gesture: that is what kept fast
+    // consecutive drags from losing every other stroke.
+    if (const auto move = state->interaction.finish_snap()) {
+        commit_move(*move);
+    }
+
     // Before the camera is captured, never after: a press arriving between
     // two frames must aim at the viewpoint the last one produced.
     drain_orbit();
@@ -221,10 +247,8 @@ bool advance(double elapsed_ms) noexcept
 
     drain_orbit();
 
-    // The one place a gesture becomes a change to the logical cube.
     if (const auto move = state->interaction.take_committed_move()) {
-        state->cube_state.apply(*move);
-        ++state->user_move_count;
+        commit_move(*move);
     }
 
     return more_frames;

@@ -77,7 +77,7 @@ Phase 6까지로 최소 gameplay flow가 완성되었습니다. 이후 phase는 
 1차(완료): scramble의 solved 검사와 R 덧붙임 제거 — 축 제약으로 identity가 구조적으로 불가능해 도달하지 않는 분기였습니다 — 와 `is_busy()`의 orbit 제외 — busy가 막는 대상은 cube를 바꾸는 입력인데 orbit은 commit이 없습니다. 두 건 모두 Phase 9의 결정을 앞당긴 것이고, 고정하는 test가 없음을 확인했습니다.
 2차: 이후 phase가 상태를 얹기 전에 그 자리를 안전하게 만듭니다. Application의 흩어진 전역을 `unique_ptr<ApplicationState>` 하나로 묶어 shutdown의 수동 초기화 목록을 없애고, 유일한 소비자(web)가 fail-stop으로만 쓰는 renderer resize rollback을 test 전용 fault seam과 함께 제거하고(Phase 1 계약 개정), timer의 스크린 리더 소음(`aria-live`)과 busy 주석을 정리합니다.
 
-## [ ] Phase 7: [Interaction robustness](./07-interaction-robustness.md)
+## [x] Phase 7: [Interaction robustness](./07-interaction-robustness.md)
 
 빠른 연속 drag에서 회전 입력이 사라지는 문제를 해결합니다.
 Snap animation이 도는 동안 새 gesture가 시작되지 못해 drag 전체가 무시되는 경로와, 짧고 빠른 flick이 90°의 절반을 넘기지 못해 제자리로 snap되는 두 가지 원인을 함께 다룹니다.

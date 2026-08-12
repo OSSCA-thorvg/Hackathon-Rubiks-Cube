@@ -2,7 +2,7 @@
 
 ## Status
 
-`Not started`
+`Completed`
 
 ## Objective
 
@@ -86,30 +86,30 @@ target = round((|angle| + 45° − kCommitDegrees) / 90°) × sign(angle)
 
 ### 1. Snap 즉시 확정
 
-- [ ] `finish_snap()` 구현: 목표 quarter turn 산출, `snap_` 해제, move 반환 (목표 0이면 `nullopt`)
-- [ ] `commit_move(move)` 도입과 `advance()`의 기존 commit 경로를 이 함수로 이관
-- [ ] `Application::pointer_down()`에서 확정 move를 `commit_move`로 적용
-- [ ] Snap 중 두 번째 drag 시작 → 두 move가 모두 정확히 한 번씩 적용되는 test
-- [ ] 확정된 상태 위에서 새 gesture의 pick이 올바른 cell을 잡는 test
-- [ ] Snap-back(목표 0) 확정이 `CubeState`를 바꾸지 않는 test
-- [ ] 빈 공간 press로 orbit을 시작할 때도 확정이 일어나는 test
-- [ ] Non-finite 좌표의 pointer down이 snap을 확정하지 않는 test (좌표 검증이 확정보다 앞)
-- [ ] **기존 controller test의 유지 확인**: "input during the snap is ignored"는 controller 수준 계약이라 그대로 유효합니다 — `finish_snap()`은 Application이 snap을 먼저 비우고 나서 `pointer_down`을 부르는 상위 계층의 일이므로, 이 test는 교체 대상이 아니라 그 분업의 근거로 유지하고 의도를 주석으로 명시합니다
+- [x] `finish_snap()` 구현: 목표 quarter turn 산출, `snap_` 해제, move 반환 (목표 0이면 `nullopt`)
+- [x] `commit_move(move)` 도입과 `advance()`의 기존 commit 경로를 이 함수로 이관
+- [x] `Application::pointer_down()`에서 확정 move를 `commit_move`로 적용
+- [x] Snap 중 두 번째 drag 시작 → 두 move가 모두 정확히 한 번씩 적용되는 test
+- [x] 확정된 상태 위에서 새 gesture의 pick이 올바른 cell을 잡는 test
+- [x] Snap-back(목표 0) 확정이 `CubeState`를 바꾸지 않는 test
+- [x] 빈 공간 press로 orbit을 시작할 때도 확정이 일어나는 test
+- [x] Non-finite 좌표의 pointer down이 snap을 확정하지 않는 test (좌표 검증이 확정보다 앞)
+- [x] **기존 controller test의 유지 확인**: "input during the snap is ignored"는 controller 수준 계약이라 그대로 유효합니다 — `finish_snap()`은 Application이 snap을 먼저 비우고 나서 `pointer_down`을 부르는 상위 계층의 일이므로, 이 test는 교체 대상이 아니라 그 분업의 근거로 유지하고 의도를 주석으로 명시합니다
 
 ### 2. Snap 경계
 
-- [ ] `kCommitDegrees` 상수와 경계 이동 규칙 구현 — 분기 없는 편향 식 하나
-- [ ] 경계 known-answer test: 첫 경계(`kCommitDegrees`)와 둘째 경계(90° + `kCommitDegrees`)를 straddle하는 쌍, 음의 방향 대칭
-- [ ] **기존 "nearest quarter turn" known-answer 표의 교체**: `37° → 0`과 `±45°` 동점 straddle 쌍은 새 규칙에서 결과가 바뀌고, `143° → 2`와 `270° → 3`은 그대로입니다. 표를 새 경계의 straddle 쌍으로 재고정하고 test 이름의 "nearest"도 규칙 서술로 바꿉니다
-- [ ] **Canonical drag 상수 이동**: test 전반이 "명백한 한 칸"으로 쓰는 120°가 정확히 새 경계에 얹히므로(`round(1.5)` 동점이 부동소수 노이즈에 걸림), 한 칸 구간의 중앙(예: 75°)으로 일괄 이동
-- [ ] Snap duration 유계 test 갱신: 남은 각도의 유도 상한이 45°에서 90° − `kCommitDegrees`로 커진 것을 반영
-- [ ] Commit의 mod 4 폐기: 360° 목표로 끝난 drag가 상태도 count도 바꾸지 않는 test
+- [x] `kCommitDegrees` 상수와 경계 이동 규칙 구현 — 분기 없는 편향 식 하나
+- [x] 경계 known-answer test: 첫 경계(`kCommitDegrees`)와 둘째 경계(90° + `kCommitDegrees`)를 straddle하는 쌍, 음의 방향 대칭
+- [x] **기존 "nearest quarter turn" known-answer 표의 교체**: `37° → 0`과 `±45°` 동점 straddle 쌍은 새 규칙에서 결과가 바뀌고, `143° → 2`와 `270° → 3`은 그대로입니다. 표를 새 경계의 straddle 쌍으로 재고정하고 test 이름의 "nearest"도 규칙 서술로 바꿉니다
+- [x] **Canonical drag 상수 이동**: test 전반이 "명백한 한 칸"으로 쓰는 120°가 정확히 새 경계에 얹히므로(`round(1.5)` 동점이 부동소수 노이즈에 걸림), 한 칸 구간의 중앙(예: 75°)으로 일괄 이동
+- [x] Snap duration 유계 test 갱신: 남은 각도의 유도 상한이 45°에서 90° − `kCommitDegrees`로 커진 것을 반영
+- [x] Commit의 mod 4 폐기: 360° 목표로 끝난 drag가 상태도 count도 바꾸지 않는 test
 
 ### 3. Verification
 
-- [ ] e2e: 빠른 연속 drag 두 번이 모두 반영되는지
-- [ ] e2e: 짧은 drag가 한 칸 도는지 — 각도는 경계에 붙이지 않고 여유를 둔 값(예: 45°)을 씁니다. e2e는 CSS 크기와 pointer 좌표 반올림을 거치므로 경계 ±1° 판정은 환경에 따라 뒤집힙니다. 경계 자체는 native known-answer test가 고정합니다
-- [ ] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
+- [x] e2e: 빠른 연속 drag 두 번이 모두 반영되는지
+- [x] e2e: 짧은 drag가 한 칸 도는지 — 각도는 경계에 붙이지 않고 여유를 둔 값(예: 45°)을 씁니다. e2e는 CSS 크기와 pointer 좌표 반올림을 거치므로 경계 ±1° 판정은 환경에 따라 뒤집힙니다. 경계 자체는 native known-answer test가 고정합니다
+- [x] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
 
 ## Acceptance criteria
 
@@ -141,8 +141,38 @@ npm --prefix web run build
 
 ## Completion
 
-모든 acceptance criteria와 verification command를 통과한 뒤 다음 작업을 수행합니다.
+모든 acceptance criteria와 verification command를 통과했습니다. Native 13/13, WASM
+build, TypeScript unit 81/81, e2e 15/15(신규 2건 포함), production build.
 
-- 이 문서의 status를 `Completed`로 변경합니다.
-- 상위 [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md)의 Phase 7을 완료 처리합니다.
-- 실제 구현과 차이가 생긴 결정을 이 문서에 기록합니다.
+### 구현에서 달라진 것
+
+- **Mod 4 폐기는 commit 단계가 아니라 `settled_move()` 한 곳에 있습니다.** 계획은
+  "commit 단계에서만 폐기"였으나, 확정 경로가 둘(`advance()`, `finish_snap()`)이 된
+  이상 두 곳이 각각 검사하면 한쪽만 고쳐질 수 있습니다. 진행 중인 snap이 만들 move를
+  계산하는 private helper `settled_move()`를 두고 양쪽이 그것을 부릅니다 —
+  `finish_snap()`은 그 결과를 반환하고 `advance()`는 `committed_`에 넣습니다. 폐기
+  규칙도 목표 각도를 아는 그 한 곳에 있습니다.
+- **좌표 검증 앞에 view mode 검증도 있습니다.** 계획이 명시한 것은 non-finite
+  좌표뿐이지만, net 전용 view의 press도 거절되면서 아무것도 시작하지 못합니다.
+  거절 사유 전부가 확정보다 앞이라는 한 문장이 되도록 순서를 맞추고 test를 하나
+  더 두었습니다(`set_view_mode`는 snap을 죽이지 않으므로 도달 가능한 조합입니다).
+- **확정은 pointer snap만이 아니라 programmatic turn에도 걸립니다.** `start_move()`가
+  같은 `snap_`을 쓰므로, keyboard/DOM 버튼으로 시작된 회전 중에 press가 오면 그것도
+  즉시 확정되고 새 gesture가 시작됩니다. 계획 본문은 release만 이야기했지만 이쪽이
+  같은 규칙의 자연스러운 범위이고("무엇이 돌고 있든 press가 오면 끝난 것으로 친다"),
+  Phase 9의 재생 중 사용자 개입도 이 경로를 그대로 씁니다. Test를 하나 두었습니다.
+- **Canonical drag 상수는 75°이고 이름이 test마다 다릅니다.** `InteractionTest`는
+  `kOneTurnDrag`, `PointerInteractionTest`는 기존 이름 `kQuarterTurnDrag`를 유지한 채
+  값만 옮겼습니다. e2e는 각도 대신 quarter turn 분수 `SHORT_TURN = 0.5`(45°)를 쓰고,
+  snap-back e2e는 0.3(27°)이 새 경계에서 3°밖에 떨어져 있지 않아 0.15(13.5°)로
+  내렸습니다.
+- **"확정 위에서 새 gesture가 올바른 cell을 잡는다" test는 왼쪽 열이 아니라 가운데
+  열을 씁니다.** 전면 왼쪽 열에서 화면 수직 drag는 X축이 아니라 Y축으로 resolve
+  됩니다 — 그 지점에서 X 회전의 화면 방향이 심하게 단축되어 두 후보의 점수가
+  1.0 대 0.94로 붙기 때문입니다. 이 phase와 무관한 기존 pick 동작이라 건드리지 않고,
+  판정이 명확한 가운데 열로 test를 세웠습니다.
+- **빠른 연속 drag e2e는 실패할 수는 없지만 항상 확정 경로를 타지는 않습니다.**
+  남은 각도의 상한이 90° − `kCommitDegrees`이므로 snap이 도는 시간은 최대 약
+  133ms이고, 45° drag는 100ms입니다. Playwright의 up → move → down이 그보다 느리면
+  두 move가 그냥 순서대로 commit되어 test는 통과합니다. 확정 경로 자체는 native
+  test가 프레임 단위로 고정하고, e2e는 stroke가 유실되지 않는다는 것만 봅니다.

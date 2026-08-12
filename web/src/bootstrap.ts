@@ -44,7 +44,7 @@ export function bootstrap(
     <div class="hud">
       <header class="hud__header">
         <h1 id="game-title">ThorVG Rubik's Cube</h1>
-        <output id="timer" aria-label="Elapsed time">00:00.00</output>
+        <output id="timer" aria-label="Elapsed time" aria-live="off">00:00.00</output>
       </header>
 
       <div class="view-switch" role="group" aria-label="View mode">

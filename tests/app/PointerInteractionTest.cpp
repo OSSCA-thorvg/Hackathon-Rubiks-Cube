@@ -6,6 +6,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "EngineLifecycle.hpp"
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
 #include "interaction/DragResolver.hpp"
@@ -193,7 +194,7 @@ TEST_CASE("pointer entry points are safe before initialization")
 
 TEST_CASE("a drag gesture turns the cube")
 {
-    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
     require_up_right_column(kWhite);
 
@@ -209,12 +210,11 @@ TEST_CASE("a drag gesture turns the cube")
     // R lifts the front face's right column onto the top face.
     require_up_right_column(kGreen);
 
-    rubiks::app::shutdown();
 }
 
 TEST_CASE("pressing away from the cube never turns a layer")
 {
-    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
     // A corner of the 3D region, outside the silhouette. This starts a
     // viewpoint sweep rather than nothing, but the cube itself is untouched
@@ -230,12 +230,11 @@ TEST_CASE("pressing away from the cube never turns a layer")
 
     require_up_right_column(kWhite);
 
-    rubiks::app::shutdown();
 }
 
 TEST_CASE("cancelling a gesture leaves the cube alone")
 {
-    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
     drag_upward(kQuarterTurnDrag);
     rubiks::app::pointer_cancel();
@@ -250,12 +249,11 @@ TEST_CASE("cancelling a gesture leaves the cube alone")
     REQUIRE_FALSE(rubiks::app::advance(kFrameMs));
     require_up_right_column(kWhite);
 
-    rubiks::app::shutdown();
 }
 
 TEST_CASE("resizing during a drag abandons it")
 {
-    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
     drag_upward(kQuarterTurnDrag);
 
@@ -270,12 +268,11 @@ TEST_CASE("resizing during a drag abandons it")
     REQUIRE(rubiks::app::resize(kCanvas, kCanvas));
     require_up_right_column(kWhite);
 
-    rubiks::app::shutdown();
 }
 
 TEST_CASE("resizing during the snap lets it finish")
 {
-    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
     drag_upward(kQuarterTurnDrag);
     rubiks::app::pointer_up();
@@ -288,12 +285,11 @@ TEST_CASE("resizing during the snap lets it finish")
     REQUIRE(rubiks::app::resize(kCanvas, kCanvas));
     require_up_right_column(kGreen);
 
-    rubiks::app::shutdown();
 }
 
 TEST_CASE("dragging the background sweeps the viewpoint")
 {
-    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
     // Home shows the +Z, +X and +Y faces around the (1, 1, 1) diagonal.
     require_visible_faces(kWhite, kGreen, kRed);
@@ -309,12 +305,11 @@ TEST_CASE("dragging the background sweeps the viewpoint")
     // The cube itself never moved.
     require_solved_net();
 
-    rubiks::app::shutdown();
 }
 
 TEST_CASE("sweeping the other way brings the opposite corner round")
 {
-    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
     // The other neighbouring corner: the front face slides right and the left
     // face comes into view beside it.
@@ -325,12 +320,11 @@ TEST_CASE("sweeping the other way brings the opposite corner round")
     require_visible_faces(kWhite, kOrange, kGreen);
     require_solved_net();
 
-    rubiks::app::shutdown();
 }
 
 TEST_CASE("a press between two frames sees the viewpoint it was aimed at")
 {
-    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
     orbit_left(1.0f);
     rubiks::app::pointer_up();
@@ -346,12 +340,11 @@ TEST_CASE("a press between two frames sees the viewpoint it was aimed at")
 
     require_visible_faces(kWhite, kRed, kBlue);
 
-    rubiks::app::shutdown();
 }
 
 TEST_CASE("a resize keeps the viewpoint and applies the last sweep")
 {
-    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
     orbit_left(1.0f);
 
@@ -363,12 +356,11 @@ TEST_CASE("a resize keeps the viewpoint and applies the last sweep")
 
     require_visible_faces(kWhite, kRed, kBlue);
 
-    rubiks::app::shutdown();
 }
 
 TEST_CASE("scramble and reset keep the viewpoint the drag left behind")
 {
-    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
     // A sweep no frame has published yet. Neither command owns the camera,
     // so both have to keep it rather than drop it with the gesture state.
@@ -389,7 +381,6 @@ TEST_CASE("scramble and reset keep the viewpoint the drag left behind")
     require_visible_faces(kWhite, kBlue, kOrange);
     require_solved_net();
 
-    rubiks::app::shutdown();
 }
 
 TEST_CASE("shutdown returns the viewpoint home")

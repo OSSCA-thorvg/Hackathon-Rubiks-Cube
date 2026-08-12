@@ -128,7 +128,12 @@ public:
     [[nodiscard]] std::optional<graphics::ActiveRotation> active_rotation()
         const noexcept;
 
-    /** Returns true while a gesture, snap, or unconsumed commit exists. */
+    /**
+     * Returns true while a gesture, snap, or unconsumed commit exists.
+     *
+     * An orbit sweep is not busy: it has no commit to protect, so it blocks
+     * neither moves nor queued playback.
+     */
     [[nodiscard]] bool is_busy() const noexcept;
 
     /** Drops all interaction state, as after a shutdown. */

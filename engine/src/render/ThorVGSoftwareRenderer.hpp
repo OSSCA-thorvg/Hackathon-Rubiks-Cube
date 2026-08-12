@@ -49,11 +49,12 @@ public:
     /**
      * Replaces the pixel buffer and canvas target with a new size.
      *
-     * Follows the resize failure semantics of the Phase 1 contract: the
-     * previous target survives validation and allocation failures, a failed
-     * target swap is rolled back, and a failed rollback leaves the renderer
-     * unusable until it is destroyed and recreated. A successful resize does
-     * not touch scene state, because the scene arrives with each frame.
+     * The previous target survives validation and allocation failures, which
+     * happen before anything is touched. A failed target swap leaves the
+     * renderer unusable until it is destroyed and recreated; the only caller
+     * treats any resize failure as fatal, so nothing rolls back. A successful
+     * resize does not touch scene state, because the scene arrives with each
+     * frame.
      */
     [[nodiscard]] bool resize(std::uint32_t width,
                               std::uint32_t height) noexcept override;
@@ -65,32 +66,16 @@ public:
 
     [[nodiscard]] std::uint32_t pixel_byte_length() const noexcept override;
 
-protected:
+private:
     ThorVGSoftwareRenderer() = default;
 
-    /**
-     * Builds the canvas, buffer, target, and scene for the initial size.
-     *
-     * Called by create(); test subclasses call it directly after
-     * constructing themselves with fault-injecting overrides in place.
-     */
+    /** Builds the canvas, buffer, and target for the initial size. */
     [[nodiscard]] bool init(std::uint32_t width, std::uint32_t height) noexcept;
 
-    // Fault-injection seams: the only operations that can fail after
-    // validation. Tests override these to reach the resize rollback
-    // branches deterministically; both are called only during init() and
-    // resize(), never on the per-frame render path.
-
-    /** Allocates a pixel buffer, nullptr on failure (-fno-exceptions). */
-    [[nodiscard]] virtual std::uint32_t* allocate_pixels(
-        std::uint32_t width, std::uint32_t height) noexcept;
-
     /** Points the canvas at a buffer; false when ThorVG rejects it. */
-    [[nodiscard]] virtual bool set_target(std::uint32_t* buffer,
-                                          std::uint32_t width,
-                                          std::uint32_t height) noexcept;
+    [[nodiscard]] bool set_target(std::uint32_t* buffer, std::uint32_t width,
+                                  std::uint32_t height) noexcept;
 
-private:
     /** Replaces the canvas contents with the background and the scene faces. */
     [[nodiscard]] bool rebuild_canvas(
         const graphics::RenderScene& scene) noexcept;

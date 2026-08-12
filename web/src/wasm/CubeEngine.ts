@@ -342,7 +342,10 @@ export class CubeEngine {
     this.module._thorvg_rubiks_reset_view();
   }
 
-  /** Reports whether a gesture, animation, or pending commit is active. */
+  /**
+   * Reports whether a gesture, animation, or pending commit is active.
+   * An orbit sweep is not busy; the viewpoint moves while the cube cannot.
+   */
   isBusy(): boolean {
     this.assertUsable();
     return this.module._thorvg_rubiks_is_busy() !== 0;

@@ -115,7 +115,11 @@ void reset_cube() noexcept;
 /** Restores the home camera without changing cube or view mode. */
 void reset_view() noexcept;
 
-/** Returns whether a gesture, animation, or unconsumed commit is active. */
+/**
+ * Returns whether a gesture, animation, or unconsumed commit is active.
+ *
+ * An orbit sweep is not busy; the viewpoint can move while the cube cannot.
+ */
 [[nodiscard]] bool is_busy() noexcept;
 
 /**

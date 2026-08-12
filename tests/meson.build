@@ -11,4 +11,3 @@ subdir('graphics')
 subdir('interaction')
 
 subdir('app')
-subdir('render')

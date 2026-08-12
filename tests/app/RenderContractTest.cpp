@@ -8,6 +8,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "EngineLifecycle.hpp"
+
 // Rendered scene contract v3: the canvas is split into a square 3D region
 // showing the +X, +Y and +Z faces of a solved 3x3x3, and a net below it
 // showing all six faces flat. Distinct face colors make a winding, culling or
@@ -187,7 +189,7 @@ void require_scene(std::uint32_t width, std::uint32_t height)
 
 TEST_CASE("face, net and corner pixels match the rendered scene contract")
 {
-    REQUIRE(rubiks::app::initialize(256, 256));
+    const rubiks::test::EngineLifecycle engine(256, 256);
     require_scene(256, 256);
 
     SECTION("after resizing to a larger square buffer")
@@ -202,14 +204,13 @@ TEST_CASE("face, net and corner pixels match the rendered scene contract")
         require_scene(129, 129);
     }
 
-    rubiks::app::shutdown();
 }
 
 TEST_CASE("the contract holds on non-square buffers")
 {
     // The 3D region is square whatever the canvas is, so unlike contract v2
     // these fractions stay valid here.
-    REQUIRE(rubiks::app::initialize(320, 200));
+    const rubiks::test::EngineLifecycle engine(320, 200);
     require_scene(320, 200);
 
     SECTION("and on a portrait buffer")
@@ -218,7 +219,6 @@ TEST_CASE("the contract holds on non-square buffers")
         require_scene(200, 320);
     }
 
-    rubiks::app::shutdown();
 }
 
 TEST_CASE("the seams between stickers show the background")
@@ -228,12 +228,11 @@ TEST_CASE("the seams between stickers show the background")
     // smaller sizes above check faces and corners only.
     constexpr std::uint32_t kSize = 1024;
 
-    REQUIRE(rubiks::app::initialize(kSize, kSize));
+    const rubiks::test::EngineLifecycle engine(kSize, kSize);
     require_scene(kSize, kSize);
 
     for (const auto& seam : kSeamSamples) {
         require_pixel(pixel_in_cube(seam, kSize, kSize), kBackground);
     }
 
-    rubiks::app::shutdown();
 }

@@ -186,7 +186,7 @@ EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_reset_view() noexcept
     rubiks::app::reset_view();
 }
 
-/** Returns one while a gesture, snap, or commit is active. */
+/** Returns one while a gesture, snap, or commit is active; orbit is not busy. */
 EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_is_busy() noexcept
 {
     return rubiks::app::is_busy() ? 1 : 0;

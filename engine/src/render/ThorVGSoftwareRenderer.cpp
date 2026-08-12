@@ -60,7 +60,9 @@ bool ThorVGSoftwareRenderer::init(std::uint32_t width,
     canvas_ = tvg::SwCanvas::gen();
     if (!canvas_) return false;
 
-    buffer_ = allocate_pixels(width, height);
+    // -fno-exceptions: allocation failure must surface as nullptr.
+    buffer_ = new (std::nothrow)
+        std::uint32_t[static_cast<std::size_t>(width) * height];
     if (!buffer_) return false;
 
     if (!set_target(buffer_, width, height)) return false;
@@ -69,14 +71,6 @@ bool ThorVGSoftwareRenderer::init(std::uint32_t width,
 
     usable_ = true;
     return true;
-}
-
-std::uint32_t* ThorVGSoftwareRenderer::allocate_pixels(
-    std::uint32_t width, std::uint32_t height) noexcept
-{
-    // -fno-exceptions: allocation failure must surface as nullptr.
-    return new (std::nothrow)
-        std::uint32_t[static_cast<std::size_t>(width) * height];
 }
 
 ThorVGSoftwareRenderer::~ThorVGSoftwareRenderer()
@@ -92,21 +86,20 @@ bool ThorVGSoftwareRenderer::resize(std::uint32_t width,
     if (!valid_dimensions(width, height)) return false;
     if (width == width_ && height == height_) return true;
 
-    auto* next = allocate_pixels(width, height);
+    auto* next = new (std::nothrow)
+        std::uint32_t[static_cast<std::size_t>(width) * height];
     if (!next) return false;  // ThorVG untouched; current target preserved.
 
     if (!set_target(next, width, height)) {
+        // The failed call may have partially updated the surface, and the
+        // only caller treats any resize failure as fatal, so this renderer
+        // is done rather than rolled back.
         delete[] next;
-
-        // The failed call may have partially updated the surface, so the
-        // previous target must be restored explicitly.
-        if (!set_target(buffer_, width_, height_)) {
-            delete[] buffer_;
-            buffer_ = nullptr;
-            width_ = 0;
-            height_ = 0;
-            usable_ = false;
-        }
+        delete[] buffer_;
+        buffer_ = nullptr;
+        width_ = 0;
+        height_ = 0;
+        usable_ = false;
         return false;
     }
 

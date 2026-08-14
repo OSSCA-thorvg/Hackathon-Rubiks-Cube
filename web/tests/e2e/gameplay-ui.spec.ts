@@ -2,6 +2,8 @@ import { expect, test, type Page } from '@playwright/test';
 
 import {
   assertSceneContract,
+  BODY,
+  FRONT_RIGHT_COLUMN,
   pagePointInCube,
   probeCanvas,
   QUARTER_TURN_DRAG,
@@ -23,6 +25,33 @@ async function orbitOnce(page: Page): Promise<void> {
     { steps: 12 },
   );
   await page.mouse.up();
+}
+
+/**
+ * Pins the one word production takes from Web Crypto, so the real WASM
+ * generator produces the same sequence every run.
+ *
+ * The caller has to reload afterwards: the script is installed for documents
+ * created from here on.
+ */
+async function pinSeed(page: Page, seed: number): Promise<void> {
+  await page.addInitScript(`
+    const originalGetRandomValues = Crypto.prototype.getRandomValues;
+    Crypto.prototype.getRandomValues = function(array) {
+      if (array instanceof Uint32Array && array.length === 1) {
+        array[0] = ${seed};
+        return array;
+      }
+      return originalGetRandomValues.call(this, array);
+    };
+  `);
+}
+
+/** Sets the scramble length, the way a person changing the box would. */
+async function setScrambleMoves(page: Page, count: number): Promise<void> {
+  const moves = page.locator('#scramble-moves');
+  await moves.fill(String(count));
+  await moves.dispatchEvent('change');
 }
 
 test.beforeEach(async ({ page }) => {
@@ -131,21 +160,90 @@ test('desktop action groups sit outside opposite canvas edges', async ({
   expect(gameActions!.x).toBeGreaterThan(canvas!.x + canvas!.width);
 });
 
+test('a scramble is turned into the cube where it can be watched', async ({
+  page,
+}) => {
+  const root = page.locator('.game-shell');
+  const moveButtons = page.locator('[data-face]');
+  const solved = await probeCanvas(page);
+
+  await page.locator('#scramble').click();
+  await expect(root).toHaveAttribute('data-game-state', 'scrambling');
+
+  // The cut face of a cubie is only ever drawn while a layer is part way
+  // round, so finding it is finding the cube mid-turn rather than merely
+  // changed. Nothing can be turned by hand for as long as that lasts.
+  await expect(moveButtons.first()).toBeDisabled();
+  await expect(page.locator('#timer')).toHaveText('00:00.00');
+  await expect
+    .poll(
+      async () => {
+        const probe = await probeCanvas(page);
+        return probe.cubeGrid.some(
+          (pixel) => pixel.join() === BODY.join(),
+        );
+      },
+      { timeout: 5000 },
+    )
+    .toBe(true);
+
+  await expect(root).toHaveAttribute('data-game-state', 'ready');
+  await expect(moveButtons.first()).toBeEnabled();
+
+  // And it arrived: both views moved, and the clock is waiting rather than
+  // running.
+  const scrambled = await probeCanvas(page);
+  expect(scrambled.net).not.toEqual(solved.net);
+  expect(scrambled.cubeGrid).not.toEqual(solved.cubeGrid);
+  await expect(page.locator('#timer')).toHaveText('00:00.00');
+});
+
+test('a drag over the cube while a scramble plays only sweeps the view', async ({
+  page,
+}) => {
+  await pinSeed(page, 42);
+  await page.reload();
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+
+  const root = page.locator('.game-shell');
+
+  // One scramble with a drag pulled straight across a sticker in the middle
+  // of it -- the grip that takes hold of a layer at any other moment.
+  await page.locator('#scramble').click();
+  await expect(root).toHaveAttribute('data-game-state', 'scrambling');
+
+  const probe = await probeCanvas(page);
+  const grab = pagePointInCube(probe, FRONT_RIGHT_COLUMN);
+  await page.mouse.move(grab.x, grab.y);
+  await page.mouse.down();
+  await page.mouse.move(
+    grab.x - QUARTER_TURN_DRAG * probe.box.width,
+    grab.y,
+    { steps: 12 },
+  );
+  await page.mouse.up();
+  await expect(root).toHaveAttribute('data-game-state', 'ready');
+
+  // The drag did something: the viewpoint is no longer where Home puts it.
+  const swept = await probeCanvas(page);
+  await page.locator('#home-view').click();
+  const dragged = await probeCanvas(page);
+  expect(dragged.cubeGrid).not.toEqual(swept.cubeGrid);
+
+  // And it did nothing else. The same seed again, untouched, has to land on
+  // the same cube -- an extra turn taken from under the finger would not.
+  await page.locator('#scramble').click();
+  await expect(root).toHaveAttribute('data-game-state', 'ready');
+  const clean = await probeCanvas(page);
+
+  expect(dragged.net).toEqual(clean.net);
+  expect(dragged.cubeGrid).toEqual(clean.cubeGrid);
+});
+
 test('a fixed scramble solved through keyboard controls stops the timer', async ({
   page,
 }) => {
-  // Production uses Web Crypto. Pin its one-word seed before reloading so the
-  // real WASM generator produces the native known-answer sequence for 42.
-  await page.addInitScript(`
-    const originalGetRandomValues = Crypto.prototype.getRandomValues;
-    Crypto.prototype.getRandomValues = function(array) {
-      if (array instanceof Uint32Array && array.length === 1) {
-        array[0] = 42;
-        return array;
-      }
-      return originalGetRandomValues.call(this, array);
-    };
-  `);
+  await pinSeed(page, 42);
   await page.reload();
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 
@@ -154,9 +252,7 @@ test('a fixed scramble solved through keyboard controls stops the timer', async 
   // to redo whenever the generator changes -- what the test is here for is
   // the path from a scrambled cube to a stopped clock, which three moves
   // walk exactly as well as twenty.
-  const moves = page.locator('#scramble-moves');
-  await moves.fill('3');
-  await moves.dispatchEvent('change');
+  await setScrambleMoves(page, 3);
   await page.locator('#scramble').click();
 
   // The scramble is turned into the cube rather than applied, so the keys

@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <limits>
 #include <new>
+#include <vector>
 
 namespace rubiks::render {
 namespace {
@@ -164,6 +165,55 @@ bool ThorVGSoftwareRenderer::rebuild_canvas(
         return false;
     }
 
+    // One shape per path; both stroke layers are drawn the same way, only at
+    // different points in the order below.
+    const auto stroke_paths =
+        [this](const std::vector<graphics::RenderStroke>& paths) {
+            for (const auto& path : paths) {
+                auto* shape = add_shape(*canvas_);
+                if (!shape) return false;
+
+                if (shape->moveTo(path.start.x, path.start.y) !=
+                    tvg::Result::Success) {
+                    return false;
+                }
+                for (const auto& segment : path.segments) {
+                    if (shape->cubicTo(segment.control_a.x, segment.control_a.y,
+                                       segment.control_b.x, segment.control_b.y,
+                                       segment.to.x, segment.to.y) !=
+                        tvg::Result::Success) {
+                        return false;
+                    }
+                }
+                if (path.closed && shape->close() != tvg::Result::Success) {
+                    return false;
+                }
+
+                // No fill() call: a shape starts fully transparent, so the
+                // curve is the line and nothing else.
+                if (shape->strokeWidth(path.width) != tvg::Result::Success) {
+                    return false;
+                }
+                if (shape->strokeFill(path.color.r, path.color.g, path.color.b,
+                                      path.color.a) != tvg::Result::Success) {
+                    return false;
+                }
+                if (shape->strokeCap(tvg::StrokeCap::Round) !=
+                    tvg::Result::Success) {
+                    return false;
+                }
+                if (shape->strokeJoin(tvg::StrokeJoin::Round) !=
+                    tvg::Result::Success) {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+    // Underlays first, so the ring diagram's loops read as the thread its
+    // stickers are strung on rather than as lines ruled across them.
+    if (!stroke_paths(scene.underlays)) return false;
+
     for (const auto& face : scene.faces) {
         auto* shape = add_shape(*canvas_);
         if (!shape) return false;
@@ -187,43 +237,7 @@ bool ThorVGSoftwareRenderer::rebuild_canvas(
     }
 
     // Strokes last, so a guide line reads on top of the stickers it crosses.
-    for (const auto& path : scene.strokes) {
-        auto* shape = add_shape(*canvas_);
-        if (!shape) return false;
-
-        if (shape->moveTo(path.start.x, path.start.y) !=
-            tvg::Result::Success) {
-            return false;
-        }
-        for (const auto& segment : path.segments) {
-            if (shape->cubicTo(segment.control_a.x, segment.control_a.y,
-                               segment.control_b.x, segment.control_b.y,
-                               segment.to.x,
-                               segment.to.y) != tvg::Result::Success) {
-                return false;
-            }
-        }
-        if (path.closed && shape->close() != tvg::Result::Success) {
-            return false;
-        }
-
-        // No fill() call: a shape starts fully transparent, so the curve is
-        // the line and nothing else.
-        if (shape->strokeWidth(path.width) != tvg::Result::Success) {
-            return false;
-        }
-        if (shape->strokeFill(path.color.r, path.color.g, path.color.b,
-                              path.color.a) != tvg::Result::Success) {
-            return false;
-        }
-        if (shape->strokeCap(tvg::StrokeCap::Round) != tvg::Result::Success) {
-            return false;
-        }
-        if (shape->strokeJoin(tvg::StrokeJoin::Round) !=
-            tvg::Result::Success) {
-            return false;
-        }
-    }
+    if (!stroke_paths(scene.strokes)) return false;
 
     return true;
 }

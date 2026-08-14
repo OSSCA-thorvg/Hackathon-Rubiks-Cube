@@ -15,6 +15,7 @@
 #include "graphics/Layout.hpp"
 #include "graphics/NetGeometry.hpp"
 #include "graphics/NetRing.hpp"
+#include "graphics/SlotRing.hpp"
 #include "graphics/Palette.hpp"
 
 namespace {
@@ -521,7 +522,7 @@ TEST_CASE("a ring runs along a drawn direction wherever a cell rests")
 }
 
 /** The sharpest turn between neighbouring samples of a whole loop. */
-float worst_turn(const NetRing& ring, int steps)
+float worst_turn(const SlotRing& ring, int steps)
 {
     const auto span = static_cast<float>(ring.slot_count());
 
@@ -1049,7 +1050,7 @@ TEST_CASE("a ring runs dead straight between slots that share a face")
     // parts and only the corners between faces are curved. It is also what
     // stops a cell rocking -- along a run there is nothing for its tilt to
     // follow but the run itself.
-    const auto require_straight = [&](const NetRing& ring) {
+    const auto require_straight = [&](const SlotRing& ring) {
         for (std::size_t slot = 0; slot < ring.slot_count(); ++slot) {
             const auto next = (slot + 1) % ring.slot_count();
             if (ring.sticker_at(slot).face != ring.sticker_at(next).face) {

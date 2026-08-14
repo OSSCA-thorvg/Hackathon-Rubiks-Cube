@@ -29,3 +29,11 @@ transient_test = executable(
 )
 
 test('transient rotation', transient_test)
+
+rings_test = executable(
+  'rings-test',
+  files('RingsTest.cpp'),
+  dependencies: [graphics_dep, catch2_dep],
+)
+
+test('ring diagram', rings_test)

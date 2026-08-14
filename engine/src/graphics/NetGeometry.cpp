@@ -8,6 +8,7 @@
 
 #include "graphics/Layout.hpp"
 #include "graphics/NetRing.hpp"
+#include "graphics/SlotRing.hpp"
 #include "graphics/Palette.hpp"
 #include "math/Types.hpp"
 
@@ -210,7 +211,7 @@ void apply_move(RenderFace& quad, const RigidMove& move) noexcept
  * through a bend, where the slots the cells would ride separately are not in
  * line with each other at all.
  */
-[[nodiscard]] std::vector<RigidMove> group_moves(const NetRing& ring, int size,
+[[nodiscard]] std::vector<RigidMove> group_moves(const SlotRing& ring, int size,
                                                  float progress)
 {
     std::vector<RigidMove> moves;
@@ -246,7 +247,7 @@ void apply_move(RenderFace& quad, const RigidMove& move) noexcept
  * Kept side by side in two arrays they were free to fall out of step.
  */
 struct TurningBand {
-    NetRing ring;
+    SlotRing ring;
     std::vector<RigidMove> moves;
 
     /** The move carrying a sticker, or nothing when this band has it not. */

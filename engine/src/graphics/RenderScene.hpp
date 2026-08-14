@@ -46,6 +46,16 @@ struct RenderStroke {
  * to know nothing about the 3D scene they came from.
  */
 struct RenderScene {
+    /**
+     * Drawn before the faces, for a line the stickers sit on rather than over.
+     *
+     * The net's guides belong on top: they answer "where would this go", so
+     * they have to be legible across whatever they cross. The ring diagram's
+     * nine loops are the opposite -- they are the thing the stickers are
+     * threaded onto, and a loop drawn over its own beads reads as a line ruled
+     * across them.
+     */
+    std::vector<RenderStroke> underlays;
     std::vector<RenderFace> faces;
     /** Drawn after the faces, so guide lines read on top of the stickers. */
     std::vector<RenderStroke> strokes;
@@ -54,6 +64,9 @@ struct RenderScene {
 /** Moves everything in `source` onto the end of `target`. */
 inline void append_scene(RenderScene& target, RenderScene&& source)
 {
+    target.underlays.insert(target.underlays.end(),
+                            std::make_move_iterator(source.underlays.begin()),
+                            std::make_move_iterator(source.underlays.end()));
     target.faces.insert(target.faces.end(),
                         std::make_move_iterator(source.faces.begin()),
                         std::make_move_iterator(source.faces.end()));

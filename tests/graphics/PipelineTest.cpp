@@ -7,6 +7,7 @@
 
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
+#include "graphics/AxisGizmo.hpp"
 #include "graphics/Camera.hpp"
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
@@ -451,4 +452,62 @@ TEST_CASE("the model transform reaches the pipeline output")
     // sample of the full-size cube now shows background.
     REQUIRE(face_at(reference, cube_sample(0.50f, 0.29f)) != nullptr);
     REQUIRE(face_at(scaled, cube_sample(0.50f, 0.29f)) == nullptr);
+}
+
+TEST_CASE("the axis gizmo reports which way each axis points from here")
+{
+    using rubiks::cube::Axis;
+
+    const Rect region = layout(1000, 800).cube;
+    const RenderScene scene = build_axis_gizmo(default_camera(1.0f), region);
+
+    // Three segments and nothing filled: it is a reading of the viewpoint, not
+    // part of the scene.
+    REQUIRE(scene.faces.empty());
+    REQUIRE(scene.strokes.size() == 3);
+
+    // All three out of one point, up in the region's top-right corner and
+    // clear of the middle where the cube is.
+    const Vec2 origin = scene.strokes.front().start;
+    for (const auto& arm : scene.strokes) {
+        REQUIRE(arm.start.x == Approx(origin.x));
+        REQUIRE(arm.start.y == Approx(origin.y));
+        REQUIRE_FALSE(arm.closed);
+        REQUIRE(arm.segments.size() == 1);
+        REQUIRE(arm.width > 0.0f);
+    }
+    REQUIRE(origin.x > region.x + 0.5f * region.width);
+    REQUIRE(origin.y < region.y + 0.5f * region.height);
+
+    // One arm per axis, in the colors the net draws that axis's guide in --
+    // which is the only reason the gizmo is worth drawing.
+    const auto tip_of = [&](Axis axis) {
+        for (const auto& arm : scene.strokes) {
+            if (arm.color == guide_color(axis)) return arm.segments.back().to;
+        }
+        FAIL("no arm for this axis");
+        return Vec2{};
+    };
+
+    const Vec2 x_tip = tip_of(Axis::X);
+    const Vec2 y_tip = tip_of(Axis::Y);
+    const Vec2 z_tip = tip_of(Axis::Z);
+
+    // The home viewpoint looks down the (1, 1, 1) diagonal, so the three axes
+    // make the usual tripod: Y straight up the canvas, X down to the right, Z
+    // down to the left. Worked out by hand from that eye.
+    REQUIRE(y_tip.x == Approx(origin.x).margin(0.01f * region.width));
+    REQUIRE(y_tip.y < origin.y);
+
+    REQUIRE(x_tip.x > origin.x);
+    REQUIRE(x_tip.y > origin.y);
+    REQUIRE(z_tip.x < origin.x);
+    REQUIRE(z_tip.y > origin.y);
+
+    // Mirror images about the vertical, as a symmetric viewpoint has to give.
+    REQUIRE(x_tip.x - origin.x == Approx(origin.x - z_tip.x));
+    REQUIRE(x_tip.y == Approx(z_tip.y));
+
+    // A region with no extent is a view mode that is not being shown.
+    REQUIRE(build_axis_gizmo(default_camera(1.0f), Rect{}).strokes.empty());
 }

@@ -4,10 +4,12 @@
 graphics_lib = static_library(
   'rubiks-graphics',
   files(
+    'AxisGizmo.cpp',
     'Camera.cpp',
     'CubeGeometry.cpp',
     'Layout.cpp',
     'NetGeometry.cpp',
+    'NetRing.cpp',
     'OrbitCamera.cpp',
     'Palette.cpp',
     'Passes.cpp',

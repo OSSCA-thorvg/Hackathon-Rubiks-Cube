@@ -21,4 +21,17 @@ Color to_color(cube::FaceColor color) noexcept
     return Color{0, 70, 173, 255};
 }
 
+Color guide_color(cube::Axis axis) noexcept
+{
+    switch (axis) {
+        case cube::Axis::X:
+            return Color{0, 224, 255, 235};
+        case cube::Axis::Y:
+            return Color{255, 72, 208, 235};
+        case cube::Axis::Z:
+            break;
+    }
+    return Color{176, 255, 64, 235};
+}
+
 }  // namespace rubiks::graphics

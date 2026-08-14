@@ -18,6 +18,13 @@ enum class Face { Right, Left, Up, Down, Front, Back };
 
 inline constexpr std::size_t kFaceCount = 6;
 
+/** The six faces, in the order the enum declares them. */
+[[nodiscard]] constexpr std::array<Face, kFaceCount> faces() noexcept
+{
+    return {Face::Right, Face::Left,  Face::Up,
+            Face::Down,  Face::Front, Face::Back};
+}
+
 enum class FaceColor { Red, Orange, White, Yellow, Green, Blue };
 
 [[nodiscard]] constexpr std::size_t face_index(Face face) noexcept

@@ -183,6 +183,36 @@ SurfaceSticker turned_sticker(const SurfaceSticker& sticker, Axis axis,
     return SurfaceSticker{to.x, to.y, to.z, turned_face(axis, sticker.face)};
 }
 
+std::vector<SurfaceSticker> surface_stickers(int size)
+{
+    std::vector<SurfaceSticker> stickers;
+    if (size < 1) return stickers;
+
+    stickers.reserve(static_cast<std::size_t>(6 * size * size));
+
+    for (const Face face : faces()) {
+        const Axis normal = axis_of(face);
+
+        // The face pins its own axis; the other two run over the whole face.
+        for (int down = 0; down < size; ++down) {
+            for (int across = 0; across < size; ++across) {
+                CubiePosition position{0, 0, 0};
+                set_coordinate(position, normal, outer_layer(face, size));
+
+                bool first = true;
+                for (const Axis axis : {Axis::X, Axis::Y, Axis::Z}) {
+                    if (axis == normal) continue;
+                    set_coordinate(position, axis, first ? across : down);
+                    first = false;
+                }
+                stickers.push_back(SurfaceSticker{position.x, position.y,
+                                                  position.z, face});
+            }
+        }
+    }
+    return stickers;
+}
+
 std::vector<SurfaceSticker> ring_slots(Axis axis, int layer, int size)
 {
     std::vector<SurfaceSticker> slots;

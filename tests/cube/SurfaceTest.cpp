@@ -238,3 +238,25 @@ TEST_CASE("where the ring says a sticker goes, the cube shows its color")
         }
     }
 }
+
+TEST_CASE("the surface is six faces of N by N stickers, each named once")
+{
+    for (const int size : {2, 3, 4}) {
+        const auto stickers = rubiks::cube::surface_stickers(size);
+        REQUIRE(stickers.size() ==
+                static_cast<std::size_t>(6 * size * size));
+
+        std::set<std::tuple<int, int, int, int>> seen;
+        for (const auto& sticker : stickers) {
+            // On the cube, and on the outer layer of its own face's axis.
+            REQUIRE(rubiks::cube::coordinate_on(
+                        rubiks::cube::axis_of(sticker.face), sticker) ==
+                    rubiks::cube::outer_layer(sticker.face, size));
+            seen.insert({sticker.x, sticker.y, sticker.z,
+                         static_cast<int>(sticker.face)});
+        }
+        REQUIRE(seen.size() == stickers.size());
+    }
+
+    REQUIRE(rubiks::cube::surface_stickers(0).empty());
+}

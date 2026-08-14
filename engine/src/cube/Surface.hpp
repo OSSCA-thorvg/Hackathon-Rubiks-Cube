@@ -75,6 +75,17 @@ struct SurfaceSticker {
                                             Axis axis, int size) noexcept;
 
 /**
+ * Every sticker of the cube's surface, once each, face by face.
+ *
+ * Screen-free like the rest of this header, which is why it lives here rather
+ * than beside one of the two views that draw them: both need to walk all 6N^2
+ * of them, and a drawing has no say in which ones exist.
+ *
+ * Empty for a size below 1.
+ */
+[[nodiscard]] std::vector<SurfaceSticker> surface_stickers(int size);
+
+/**
  * The 4N stickers one layer cycles, in the order the positive turn moves them.
  *
  * Consecutive slots are neighbours on the surface, so the sequence is a closed

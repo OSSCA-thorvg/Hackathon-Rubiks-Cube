@@ -8,6 +8,7 @@ cube_lib = static_library(
     'CubeMove.cpp',
     'CubeState.cpp',
     'Scramble.cpp',
+    'Surface.cpp',
   ),
   include_directories: engine_inc,
 )

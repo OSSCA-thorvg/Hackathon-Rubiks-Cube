@@ -1,80 +1,30 @@
 #include "cube/CubeState.hpp"
 
-#include <array>
+#include <cstddef>
 #include <utility>
+
+#include "cube/Surface.hpp"
 
 namespace rubiks::cube {
 namespace {
 
-struct Position {
-    int x;
-    int y;
-    int z;
-};
-
 /**
- * Where a cubie lands after one positive quarter turn about `axis`.
+ * The same cubie with its stickers carried round by one positive quarter turn.
  *
- * These three mappings, together with the sticker cycles below, are the whole
- * move engine. They are verified against a physical cube by the known-answer
- * test: on a solved 3x3x3, R sends the UFR cubie to the UBR slot showing
- * green on top and white at the back.
+ * The permutation itself lives in `Surface`, which is where the net and the
+ * ring diagram read it from as well. A face perpendicular to the axis maps to
+ * itself, so the loop over all six needs no special case for them.
  */
-[[nodiscard]] Position rotated(Axis axis, const Position& p, int last) noexcept
-{
-    switch (axis) {
-        case Axis::X:
-            return Position{p.x, p.z, last - p.y};
-        case Axis::Y:
-            return Position{last - p.z, p.y, p.x};
-        case Axis::Z:
-            break;
-    }
-    return Position{p.y, last - p.x, p.z};
-}
-
-/**
- * The faces a positive quarter turn cycles, each entry moving to the next.
- *
- * The two faces perpendicular to the axis keep their color, which is why they
- * are absent here.
- */
-[[nodiscard]] std::array<Face, 4> sticker_cycle(Axis axis) noexcept
-{
-    switch (axis) {
-        case Axis::X:
-            return {Face::Up, Face::Back, Face::Down, Face::Front};
-        case Axis::Y:
-            return {Face::Front, Face::Left, Face::Back, Face::Right};
-        case Axis::Z:
-            break;
-    }
-    return {Face::Up, Face::Right, Face::Down, Face::Left};
-}
-
 [[nodiscard]] Cubie rotated(Axis axis, const Cubie& cubie) noexcept
 {
     Cubie turned = cubie;
-    const auto cycle = sticker_cycle(axis);
 
-    for (std::size_t i = 0; i < cycle.size(); ++i) {
-        turned.stickers[face_index(cycle[(i + 1) % cycle.size()])] =
-            cubie.sticker(cycle[i]);
+    for (std::size_t i = 0; i < kFaceCount; ++i) {
+        const auto face = static_cast<Face>(i);
+        turned.stickers[face_index(turned_face(axis, face))] =
+            cubie.sticker(face);
     }
     return turned;
-}
-
-[[nodiscard]] int coordinate_on(Axis axis, const Position& p) noexcept
-{
-    switch (axis) {
-        case Axis::X:
-            return p.x;
-        case Axis::Y:
-            return p.y;
-        case Axis::Z:
-            break;
-    }
-    return p.z;
 }
 
 /** Turn count in 0 ... 3; a move of any integer size is well defined. */
@@ -143,16 +93,15 @@ void CubeState::rotate_quarter(Axis axis, LayerMask layers) noexcept
     // Cubies outside the turning layers keep their slot, so the copy starts
     // from the current state and only the moving ones are overwritten.
     std::vector<Cubie> next = cubies_;
-    const int last = size_ - 1;
 
     for (int x = 0; x < size_; ++x) {
         for (int y = 0; y < size_; ++y) {
             for (int z = 0; z < size_; ++z) {
-                const Position from{x, y, z};
+                const CubiePosition from{x, y, z};
                 const auto bit = layer(coordinate_on(axis, from));
                 if ((layers & bit) == 0) continue;
 
-                const auto to = rotated(axis, from, last);
+                const auto to = turned_position(axis, from, size_);
                 next[index(to.x, to.y, to.z)] =
                     rotated(axis, cubies_[index(x, y, z)]);
             }

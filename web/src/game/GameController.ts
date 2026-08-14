@@ -6,38 +6,24 @@ import {
   type FaceTurns,
 } from '../wasm/CubeEngine.ts';
 import {
-  formatElapsed,
-  SolveTimer,
-  type TimerEnvironment,
-} from './SolveTimer.ts';
+  GameSession,
+  type GameState,
+  type SessionEngine,
+} from './GameSession.ts';
+import type { TimerEnvironment } from './SolveTimer.ts';
 
-/**
- * One local solve session inside a ready application.
- *
- * `scrambling` is the sequence being played into the cube. Nothing can be
- * turned by hand during it and the clock is not yet armed, so it is a state of
- * its own rather than an early `ready`.
- */
-export type GameState =
-  | 'idle'
-  | 'scrambling'
-  | 'ready'
-  | 'running'
-  | 'completed';
+export type { GameState } from './GameSession.ts';
 
 /** Engine surface required by gameplay controls. */
-export type GameEngine = {
+export type GameEngine = SessionEngine & {
   scramble(seed: number, moveCount: number): void;
   resetCube(): void;
-  isSolved(): boolean;
-  committedMoveCount(): number;
   turnFace(face: CubeFace, faceTurns: FaceTurns): boolean;
   setViewMode(mode: CubeViewMode): void;
   viewMode(): CubeViewMode;
   setFlatStyle(style: CubeFlatStyle): void;
   flatStyle(): CubeFlatStyle;
   resetView(): void;
-  isBusy(): boolean;
   render(): void;
 };
 
@@ -202,23 +188,11 @@ export function attachGameController(
   };
 
   let active = true;
-  let gameState: GameState = 'idle';
-  let previousMoveCount = engine.committedMoveCount();
-
-  // Assigning value on an <output> publishes the text too, so the DOM only
-  // has to be written once per tick.
-  const timer = new SolveTimer((elapsedMs: number): void => {
-    ui.timer.value = formatElapsed(elapsedMs);
-  }, options.timerEnvironment);
-
-  const setGameState = (state: GameState): void => {
-    gameState = state;
-    ui.root.dataset.gameState = state;
-  };
-
-  const announce = (message: string): void => {
-    ui.status.textContent = message;
-  };
+  const session = new GameSession({
+    engine,
+    ui,
+    timerEnvironment: options.timerEnvironment,
+  });
 
   const updateViewControls = (): void => {
     const selected = engine.viewMode();
@@ -264,11 +238,8 @@ export function attachGameController(
     run((): void => {
       engine.scramble(seedSource(), DEFAULT_SCRAMBLE_MOVES);
       engine.render();
-      previousMoveCount = 0;
-      timer.reset();
-      setGameState('scrambling');
+      session.beginScramble();
       updateMoveAvailability();
-      announce('Scrambling the cube…');
 
       // The cube is still solved: the scramble is turned into it over the
       // frames that follow, and nothing else is running to ask for them.
@@ -280,11 +251,8 @@ export function attachGameController(
     run((): void => {
       engine.resetCube();
       engine.render();
-      previousMoveCount = 0;
-      timer.reset();
-      setGameState('idle');
+      session.restart();
       updateMoveAvailability();
-      announce('Cube reset.');
     });
   };
 
@@ -292,7 +260,7 @@ export function attachGameController(
     run((): void => {
       engine.resetView();
       engine.render();
-      announce('View returned home.');
+      session.announce('View returned home.');
     });
   };
 
@@ -345,8 +313,6 @@ export function attachGameController(
   ui.homeViewButton.addEventListener('click', onHomeView);
   keyboardTarget.addEventListener('keydown', onKeyDown);
 
-  timer.reset();
-  setGameState('idle');
   ui.scrambleButton.disabled = false;
   ui.resetButton.disabled = false;
   ui.homeViewButton.disabled = false;
@@ -357,40 +323,13 @@ export function attachGameController(
 
   return {
     get state(): GameState {
-      return gameState;
+      return session.state;
     },
 
     afterEngineFrame(): void {
       if (!active) return;
       run((): void => {
-        const moveCount = engine.committedMoveCount();
-        const committed = moveCount > previousMoveCount;
-        previousMoveCount = moveCount;
-
-        // Asked as a state rather than as a change, so a one-move scramble
-        // that has already finished by the first observed frame is still seen
-        // to finish. That the call was accepted is what says it began.
-        if (gameState === 'scrambling' && !engine.isBusy()) {
-          timer.arm();
-          setGameState('ready');
-          announce('Scramble ready. The timer starts after your first move.');
-        }
-
-        if (committed && gameState === 'ready') {
-          timer.start();
-          setGameState('running');
-        }
-
-        if (
-          committed &&
-          gameState === 'running' &&
-          engine.isSolved()
-        ) {
-          const finalMs = timer.stop();
-          setGameState('completed');
-          announce(`Solved in ${formatElapsed(finalMs)}.`);
-        }
-
+        session.observe();
         updateMoveAvailability();
       });
     },
@@ -398,7 +337,7 @@ export function attachGameController(
     teardown(): void {
       if (!active) return;
       active = false;
-      timer.teardown();
+      session.teardown();
       ui.scrambleButton.disabled = true;
       ui.resetButton.disabled = true;
       ui.homeViewButton.disabled = true;

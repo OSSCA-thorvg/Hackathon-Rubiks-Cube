@@ -8,8 +8,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "EngineLifecycle.hpp"
+#include "cube/Cubie.hpp"
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
+#include "graphics/NetGeometry.hpp"
 #include "interaction/DragResolver.hpp"
 #include "interaction/InteractionController.hpp"
 
@@ -27,6 +29,10 @@ constexpr Rgba kRed{183, 18, 52, 255};
 constexpr Rgba kBlue{0, 70, 173, 255};
 constexpr Rgba kOrange{255, 88, 0, 255};
 constexpr Rgba kYellow{255, 213, 0, 255};
+constexpr Rgba kBackground{32, 32, 32, 255};
+
+/** The cut surface, only ever on show while a layer is turning. */
+constexpr Rgba kBody{70, 74, 82, 255};
 
 // The three face centers of the rendered scene contract, as fractions of the
 // square 3D region. Which colors they read depends on the viewpoint, which is
@@ -98,18 +104,34 @@ const std::uint8_t* pixel_at(float x, float y, std::uint32_t width)
     return bytes + (row * width + column) * 4;
 }
 
-/** Reads the center of one cell of the net's top face. */
-const std::uint8_t* up_face_cell(int column, int row, std::uint32_t width,
-                                 std::uint32_t height)
+/** Center of one net cell, in drawing-buffer pixels. */
+rubiks::math::Vec2 net_cell_point(rubiks::cube::Face face, int column, int row)
 {
-    const auto net = rubiks::graphics::layout(width, height).net;
+    const auto net = rubiks::graphics::layout(kCanvas, kCanvas).net;
     const float face_side =
         net.width / static_cast<float>(rubiks::graphics::kNetColumns);
     const float cell = face_side / static_cast<float>(kCubeSize);
+    const auto block = rubiks::graphics::net_block(face);
 
-    // The top face sits in the second column of the cross, on the first row.
-    return pixel_at(net.x + face_side + (static_cast<float>(column) + 0.5f) * cell,
-                    net.y + (static_cast<float>(row) + 0.5f) * cell, width);
+    return rubiks::math::Vec2{
+        net.x + static_cast<float>(block.column) * face_side +
+            (static_cast<float>(column) + 0.5f) * cell,
+        net.y + static_cast<float>(block.row) * face_side +
+            (static_cast<float>(row) + 0.5f) * cell};
+}
+
+/** Reads the center of one net cell. */
+const std::uint8_t* net_cell_pixel(rubiks::cube::Face face, int column,
+                                   int row)
+{
+    const auto point = net_cell_point(face, column, row);
+    return pixel_at(point.x, point.y, kCanvas);
+}
+
+/** Reads the center of one cell of the net's top face. */
+const std::uint8_t* up_face_cell(int column, int row)
+{
+    return net_cell_pixel(rubiks::cube::Face::Up, column, row);
 }
 
 void require_pixel(const std::uint8_t* pixel, const Rgba& color)
@@ -126,7 +148,17 @@ void require_up_column(int column, const Rgba& color)
     REQUIRE(rubiks::app::render());
     for (int row = 0; row < kCubeSize; ++row) {
         INFO("up face cell at column " << column << ", row " << row);
-        require_pixel(up_face_cell(column, row, kCanvas, kCanvas), color);
+        require_pixel(up_face_cell(column, row), color);
+    }
+}
+
+/** One row of an unfolded face, all three cells. */
+void require_net_row(rubiks::cube::Face face, int row, const Rgba& color)
+{
+    REQUIRE(rubiks::app::render());
+    for (int column = 0; column < kCubeSize; ++column) {
+        INFO("net cell at column " << column << ", row " << row);
+        require_pixel(net_cell_pixel(face, column, row), color);
     }
 }
 
@@ -161,9 +193,31 @@ void require_solved_net()
     REQUIRE(rubiks::app::render());
     for (int column = 0; column < kCubeSize; ++column) {
         for (int row = 0; row < kCubeSize; ++row) {
-            require_pixel(up_face_cell(column, row, kCanvas, kCanvas), kWhite);
+            require_pixel(up_face_cell(column, row), kWhite);
         }
     }
+}
+
+/** Whether a coarse sweep of the 3D region finds a color anywhere in it. */
+bool cube_region_shows(const Rgba& color)
+{
+    constexpr int kSteps = 24;
+    const auto rect = cube_rect(kCanvas, kCanvas);
+
+    for (int row = 0; row < kSteps; ++row) {
+        for (int column = 0; column < kSteps; ++column) {
+            const float fx = (static_cast<float>(column) + 0.5f) / kSteps;
+            const float fy = (static_cast<float>(row) + 0.5f) / kSteps;
+            const auto* pixel =
+                pixel_at(rect.x + fx * rect.width, rect.y + fy * rect.height,
+                         kCanvas);
+            if (pixel[0] == color[0] && pixel[1] == color[1] &&
+                pixel[2] == color[2] && pixel[3] == color[3]) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /** A point on the background, clear of the cube's silhouette. */
@@ -187,19 +241,59 @@ void orbit_left(float quarter_turns)
         from.y);
 }
 
+/** Carries an upward drag on one front face column to a given angle. */
+void move_column_upward(int column, float degrees)
+{
+    const auto grab = front_column(column, kCanvas, kCanvas);
+    rubiks::app::pointer_move(
+        grab.x, grab.y - degrees * pixels_per_degree(kCanvas, kCanvas));
+}
+
 /** Presses one front face column and drags upward, without releasing. */
 void drag_column_upward(int column, float degrees)
 {
     const auto grab = front_column(column, kCanvas, kCanvas);
     REQUIRE(rubiks::app::pointer_down(grab.x, grab.y));
-    rubiks::app::pointer_move(
-        grab.x, grab.y - degrees * pixels_per_degree(kCanvas, kCanvas));
+    move_column_upward(column, degrees);
 }
 
 /** The same for the right column, the gesture that means R. */
 void drag_upward(float degrees)
 {
     drag_column_upward(2, degrees);
+}
+
+/**
+ * Presses a net cell and drags it, without releasing.
+ *
+ * The distance is in face widths, which is also the net's own sensitivity:
+ * one face across is one quarter turn.
+ */
+void drag_net_cell(rubiks::cube::Face face, int column, int row, float faces_x,
+                   float faces_y)
+{
+    const auto net = rubiks::graphics::layout(kCanvas, kCanvas).net;
+    const float face_side =
+        net.width / static_cast<float>(rubiks::graphics::kNetColumns);
+    const auto from = net_cell_point(face, column, row);
+
+    REQUIRE(rubiks::app::pointer_down(from.x, from.y));
+    rubiks::app::pointer_move(from.x + faces_x * face_side,
+                              from.y + faces_y * face_side);
+}
+
+/** Enough of a net drag to commit, well clear of either boundary. */
+constexpr float kNetTurnDrag = 0.6f;
+
+/**
+ * Drags the top row of the net's front face to the left, which means U.
+ *
+ * The turn is derived from where the cell would land, so this is the gesture
+ * that carries the front's top row round onto the left face.
+ */
+void drag_net_top_row_left()
+{
+    drag_net_cell(rubiks::cube::Face::Front, 1, 0, -kNetTurnDrag, 0.0f);
 }
 
 }  // namespace
@@ -227,14 +321,65 @@ TEST_CASE("a drag gesture turns the cube")
 
     drag_upward(kQuarterTurnDrag);
 
-    // A turn in progress does not touch the logical cube, and the net only
-    // ever draws the logical cube.
-    require_up_right_column(kWhite);
+    // A turn in progress is a picture in both views and a change to neither:
+    // the logical cube only moves when the release settles.
+    REQUIRE(rubiks::app::committed_move_count() == 0);
 
     rubiks::app::pointer_up();
     REQUIRE(settle() >= 1);
 
     // R lifts the front face's right column onto the top face.
+    require_up_right_column(kGreen);
+
+}
+
+TEST_CASE("the net shows a 3D drag while it is happening")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    require_up_right_column(kWhite);
+
+    // Two thirds of the way round. R's band is the column Up, Front and Down
+    // share in the cross, so it marches up that column: two cells along, the
+    // front face's stickers are the ones standing in the up face's block.
+    drag_upward(60.0f);
+    REQUIRE(rubiks::app::render());
+
+    require_pixel(up_face_cell(2, 1), kGreen);
+
+    // The layer the drag never touched is untouched in the drawing too.
+    require_up_column(0, kWhite);
+
+    // And the part of the band the cross cuts leaves its block through the
+    // corner below it, which is empty whenever the cube is at rest. The ring
+    // carries it through there somewhere along the way rather than at one
+    // named angle, so the whole crossing is swept.
+    const auto net = rubiks::graphics::layout(kCanvas, kCanvas).net;
+    const float face_side =
+        net.width / static_cast<float>(rubiks::graphics::kNetColumns);
+    const float cell = face_side / static_cast<float>(kCubeSize);
+    const float corner_x = net.x + 3.0f * face_side + 0.5f * cell;
+    const float corner_y = net.y + 2.0f * face_side + 1.5f * cell;
+
+    REQUIRE(pixel_at(corner_x, corner_y, kCanvas)[2] == kBackground[2]);
+
+    bool crossed = false;
+    for (int step = 1; step <= 89 && !crossed; ++step) {
+        move_column_upward(2, static_cast<float>(step));
+        REQUIRE(rubiks::app::render());
+        crossed = pixel_at(corner_x, corner_y, kCanvas)[2] != kBackground[2];
+    }
+    REQUIRE(crossed);
+
+    // And a quarter turn in, the picture the net shows is already exactly
+    // what the commit is about to make true.
+    move_column_upward(2, 90.0f);
+    require_up_right_column(kGreen);
+
+    // Which the commit then does, without the picture changing.
+    rubiks::app::pointer_up();
+    settle();
+    REQUIRE(rubiks::app::committed_move_count() == 1);
     require_up_right_column(kGreen);
 
 }
@@ -248,13 +393,12 @@ TEST_CASE("a press during the snap confirms it and starts the next drag")
 
     // One frame, so the snap is genuinely still running when the press lands.
     REQUIRE(rubiks::app::advance(kFrameMs));
-    require_up_right_column(kWhite);
+    REQUIRE(rubiks::app::committed_move_count() == 0);
 
     // The press that used to be dropped, taking the whole stroke with it. It
     // applies the turn the release had already decided and begins its own.
     drag_upward(kQuarterTurnDrag);
     REQUIRE(rubiks::app::committed_move_count() == 1);
-    require_up_right_column(kGreen);
 
     rubiks::app::pointer_up();
     settle();
@@ -278,7 +422,6 @@ TEST_CASE("a press during a button turn confirms that too")
 
     drag_upward(kQuarterTurnDrag);
     REQUIRE(rubiks::app::committed_move_count() == 1);
-    require_up_right_column(kGreen);
 
     rubiks::app::pointer_up();
     settle();
@@ -323,7 +466,6 @@ TEST_CASE("confirming a snap that turns nothing leaves the cube alone")
 
     drag_upward(kQuarterTurnDrag);
     REQUIRE(rubiks::app::committed_move_count() == 0);
-    require_up_right_column(kWhite);
 
     rubiks::app::pointer_up();
     settle();
@@ -370,7 +512,6 @@ TEST_CASE("a press that cannot start anything confirms nothing")
     // that begins nothing has changed nothing either: the snap still owns the
     // turn and still finishes it on its own.
     REQUIRE(rubiks::app::committed_move_count() == 0);
-    require_up_right_column(kWhite);
 
     settle();
     REQUIRE(rubiks::app::committed_move_count() == 1);
@@ -378,7 +519,7 @@ TEST_CASE("a press that cannot start anything confirms nothing")
 
 }
 
-TEST_CASE("a press rejected by the net-only view confirms nothing")
+TEST_CASE("a press off the net in net-only view confirms nothing")
 {
     const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
@@ -386,16 +527,204 @@ TEST_CASE("a press rejected by the net-only view confirms nothing")
     rubiks::app::pointer_up();
 
     // Switching the view cancels gestures but never a snap, so one is still
-    // running under a view that refuses pointer input entirely.
+    // running under a view with no 3D region to fall back on.
     REQUIRE(rubiks::app::set_view_mode(rubiks::graphics::ViewMode::Net));
     REQUIRE(rubiks::app::advance(kFrameMs));
 
-    const auto grab = front_column(2, kCanvas, kCanvas);
-    REQUIRE_FALSE(rubiks::app::pointer_down(grab.x, grab.y));
+    // The corner of the canvas, clear of the net block. There is no viewpoint
+    // on screen to sweep, so this press starts nothing -- and a press that
+    // starts nothing confirms nothing.
+    REQUIRE_FALSE(rubiks::app::pointer_down(2.0f, 2.0f));
     REQUIRE(rubiks::app::committed_move_count() == 0);
 
     settle();
     REQUIRE(rubiks::app::committed_move_count() == 1);
+
+}
+
+TEST_CASE("dragging a net cell turns the cube")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    drag_net_top_row_left();
+    REQUIRE(rubiks::app::committed_move_count() == 0);
+
+    rubiks::app::pointer_up();
+    REQUIRE(settle() >= 1);
+
+    REQUIRE(rubiks::app::committed_move_count() == 1);
+
+    // U carries each side face's top row round onto the face to its left, so
+    // the front takes the right's red and the left takes the front's green.
+    require_net_row(rubiks::cube::Face::Front, 0, kRed);
+    require_net_row(rubiks::cube::Face::Left, 0, kGreen);
+    require_net_row(rubiks::cube::Face::Right, 0, kBlue);
+    require_net_row(rubiks::cube::Face::Back, 0, kOrange);
+
+    // The rows the turn did not take are where they were, and Up turns in
+    // place, so a solved cube's top face is still one color.
+    require_net_row(rubiks::cube::Face::Front, 1, kGreen);
+    require_solved_net();
+
+}
+
+TEST_CASE("a net drag commits the same move a button would")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    drag_net_top_row_left();
+    rubiks::app::pointer_up();
+    settle();
+
+    // Undoing it by name leaves a solved cube, so the drag committed exactly
+    // U and nothing near it. Past the release the two paths are one move.
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Up, -1));
+    settle();
+
+    REQUIRE(rubiks::app::is_solved());
+    REQUIRE(rubiks::app::committed_move_count() == 2);
+
+}
+
+TEST_CASE("a net drag turns the 3D view with it")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    REQUIRE(rubiks::app::render());
+    REQUIRE_FALSE(cube_region_shows(kBody));
+
+    drag_net_top_row_left();
+    REQUIRE(rubiks::app::render());
+
+    // One rotation drives both views, so a layer swung away in the net has
+    // swung away in the cube too, leaving the cut surface on show.
+    REQUIRE(cube_region_shows(kBody));
+
+    rubiks::app::pointer_up();
+    settle();
+    REQUIRE(rubiks::app::render());
+    REQUIRE_FALSE(cube_region_shows(kBody));
+
+}
+
+TEST_CASE("a net drag past a quarter turn settles on the turn it reached")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    // Two and a half faces across: at the drag sensitivity that is 225
+    // degrees, which settles on three quarter turns. The net used to stop at
+    // one, because one was all it could draw; it takes a band as far round its
+    // loop as the finger goes now, so the picture and the commit agree however
+    // far that is. Three quarters one way is one the other, so the front row
+    // ends up holding the row that one quarter backwards would bring it.
+    drag_net_cell(rubiks::cube::Face::Front, 1, 0, -2.5f, 0.0f);
+    rubiks::app::pointer_up();
+    settle();
+
+    REQUIRE(rubiks::app::committed_move_count() == 1);
+    require_net_row(rubiks::cube::Face::Front, 0, kOrange);
+}
+
+TEST_CASE("the net is draggable in net-only view")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    REQUIRE(rubiks::app::set_view_mode(rubiks::graphics::ViewMode::Net));
+
+    // The net-only layout is a different rectangle from the shared one.
+    const auto net = rubiks::graphics::layout(kCanvas, kCanvas,
+                                              rubiks::graphics::ViewMode::Net)
+                         .net;
+    const float face_side =
+        net.width / static_cast<float>(rubiks::graphics::kNetColumns);
+    const float cell = face_side / static_cast<float>(kCubeSize);
+
+    // The front face's top middle cell.
+    const float x = net.x + face_side + 1.5f * cell;
+    const float y = net.y + face_side + 0.5f * cell;
+
+    REQUIRE(rubiks::app::pointer_down(x, y));
+    rubiks::app::pointer_move(x - 0.6f * face_side, y);
+    rubiks::app::pointer_up();
+    settle();
+
+    REQUIRE(rubiks::app::committed_move_count() == 1);
+
+    // Read back in the shared layout, where the net cell helpers apply.
+    REQUIRE(rubiks::app::set_view_mode(rubiks::graphics::ViewMode::Both));
+    require_net_row(rubiks::cube::Face::Front, 0, kRed);
+
+}
+
+TEST_CASE("an empty corner of the cross is not a net cell")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    const auto net = rubiks::graphics::layout(kCanvas, kCanvas).net;
+    const float face_side =
+        net.width / static_cast<float>(rubiks::graphics::kNetColumns);
+
+    // Top left of the cross, which the unfolding leaves empty. Inside the net
+    // rectangle, but on no face.
+    const float x = net.x + 0.5f * face_side;
+    const float y = net.y + 0.5f * face_side;
+
+    // With the cube on screen this is background like any other, so it sweeps
+    // the viewpoint; what it must never do is turn a layer.
+    REQUIRE(rubiks::app::pointer_down(x, y));
+    rubiks::app::pointer_move(x - face_side, y);
+    rubiks::app::pointer_up();
+    settle();
+
+    REQUIRE(rubiks::app::committed_move_count() == 0);
+    require_solved_net();
+
+    // With only the net on screen there is no viewpoint behind it either, so
+    // the same press starts nothing at all.
+    REQUIRE(rubiks::app::set_view_mode(rubiks::graphics::ViewMode::Net));
+    const auto only = rubiks::graphics::layout(kCanvas, kCanvas,
+                                               rubiks::graphics::ViewMode::Net)
+                          .net;
+    const float only_face =
+        only.width / static_cast<float>(rubiks::graphics::kNetColumns);
+    REQUIRE_FALSE(rubiks::app::pointer_down(only.x + 0.5f * only_face,
+                                            only.y + 0.5f * only_face));
+
+}
+
+TEST_CASE("a net drag and a cube drag cannot run at once")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    drag_net_top_row_left();
+
+    // One gesture at a time, whichever view it started in: the second press
+    // is refused rather than layered on top of the first.
+    const auto grab = front_column(2, kCanvas, kCanvas);
+    REQUIRE_FALSE(rubiks::app::pointer_down(grab.x, grab.y));
+
+    rubiks::app::pointer_up();
+    settle();
+
+    // Only the net drag's turn, and the refused press left nothing behind.
+    REQUIRE(rubiks::app::committed_move_count() == 1);
+    require_net_row(rubiks::cube::Face::Front, 0, kRed);
+    require_up_column(2, kWhite);
+
+}
+
+TEST_CASE("a net drag too short to commit springs back")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    // Past the dead zone, nowhere near the threshold that commits.
+    drag_net_cell(rubiks::cube::Face::Front, 1, 0, -0.2f, 0.0f);
+    rubiks::app::pointer_up();
+    settle();
+
+    REQUIRE(rubiks::app::committed_move_count() == 0);
+    REQUIRE(rubiks::app::is_solved());
+    require_solved_net();
 
 }
 

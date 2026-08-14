@@ -97,7 +97,7 @@ TEST_CASE("programmatic face turns commit and count like pointer moves")
         static_cast<rubiks::cube::Face>(99), 1));
 }
 
-TEST_CASE("view modes preserve state and net mode declines pointer gestures")
+TEST_CASE("view modes preserve state and net mode takes pointer gestures")
 {
     using rubiks::graphics::ViewMode;
 
@@ -107,7 +107,11 @@ TEST_CASE("view modes preserve state and net mode declines pointer gestures")
         REQUIRE(rubiks::app::set_view_mode(ViewMode::Net));
         REQUIRE(rubiks::app::view_mode() == ViewMode::Net);
         REQUIRE(rubiks::app::render());
-        REQUIRE_FALSE(rubiks::app::pointer_down(128.0f, 128.0f));
+
+        // The center of the canvas is the center of the net block, so the net
+        // is the one view on screen and it answers the press itself.
+        REQUIRE(rubiks::app::pointer_down(128.0f, 128.0f));
+        rubiks::app::pointer_cancel();
         REQUIRE_FALSE(rubiks::app::is_solved());
 
         REQUIRE(rubiks::app::set_view_mode(ViewMode::Both));

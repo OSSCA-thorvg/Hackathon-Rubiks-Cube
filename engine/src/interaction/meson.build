@@ -6,6 +6,7 @@ interaction_lib = static_library(
   files(
     'DragResolver.cpp',
     'InteractionController.cpp',
+    'NetPicking.cpp',
     'Picking.cpp',
   ),
   dependencies: [graphics_dep],

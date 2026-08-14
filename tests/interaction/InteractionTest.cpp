@@ -1,10 +1,12 @@
 #include "interaction/InteractionController.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <vector>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -12,7 +14,9 @@
 #include "cube/CubeState.hpp"
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
+#include "graphics/NetGeometry.hpp"
 #include "interaction/DragResolver.hpp"
+#include "interaction/NetPicking.hpp"
 
 namespace {
 
@@ -717,5 +721,319 @@ TEST_CASE("reset returns the controller to rest")
     REQUIRE_FALSE(controller.active_rotation());
     REQUIRE_FALSE(controller.advance(kFrameMs));
     REQUIRE_FALSE(controller.take_committed_move());
+}
+
+
+// The net side of the controller. The same snap and the same commit, reached
+// from a view with fixed screen directions and no camera.
+
+namespace {
+
+Rect net_rect()
+{
+    return rubiks::graphics::layout(kCanvas, kCanvas).net;
+}
+
+float net_face_side()
+{
+    return net_rect().width /
+           static_cast<float>(rubiks::graphics::kNetColumns);
+}
+
+/** The center of one net cell, in drawing-buffer pixels. */
+Vec2 net_point(Face face, int col, int row)
+{
+    const Rect rect = net_rect();
+    const float face_side = net_face_side();
+    const float cell = face_side / static_cast<float>(kSize);
+    const auto block = rubiks::graphics::net_block(face);
+
+    return Vec2{rect.x + static_cast<float>(block.column) * face_side +
+                    (static_cast<float>(col) + 0.5f) * cell,
+                rect.y + static_cast<float>(block.row) * face_side +
+                    (static_cast<float>(row) + 0.5f) * cell};
+}
+
+/** Presses a net cell, which must be on a face. */
+void press_net(InteractionController& controller, Face face, int col, int row)
+{
+    const Vec2 at = net_point(face, col, row);
+    const auto pick = pick_net(at.x, at.y, net_rect(), kSize);
+    REQUIRE(pick);
+    REQUIRE(controller.net_pointer_down(at.x, at.y, net_rect(), *pick));
+}
+
+/** Drags a pressed net cell by a number of face widths. */
+void drag_net(InteractionController& controller, Face face, int col, int row,
+              float faces_x, float faces_y)
+{
+    const Vec2 from = net_point(face, col, row);
+    controller.pointer_move(from.x + faces_x * net_face_side(),
+                            from.y + faces_y * net_face_side());
+}
+
+}  // namespace
+
+TEST_CASE("a net drag reaches the same snap a cube drag does")
+{
+    InteractionController controller(kSize);
+
+    press_net(controller, Face::Front, 1, 0);
+    REQUIRE_FALSE(controller.active_rotation());
+
+    // Half a face, so half a quarter turn: the net's sensitivity is one face
+    // across for one turn.
+    drag_net(controller, Face::Front, 1, 0, -0.5f, 0.0f);
+
+    const auto turning = controller.active_rotation();
+    REQUIRE(turning);
+    REQUIRE(turning->axis == Axis::Y);
+    REQUIRE(turning->layers == rubiks::cube::layer(kSize - 1));
+    REQUIRE(turning->angle_degrees == Approx(45.0f));
+
+    controller.pointer_up();
+    const auto settled = settle(controller);
+
+    REQUIRE(settled.commits == 1);
+    REQUIRE(settled.move ==
+            CubeMove{Axis::Y, rubiks::cube::layer(kSize - 1), 1});
+}
+
+TEST_CASE("a net drag the other way turns the other way")
+{
+    InteractionController controller(kSize);
+
+    press_net(controller, Face::Front, 1, 0);
+    drag_net(controller, Face::Front, 1, 0, 0.5f, 0.0f);
+    controller.pointer_up();
+
+    const auto settled = settle(controller);
+    REQUIRE(settled.move ==
+            CubeMove{Axis::Y, rubiks::cube::layer(kSize - 1), -1});
+}
+
+TEST_CASE("a net drag locks to one of the two directions it can go")
+{
+    InteractionController controller(kSize);
+
+    // Mostly sideways, so the sideways turn is the one that runs; the
+    // downward component contributes nothing to the angle.
+    press_net(controller, Face::Front, 1, 1);
+    drag_net(controller, Face::Front, 1, 1, -0.5f, -0.2f);
+
+    const auto turning = controller.active_rotation();
+    REQUIRE(turning);
+    REQUIRE(turning->axis == Axis::Y);
+    REQUIRE(turning->angle_degrees == Approx(45.0f));
+
+    // Which is the middle layer, because that is the cell that was pressed.
+    REQUIRE(turning->layers == rubiks::cube::layer(1));
+}
+
+TEST_CASE("a piece lifts once for a turn and stays up until it settles")
+{
+    // The lift is one height, not a reading of how far round the turn has
+    // got. It slides in over a little time so that it does not appear at a
+    // stroke, and from then on the angle has nothing to do with it: a finger
+    // carrying the turn further, or bringing it back toward nothing, leaves
+    // the piece exactly as high as it was.
+    InteractionController controller(kSize);
+    press_net(controller, Face::Front, 1, 0);
+    drag_net(controller, Face::Front, 1, 0, -0.2f, 0.0f);
+
+    // Part way through the slide it is part way open, and it is time that has
+    // carried it there.
+    static_cast<void>(controller.advance(0.5 * kOpeningMs));
+    REQUIRE(controller.active_rotation());
+    REQUIRE(controller.active_rotation()->opening == Approx(0.5f));
+
+    static_cast<void>(controller.advance(kOpeningMs));
+    REQUIRE(controller.active_rotation()->opening == Approx(1.0f));
+
+    for (const float faces : {-0.5f, -1.0f, -1.4f, -0.05f, -2.5f}) {
+        drag_net(controller, Face::Front, 1, 0, faces, 0.0f);
+        static_cast<void>(controller.advance(16.0));
+
+        const auto turning = controller.active_rotation();
+        REQUIRE(turning);
+
+        INFO("dragged " << faces << " faces, at " << turning->angle_degrees
+                        << " degrees");
+        REQUIRE(turning->opening == Approx(1.0f));
+    }
+
+    // And the release closes it, so the commit lands on a settled drawing.
+    controller.pointer_up();
+    while (controller.advance(16.0)) {
+    }
+    REQUIRE_FALSE(controller.active_rotation());
+}
+
+TEST_CASE("a net drag past a quarter turn keeps turning")
+{
+    // The net used to cap the angle at a quarter, because that was all it
+    // could draw. It draws a band all the way round its loop now, so a drag
+    // carried further settles on the turn it actually reached -- including
+    // one that came the whole way round and left the cube alone.
+    struct Carried {
+        float faces;
+        float degrees;
+        int commits;
+        int quarter_turns;
+    };
+
+    for (const auto& carried : {Carried{1.5f, 135.0f, 1, 2},
+                                Carried{3.0f, 270.0f, 1, 3},
+                                Carried{4.0f, 360.0f, 0, 0}}) {
+        InteractionController controller(kSize);
+        press_net(controller, Face::Front, 1, 0);
+        drag_net(controller, Face::Front, 1, 0, -carried.faces, 0.0f);
+
+        const auto turning = controller.active_rotation();
+        REQUIRE(turning);
+
+        INFO("dragged " << carried.faces << " faces");
+        REQUIRE(turning->angle_degrees == Approx(carried.degrees));
+
+        controller.pointer_up();
+        const auto settled = settle(controller);
+
+        REQUIRE(settled.commits == carried.commits);
+        if (carried.commits > 0) {
+            REQUIRE(settled.move->quarter_turns == carried.quarter_turns);
+        }
+    }
+}
+
+TEST_CASE("a net drag inside the dead zone commits nothing")
+{
+    InteractionController controller(kSize);
+
+    press_net(controller, Face::Front, 1, 0);
+    drag_net(controller, Face::Front, 1, 0, -0.001f, 0.0f);
+
+    REQUIRE_FALSE(controller.active_rotation());
+
+    controller.pointer_up();
+    REQUIRE_FALSE(controller.advance(kFrameMs));
+    REQUIRE_FALSE(controller.take_committed_move());
+}
+
+TEST_CASE("a net drag short of the threshold springs back")
+{
+    InteractionController controller(kSize);
+
+    press_net(controller, Face::Front, 1, 0);
+    drag_net(controller, Face::Front, 1, 0, -0.2f, 0.0f);
+    controller.pointer_up();
+
+    const auto settled = settle(controller);
+    REQUIRE(settled.commits == 0);
+    REQUIRE_FALSE(controller.active_rotation());
+}
+
+TEST_CASE("only one gesture runs at a time whichever view it started in")
+{
+    InteractionController controller(kSize);
+
+    press_net(controller, Face::Front, 1, 0);
+
+    const Vec2 at = screen_of(kFrontCenter);
+    REQUIRE_FALSE(
+        controller.pointer_down(at.x, at.y, cube_camera(), cube_rect()));
+    REQUIRE_FALSE(controller.start_move(CubeMove{Axis::X, 1, 1}));
+
+    controller.cancel();
+
+    // And the other way round: a cube drag refuses a net press.
+    press(controller, kFrontCenter);
+
+    const Vec2 cell = net_point(Face::Front, 1, 0);
+    const auto pick = pick_net(cell.x, cell.y, net_rect(), kSize);
+    REQUIRE(pick);
+    REQUIRE_FALSE(controller.net_pointer_down(cell.x, cell.y, net_rect(),
+                                              *pick));
+}
+
+TEST_CASE("a cancelled net drag leaves nothing behind")
+{
+    InteractionController controller(kSize);
+
+    press_net(controller, Face::Front, 1, 0);
+    drag_net(controller, Face::Front, 1, 0, -0.8f, 0.0f);
+    REQUIRE(controller.is_busy());
+
+    controller.cancel();
+
+    REQUIRE_FALSE(controller.is_busy());
+    REQUIRE_FALSE(controller.active_rotation());
+    REQUIRE_FALSE(controller.advance(kFrameMs));
+
+    // A release after the cancel finds no gesture to end.
+    controller.pointer_up();
+    REQUIRE_FALSE(controller.advance(kFrameMs));
+    REQUIRE_FALSE(controller.take_committed_move());
+}
+
+TEST_CASE("a net press with nothing to draw on is refused")
+{
+    InteractionController controller(kSize);
+    const Vec2 at = net_point(Face::Front, 1, 0);
+    const NetPick pick{Face::Front, 1, 0};
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+
+    REQUIRE_FALSE(controller.net_pointer_down(nan, at.y, net_rect(), pick));
+    REQUIRE_FALSE(controller.net_pointer_down(
+        at.x, at.y, Rect{0.0f, 0.0f, 0.0f, 0.0f}, pick));
+}
+
+TEST_CASE("a press offers the two rings that cell can turn on")
+{
+    using rubiks::cube::Axis;
+    using rubiks::cube::Face;
+    using rubiks::graphics::NetGuide;
+    using rubiks::interaction::NetPick;
+
+    const auto rect = rubiks::graphics::layout(kCanvas, kCanvas).net;
+    const float cell = rect.width / 12.0f;
+
+    const auto axes_offered = [&](Face face, int col, int row) {
+        InteractionController controller(kSize);
+        const auto block = rubiks::graphics::net_block(face);
+        const float x = rect.x + (static_cast<float>(block.column * kSize +
+                                                     col) +
+                                  0.5f) * cell;
+        const float y = rect.y + (static_cast<float>(block.row * kSize + row) +
+                                  0.5f) * cell;
+
+        REQUIRE(controller.net_pointer_down(x, y, rect,
+                                            NetPick{face, col, row}));
+
+        std::vector<Axis> axes;
+        for (const auto& guide : controller.net_guides()) axes.push_back(
+            guide.axis);
+        std::sort(axes.begin(), axes.end());
+        return axes;
+    };
+
+    // The two rings are the two axes the cell's own face does not point along:
+    // turning about its own axis leaves it on that face, spinning in place.
+    REQUIRE(axes_offered(Face::Up, 1, 2) ==
+            std::vector<Axis>{Axis::X, Axis::Z});
+    REQUIRE(axes_offered(Face::Front, 1, 1) ==
+            std::vector<Axis>{Axis::X, Axis::Y});
+    REQUIRE(axes_offered(Face::Right, 0, 1) ==
+            std::vector<Axis>{Axis::Y, Axis::Z});
+
+    // And each names the layer that cell sits in.
+    InteractionController controller(kSize);
+    const float x = rect.x + 4.5f * cell;
+    const float y = rect.y + 2.5f * cell;
+    REQUIRE(controller.net_pointer_down(x, y, rect, NetPick{Face::Up, 1, 2}));
+
+    for (const auto& guide : controller.net_guides()) {
+        INFO("axis " << static_cast<int>(guide.axis));
+        REQUIRE(guide.layer == (guide.axis == Axis::X ? 1 : 2));
+    }
 }
 

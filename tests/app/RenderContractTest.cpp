@@ -5,10 +5,14 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include "EngineLifecycle.hpp"
+#include "graphics/NetGeometry.hpp"
+#include "graphics/Palette.hpp"
+#include "interaction/InteractionController.hpp"
 
 // Rendered scene contract v3: the canvas is split into a square 3D region
 // showing the +X, +Y and +Z faces of a solved 3x3x3, and a net below it
@@ -77,6 +81,17 @@ constexpr NetBlock kNetBlocks[]{
 };
 
 constexpr int kCubeSize = 3;
+
+/** Fill of a cut surface, only ever visible while a layer is turning. */
+constexpr Rgba kBody{70, 74, 82, 255};
+
+/**
+ * Half of the snap animation, which is half of the turn.
+ *
+ * The easing is symmetric about its middle, so the frame at half the duration
+ * is the frame at 45 degrees exactly, with no tolerance needed.
+ */
+constexpr double kHalfTurnMs = 100.0;
 
 float shorter_side(std::uint32_t width, std::uint32_t height)
 {
@@ -166,6 +181,40 @@ void require_net(std::uint32_t width, std::uint32_t height)
     }
 }
 
+/** Pixel at a point given in net cells from the top left of the net. */
+const std::uint8_t* pixel_in_net(float column, float row, std::uint32_t width,
+                                 std::uint32_t height)
+{
+    const Region region = net_region(width, height);
+    const float cell = region.side / static_cast<float>(kCubeSize);
+    return pixel_at(region.x + column * cell, region.y + row * cell, width,
+                    height);
+}
+
+/** Whether a coarse sweep of the 3D region finds a color anywhere in it. */
+bool cube_region_shows(const Rgba& color, std::uint32_t width,
+                       std::uint32_t height)
+{
+    constexpr int kSteps = 32;
+    const Region region = cube_region(width, height);
+
+    for (int row = 0; row < kSteps; ++row) {
+        for (int column = 0; column < kSteps; ++column) {
+            const auto* pixel = pixel_at(
+                region.x + (static_cast<float>(column) + 0.5f) /
+                               kSteps * region.side,
+                region.y + (static_cast<float>(row) + 0.5f) / kSteps *
+                               region.side,
+                width, height);
+            if (pixel[0] == color[0] && pixel[1] == color[1] &&
+                pixel[2] == color[2] && pixel[3] == color[3]) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void require_corners(std::uint32_t width, std::uint32_t height)
 {
     require_pixel(pixel_at(0, 0, width), kBackground);
@@ -183,6 +232,80 @@ void require_scene(std::uint32_t width, std::uint32_t height)
     require_cube_faces(width, height);
     require_net(width, height);
     require_corners(width, height);
+}
+
+/** Every byte of the 3D region, so an intrusion cannot hide in a blend. */
+std::vector<std::uint8_t> cube_region_bytes(std::uint32_t width,
+                                            std::uint32_t height)
+{
+    const Region region = cube_region(width, height);
+    const auto left = static_cast<std::uint32_t>(region.x);
+    const auto top = static_cast<std::uint32_t>(region.y);
+    const auto side = static_cast<std::uint32_t>(region.side);
+
+    std::vector<std::uint8_t> bytes;
+    bytes.reserve(static_cast<std::size_t>(side) * side * 4);
+
+    for (std::uint32_t row = 0; row < side && top + row < height; ++row) {
+        for (std::uint32_t column = 0; column < side && left + column < width;
+             ++column) {
+            const auto* pixel = pixel_at(left + column, top + row, width);
+            bytes.insert(bytes.end(), pixel, pixel + 4);
+        }
+    }
+    return bytes;
+}
+
+/**
+ * How many pixels of a box are drawn in a guide line's own color.
+ *
+ * A piece the turn is carrying rounds a cut and ends up outside the net, so
+ * "anything at all is drawn here" no longer tells a guide line from a sticker.
+ * The line's own color does: the stickers have none of the three, and the core
+ * of a line this thick lands on it exactly whatever the edges blend with.
+ */
+int guide_pixels(float left, float top, float right, float bottom,
+                 std::uint32_t width, std::uint32_t height)
+{
+    int total = 0;
+    for (auto y = static_cast<std::uint32_t>(top);
+         y < static_cast<std::uint32_t>(bottom) && y < height; ++y) {
+        for (auto x = static_cast<std::uint32_t>(left);
+             x < static_cast<std::uint32_t>(right) && x < width; ++x) {
+            const auto* pixel = pixel_at(x, y, width);
+
+            for (const auto axis : {rubiks::cube::Axis::X,
+                                    rubiks::cube::Axis::Y,
+                                    rubiks::cube::Axis::Z}) {
+                // A guide line is not quite opaque, so what lands on an empty
+                // margin is its color over the background, not the color.
+                const auto guide = rubiks::graphics::guide_color(axis);
+                const float cover = static_cast<float>(guide.a) / 255.0f;
+                const std::array<float, 3> over{
+                    guide.r * cover + kBackground[0] * (1.0f - cover),
+                    guide.g * cover + kBackground[1] * (1.0f - cover),
+                    guide.b * cover + kBackground[2] * (1.0f - cover)};
+
+                constexpr float kSlack = 12.0f;
+                if (std::abs(pixel[0] - over[0]) < kSlack &&
+                    std::abs(pixel[1] - over[1]) < kSlack &&
+                    std::abs(pixel[2] - over[2]) < kSlack) {
+                    ++total;
+                    break;
+                }
+            }
+        }
+    }
+    return total;
+}
+
+/** The middle of a net cell, in buffer coordinates. */
+Sample net_cell_point(float column, float row, std::uint32_t width,
+                      std::uint32_t height)
+{
+    const Region region = net_region(width, height);
+    const float cell = region.side / static_cast<float>(kCubeSize);
+    return Sample{region.x + column * cell, region.y + row * cell};
 }
 
 }  // namespace
@@ -235,4 +358,156 @@ TEST_CASE("the seams between stickers show the background")
         require_pixel(pixel_in_cube(seam, kSize, kSize), kBackground);
     }
 
+}
+
+// Rendered scene contract, extended to a frame in the middle of a turn. The
+// same idea as above -- fixed sample points read out of a real rasterization
+// -- applied where both views are moving, so that a band carried to the wrong
+// place shows up as a wrong color rather than as a plausible picture.
+//
+// No golden image: one would have to be regenerated every time the ThorVG
+// submodule moves, whereas these coordinates are rederived by hand.
+
+TEST_CASE("a sliding turn half way through rasterizes in both views")
+{
+    constexpr std::uint32_t kSize = 1024;
+    const rubiks::test::EngineLifecycle engine(kSize, kSize);
+
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Up, 1));
+    REQUIRE(rubiks::app::advance(kHalfTurnMs));
+    REQUIRE(rubiks::app::render());
+
+    // U slides the four side faces' top row -- the fourth of the net's nine
+    // rows -- half a face to the left, which is one and a half cells. So the
+    // stickers of that row now sit on whole-cell boundaries, and the one four
+    // cells in is the front face's rightmost, still green.
+    require_pixel(pixel_in_net(4.0f, 3.5f, kSize, kSize), kGreen);
+
+    // Five cells in is the one that followed it, off the right of the front
+    // block and onto the right block: red.
+    require_pixel(pixel_in_net(5.0f, 3.5f, kSize, kSize), kRed);
+
+    // The row below is not in the layer and has not moved: nothing the turn
+    // does moves the drawing it is passing over.
+    require_pixel(pixel_in_net(4.5f, 4.5f, kSize, kSize), kGreen);
+    require_pixel(pixel_in_net(4.5f, 5.5f, kSize, kSize), kGreen);
+
+    // Up is on the turning axis, so its block turns in place: the middle of
+    // it does not move, and neither does the color of a solved face.
+    require_pixel(pixel_in_net(4.5f, 1.5f, kSize, kSize), kWhite);
+
+    // Meanwhile the 3D view is turning the same layer, which opens the cut.
+    REQUIRE(cube_region_shows(kBody, kSize, kSize));
+
+    // Both views come back to rest together, and undoing the turn puts the
+    // whole resting contract back exactly as it was.
+    while (rubiks::app::advance(16.0)) {
+    }
+    REQUIRE(rubiks::app::render());
+    REQUIRE_FALSE(cube_region_shows(kBody, kSize, kSize));
+
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Up, -1));
+    while (rubiks::app::advance(16.0)) {
+    }
+    require_scene(kSize, kSize);
+}
+
+TEST_CASE("a turn across a cut band half way through rasterizes in both views")
+{
+    constexpr std::uint32_t kSize = 1024;
+    const rubiks::test::EngineLifecycle engine(kSize, kSize);
+
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1));
+    REQUIRE(rubiks::app::advance(kHalfTurnMs));
+    REQUIRE(rubiks::app::render());
+
+    // R's band runs down the column Up, Front and Down share in the cross, so
+    // it marches up it: half way round, every cell of that column has moved a
+    // face and a half, and the front's middle cell is now in the up face's.
+    require_pixel(pixel_in_net(5.5f, 3.0f, kSize, kSize), kGreen);
+
+    // With the down face's middle cell right behind it, in the front's.
+    require_pixel(pixel_in_net(5.5f, 6.0f, kSize, kSize), kYellow);
+
+    // The column beside it is in no part of the turn, so it is where it was.
+    require_pixel(pixel_in_net(4.5f, 1.5f, kSize, kSize), kWhite);
+    require_pixel(pixel_in_net(3.5f, 1.5f, kSize, kSize), kWhite);
+
+    // And the right face is the one turning, so it spins in place: a solved
+    // face stays one color through it, and its middle never moves.
+    require_pixel(pixel_in_net(7.5f, 4.5f, kSize, kSize), kRed);
+
+    REQUIRE(cube_region_shows(kBody, kSize, kSize));
+
+    // And the turn arrives exactly where the commit puts the cube, so the
+    // frame after it is the same picture.
+    while (rubiks::app::advance(16.0)) {
+    }
+    REQUIRE(rubiks::app::render());
+    require_pixel(pixel_in_net(5.5f, 0.5f, kSize, kSize), kGreen);
+    require_pixel(pixel_in_net(5.5f, 2.5f, kSize, kSize), kGreen);
+}
+
+TEST_CASE("pressing a net cell draws the rings it could turn on")
+{
+    constexpr std::uint32_t kSize = 1024;
+    const rubiks::test::EngineLifecycle engine(kSize, kSize);
+
+    const Region net = net_region(kSize, kSize);
+    const float cell = net.side / static_cast<float>(kCubeSize);
+    const float net_bottom =
+        net.y + static_cast<float>(rubiks::graphics::kNetRows) * net.side;
+
+    // Two margins that tell the two rings apart. The vertical ring bridges Up's
+    // column across to Back's below the net; the horizontal one goes round past
+    // the left-hand edge. Counted by the line's own color, because a drag also
+    // steps the cells beside the turn out into these margins.
+    const auto below = [&] {
+        return guide_pixels(0.0f, net_bottom, static_cast<float>(kSize),
+                            static_cast<float>(kSize), kSize, kSize);
+    };
+    const auto beside = [&] {
+        return guide_pixels(0.0f, net.y, net.x, net_bottom, kSize, kSize);
+    };
+
+    REQUIRE(rubiks::app::render());
+    REQUIRE(below() == 0);
+    REQUIRE(beside() == 0);
+
+    const auto resting_cube = cube_region_bytes(kSize, kSize);
+
+    // The middle of the front block turns on two rings, neither of them the
+    // one the front block itself spins on.
+    const Sample press = net_cell_point(4.5f, 4.5f, kSize, kSize);
+    REQUIRE(rubiks::app::pointer_down(press.x, press.y));
+    REQUIRE(rubiks::app::render());
+
+    REQUIRE(below() > 0);
+    REQUIRE(beside() > 0);
+
+    // And they keep off the 3D view entirely: not one byte of it moved. A
+    // whole-buffer comparison rather than a search for the line's own color,
+    // which would miss a pixel the edge of the line only tinted.
+    REQUIRE(cube_region_bytes(kSize, kSize) == resting_cube);
+
+    // Dragging up settles on the vertical one, and the horizontal one goes.
+    rubiks::app::pointer_move(press.x, press.y - 3.0f * cell);
+    REQUIRE(rubiks::app::render());
+    REQUIRE(below() > 0);
+    REQUIRE(beside() == 0);
+
+    // Releasing ends the gesture, so the guide goes with it.
+    rubiks::app::pointer_up();
+    while (rubiks::app::advance(16.0)) {
+    }
+    REQUIRE(rubiks::app::render());
+    REQUIRE(below() == 0);
+    REQUIRE(beside() == 0);
+
+    // A drag the other way settles on the horizontal ring instead.
+    REQUIRE(rubiks::app::pointer_down(press.x, press.y));
+    rubiks::app::pointer_move(press.x + 3.0f * cell, press.y);
+    REQUIRE(rubiks::app::render());
+    REQUIRE(beside() > 0);
+    REQUIRE(below() == 0);
 }

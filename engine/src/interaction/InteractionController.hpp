@@ -1,12 +1,15 @@
 #pragma once
 
 #include <optional>
+#include <vector>
 
 #include "cube/CubeMove.hpp"
 #include "graphics/ActiveRotation.hpp"
+#include "graphics/NetGeometry.hpp"
 #include "graphics/Camera.hpp"
 #include "graphics/Rect.hpp"
 #include "interaction/DragResolver.hpp"
+#include "interaction/NetPicking.hpp"
 #include "interaction/Picking.hpp"
 #include "math/Types.hpp"
 
@@ -25,6 +28,25 @@ inline constexpr float kQuarterTurnFraction = 0.5f;
  * that happen to start out equal, and tuning one should not move the other.
  */
 inline constexpr float kOrbitQuarterTurnFraction = 0.5f;
+
+/**
+ * The same for a drag across the unfolded net, as a fraction of its width.
+ *
+ * One face out of the four the cross is wide, so a sticker dragged a quarter
+ * turn travels about as far as the face it is heading for.
+ */
+inline constexpr float kNetQuarterTurnFraction = 0.25f;
+
+/**
+ * How long a moving piece takes to lift off the drawing, and to settle again.
+ *
+ * In milliseconds, and a time rather than an angle on purpose: the lift is one
+ * height, held from the moment the turn has a direction until the moment it
+ * commits. Sliding it in over a little time is only so that it does not appear
+ * at a stroke; a lift that grew and shrank with the angle would have the piece
+ * breathing under a finger that was only turning further.
+ */
+inline constexpr double kOpeningMs = 120.0;
 
 /** Snap pacing: time for a full quarter turn, and a floor for short snaps. */
 inline constexpr double kSnapMsPerQuarterTurn = 200.0;
@@ -67,6 +89,10 @@ struct OrbitDelta {
  * and commits nothing. Only a genuine release of a layer drag can reach the
  * snap, so an interrupted gesture can never change the cube.
  *
+ * A drag on the unfolded net is the third way in and the shortest: it reaches
+ * the same snap, so past the release nothing downstream can tell which of the
+ * two views a turn was asked for in. One gesture at a time, whichever it was.
+ *
  * The controller owns neither the CubeState nor the camera. A finished snap
  * hands back a CubeMove and an orbit hands back angles, which keeps every
  * state change visible at the call site instead of hidden behind a reference.
@@ -88,6 +114,25 @@ public:
     [[nodiscard]] bool pointer_down(float x, float y,
                                     const graphics::Camera& camera,
                                     const graphics::Rect& viewport) noexcept;
+
+    /**
+     * Starts a layer drag on the unfolded net instead of on the cube.
+     *
+     * The cell is passed in rather than found here, because the caller has to
+     * know whether the press landed on a face before it can decide that this
+     * is a net gesture at all, and picking it twice would let the two answers
+     * disagree.
+     *
+     * The angle a net drag reaches is capped at one quarter turn: the net
+     * shows a cycle one cell at a time, so a drag carried further would settle
+     * on a turn the drawing never showed.
+     *
+     * @return true when a gesture began; false only when another gesture or a
+     *         snap is already running, or the coordinates are not finite.
+     */
+    [[nodiscard]] bool net_pointer_down(float x, float y,
+                                        const graphics::Rect& rect,
+                                        const NetPick& pick) noexcept;
 
     /**
      * Starts an animated move without a pointer gesture.
@@ -151,6 +196,14 @@ public:
      */
     [[nodiscard]] std::optional<OrbitDelta> take_orbit_delta() noexcept;
 
+    /**
+     * The rings a net press is offering, or the one it has locked onto.
+     *
+     * Empty at every other moment, which is what gives the guide lines the
+     * lifetime of the gesture and saves keeping a selection of their own.
+     */
+    [[nodiscard]] std::vector<graphics::NetGuide> net_guides() const;
+
     /** The turn to draw, or nothing when the cube is at rest. */
     [[nodiscard]] std::optional<graphics::ActiveRotation> active_rotation()
         const noexcept;
@@ -177,11 +230,47 @@ private:
         float angle_degrees = 0.0f;
     };
 
+    /** The turn a net drag locked onto, with the direction driving it. */
+    struct NetLock {
+        cube::Axis axis;
+        int layer;
+        cube::LayerMask layers;
+        /** Unit screen direction, one of the four the net's grid allows. */
+        math::Vec2 direction;
+        /** +1 when moving along `direction` turns the axis positively. */
+        float sign;
+    };
+
+    /** A drag in progress across the net. */
+    struct NetGesture {
+        graphics::Rect rect;
+        NetPick pick;
+        math::Vec2 start;
+        std::optional<NetLock> lock;
+        float angle_degrees = 0.0f;
+    };
+
     /** A drag sweeping the viewpoint. */
     struct Orbit {
         graphics::Rect viewport;
         /** The last position seen, so a move is a step rather than a total. */
         math::Vec2 previous;
+    };
+
+    /**
+     * The turn a locked gesture is making, whichever kind of gesture it is.
+     *
+     * A drag on the cube and a drag on the net decide an axis, a layer and an
+     * angle by quite different means and then have nothing left to say apart
+     * from those three. Naming the three is what keeps the rest of this class
+     * from asking "cube gesture, or net gesture?" once per consumer -- and a
+     * third way in would be one more case here rather than one more pair of
+     * branches everywhere.
+     */
+    struct LockedTurn {
+        cube::Axis axis;
+        cube::LayerMask layers;
+        float angle_degrees;
     };
 
     /** A release running down to the quarter turn it settled on. */
@@ -194,7 +283,31 @@ private:
         double duration_ms = 0.0;
     };
 
+    /** True while a pointer owns a gesture of any of the three kinds. */
+    [[nodiscard]] bool gesture_running() const noexcept;
+
+    /** The turn a finger is holding, or nothing when none has an axis yet. */
+    [[nodiscard]] std::optional<LockedTurn> locked_turn() const noexcept;
+
+    /** Updates a net drag's lock and angle from the pointer's position. */
+    void advance_net_gesture(float x, float y) noexcept;
+
+    /** Begins the run-down from a released drag's angle to its quarter turn. */
+    void start_snap(cube::Axis axis, cube::LayerMask layers,
+                    float angle_degrees) noexcept;
+
     [[nodiscard]] float snap_angle() const noexcept;
+
+    /** How far a moving piece is held up, for whatever is happening now. */
+    [[nodiscard]] float opening() const noexcept;
+
+    /**
+     * How long a turn has been on, capped at the time it takes to open.
+     *
+     * Counted while a turn is being made, whether by a finger or by a snap
+     * animating a move nobody is holding, and dropped when the cube settles.
+     */
+    double opened_ms_ = 0.0;
 
     /**
      * The move the running snap has decided on, if it changes the cube.
@@ -208,6 +321,7 @@ private:
 
     int size_;
     std::optional<Gesture> gesture_;
+    std::optional<NetGesture> net_gesture_;
     std::optional<Orbit> orbit_;
     std::optional<Snap> snap_;
     std::optional<cube::CubeMove> committed_;

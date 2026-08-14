@@ -51,16 +51,18 @@ namespace rubiks::app {
 /**
  * Begins a pointer gesture at a point in drawing-buffer pixels.
  *
- * Pressing the cube drags a layer; pressing anywhere else sweeps the
- * viewpoint around it. Converting CSS pixels and the device pixel ratio is the
- * caller's job, the same split the resize path uses.
+ * Pressing a cell of either view drags a layer; pressing anywhere else sweeps
+ * the viewpoint around the cube. Which view a press belongs to comes from the
+ * layout, so the two never contend for a pixel. Converting CSS pixels and the
+ * device pixel ratio is the caller's job, the same split the resize path uses.
  *
  * A snap left running by the previous release is confirmed here rather than
  * blocking the press, so drags in quick succession all reach the cube.
  *
  * @return true when a gesture began. False only when none could: before
- *         initialization, in net-only view, for non-finite coordinates, and
- *         while another gesture is already running.
+ *         initialization, for non-finite coordinates, while another gesture is
+ *         already running, and in net-only view for a press off the net, where
+ *         there is no viewpoint on screen to sweep instead.
  */
 [[nodiscard]] bool pointer_down(float x, float y) noexcept;
 

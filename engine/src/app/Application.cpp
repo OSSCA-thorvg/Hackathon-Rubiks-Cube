@@ -2,11 +2,13 @@
 
 #include <cmath>
 #include <memory>
+#include <optional>
 
 #include <thorvg.h>
 
 #include "cube/CubeState.hpp"
 #include "cube/Scramble.hpp"
+#include "graphics/AxisGizmo.hpp"
 #include "graphics/Camera.hpp"
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
@@ -15,6 +17,7 @@
 #include "graphics/Pipeline.hpp"
 #include "graphics/RenderScene.hpp"
 #include "interaction/InteractionController.hpp"
+#include "interaction/NetPicking.hpp"
 #include "math/Transform.hpp"
 #include "render/Renderer.hpp"
 #include "render/ThorVGSoftwareRenderer.hpp"
@@ -196,12 +199,25 @@ bool resize(std::uint32_t width, std::uint32_t height) noexcept
 bool pointer_down(float x, float y) noexcept
 {
     if (!state) return false;
-    if (state->view_mode == graphics::ViewMode::Net) return false;
 
     // Everything that could reject the press comes first. A press that starts
     // nothing must not change anything either, and confirming the snap below
     // is a change.
     if (!std::isfinite(x) || !std::isfinite(y)) return false;
+
+    // The layout is what routes the press. The net owns every cell inside its
+    // own block, and the 3D region and the background around it own the rest,
+    // so the two views never contend for the same pixel.
+    std::optional<interaction::NetPick> net_pick;
+    if (state->view_mode != graphics::ViewMode::Cube3D) {
+        net_pick = interaction::pick_net(x, y, state->placement.net, kCubeSize);
+    }
+
+    // Nothing to start: the net is the only view showing and the press missed
+    // it. Sweeping the viewpoint is not the fallback here, because there is no
+    // viewpoint on screen to sweep.
+    const bool cube_visible = state->view_mode != graphics::ViewMode::Net;
+    if (!net_pick && !cube_visible) return false;
 
     // A snap still animating already knows its turn, so it is applied here
     // rather than made to block the new gesture: that is what kept fast
@@ -213,6 +229,11 @@ bool pointer_down(float x, float y) noexcept
     // Before the camera is captured, never after: a press arriving between
     // two frames must aim at the viewpoint the last one produced.
     drain_orbit();
+
+    if (net_pick) {
+        return state->interaction.net_pointer_down(x, y, state->placement.net,
+                                                   *net_pick);
+    }
 
     return state->interaction.pointer_down(x, y, current_camera(),
                                            state->placement.cube);
@@ -273,14 +294,29 @@ bool render() noexcept
                 | graphics::cull()                                            //
                 | graphics::depth_sort()                                      //
                 | graphics::viewport(state->placement.cube);
+
+        // Which way each axis points from here, in the colors the net's guide
+        // lines use, so a cyan loop over there and a cyan arm over here are
+        // plainly the same axis.
+        graphics::append_scene(
+            scene, graphics::build_axis_gizmo(camera, state->placement.cube));
     }
 
     if (state->view_mode != graphics::ViewMode::Cube3D) {
-        // The net is already screen-space, so it only has to be appended.
-        const auto net =
-            graphics::build_net_scene(state->cube_state, state->placement.net);
-        scene.faces.insert(scene.faces.end(), net.faces.begin(),
-                           net.faces.end());
+        // The net is already screen-space, so it only has to be appended. It
+        // gets the same rotation as the 3D scene, which is what makes one
+        // gesture move both views in the same frame.
+        graphics::append_scene(
+            scene, graphics::build_net_scene(
+                       state->cube_state, state->placement.net,
+                       state->interaction.active_rotation()));
+
+        // The rings the pressed cell could turn on, drawn over the stickers
+        // so the gesture says where it is about to go before it goes there.
+        graphics::append_scene(
+            scene, graphics::build_net_guides(state->interaction.net_guides(),
+                                              state->placement.net,
+                                              kCubeSize));
     }
 
     return state->renderer->render(scene);

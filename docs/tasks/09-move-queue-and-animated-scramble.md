@@ -2,7 +2,7 @@
 
 ## Status
 
-`In progress`
+`Completed`
 
 ## Objective
 
@@ -119,56 +119,56 @@ thorvg_rubiks_scramble(seed: uint32, move_count: uint32) -> int
 
 ### 0. GameSession 분리
 
-- [ ] `web/src/game/GameSession.ts`: timer 소유, `GameState` 전이, 완주 판정을 `GameController`에서 옮김. DOM listener 배선은 `GameController`에, frame 소유권은 `AppLifecycle`에 그대로 남김
-- [ ] `GameController`는 session을 만들고 명령(`scramble`/`reset`/move)과 `afterEngineFrame` 관찰을 그것에 넘기는 배선만 남김
-- [ ] 기존 `GameController` unit test가 관찰하던 전이가 그대로 통과하는지 확인 (동작 변경 없음)
+- [x] `web/src/game/GameSession.ts`: timer 소유, `GameState` 전이, 완주 판정을 `GameController`에서 옮김. DOM listener 배선은 `GameController`에, frame 소유권은 `AppLifecycle`에 그대로 남김
+- [x] `GameController`는 session을 만들고 명령(`scramble`/`reset`/move)과 `afterEngineFrame` 관찰을 그것에 넘기는 배선만 남김
+- [x] 기존 `GameController` unit test가 관찰하던 전이가 그대로 통과하는지 확인 (동작 변경 없음)
 
 ### 1. Player
 
-- [ ] `start_move`에 90°당 tempo 인자 추가 — duration은 각도 비례 유도 (기본값 유지, 기존 test 무수정 통과)
-- [ ] `snap_duration`의 바닥을 `min(kMinSnapMs, tempo)`로 바꾸고, 기존 두 tempo에서 값이 변하지 않음을 고정하는 test
-- [ ] `start_move`가 `opened_ms_`를 되돌리는 구현과, 연속 두 move의 리프트가 두 번 모두 0에서 오르는 test
-- [ ] Half turn이 quarter turn의 두 배 duration으로 도는 test
-- [ ] 재생 중 매 frame(`start_move` 직후와 move 사이 포함) `app::advance()`가 true를 반환하는 test
-- [ ] `pointer_up`에 tempo 인자 추가(`start_snap`을 함께 지남)와 `Application::pointer_up()`의 사용자 tempo 연결 (기본값 유지, 기존 test 무수정 통과)
-- [ ] `Player` 정의(`plan`, `next`, `tempo_ms`)와 `ApplicationState::playback`, `advance()`의 소비 loop 구현
-- [ ] 거절되는 move가 섞인 plan이 frame loop를 멈추게 하지 않고 끝까지 소진되는 test
-- [ ] `commit_move(move)`가 `playback`을 스스로 읽어 count를 가르는 구현 (출처 인자 없음)
-- [ ] 재생 중 commit이 `user_move_count`를 증가시키지 않는 test
-- [ ] 재생 진행 중 `is_busy()` true, `turn_face`와 UI move 거절 test
-- [ ] 재생 중 net·rings 영역의 press가 layer drag를 시작하지 못하는 test (Phase 8·8.5의 두 picking 경로)
-- [ ] **Scramble 수락 직후, 첫 `advance()` 전의 `turn_face`가 거절되는 test** (controller가 idle인 창을 Application guard가 막는지)
-- [ ] 마지막 수의 snap이 도는 동안(plan은 소진된 뒤) busy가 유지되는 test
-- [ ] Picking 없는 `start_orbit()` 추가 — snap은 보지 않고, 퇴화된 viewport는 거절. `pointer_down()`의 빗나감 분기도 이 함수를 부르게 함
-- [ ] 재생 중 pointer down이 cube 위에서도 orbit gesture를 시작하고 `finish_snap()`을 부르지 않는 test
-- [ ] **`ViewMode::Flat` 재생 중의 press가 거절되고, 이후 3D로 돌아온 카메라가 유한한 값인 test** (NaN 회귀)
-- [ ] **Orbit을 잡고 있는 동안에도 다음 move가 시작되어 재생이 끝까지 진행되는 test**
-- [ ] `playback`이 마지막 수의 commit까지 유지되어 그동안 orbit 라우팅과 busy가 끊기지 않는 test
-- [ ] 원자적 폐기 helper(`drain_orbit()` + `interaction.reset()` + `playback.reset()`) 구현
-- [ ] `cancel()`이 진행 중인 snap을 버리지 않음을 고정하는 회귀 test
-- [ ] Reset과 scramble의 폐기 test (`shutdown`은 `ApplicationState` 파괴로 자동)
-- [ ] Player를 떠난 snap이 진행 중일 때 reset하면 그 move가 commit되지 않는 test
-- [ ] Resize와 view 전환(`set_view_mode`·`set_flat_style`) 중에도 재생이 계속되어 scramble이 끝까지 적용되는 test
+- [x] `start_move`에 90°당 tempo 인자 추가 — duration은 각도 비례 유도 (기본값 유지, 기존 test 무수정 통과)
+- [x] `snap_duration`의 바닥을 `min(kMinSnapMs, tempo)`로 바꾸고, 기존 두 tempo에서 값이 변하지 않음을 고정하는 test
+- [x] `start_move`가 `opened_ms_`를 되돌리는 구현과, 연속 두 move의 리프트가 두 번 모두 0에서 오르는 test
+- [x] Half turn이 quarter turn의 두 배 duration으로 도는 test
+- [x] 재생 중 매 frame(`start_move` 직후와 move 사이 포함) `app::advance()`가 true를 반환하는 test
+- [x] `pointer_up`에 tempo 인자 추가(`start_snap`을 함께 지남)와 `Application::pointer_up()`의 사용자 tempo 연결 (기본값 유지, 기존 test 무수정 통과)
+- [x] `Player` 정의(`plan`, `next`, `tempo_ms`)와 `ApplicationState::playback`, `advance()`의 소비 loop 구현
+- [x] 거절되는 move가 섞인 plan이 frame loop를 멈추게 하지 않고 끝까지 소진되는 test
+- [x] `commit_move(move)`가 `playback`을 스스로 읽어 count를 가르는 구현 (출처 인자 없음)
+- [x] 재생 중 commit이 `user_move_count`를 증가시키지 않는 test
+- [x] 재생 진행 중 `is_busy()` true, `turn_face`와 UI move 거절 test
+- [x] 재생 중 net·rings 영역의 press가 layer drag를 시작하지 못하는 test (Phase 8·8.5의 두 picking 경로)
+- [x] **Scramble 수락 직후, 첫 `advance()` 전의 `turn_face`가 거절되는 test** (controller가 idle인 창을 Application guard가 막는지)
+- [x] 마지막 수의 snap이 도는 동안(plan은 소진된 뒤) busy가 유지되는 test
+- [x] Picking 없는 `start_orbit()` 추가 — snap은 보지 않고, 퇴화된 viewport는 거절. `pointer_down()`의 빗나감 분기도 이 함수를 부르게 함
+- [x] 재생 중 pointer down이 cube 위에서도 orbit gesture를 시작하고 `finish_snap()`을 부르지 않는 test
+- [x] **`ViewMode::Flat` 재생 중의 press가 거절되고, 이후 3D로 돌아온 카메라가 유한한 값인 test** (NaN 회귀)
+- [x] **Orbit을 잡고 있는 동안에도 다음 move가 시작되어 재생이 끝까지 진행되는 test**
+- [x] `playback`이 마지막 수의 commit까지 유지되어 그동안 orbit 라우팅과 busy가 끊기지 않는 test
+- [x] 원자적 폐기 helper(`drain_orbit()` + `interaction.reset()` + `playback.reset()`) 구현
+- [x] `cancel()`이 진행 중인 snap을 버리지 않음을 고정하는 회귀 test
+- [x] Reset과 scramble의 폐기 test (`shutdown`은 `ApplicationState` 파괴로 자동)
+- [x] Player를 떠난 snap이 진행 중일 때 reset하면 그 move가 commit되지 않는 test
+- [x] Resize와 view 전환(`set_view_mode`·`set_flat_style`) 중에도 재생이 계속되어 scramble이 끝까지 적용되는 test
 
 ### 2. Animated scramble
 
-- [ ] `scramble(seed, move_count)` 구현: `move_count` 검증(큐브를 건드리기 전에)과 Player 생성
-- [ ] `move_count` 범위 검증 test — 거절된 호출이 큐브도 재생도 남기지 않음을 함께 확인
-- [ ] `seed 42 has a stable cross-platform known answer` 삭제, 그 자리의 `move_count` 커버리지를 위 결정성 test에 흡수
-- [ ] 고정 dt를 반복 주입해 재생 소진 후 상태가 즉시 적용과 동치인 test
-- [ ] `scramble()` 직후 상태를 읽던 native test들에 `settle_application()` 삽입 (위 목록)
+- [x] `scramble(seed, move_count)` 구현: `move_count` 검증(큐브를 건드리기 전에)과 Player 생성
+- [x] `move_count` 범위 검증 test — 거절된 호출이 큐브도 재생도 남기지 않음을 함께 확인
+- [x] `seed 42 has a stable cross-platform known answer` 삭제, 그 자리의 `move_count` 커버리지를 위 결정성 test에 흡수
+- [x] 고정 dt를 반복 주입해 재생 소진 후 상태가 즉시 적용과 동치인 test
+- [x] `scramble()` 직후 상태를 읽던 native test들에 `settle_application()` 삽입 (위 목록)
 
 ### 3. Boundary와 UI
 
-- [ ] C ABI signature 변경과 hand-maintained `.d.ts`, exported list, fake fixture 갱신
-- [ ] `GameSession`: `scrambling` 상태, busy 전이로 ready 판정, 안내 문구 이동
-- [ ] `GameController`: scramble 수락 시 frame loop 시작
-- [ ] Scramble 수 입력 UI와 검증
-- [ ] TS unit test: scrambling 전이, timer arm 시점, 입력 검증
-- [ ] 1수 scramble이 첫 관찰 frame에 끝나도 `ready`로 넘어가는 test
-- [ ] e2e: Scramble click 후 큐브가 돌아가는 중간 frame 관찰, 소진 후 timer armed, 첫 user move에 timer 시작
-- [ ] e2e: `ready`를 기다리도록 기존 scramble 관찰 test 수정, 키보드 solve test를 3수 scramble로 축소
-- [ ] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
+- [x] C ABI signature 변경과 hand-maintained `.d.ts`, exported list, fake fixture 갱신
+- [x] `GameSession`: `scrambling` 상태, busy 전이로 ready 판정, 안내 문구 이동
+- [x] `GameController`: scramble 수락 시 frame loop 시작
+- [x] Scramble 수 입력 UI와 검증
+- [x] TS unit test: scrambling 전이, timer arm 시점, 입력 검증
+- [x] 1수 scramble이 첫 관찰 frame에 끝나도 `ready`로 넘어가는 test
+- [x] e2e: Scramble click 후 큐브가 돌아가는 중간 frame 관찰, 소진 후 timer armed, 첫 user move에 timer 시작
+- [x] e2e: `ready`를 기다리도록 기존 scramble 관찰 test 수정, 키보드 solve test를 3수 scramble로 축소
+- [x] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
 
 ## Acceptance criteria
 
@@ -220,6 +220,20 @@ npm --prefix web run build
 **과소평가한 범위 하나.** 손볼 test는 known-answer 하나가 아니라 `scramble()` 직후 큐브를 읽는 전부입니다. 목록을 문서에 실었습니다. 대신 키보드 solve e2e는 버리지 않고 3수로 줄입니다 — 브라우저에서 `running → completed`를 보는 유일한 경로라, 문제는 그 존재가 아니라 24키라는 길이였고 `move_count`가 인자가 된 지금 길이는 고를 수 있습니다.
 
 **빠져 있던 단계 하나.** `GameSession` 분리가 Scope에만 있고 구현 단계도 acceptance criterion도 없었습니다. 문서 자신의 근거("web 코드가 쌓이기 시작하는 이 phase의 첫 단계")를 따라 단계 0으로 두었습니다.
+
+### 2. 구현에서 드러난 것
+
+**리프트를 되돌리는 자리가 `start_move()`인 것은 재생만의 문제가 아니었습니다.** 시작 전 대조에서는 "재생에는 쉬는 frame이 없다"는 이유로 넣었는데, 구현하고 보니 같은 깜빡임이 `turn_face`에도 있었습니다 — 직전 move의 정리 frame보다 keyboard가 먼저 도착하는 좁은 창에서 `opened_ms_`가 아직 상한입니다. 재생이 그 창을 매 move마다 지나므로 드러났을 뿐입니다.
+
+**`min(kMinSnapMs, tempo)`는 지금은 아무것도 바꾸지 않습니다.** 두 tempo(200·120) 모두 60ms보다 크므로 값이 그대로 60입니다. Test는 그 사실과, 60ms보다 빠른 tempo에서 바닥이 tempo를 따라간다는 것을 함께 고정합니다.
+
+**재생이 정확히 준 수순만 적용했는지는 얼굴 이름으로 되짚어 확인합니다.** Scramble은 바깥 면 turn만 만들고 바깥 면은 전부 `turn_face`로 말할 수 있으므로, 수순을 거꾸로 되돌려 solved가 되면 빠뜨림·중복·순서 바뀜이 모두 배제됩니다. 큐브 상태를 읽는 ABI를 더할 필요가 없었습니다.
+
+**Browser에서 "실제로 돌고 있다"는 것은 잘린 면의 색으로 봅니다.** 회전 중인 layer의 절단면(`BODY`)은 정지 상태에서 절대 그려지지 않으므로, 3D 영역 어딘가에 그 색이 있다는 것이 곧 큐브가 도는 중이라는 뜻입니다. 두 frame의 픽셀이 다르다는 것보다 강한 주장이고 경합도 없습니다.
+
+**재생 중 drag가 시점만 옮긴다는 것은 양쪽으로 확인합니다.** Home view가 그림을 바꾸면 drag가 무언가를 했다는 뜻이고, 같은 seed를 다시 돌린 결과와 큐브가 같으면 그 이상은 하지 않았다는 뜻입니다. Guard를 지우면 첫 번째가 깨집니다 — drag가 layer를 잡아 Home이 되돌릴 것이 없어집니다.
+
+**`GameSession`은 engine에 명령하지 않고 읽기만 합니다.** 상태 전이는 전부 controller가 이미 내린 명령이나 이미 지나간 frame을 뒤따르므로, 둘 사이의 순서를 틀릴 여지가 없습니다.
 
 ## Completion
 

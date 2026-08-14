@@ -111,7 +111,7 @@ Interaction은 3D보다 단순하고 1차 구현으로 완료되어 개정에서
 
 `ViewMode::Rings`(ABI 값 3) 추가는 값 하나가 아니라 전 계층 migration입니다: Application의 render가 지금 `mode != Net` 같은 부정 조건으로 분기해 값을 더하면 잘못된 경로가 실행되므로 mode별 명시 분기로 재구성하고, C ABI 검증·layout·TypeScript enum·view 버튼까지 함께 갑니다. 이 phase는 표시와 회전 동조까지이고, 이 view의 조작과 정교한 배치는 UI 단계의 몫입니다. Phase 8에 얹지 않고 분리한 이유와 경위는 Phase 8 문서의 개정 기록에 있습니다.
 
-## [-] Phase 9: [Move player and animated scramble](./09-move-queue-and-animated-scramble.md)
+## [x] Phase 9: [Move player and animated scramble](./09-move-queue-and-animated-scramble.md)
 
 미리 만들어진 수순 하나를 순서대로 재생하는 Player를 application lifecycle에 도입합니다.
 Scramble은 logical state를 한 번에 바꾸는 대신 수순을 Player에 넘겨 실제로 돌아가는 모습을 보여주고, 재생이 소비하는 move는 user move count와 timer에서 제외됩니다.

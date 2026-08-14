@@ -200,12 +200,19 @@ enum class ViewMode : std::uint8_t {
 - `Both`는 Phase 4 contract v3의 기존 split layout을 그대로 사용합니다. 초기 화면 pixel contract가 바뀌지 않아야 합니다.
 - `Cube3D`는 정사각형 3D viewport를 canvas 중앙에 더 크게 배치하고 net을 방출하지 않습니다.
 - `Net`은 4×3 net을 canvas 안에서 가능한 크게 중앙 배치하고 3D scene을 방출하지 않습니다.
-- `Net`은 표시 전용입니다. 이 모드의 `pointer_down`은 false를 반환하여 invisible cube orbit이나 layer drag를 시작하지 않습니다.
+- `Net`은 표시 전용입니다. 이 모드의 `pointer_down`은 false를 반환하여 invisible cube orbit이나 layer drag를 시작하지 않습니다. *(Phase 8에서 개정 — 아래 참고)*
 - Mode 전환은 CubeState, committed move count, timer session과 camera yaw/pitch를 보존합니다.
 - Mode 전환 중 `Dragging`/`Orbiting`은 commit 없이 취소합니다. 이미 release되어 `Snapping`인 move는 끝까지 진행하고 commit합니다.
 - Net에서 `Cube3D` 또는 `Both`로 돌아오면 보존된 camera로 다시 렌더링합니다.
 - Resize는 현재 mode로 layout을 다시 계산합니다.
-- 정수 C ABI mode 값은 세 enum 값만 허용하고 잘못된 값은 false를 반환하며 기존 mode를 유지합니다.
+- 정수 C ABI mode 값은 세 enum 값만 허용하고 잘못된 값은 false를 반환하며 기존 mode를 유지합니다. *(Phase 8.5에서 네 번째 값이 추가됩니다 — 아래 참고)*
+
+> **개정 (Phase 8 / 8.5)**: 이 절의 view mode 계약 두 가지가 이후 phase에서 바뀌었습니다.
+>
+> - **`Net`은 더 이상 표시 전용이 아닙니다.** [Phase 8](./08-net-rotation-and-interaction.md)이 전개도의 셀 drag로 layer를 돌릴 수 있게 했습니다. 이 mode의 `pointer_down`은 전개도의 면 위 press를 받아들이고, **전개도 밖** press에 대해서만 false를 반환합니다(그 경우 진행 중인 snap도 확정하지 않습니다). 돌릴 시점이 없어 orbit이 없다는 점은 그대로입니다.
+> - **네 번째 mode `Rings = 3`이 추가됩니다.** [Phase 8.5](./08.5-ring-diagram-view.md)의 링 다이어그램 view이고, C ABI는 네 값을 허용하게 됩니다. 이 mode는 표시 전용이라 `pointer_down`이 부작용 없이 false를 반환합니다 — 이 절이 원래 `Net`에 대해 규정했던 것과 같은 규칙입니다.
+>
+> "Mode 전환 중 Dragging/Orbiting은 취소하고 Snapping은 끝까지 진행한다"는 이 절의 계약은 그대로이며, Phase 8.5의 회전 동조 test가 그 위에 세워집니다.
 
 ### 7. Gameplay and page state machines
 

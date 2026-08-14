@@ -128,6 +128,8 @@ struct RenderScene {
 `faces`는 depth sort까지 끝난 back-to-front 순서이며 renderer는 순서를 신뢰하고 그대로 그립니다.
 Depth 값은 scene에 남기지 않습니다. 정렬은 pipeline의 책임이고 renderer는 2D 그리기만 담당합니다.
 
+> **개정 (Phase 8)**: `RenderScene`에 두 번째 목록 `strokes`가 추가되었습니다. 채워진 quad만으로는 곡선 안내선을 짧은 선분의 얇은 사각형으로 근사할 수밖에 없는데, ThorVG는 cubic path와 stroke를 이미 갖고 있고 이 프로젝트가 ThorVG 쇼케이스라는 점에서 엔진의 기능을 우회하는 것이 정확히 반대 방향이었습니다. `RenderScene`이 ThorVG type을 포함하지 않는다는 원칙은 그대로입니다 — 추가된 것은 순수 2D 자료구조인 cubic 경로와 선 굵기·색이고, ThorVG의 `cubicTo`/`strokeWidth`/`strokeFill` 호출은 여전히 renderer 안에만 있습니다. 자세한 내용은 [Phase 8 문서](./08-net-rotation-and-interaction.md)에 있습니다.
+
 ### Pipeline passes
 
 각 pass는 상태 없는 `Input → Output` callable로 구현해 native test에서 독립적으로 검증합니다.

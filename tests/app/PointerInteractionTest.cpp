@@ -884,7 +884,7 @@ TEST_CASE("scramble and reset keep the viewpoint the drag left behind")
     // so both have to keep it rather than drop it with the gesture state.
     orbit_left(1.0f);
     rubiks::app::pointer_up();
-    REQUIRE(rubiks::app::scramble(42U));
+    REQUIRE(rubiks::app::scramble(42U, 20U));
     settle();
 
     // Face centers never move under outer-face turns, so a scrambled cube
@@ -1086,4 +1086,96 @@ TEST_CASE("a press away from the ring diagram's stickers starts nothing")
 
     settle();
     REQUIRE(rubiks::app::committed_move_count() == 1);
+}
+
+TEST_CASE("a press over the cube while a sequence plays only looks around it")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    require_visible_faces(kWhite, kGreen, kRed);
+    REQUIRE(rubiks::app::scramble(21U, 6U));
+
+    // Straight onto a sticker, which at any other moment takes hold of the
+    // layer under it. The press reaches no pick at all here, so the drag that
+    // follows sweeps the viewpoint instead.
+    const auto grab = front_column(2, kCanvas, kCanvas);
+    const auto rect = cube_rect(kCanvas, kCanvas);
+    REQUIRE(rubiks::app::pointer_down(grab.x, grab.y));
+    rubiks::app::pointer_move(
+        grab.x -
+            rubiks::interaction::kOrbitQuarterTurnFraction * rect.width,
+        grab.y);
+    rubiks::app::pointer_up();
+
+    settle();
+
+    // A quarter turn round, and the sequence still owns every move made.
+    require_visible_faces(kWhite, kRed, kBlue);
+    REQUIRE(rubiks::app::committed_move_count() == 0);
+    REQUIRE_FALSE(rubiks::app::is_solved());
+}
+
+TEST_CASE("a sequence plays on while the viewpoint is being swept")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    REQUIRE(rubiks::app::scramble(21U, 6U));
+    orbit_left(1.0f);
+
+    // A sweep is not busy, so every move still finds the controller free. If
+    // one did not, this loop would never see the sequence end.
+    int frames = 0;
+    while (rubiks::app::is_busy()) {
+        REQUIRE(rubiks::app::advance(kFrameMs));
+        ++frames;
+        REQUIRE(frames < 4000);
+    }
+
+    rubiks::app::pointer_up();
+    settle();
+
+    require_visible_faces(kWhite, kRed, kBlue);
+    REQUIRE(rubiks::app::committed_move_count() == 0);
+    REQUIRE_FALSE(rubiks::app::is_solved());
+}
+
+TEST_CASE("a press while a sequence plays in the flat view starts nothing")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    // Both flat drawings in turn, so neither picking path is reached: the net
+    // cell under the middle of the canvas, and a sticker of the diagram.
+    for (const auto style :
+         {rubiks::graphics::FlatStyle::Net,
+          rubiks::graphics::FlatStyle::Rings}) {
+        REQUIRE(rubiks::app::set_view_mode(rubiks::graphics::ViewMode::Flat));
+        REQUIRE(rubiks::app::set_flat_style(style));
+        REQUIRE(rubiks::app::scramble(21U, 6U));
+
+        const auto rect = rings_rect();
+        const auto ring =
+            rubiks::graphics::rings_ring(rubiks::cube::Axis::X, 2, rect,
+                                         kCubeSize);
+        const auto at = style == rubiks::graphics::FlatStyle::Net
+                            ? rubiks::math::Vec2{0.5f * kCanvas, 0.5f * kCanvas}
+                            : ring.at(0.0f).position;
+
+        // There is no cube on screen to look around, so a press has nothing
+        // it may start. Sent to the empty cube region instead it would be
+        // measured against a rectangle of no width, and the infinity that
+        // yields would leave the viewpoint NaN for the rest of the session.
+        REQUIRE_FALSE(rubiks::app::pointer_down(at.x, at.y));
+        rubiks::app::pointer_move(at.x + 0.2f * kCanvas, at.y);
+        rubiks::app::pointer_up();
+
+        settle();
+        REQUIRE(rubiks::app::committed_move_count() == 0);
+        REQUIRE_FALSE(rubiks::app::is_solved());
+    }
+
+    // Back to the layout the face samples are calibrated against. A viewpoint
+    // that had gone NaN could not draw the cube at all.
+    REQUIRE(rubiks::app::set_view_mode(rubiks::graphics::ViewMode::Both));
+    REQUIRE(rubiks::app::set_flat_style(rubiks::graphics::FlatStyle::Net));
+    require_visible_faces(kWhite, kGreen, kRed);
 }

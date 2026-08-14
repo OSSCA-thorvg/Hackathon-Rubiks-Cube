@@ -27,8 +27,13 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_pointer_cancel(): void;
   /** Returns 1 while further frames still have to be drawn. */
   _thorvg_rubiks_advance(elapsedMs: number): number;
-  /** Returns 1 when the cube was replaced by the scramble for `seed`. */
-  _thorvg_rubiks_scramble(seed: number): number;
+  /**
+   * Returns 1 when the scramble for `seed` was accepted and began playing.
+   *
+   * The cube is still solved on return and reaches the scrambled state once
+   * the sequence has played; the engine is busy until it does.
+   */
+  _thorvg_rubiks_scramble(seed: number, moveCount: number): number;
   /** Restores the solved cube, keeping the camera and the view mode. */
   _thorvg_rubiks_reset_cube(): void;
   /** Returns 1 when the committed logical cube is solved. */

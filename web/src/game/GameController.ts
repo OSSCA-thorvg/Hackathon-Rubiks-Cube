@@ -2,6 +2,7 @@ import {
   CubeFace,
   CubeFlatStyle,
   CubeViewMode,
+  DEFAULT_SCRAMBLE_MOVES,
   type FaceTurns,
 } from '../wasm/CubeEngine.ts';
 import {
@@ -10,12 +11,23 @@ import {
   type TimerEnvironment,
 } from './SolveTimer.ts';
 
-/** One local solve session inside a ready application. */
-export type GameState = 'idle' | 'ready' | 'running' | 'completed';
+/**
+ * One local solve session inside a ready application.
+ *
+ * `scrambling` is the sequence being played into the cube. Nothing can be
+ * turned by hand during it and the clock is not yet armed, so it is a state of
+ * its own rather than an early `ready`.
+ */
+export type GameState =
+  | 'idle'
+  | 'scrambling'
+  | 'ready'
+  | 'running'
+  | 'completed';
 
 /** Engine surface required by gameplay controls. */
 export type GameEngine = {
-  scramble(seed: number): void;
+  scramble(seed: number, moveCount: number): void;
   resetCube(): void;
   isSolved(): boolean;
   committedMoveCount(): number;
@@ -250,13 +262,17 @@ export function attachGameController(
 
   const onScramble = (): void => {
     run((): void => {
-      engine.scramble(seedSource());
+      engine.scramble(seedSource(), DEFAULT_SCRAMBLE_MOVES);
       engine.render();
       previousMoveCount = 0;
-      timer.arm();
-      setGameState('ready');
+      timer.reset();
+      setGameState('scrambling');
       updateMoveAvailability();
-      announce('Scramble ready. The timer starts after your first move.');
+      announce('Scrambling the cube…');
+
+      // The cube is still solved: the scramble is turned into it over the
+      // frames that follow, and nothing else is running to ask for them.
+      startFrameLoop();
     });
   };
 
@@ -350,6 +366,15 @@ export function attachGameController(
         const moveCount = engine.committedMoveCount();
         const committed = moveCount > previousMoveCount;
         previousMoveCount = moveCount;
+
+        // Asked as a state rather than as a change, so a one-move scramble
+        // that has already finished by the first observed frame is still seen
+        // to finish. That the call was accepted is what says it began.
+        if (gameState === 'scrambling' && !engine.isBusy()) {
+          timer.arm();
+          setGameState('ready');
+          announce('Scramble ready. The timer starts after your first move.');
+        }
 
         if (committed && gameState === 'ready') {
           timer.start();

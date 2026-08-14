@@ -1,8 +1,11 @@
 #include "app/Application.hpp"
 
 #include <cmath>
+#include <cstddef>
 #include <memory>
 #include <optional>
+#include <utility>
+#include <vector>
 
 #include <thorvg.h>
 
@@ -28,6 +31,36 @@ namespace rubiks::app {
 namespace {
 
 constexpr int kCubeSize = 3;
+
+/** How fast a user's own release settles, in milliseconds per quarter turn. */
+constexpr double kUserTempoMs = interaction::kSnapMsPerQuarterTurn;
+
+/**
+ * The same for a scramble, which is watched rather than made.
+ *
+ * Brisker than a user's own turn, and no brisker than the time a piece takes
+ * to lift and settle again: a move shorter than that never lets the lift form,
+ * and the drawing would flatten into a slideshow of states. Twenty moves land
+ * inside three seconds at this pace.
+ */
+constexpr double kScrambleTempoMs = interaction::kOpeningMs;
+
+/**
+ * One scripted sequence being played back, with how to play it.
+ *
+ * A value rather than a queue and a flag beside it: a sequence and the way it
+ * is being played are set up together and die together, and two pieces of
+ * state with one lifetime are one object. Later phases add fields here -- a
+ * repeat for the ambient pattern, a timeline effect for a rewind -- rather
+ * than adding names to an enum of where the moves came from, because nothing
+ * downstream asks where they came from, only what to do with them.
+ */
+struct Player {
+    std::vector<cube::CubeMove> plan;
+    std::size_t next = 0;
+    /** Milliseconds per quarter turn, as `start_move` takes it. */
+    double tempo_ms;
+};
 
 /**
  * Everything one running application owns.
@@ -58,6 +91,10 @@ struct ApplicationState {
     graphics::ViewMode view_mode = graphics::ViewMode::Both;
     graphics::FlatStyle flat_style = graphics::FlatStyle::Net;
     std::uint32_t user_move_count = 0;
+
+    // The whole of the playback state. Its presence is what "a sequence is
+    // playing" means, so there is no second flag to fall out of step with it.
+    std::optional<Player> playback;
 };
 
 std::unique_ptr<ApplicationState> state;
@@ -204,7 +241,18 @@ struct FlatParts {
 void commit_move(const cube::CubeMove& move) noexcept
 {
     state->cube_state.apply(move);
-    ++state->user_move_count;
+
+    // A played move is nobody's, so it is not counted and does not start the
+    // clock. Read here rather than passed in: while a sequence plays, every
+    // way of turning a layer by hand is shut, so there is no moment when the
+    // answer could differ from what the caller would have said.
+    if (!state->playback) ++state->user_move_count;
+}
+
+/** Whether anything at all owns the cube, playback included. */
+[[nodiscard]] bool busy() noexcept
+{
+    return state->playback.has_value() || state->interaction.is_busy();
 }
 
 /**
@@ -219,6 +267,50 @@ void drain_orbit() noexcept
     if (const auto delta = state->interaction.take_orbit_delta()) {
         state->orbit.turn(delta->yaw_degrees, delta->pitch_degrees);
     }
+}
+
+/**
+ * Throws away everything a playback is made of, in one call.
+ *
+ * Two things, not one: the sequence, and any turn of it already in flight. A
+ * turn that has left the player still commits on its own a few frames later,
+ * so dropping only the player would apply the last move of an abandoned
+ * scramble onto the cube that replaced it. The sweep the pointer has made is
+ * kept -- a viewpoint is where the user left it -- and moves already committed
+ * are never taken back.
+ */
+void discard_playback() noexcept
+{
+    drain_orbit();
+    state->interaction.reset();
+    state->playback.reset();
+}
+
+/**
+ * Starts the next move of a sequence once the previous one has landed.
+ *
+ * One move per frame at most. `next` moves on when a move is taken rather than
+ * when it starts, so a move the controller will not animate is passed over
+ * instead of retried -- retrying would leave the sequence stuck asking for
+ * frames that never make progress.
+ */
+void advance_playback() noexcept
+{
+    if (!state->playback) return;
+
+    Player& player = *state->playback;
+    while (player.next < player.plan.size()) {
+        if (state->interaction.is_busy()) return;
+        if (state->interaction.start_move(player.plan[player.next++],
+                                          player.tempo_ms)) {
+            return;
+        }
+    }
+
+    // The sequence outlives its last move: it is what makes the application
+    // busy, and it is what says the commit just made was nobody's. Both have
+    // to still be true on the frame that move lands.
+    if (!state->interaction.is_busy()) state->playback.reset();
 }
 
 }  // namespace
@@ -274,6 +366,20 @@ bool pointer_down(float x, float y) noexcept
     // nothing must not change anything either, and confirming the snap below
     // is a change.
     if (!std::isfinite(x) || !std::isfinite(y)) return false;
+
+    // Ahead of every pick and of the confirmation below, which is the only
+    // position where it does what it says: while a sequence plays, a press may
+    // look around the cube and do nothing else. Whether the snap in flight is
+    // the user's never has to be asked, because the path that would ask it is
+    // no longer reachable. With no cube on screen there is nothing to look
+    // around either, so the press is refused rather than aimed at a region
+    // that has no size -- which would make the viewpoint permanently NaN.
+    if (state->playback) {
+        if (!visible_views(state->view_mode).cube) return false;
+
+        drain_orbit();
+        return state->interaction.start_orbit(x, y, state->placement.cube);
+    }
 
     // The layout is what routes the press. The flat view owns every cell or
     // sticker inside its own region, and the 3D region and the background
@@ -334,7 +440,7 @@ void pointer_up() noexcept
 {
     if (!state) return;
 
-    state->interaction.pointer_up();
+    state->interaction.pointer_up(kUserTempoMs);
 }
 
 void pointer_cancel() noexcept
@@ -356,7 +462,11 @@ bool advance(double elapsed_ms) noexcept
         commit_move(*move);
     }
 
-    return more_frames;
+    advance_playback();
+
+    // A sequence between two of its moves has nothing animating, so the
+    // controller would let the frame loop stop halfway through it.
+    return more_frames || state->playback.has_value();
 }
 
 bool render() noexcept
@@ -421,18 +531,29 @@ bool render() noexcept
     return state->renderer->render(scene);
 }
 
-bool scramble(std::uint32_t seed) noexcept
+bool scramble(std::uint32_t seed, std::uint32_t move_count) noexcept
 {
     if (!state) return false;
+
+    // Everything that could refuse comes before anything is changed, so a
+    // rejected count leaves the cube and any playback exactly as they were.
+    // Zero would be a scramble that leaves the cube solved; the upper bound is
+    // against a number typed into the box that would never finish playing.
+    if (move_count == 0 || move_count > kMaxScrambleMoves) return false;
+
+    auto plan = cube::make_scramble(kCubeSize, seed, move_count);
+    if (plan.empty()) return false;
 
     // The cube restarts but the viewpoint does not, so a sweep the controller
     // has not published yet still counts. Everything else goes, including a
     // snap that would otherwise commit onto the new cube.
-    drain_orbit();
-    state->interaction.reset();
+    discard_playback();
     state->cube_state = cube::CubeState(kCubeSize);
-    state->cube_state.apply(cube::make_scramble(kCubeSize, seed));
     state->user_move_count = 0;
+
+    // Turned rather than applied: the cube is still solved when this returns
+    // and arrives at the scrambled state a few hundred frames later.
+    state->playback = Player{std::move(plan), 0, kScrambleTempoMs};
     return true;
 }
 
@@ -441,8 +562,7 @@ void reset_cube() noexcept
     if (!state) return;
 
     // Same split as scramble(): the cube is the only thing this command owns.
-    drain_orbit();
-    state->interaction.reset();
+    discard_playback();
     state->cube_state = cube::CubeState(kCubeSize);
     state->user_move_count = 0;
 }
@@ -462,6 +582,11 @@ bool turn_face(cube::Face face, int face_turns) noexcept
     if (!state) return false;
     if (!valid_face(face)) return false;
     if (face_turns != -1 && face_turns != 1 && face_turns != 2) return false;
+
+    // The controller does not know about playback, and between a sequence
+    // being accepted and its first frame it is idle -- so without this the
+    // very next keypress would land in the middle of the sequence.
+    if (busy()) return false;
 
     cube::CubeMove move = clockwise_move(face);
     move.quarter_turns *= face_turns;
@@ -518,7 +643,7 @@ void reset_view() noexcept
 
 bool is_busy() noexcept
 {
-    return state && state->interaction.is_busy();
+    return state && busy();
 }
 
 std::uintptr_t pixel_buffer() noexcept

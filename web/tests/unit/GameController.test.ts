@@ -59,9 +59,10 @@ function createHarness() {
 
   const engine = {
     scramble: vi.fn((): void => {
-      solved = false;
+      // Accepted and busy, with the cube still solved: the moves are turned
+      // into it over the frames that follow.
       moveCount = 0;
-      busy = false;
+      busy = true;
     }),
     resetCube: vi.fn((): void => {
       solved = true;
@@ -130,6 +131,12 @@ function createHarness() {
     setSolved: (value: boolean): void => {
       solved = value;
     },
+    /** Plays an accepted scramble out and lets the controller see it end. */
+    finishScramble: (): void => {
+      solved = false;
+      busy = false;
+      controller.afterEngineFrame();
+    },
     commitMove: (): void => {
       ++moveCount;
       busy = false;
@@ -175,7 +182,15 @@ describe('attachGameController', () => {
     const harness = createHarness();
 
     harness.ui.scrambleButton.click();
-    expect(harness.engine.scramble).toHaveBeenCalledWith(1234);
+    expect(harness.engine.scramble).toHaveBeenCalledWith(1234, 20);
+
+    // Not ready yet: the cube is being turned, and the frame loop that turns
+    // it has to be asked for, because nothing else was running.
+    expect(harness.controller.state).toBe('scrambling');
+    expect(harness.startFrameLoop).toHaveBeenCalledTimes(1);
+    expect(harness.ui.timer.value).toBe('00:00.00');
+
+    harness.finishScramble();
     expect(harness.controller.state).toBe('ready');
     expect(harness.ui.status.textContent).toContain('timer starts');
 
@@ -185,9 +200,25 @@ describe('attachGameController', () => {
     expect(harness.ui.timer.value).toBe('00:00.00');
   });
 
+  it('holds at scrambling while the cube is still turning', () => {
+    const harness = createHarness();
+    harness.ui.scrambleButton.click();
+
+    // Frames observed while the sequence plays change nothing, and no layer
+    // can be turned by hand during them.
+    harness.controller.afterEngineFrame();
+    expect(harness.controller.state).toBe('scrambling');
+    expect(harness.ui.moveButtons[0]?.disabled).toBe(true);
+
+    harness.finishScramble();
+    expect(harness.controller.state).toBe('ready');
+    expect(harness.ui.moveButtons[0]?.disabled).toBe(false);
+  });
+
   it('starts on first commit and stops on a later solved commit', () => {
     const harness = createHarness();
     harness.ui.scrambleButton.click();
+    harness.finishScramble();
 
     harness.setNow(100);
     harness.commitMove();
@@ -210,6 +241,7 @@ describe('attachGameController', () => {
   it('does not start without a committed move', () => {
     const harness = createHarness();
     harness.ui.scrambleButton.click();
+    harness.finishScramble();
 
     harness.controller.afterEngineFrame();
     expect(harness.controller.state).toBe('ready');
@@ -299,6 +331,7 @@ describe('attachGameController', () => {
   it('teardown removes controls, keyboard, and timer work', () => {
     const harness = createHarness();
     harness.ui.scrambleButton.click();
+    harness.finishScramble();
     harness.commitMove();
     harness.controller.afterEngineFrame();
     expect(harness.keyListenerCount()).toBe(1);

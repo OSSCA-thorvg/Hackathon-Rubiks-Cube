@@ -118,10 +118,16 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_advance(double elapsed_ms) noexcept
     return rubiks::app::advance(elapsed_ms) ? 1 : 0;
 }
 
-/** Replaces the cube with a deterministic scramble for `seed`. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_scramble(std::uint32_t seed) noexcept
+/**
+ * Restarts the cube and plays `move_count` scramble moves into it.
+ *
+ * The cube is still solved when this returns; it arrives at the scrambled
+ * state once the sequence has been played, and is busy until then.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_scramble(
+    std::uint32_t seed, std::uint32_t move_count) noexcept
 {
-    return rubiks::app::scramble(seed) ? 1 : 0;
+    return rubiks::app::scramble(seed, move_count) ? 1 : 0;
 }
 
 /** Restores the solved cube while preserving camera and view mode. */

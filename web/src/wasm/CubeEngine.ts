@@ -83,6 +83,12 @@ async function loadGeneratedModule(): Promise<ThorvgRubiksModule> {
 /** Largest drawing buffer dimension; mirrors the C++ engine limit. */
 export const MAX_DIMENSION = 8192;
 
+/** Longest scramble the engine will play; mirrors its limit too. */
+export const MAX_SCRAMBLE_MOVES = 100;
+
+/** How many moves a scramble has when nobody has said otherwise. */
+export const DEFAULT_SCRAMBLE_MOVES = 20;
+
 /**
  * Computes the drawing buffer size for a CSS size and device pixel ratio.
  *
@@ -292,13 +298,25 @@ export class CubeEngine {
     return this.module._thorvg_rubiks_advance(elapsedMs) !== 0;
   }
 
-  /** Replaces the cube with a deterministic scramble for `seed`. */
-  scramble(seed: number): void {
+  /**
+   * Restarts the cube and plays the scramble for `seed` into it.
+   *
+   * The cube is still solved when this returns: the moves are turned rather
+   * than applied, so the caller has to run frames for the scramble to arrive.
+   */
+  scramble(seed: number, moveCount: number): void {
     this.assertUsable();
     if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) {
       throw new Error(`Invalid scramble seed ${seed}.`);
     }
-    if (this.module._thorvg_rubiks_scramble(seed) === 0) {
+    if (
+      !Number.isInteger(moveCount) ||
+      moveCount < 1 ||
+      moveCount > MAX_SCRAMBLE_MOVES
+    ) {
+      throw new Error(`Invalid scramble move count ${moveCount}.`);
+    }
+    if (this.module._thorvg_rubiks_scramble(seed, moveCount) === 0) {
       throw new Error('Engine rejected the scramble.');
     }
   }

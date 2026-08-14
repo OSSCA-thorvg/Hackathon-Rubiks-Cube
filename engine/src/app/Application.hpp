@@ -59,10 +59,15 @@ namespace rubiks::app {
  * A snap left running by the previous release is confirmed here rather than
  * blocking the press, so drags in quick succession all reach the cube.
  *
+ * While a sequence is playing, a press may only look around the cube: it never
+ * reaches a pick, and it is refused outright when the 3D cube is not on screen,
+ * for the same reason a press off the net is refused in the flat-only view.
+ *
  * @return true when a gesture began. False only when none could: before
  *         initialization, for non-finite coordinates, while another gesture is
- *         already running, and in net-only view for a press off the net, where
- *         there is no viewpoint on screen to sweep instead.
+ *         already running, and for a press with nothing on screen it could
+ *         start -- off the net in the flat-only view, or anywhere in that view
+ *         while a sequence plays.
  */
 [[nodiscard]] bool pointer_down(float x, float y) noexcept;
 
@@ -89,8 +94,21 @@ void pointer_cancel() noexcept;
  */
 [[nodiscard]] bool advance(double elapsed_ms) noexcept;
 
-/** Replaces the cube with the deterministic scramble for `seed`. */
-[[nodiscard]] bool scramble(std::uint32_t seed) noexcept;
+/** The largest scramble that can be asked for. */
+inline constexpr std::uint32_t kMaxScrambleMoves = 100;
+
+/**
+ * Restarts the cube and plays the deterministic scramble for `seed` into it.
+ *
+ * The moves are turned rather than applied, so the cube is still solved when
+ * this returns and reaches the scrambled state some frames later. Until then
+ * the application is busy and the played moves are nobody's.
+ *
+ * @return true when the sequence was accepted. False for a count outside
+ *         1..kMaxScrambleMoves, which leaves the cube exactly as it was.
+ */
+[[nodiscard]] bool scramble(std::uint32_t seed,
+                            std::uint32_t move_count) noexcept;
 
 /** Restores the logical cube and clears the current solve session. */
 void reset_cube() noexcept;
@@ -132,9 +150,11 @@ void reset_cube() noexcept;
 void reset_view() noexcept;
 
 /**
- * Returns whether a gesture, animation, or unconsumed commit is active.
+ * Returns whether a gesture, animation, unconsumed commit, or playback is on.
  *
  * An orbit sweep is not busy; the viewpoint can move while the cube cannot.
+ * A sequence being played is, from the moment it is accepted until its last
+ * turn has settled, so the value never falls away between two of its moves.
  */
 [[nodiscard]] bool is_busy() noexcept;
 

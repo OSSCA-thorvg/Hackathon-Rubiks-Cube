@@ -7,6 +7,7 @@ import {
   CubeFlatStyle,
   CubeViewMode,
   MAX_DIMENSION,
+  MAX_SCRAMBLE_MOVES,
 } from '../../src/wasm/CubeEngine.ts';
 import type { ThorvgRubiksModule } from '../../src/wasm/generated/thorvg-rubiks.js';
 
@@ -381,8 +382,11 @@ describe('CubeEngine gameplay and view controls', () => {
   it('passes scramble, reset, status, and camera commands through', async () => {
     const { engine, module, behavior } = await createEngine();
 
-    engine.scramble(0x12345678);
-    expect(module._thorvg_rubiks_scramble).toHaveBeenCalledWith(0x12345678);
+    engine.scramble(0x12345678, 20);
+    expect(module._thorvg_rubiks_scramble).toHaveBeenCalledWith(
+      0x12345678,
+      20,
+    );
 
     behavior.solvedResult = 0;
     behavior.moveCount = 7;
@@ -397,11 +401,16 @@ describe('CubeEngine gameplay and view controls', () => {
     expect(module._thorvg_rubiks_reset_view).toHaveBeenCalledTimes(1);
   });
 
-  it('validates scramble seeds before crossing the C ABI', async () => {
+  it('validates scramble seeds and counts before crossing the C ABI', async () => {
     const { engine, module } = await createEngine();
 
     for (const seed of [-1, 1.5, Number.NaN, 0x1_0000_0000]) {
-      expect(() => engine.scramble(seed)).toThrow('Invalid scramble seed');
+      expect(() => engine.scramble(seed, 20)).toThrow('Invalid scramble seed');
+    }
+    for (const count of [0, -1, 2.5, Number.NaN, MAX_SCRAMBLE_MOVES + 1]) {
+      expect(() => engine.scramble(1, count)).toThrow(
+        'Invalid scramble move count',
+      );
     }
     expect(module._thorvg_rubiks_scramble).not.toHaveBeenCalled();
   });

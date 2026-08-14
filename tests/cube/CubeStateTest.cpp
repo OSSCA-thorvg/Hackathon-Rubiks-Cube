@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
@@ -237,6 +238,12 @@ TEST_CASE("seeded scrambles are reproducible and structurally valid")
     REQUIRE(first != different);
     REQUIRE(first.size() == rubiks::cube::kScrambleMoveCount);
 
+    // The count is the caller's, and asking for fewer moves gives the same
+    // sequence cut short rather than a different one.
+    const auto shorter = rubiks::cube::make_scramble(kSize, kSeed, 5);
+    REQUIRE(shorter.size() == 5);
+    REQUIRE(std::equal(shorter.begin(), shorter.end(), first.begin()));
+
     for (std::size_t index = 0; index < first.size(); ++index) {
         const CubeMove& move = first[index];
         REQUIRE((move.layers == layer(0) || move.layers == layer(kLast)));
@@ -244,24 +251,6 @@ TEST_CASE("seeded scrambles are reproducible and structurally valid")
                  move.quarter_turns == 2));
         if (index > 0) REQUIRE(move.axis != first[index - 1].axis);
     }
-}
-
-TEST_CASE("seed 42 has a stable cross-platform known answer")
-{
-    const std::vector<CubeMove> expected{
-        {Axis::X, layer(0), -1},     {Axis::Y, layer(0), -1},
-        {Axis::X, layer(0), 1},      {Axis::Z, layer(0), 1},
-        {Axis::X, layer(0), 1},      {Axis::Z, layer(0), -1},
-        {Axis::Y, layer(0), -1},     {Axis::Z, layer(0), 2},
-        {Axis::X, layer(kLast), -1}, {Axis::Z, layer(kLast), -1},
-        {Axis::X, layer(0), -1},     {Axis::Y, layer(kLast), -1},
-        {Axis::Z, layer(0), -1},     {Axis::X, layer(0), 2},
-        {Axis::Y, layer(kLast), 1},  {Axis::Z, layer(kLast), 1},
-        {Axis::Y, layer(kLast), 1},  {Axis::Z, layer(0), -1},
-        {Axis::Y, layer(kLast), 2},  {Axis::Z, layer(0), 2},
-    };
-
-    REQUIRE(rubiks::cube::make_scramble(kSize, 42U) == expected);
 }
 
 TEST_CASE("a generated scramble is restored by its inverse")

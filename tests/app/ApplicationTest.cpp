@@ -1,10 +1,17 @@
 #include "app/Application.hpp"
 
+#include <cstdlib>
+#include <vector>
+
 #include <catch2/catch_test_macros.hpp>
 
 #include "EngineLifecycle.hpp"
+#include "cube/CubeMove.hpp"
+#include "cube/Scramble.hpp"
 
 namespace {
+
+constexpr int kSize = 3;
 
 /** Advances the application until its current animation is settled. */
 void settle_application()
@@ -12,7 +19,60 @@ void settle_application()
     int frames = 0;
     while (rubiks::app::advance(16.0)) {
         ++frames;
-        REQUIRE(frames < 1000);
+        REQUIRE(frames < 4000);
+    }
+}
+
+/**
+ * The face whose clockwise turn is the given axis and layer, with its sign.
+ *
+ * The named faces are how the outside asks for a turn, and a scramble is made
+ * of nothing but outer faces, so every move of one can be spoken back through
+ * `turn_face`. The sign is there because half of the six turn negatively about
+ * their axis.
+ */
+struct NamedFace {
+    rubiks::cube::Face face;
+    int sign;
+};
+
+[[nodiscard]] NamedFace named_face(const rubiks::cube::CubeMove& move)
+{
+    using rubiks::cube::Axis;
+    using rubiks::cube::Face;
+
+    const bool last = move.layers == rubiks::cube::layer(kSize - 1);
+    switch (move.axis) {
+        case Axis::X:
+            return last ? NamedFace{Face::Right, 1} : NamedFace{Face::Left, -1};
+        case Axis::Y:
+            return last ? NamedFace{Face::Up, 1} : NamedFace{Face::Down, -1};
+        case Axis::Z:
+            break;
+    }
+    return last ? NamedFace{Face::Front, 1} : NamedFace{Face::Back, -1};
+}
+
+/**
+ * Turns a sequence back, one settled move at a time.
+ *
+ * How a played sequence is checked against the moves it was given: undoing
+ * exactly those moves leaves a solved cube, and any move the playback dropped,
+ * repeated, or took in the wrong order leaves it scrambled.
+ */
+void undo_through_faces(const std::vector<rubiks::cube::CubeMove>& plan)
+{
+    for (auto move = plan.rbegin(); move != plan.rend(); ++move) {
+        const NamedFace named = named_face(*move);
+
+        // A half turn undoes itself, and -2 is not one of the three amounts a
+        // face turn is asked for.
+        const int turns = std::abs(move->quarter_turns) == 2
+                              ? 2
+                              : -move->quarter_turns * named.sign;
+
+        REQUIRE(rubiks::app::turn_face(named.face, turns));
+        settle_application();
     }
 }
 
@@ -62,7 +122,15 @@ TEST_CASE("scramble and reset own only the cube solve session")
     REQUIRE(rubiks::app::view_mode() == ViewMode::Both);
 
     REQUIRE(rubiks::app::set_view_mode(ViewMode::Cube3D));
-    REQUIRE(rubiks::app::scramble(42U));
+
+    // The scramble is turned rather than applied, so the cube is still solved
+    // here and reaches the scrambled state only once the sequence has played.
+    REQUIRE(rubiks::app::scramble(42U, 20U));
+    REQUIRE(rubiks::app::is_solved());
+    REQUIRE(rubiks::app::is_busy());
+
+    settle_application();
+    REQUIRE_FALSE(rubiks::app::is_busy());
     REQUIRE_FALSE(rubiks::app::is_solved());
     REQUIRE(rubiks::app::committed_move_count() == 0);
     REQUIRE(rubiks::app::view_mode() == ViewMode::Cube3D);
@@ -71,6 +139,117 @@ TEST_CASE("scramble and reset own only the cube solve session")
     REQUIRE(rubiks::app::is_solved());
     REQUIRE(rubiks::app::committed_move_count() == 0);
     REQUIRE(rubiks::app::view_mode() == ViewMode::Cube3D);
+}
+
+TEST_CASE("a played scramble applies exactly the sequence it was given")
+{
+    const rubiks::test::EngineLifecycle engine(256, 256);
+    const auto plan = rubiks::cube::make_scramble(kSize, 1234U, 12U);
+    REQUIRE(plan.size() == 12);
+
+    REQUIRE(rubiks::app::scramble(1234U, 12U));
+    settle_application();
+    REQUIRE_FALSE(rubiks::app::is_solved());
+
+    // Anything dropped, repeated, or taken out of order survives this.
+    undo_through_faces(plan);
+    REQUIRE(rubiks::app::is_solved());
+}
+
+TEST_CASE("played moves are nobody's, and the cube is busy until the last one")
+{
+    const rubiks::test::EngineLifecycle engine(256, 256);
+
+    REQUIRE(rubiks::app::scramble(5U, 4U));
+
+    // Busy from the moment it is accepted, before a single frame has run --
+    // which is the window a keyboard turn would otherwise slip through.
+    REQUIRE(rubiks::app::is_busy());
+    REQUIRE_FALSE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1));
+
+    // Busy without a break from there to the end, and every frame it is busy
+    // it asks for another -- between two of its moves nothing is animating,
+    // so without the sequence in that answer the loop would stop halfway.
+    int frames = 0;
+    while (rubiks::app::is_busy()) {
+        REQUIRE(rubiks::app::advance(16.0));
+        ++frames;
+        REQUIRE(frames < 4000);
+    }
+
+    REQUIRE(frames > 0);
+    REQUIRE_FALSE(rubiks::app::advance(16.0));
+    REQUIRE(rubiks::app::committed_move_count() == 0);
+
+    // A move of the user's own counts again straight away.
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1));
+    settle_application();
+    REQUIRE(rubiks::app::committed_move_count() == 1);
+}
+
+TEST_CASE("a scramble count outside the range changes nothing")
+{
+    const rubiks::test::EngineLifecycle engine(256, 256);
+
+    REQUIRE_FALSE(rubiks::app::scramble(1U, 0U));
+    REQUIRE_FALSE(
+        rubiks::app::scramble(1U, rubiks::app::kMaxScrambleMoves + 1U));
+
+    // Refused before anything was touched: no playback, and the cube it would
+    // have restarted is still the one that was there.
+    REQUIRE_FALSE(rubiks::app::is_busy());
+    REQUIRE(rubiks::app::is_solved());
+
+    REQUIRE(rubiks::app::scramble(1U, 1U));
+    settle_application();
+    REQUIRE_FALSE(rubiks::app::is_solved());
+}
+
+TEST_CASE("resizing and switching views leave a playing sequence alone")
+{
+    using rubiks::graphics::FlatStyle;
+    using rubiks::graphics::ViewMode;
+
+    const rubiks::test::EngineLifecycle engine(256, 256);
+    const auto plan = rubiks::cube::make_scramble(kSize, 9U, 8U);
+
+    REQUIRE(rubiks::app::scramble(9U, 8U));
+
+    // A phone turned sideways part way through a scramble. Dropping the
+    // sequence here would leave the cube half scrambled with nothing busy.
+    for (int frame = 0; frame < 20; ++frame) {
+        static_cast<void>(rubiks::app::advance(16.0));
+    }
+    REQUIRE(rubiks::app::resize(320, 200));
+    REQUIRE(rubiks::app::set_view_mode(ViewMode::Flat));
+    REQUIRE(rubiks::app::set_flat_style(FlatStyle::Rings));
+    REQUIRE(rubiks::app::is_busy());
+
+    settle_application();
+    undo_through_faces(plan);
+    REQUIRE(rubiks::app::is_solved());
+}
+
+TEST_CASE("discarding a sequence stops it where the last commit left it")
+{
+    const rubiks::test::EngineLifecycle engine(256, 256);
+
+    REQUIRE(rubiks::app::scramble(3U, 10U));
+
+    // Part way in, with a turn of the sequence in flight. The player and that
+    // turn go together: left behind, it would commit onto the fresh cube some
+    // frames later and reset would have quietly kept one move of the old one.
+    for (int frame = 0; frame < 12; ++frame) {
+        static_cast<void>(rubiks::app::advance(16.0));
+    }
+
+    rubiks::app::reset_cube();
+    REQUIRE_FALSE(rubiks::app::is_busy());
+    REQUIRE(rubiks::app::is_solved());
+
+    settle_application();
+    REQUIRE(rubiks::app::is_solved());
+    REQUIRE(rubiks::app::committed_move_count() == 0);
 }
 
 TEST_CASE("programmatic face turns commit and count like pointer moves")
@@ -103,7 +282,8 @@ TEST_CASE("view modes preserve state and net mode takes pointer gestures")
 
     {
         const rubiks::test::EngineLifecycle engine(256, 256);
-        REQUIRE(rubiks::app::scramble(7U));
+        REQUIRE(rubiks::app::scramble(7U, 20U));
+        settle_application();
         REQUIRE(rubiks::app::set_view_mode(ViewMode::Flat));
         REQUIRE(rubiks::app::view_mode() == ViewMode::Flat);
         REQUIRE(rubiks::app::render());
@@ -129,7 +309,8 @@ TEST_CASE("the flat view keeps its style whichever regions are on screen")
 
     const rubiks::test::EngineLifecycle engine(256, 256);
 
-    REQUIRE(rubiks::app::scramble(11U));
+    REQUIRE(rubiks::app::scramble(11U, 20U));
+    settle_application();
     REQUIRE(rubiks::app::flat_style() == FlatStyle::Net);
 
     // The style is its own axis: it can be set while the flat view is not up

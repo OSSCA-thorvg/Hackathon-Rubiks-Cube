@@ -150,6 +150,13 @@ test('a fixed scramble solved through keyboard controls stops the timer', async 
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
   await page.locator('#scramble').click();
 
+  // The scramble is turned into the cube rather than applied, so the keys
+  // below have to wait for it: a layer cannot be turned by hand until then.
+  await expect(page.locator('.game-shell')).toHaveAttribute(
+    'data-game-state',
+    'ready',
+  );
+
   // Reverse inverse of seed 42. A half turn is two same-direction keyboard
   // quarter turns because the visible controls intentionally expose ±90°.
   const solution = [

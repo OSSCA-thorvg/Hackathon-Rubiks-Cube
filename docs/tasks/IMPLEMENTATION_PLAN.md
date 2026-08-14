@@ -111,7 +111,7 @@ Interaction은 3D보다 단순하고 1차 구현으로 완료되어 개정에서
 
 `ViewMode::Rings`(ABI 값 3) 추가는 값 하나가 아니라 전 계층 migration입니다: Application의 render가 지금 `mode != Net` 같은 부정 조건으로 분기해 값을 더하면 잘못된 경로가 실행되므로 mode별 명시 분기로 재구성하고, C ABI 검증·layout·TypeScript enum·view 버튼까지 함께 갑니다. 이 phase는 표시와 회전 동조까지이고, 이 view의 조작과 정교한 배치는 UI 단계의 몫입니다. Phase 8에 얹지 않고 분리한 이유와 경위는 Phase 8 문서의 개정 기록에 있습니다.
 
-## [ ] Phase 9: [Move player and animated scramble](./09-move-queue-and-animated-scramble.md)
+## [-] Phase 9: [Move player and animated scramble](./09-move-queue-and-animated-scramble.md)
 
 미리 만들어진 수순 하나를 순서대로 재생하는 Player를 application lifecycle에 도입합니다.
 Scramble은 logical state를 한 번에 바꾸는 대신 수순을 Player에 넘겨 실제로 돌아가는 모습을 보여주고, 재생이 소비하는 move는 user move count와 timer에서 제외됩니다.
@@ -119,6 +119,7 @@ Scramble은 logical state를 한 번에 바꾸는 대신 수순을 Player에 넘
 남은 수순과 마지막 move의 animation까지 끝나야 busy가 풀리며, 그동안 layer를 돌리는 입력은 차단하고 pointer는 camera orbit만 하도록 보내 재생을 돌려 가며 볼 수 있게 합니다. Scramble animation이 끝나는 시점에 timer가 준비됩니다.
 Scramble 수는 `make_scramble`이 이미 인자로 받고 있으므로 사용자가 정하는 정수 값으로 함께 노출합니다. 난이도 단계로 포장하지 않고 수 자체를 보여 줍니다.
 Scramble의 solved 검사와 R 덧붙임은 Phase 6.5가 이미 걷어냈으므로, 이 phase는 그 위에서 재생 형태만 바꿉니다.
+세부 문서가 Phase 8·8.5 이전에 쓰였으므로 시작 직전 대조에서 여섯 가지가 개정되었습니다. 가장 큰 것은 "재생 중 press는 좌표와 무관하게 orbit"이 `ViewMode::Flat`에서 카메라를 NaN으로 만든다는 것입니다 — 그 mode에는 cube 영역이 없어 pixel당 각도가 0으로 나뉘므로, 3D cube가 보일 때만 orbit으로 보내고 아니면 거절합니다(Phase 8이 "전개도 전용 view에는 orbit할 대상이 없다"고 이미 정한 것과 같은 규칙입니다). 차단해야 할 picking은 그 사이 cube 하나에서 cube·net·rings 셋이 되었고, 이는 guard를 `pointer_down` 맨 앞 — 세 picking과 Phase 7의 확정 호출보다 앞 — 에 두는 것으로 한 자리에서 해결됩니다. 그 위치가 "확정 경로가 도달 불가능"의 전제이기도 합니다. 재생은 move 사이에 쉬는 frame이 없어 리프트가 최대 높이에 머무는데, `start_move()`가 그 누적을 되돌려 각 move가 keyboard turn 하나와 같은 호를 그리게 합니다. 그 밖에 `shutdown()`이 폐기 목록에 잘못 올라 있었고(Phase 6.5가 상태를 통째로 파괴하게 만들어 둔 뒤로 더할 것이 없습니다), 소비 loop가 거절당한 move에서 멈추면 frame loop가 끝나지 않으며, 손볼 test는 known-answer 하나가 아니라 `scramble()` 직후 큐브를 읽는 전부입니다.
 
 ## [ ] Phase 10: [Ambient mode](./10-ambient-mode.md)
 

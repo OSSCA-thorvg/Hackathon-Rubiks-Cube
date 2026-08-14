@@ -295,8 +295,8 @@ test('the net is draggable when it is the only view', async ({ page }) => {
   await page.goto('./');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 
-  await page.locator('button[data-view="net"]').click();
-  await expect(page.locator('button[data-view="net"]')).toHaveAttribute(
+  await page.locator('button[data-view="2d"]').click();
+  await expect(page.locator('button[data-view="2d"]')).toHaveAttribute(
     'aria-pressed',
     'true',
   );

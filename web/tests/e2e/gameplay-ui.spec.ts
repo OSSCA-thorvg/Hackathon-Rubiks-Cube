@@ -5,6 +5,7 @@ import {
   pagePointInCube,
   probeCanvas,
   QUARTER_TURN_DRAG,
+  WHITE,
 } from './sceneContract.ts';
 
 /** A viewport large enough to keep the desktop HUD beside the canvas. */
@@ -63,13 +64,13 @@ test('scramble starts a session on first committed move and Reset restores it', 
   assertSceneContract(await probeCanvas(page));
 });
 
-test('Both is default and 3D, Net, and Home view controls preserve gameplay', async ({
+test('Both is default and 3D, 2D, and Home view controls preserve gameplay', async ({
   page,
 }) => {
   const canvas = page.locator('#view');
   const both = page.locator('[data-view="both"]');
   const cube = page.locator('[data-view="3d"]');
-  const net = page.locator('[data-view="net"]');
+  const net = page.locator('[data-view="2d"]');
 
   await expect(both).toHaveAttribute('aria-pressed', 'true');
   await expect(canvas).toHaveAttribute('data-view-mode', 'both');
@@ -80,7 +81,7 @@ test('Both is default and 3D, Net, and Home view controls preserve gameplay', as
 
   await net.click();
   await expect(net).toHaveAttribute('aria-pressed', 'true');
-  await expect(canvas).toHaveAttribute('data-view-mode', 'net');
+  await expect(canvas).toHaveAttribute('data-view-mode', '2d');
 
   // The net is something to work on rather than to look at: a drag across a
   // cell turns a layer here just as one on the cube does.
@@ -221,4 +222,187 @@ test('mobile layout moves actions below the canvas without horizontal overflow',
     expect(box).not.toBeNull();
     expect(box!.height).toBeGreaterThanOrEqual(44);
   }
+});
+
+/**
+ * The middles of every sticker of one solved face, in page coordinates.
+ *
+ * Connected components rather than anything looser: net cells sit a few pixels
+ * apart and ring stickers a good deal further, so no single "near enough"
+ * radius separates the one without splitting the other.
+ */
+async function faceStickers(
+  page: Page,
+  color: readonly number[],
+): Promise<{ x: number; y: number }[]> {
+  return page.evaluate((wanted) => {
+    const canvas = document.querySelector('canvas')!;
+    const context = canvas.getContext('2d')!;
+    const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+
+    const step = 3;
+    const cols = Math.floor(canvas.width / step);
+    const rows = Math.floor(canvas.height / step);
+    const on = new Uint8Array(cols * rows);
+    for (let r = 0; r < rows; r += 1) {
+      for (let c = 0; c < cols; c += 1) {
+        const i = (r * step * canvas.width + c * step) * 4;
+        on[r * cols + c] =
+          data[i] === wanted[0] &&
+          data[i + 1] === wanted[1] &&
+          data[i + 2] === wanted[2]
+            ? 1
+            : 0;
+      }
+    }
+
+    const found: { x: number; y: number }[] = [];
+    for (let seed = 0; seed < on.length; seed += 1) {
+      if (on[seed] === 0) continue;
+
+      let n = 0;
+      let sx = 0;
+      let sy = 0;
+      const stack = [seed];
+      on[seed] = 0;
+      while (stack.length > 0) {
+        const at = stack.pop()!;
+        const c = at % cols;
+        const r = (at - c) / cols;
+        n += 1;
+        sx += c;
+        sy += r;
+        for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nc = c + dc;
+          const nr = r + dr;
+          if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
+          if (on[nr * cols + nc] === 0) continue;
+          on[nr * cols + nc] = 0;
+          stack.push(nr * cols + nc);
+        }
+      }
+      if (n < 12) continue;
+
+      const box = canvas.getBoundingClientRect();
+      found.push({
+        x: box.left + (((sx / n) * step) * box.width) / canvas.width,
+        y: box.top + (((sy / n) * step) * box.height) / canvas.height,
+      });
+    }
+    return found;
+  }, color);
+}
+
+test('the flat view toggles between net and rings in every region mode', async ({
+  page,
+}) => {
+  const canvas = page.locator('#view');
+  const both = page.locator('[data-view="both"]');
+  const cube = page.locator('[data-view="3d"]');
+  const flat = page.locator('[data-view="2d"]');
+  const net = page.locator('[data-flat="net"]');
+  const rings = page.locator('[data-flat="rings"]');
+
+  const frame = async (): Promise<string> =>
+    canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL());
+
+  await expect(canvas).toHaveAttribute('data-view-mode', 'both');
+  await expect(canvas).toHaveAttribute('data-flat-style', 'net');
+  const bothNet = await frame();
+
+  // Both follows the toggle, so the cube keeps its place and the drawing
+  // under it changes.
+  await rings.click();
+  await expect(rings).toHaveAttribute('aria-pressed', 'true');
+  await expect(canvas).toHaveAttribute('data-view-mode', 'both');
+  await expect(canvas).toHaveAttribute('data-flat-style', 'rings');
+  const bothRings = await frame();
+  expect(bothRings).not.toBe(bothNet);
+
+  // The style is the other axis: it survives the flat region going away and
+  // coming back, and the toggle is out of the way while it means nothing.
+  await cube.click();
+  await expect(rings).toBeHidden();
+  await flat.click();
+  await expect(rings).toBeVisible();
+  await expect(rings).toHaveAttribute('aria-pressed', 'true');
+  await expect(canvas).toHaveAttribute('data-flat-style', 'rings');
+
+  await net.click();
+  await expect(canvas).toHaveAttribute('data-flat-style', 'net');
+  await both.click();
+  expect(await frame()).toBe(bothNet);
+});
+
+test('the flat view can show the net over the rings, and both take drags', async ({
+  page,
+}) => {
+  const canvas = page.locator('#view');
+
+  await page.locator('[data-view="2d"]').click();
+  await page.locator('[data-flat="both"]').click();
+  await expect(canvas).toHaveAttribute('data-flat-style', 'both');
+
+  // Nine white stickers in each drawing, the net's above the rings'.
+  const white = await faceStickers(page, WHITE);
+  expect(white).toHaveLength(18);
+
+  const split = Math.max(...white.map((s) => s.y)) / 2;
+  const onRings = white
+    .filter((s) => s.y > split)
+    .sort((a, b) => a.x - b.x || a.y - b.y);
+  expect(onRings).toHaveLength(9);
+
+  const frame = async (): Promise<string> =>
+    canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL());
+  const resting = await frame();
+
+  // A drag on the lower drawing turns the cube, so the upper one moves too:
+  // one gesture, one rotation, every view that is up showing it.
+  await page.mouse.move(onRings[0]!.x, onRings[0]!.y);
+  await page.mouse.down();
+  await page.mouse.move(onRings[4]!.x, onRings[4]!.y, { steps: 16 });
+  await page.mouse.up();
+
+  await expect.poll(frame).not.toBe(resting);
+  await expect
+    .poll(async () => (await faceStickers(page, WHITE)).length)
+    .toBe(18);
+
+  await page.locator('#reset').click();
+});
+
+test('dragging a sticker round its ring turns the cube', async ({ page }) => {
+  const canvas = page.locator('#view');
+
+  await page.locator('[data-view="2d"]').click();
+  await page.locator('[data-flat="rings"]').click();
+  await expect(canvas).toHaveAttribute('data-flat-style', 'rings');
+
+  const frame = async (): Promise<string> =>
+    canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL());
+  const resting = await frame();
+
+  // The nine stickers of one face sit on a three-by-three patch of crossings,
+  // so two of them a step apart share a ring: dragging between them is a drag
+  // along that ring, and two slots is past the point a release commits.
+  const white = await faceStickers(page, WHITE);
+  expect(white).toHaveLength(9);
+  white.sort((a, b) => a.x - b.x || a.y - b.y);
+
+  await page.mouse.move(white[0]!.x, white[0]!.y);
+  await page.mouse.down();
+  await page.mouse.move(white[4]!.x, white[4]!.y, { steps: 16 });
+  await page.mouse.up();
+
+  await expect.poll(frame).not.toBe(resting);
+
+  // Every sticker is back on a slot once it settles, which is what makes the
+  // settled picture one the resting builder could have drawn: nine of each
+  // color, none of them part way round a loop.
+  await expect
+    .poll(async () => (await faceStickers(page, WHITE)).length)
+    .toBe(9);
+
+  await page.locator('#reset').click();
 });

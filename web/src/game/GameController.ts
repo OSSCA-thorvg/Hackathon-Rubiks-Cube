@@ -3,6 +3,7 @@ import {
   CubeFlatStyle,
   CubeViewMode,
   DEFAULT_SCRAMBLE_MOVES,
+  MAX_SCRAMBLE_MOVES,
   type FaceTurns,
 } from '../wasm/CubeEngine.ts';
 import {
@@ -34,6 +35,8 @@ export type GameUi = {
   readonly timer: HTMLOutputElement;
   readonly status: HTMLParagraphElement;
   readonly scrambleButton: HTMLButtonElement;
+  /** How many moves the next scramble is, as a plain integer. */
+  readonly scrambleMovesInput: HTMLInputElement;
   readonly resetButton: HTMLButtonElement;
   readonly homeViewButton: HTMLButtonElement;
   readonly viewButtons: readonly HTMLButtonElement[];
@@ -234,9 +237,33 @@ export function attachGameController(
     });
   };
 
+  // The last value the box held that the engine would accept. Kept here so a
+  // refused edit has something to go back to.
+  let scrambleMoves = DEFAULT_SCRAMBLE_MOVES;
+  ui.scrambleMovesInput.value = String(scrambleMoves);
+
+  const onScrambleMovesChange = (): void => {
+    const typed = Number(ui.scrambleMovesInput.value);
+    if (
+      Number.isInteger(typed) &&
+      typed >= 1 &&
+      typed <= MAX_SCRAMBLE_MOVES
+    ) {
+      scrambleMoves = typed;
+      return;
+    }
+
+    // Put back rather than clamped: a hundred is not what someone typing a
+    // thousand meant, and quietly substituting it hides the mistake.
+    ui.scrambleMovesInput.value = String(scrambleMoves);
+    session.announce(
+      `A scramble is 1 to ${MAX_SCRAMBLE_MOVES} moves. Kept ${scrambleMoves}.`,
+    );
+  };
+
   const onScramble = (): void => {
     run((): void => {
-      engine.scramble(seedSource(), DEFAULT_SCRAMBLE_MOVES);
+      engine.scramble(seedSource(), scrambleMoves);
       engine.render();
       session.beginScramble();
       updateMoveAvailability();
@@ -308,11 +335,13 @@ export function attachGameController(
     startFaceTurn(face, event.shiftKey ? -1 : 1);
   };
 
+  ui.scrambleMovesInput.addEventListener('change', onScrambleMovesChange);
   ui.scrambleButton.addEventListener('click', onScramble);
   ui.resetButton.addEventListener('click', onReset);
   ui.homeViewButton.addEventListener('click', onHomeView);
   keyboardTarget.addEventListener('keydown', onKeyDown);
 
+  ui.scrambleMovesInput.disabled = false;
   ui.scrambleButton.disabled = false;
   ui.resetButton.disabled = false;
   ui.homeViewButton.disabled = false;
@@ -338,12 +367,17 @@ export function attachGameController(
       if (!active) return;
       active = false;
       session.teardown();
+      ui.scrambleMovesInput.disabled = true;
       ui.scrambleButton.disabled = true;
       ui.resetButton.disabled = true;
       ui.homeViewButton.disabled = true;
       for (const button of ui.viewButtons) button.disabled = true;
       for (const button of ui.flatButtons) button.disabled = true;
       for (const button of ui.moveButtons) button.disabled = true;
+      ui.scrambleMovesInput.removeEventListener(
+        'change',
+        onScrambleMovesChange,
+      );
       ui.scrambleButton.removeEventListener('click', onScramble);
       ui.resetButton.removeEventListener('click', onReset);
       ui.homeViewButton.removeEventListener('click', onHomeView);

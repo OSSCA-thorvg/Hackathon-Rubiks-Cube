@@ -61,6 +61,10 @@ export function bootstrap(
       </div>
 
       <div class="game-actions" aria-label="Game actions">
+        <label class="scramble-length" for="scramble-moves">
+          <span>Moves</span>
+          <input type="number" id="scramble-moves" inputmode="numeric" min="1" max="100" step="1" value="20">
+        </label>
         <button type="button" id="scramble">Scramble</button>
         <button type="button" id="reset">Reset</button>
         <button type="button" id="home-view">Home view</button>
@@ -100,6 +104,7 @@ export function bootstrap(
     timer: app.querySelector<HTMLOutputElement>('#timer')!,
     status: statusElement,
     scrambleButton: app.querySelector<HTMLButtonElement>('#scramble')!,
+    scrambleMovesInput: app.querySelector<HTMLInputElement>('#scramble-moves')!,
     resetButton: app.querySelector<HTMLButtonElement>('#reset')!,
     homeViewButton: app.querySelector<HTMLButtonElement>('#home-view')!,
     viewButtons: [
@@ -115,6 +120,7 @@ export function bootstrap(
   for (const button of app.querySelectorAll<HTMLButtonElement>('button')) {
     button.disabled = true;
   }
+  gameUi.scrambleMovesInput.disabled = true;
 
   const setState = (state: AppState, message: string): void => {
     app.dataset.state = state;

@@ -23,6 +23,7 @@ function createGameUi(): GameUi {
     timer: document.createElement('output'),
     status: document.createElement('p'),
     scrambleButton: button(),
+    scrambleMovesInput: document.createElement('input'),
     resetButton: button(),
     homeViewButton: button(),
     viewButtons: [],

@@ -20,6 +20,7 @@ function createUi(): GameUi {
     <canvas id="view"></canvas>
     <output id="timer"></output>
     <p id="status"></p>
+    <input id="scramble-moves" type="number" min="1" max="100" value="20">
     <button id="scramble" type="button">Scramble</button>
     <button id="reset" type="button">Reset</button>
     <button id="home-view" type="button">Home</button>
@@ -40,6 +41,7 @@ function createUi(): GameUi {
     timer: root.querySelector<HTMLOutputElement>('#timer')!,
     status: root.querySelector<HTMLParagraphElement>('#status')!,
     scrambleButton: root.querySelector<HTMLButtonElement>('#scramble')!,
+    scrambleMovesInput: root.querySelector<HTMLInputElement>('#scramble-moves')!,
     resetButton: root.querySelector<HTMLButtonElement>('#reset')!,
     homeViewButton: root.querySelector<HTMLButtonElement>('#home-view')!,
     viewButtons: [...root.querySelectorAll<HTMLButtonElement>('[data-view]')],
@@ -198,6 +200,27 @@ describe('attachGameController', () => {
     expect(harness.engine.resetCube).toHaveBeenCalledTimes(1);
     expect(harness.controller.state).toBe('idle');
     expect(harness.ui.timer.value).toBe('00:00.00');
+  });
+
+  it('takes a scramble length and refuses one outside the range', () => {
+    const harness = createHarness();
+    const input = harness.ui.scrambleMovesInput;
+
+    input.value = '7';
+    input.dispatchEvent(new Event('change'));
+    harness.ui.scrambleButton.click();
+    expect(harness.engine.scramble).toHaveBeenLastCalledWith(1234, 7);
+
+    // Put back rather than clamped, and the box says so.
+    for (const refused of ['0', '101', '-3', '2.5', 'twenty']) {
+      input.value = refused;
+      input.dispatchEvent(new Event('change'));
+      expect(input.value).toBe('7');
+    }
+    expect(harness.ui.status.textContent).toContain('Kept 7');
+
+    harness.ui.scrambleButton.click();
+    expect(harness.engine.scramble).toHaveBeenLastCalledWith(1234, 7);
   });
 
   it('holds at scrambling while the cube is still turning', () => {

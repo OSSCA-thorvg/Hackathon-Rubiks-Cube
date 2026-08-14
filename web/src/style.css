@@ -197,6 +197,33 @@ button[aria-pressed="true"] {
   font-size: clamp(0.72rem, 1.5vw, 0.92rem);
 }
 
+/* The length belongs to Scramble, so it sits with it rather than reading as
+   a fourth command. */
+.scramble-length {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-inline: 0.4rem;
+  color: rgb(255 255 255 / 72%);
+  font-size: clamp(0.68rem, 1.4vw, 0.85rem);
+}
+
+.scramble-length input {
+  width: 3.6rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 0.5rem;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+  background: rgb(20 22 28 / 72%);
+}
+
+.scramble-length input:disabled {
+  opacity: 0.5;
+}
+
 .move-controls {
   width: min(100%, 48rem);
   border: 1px solid rgb(255 255 255 / 10%);

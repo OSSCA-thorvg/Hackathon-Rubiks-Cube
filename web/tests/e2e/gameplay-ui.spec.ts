@@ -148,6 +148,15 @@ test('a fixed scramble solved through keyboard controls stops the timer', async 
   `);
   await page.reload();
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+
+  // Three moves rather than twenty. This sequence has to be taken from the
+  // generator by hand, and the length only decides how much of that there is
+  // to redo whenever the generator changes -- what the test is here for is
+  // the path from a scrambled cube to a stopped clock, which three moves
+  // walk exactly as well as twenty.
+  const moves = page.locator('#scramble-moves');
+  await moves.fill('3');
+  await moves.dispatchEvent('change');
   await page.locator('#scramble').click();
 
   // The scramble is turned into the cube rather than applied, so the keys
@@ -157,12 +166,8 @@ test('a fixed scramble solved through keyboard controls stops the timer', async 
     'ready',
   );
 
-  // Reverse inverse of seed 42. A half turn is two same-direction keyboard
-  // quarter turns because the visible controls intentionally expose ±90°.
-  const solution = [
-    'b', 'b', 'u', 'u', 'B', 'U', 'F', 'U', 'l', 'l', 'B', 'u', 'L',
-    'f', 'r', 'b', 'b', 'D', 'B', 'l', 'b', 'l', 'D', 'L',
-  ];
+  // Seed 42 begins L, D, L'. Undoing it runs backwards: L, D', L'.
+  const solution = ['l', 'D', 'L'];
   const moveButtons = page.locator('[data-face]');
 
   for (const key of solution) {

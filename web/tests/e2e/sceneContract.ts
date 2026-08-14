@@ -54,6 +54,15 @@ export const NET_BLOCKS = [
 ] as const;
 export const CUBE_SIZE = 3;
 
+/** Where each face sits in the cross, by name, for aiming at a net cell. */
+export const FRONT_BLOCK = { column: 1, row: 1 } as const;
+
+export const NET_COLUMNS = 4;
+export const NET_ROWS = 3;
+/** Fractions the net-only layout grows to before it runs out of canvas. */
+export const NET_ONLY_WIDTH = 0.88;
+export const NET_ONLY_HEIGHT = 0.78;
+
 // Layout fractions of the shorter canvas side, matching
 // docs/tasks/04-rubiks-cube-domain.md. Repeated here on purpose so a layout
 // change has to be made deliberately in both places.
@@ -214,6 +223,69 @@ export function pagePointInCube(
     x: probe.box.left + (bufferX * probe.box.width) / probe.width,
     y: probe.box.top + (bufferY * probe.box.height) / probe.height,
   };
+}
+
+/** Which layout the net is drawn with; the two view modes place it apart. */
+export type NetView = 'both' | 'net';
+
+/** The net's rectangle in drawing buffer pixels. */
+export function netLayout(
+  probe: CanvasProbe,
+  view: NetView,
+): { x: number; y: number; faceSide: number } {
+  if (view === 'net') {
+    // Alone on the canvas the net grows until one extent runs out first.
+    const faceSide = Math.min(
+      (NET_ONLY_WIDTH * probe.width) / NET_COLUMNS,
+      (NET_ONLY_HEIGHT * probe.height) / NET_ROWS,
+    );
+    return {
+      x: (probe.width - faceSide * NET_COLUMNS) / 2,
+      y: (probe.height - faceSide * NET_ROWS) / 2,
+      faceSide,
+    };
+  }
+
+  const faceSide = NET_FACE_SIDE * Math.min(probe.width, probe.height);
+  return {
+    x: (probe.width - faceSide * NET_COLUMNS) / 2,
+    y: NET_TOP * Math.min(probe.width, probe.height),
+    faceSide,
+  };
+}
+
+/** Turns a net cell into page coordinates for the mouse. */
+export function pagePointInNet(
+  probe: CanvasProbe,
+  view: NetView,
+  block: { readonly column: number; readonly row: number },
+  col: number,
+  row: number,
+): { x: number; y: number } {
+  const net = netLayout(probe, view);
+  const cell = net.faceSide / CUBE_SIZE;
+  const bufferX = net.x + block.column * net.faceSide + (col + 0.5) * cell;
+  const bufferY = net.y + block.row * net.faceSide + (row + 0.5) * cell;
+
+  return {
+    x: probe.box.left + (bufferX * probe.box.width) / probe.width,
+    y: probe.box.top + (bufferY * probe.box.height) / probe.height,
+  };
+}
+
+/**
+ * Drag distance in CSS pixels for a quarter turn on the net.
+ *
+ * The net's sensitivity is one face across, so this is that face measured in
+ * the canvas box rather than in the drawing buffer.
+ */
+export function netDragFor(
+  probe: CanvasProbe,
+  view: NetView,
+  quarterTurns: number,
+): number {
+  const net = netLayout(probe, view);
+  return (net.faceSide * probe.box.width * quarterTurns) / probe.width;
 }
 
 /** The faces showing at the three screen positions, whatever the viewpoint. */

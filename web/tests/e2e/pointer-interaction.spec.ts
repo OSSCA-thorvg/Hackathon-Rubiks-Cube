@@ -7,16 +7,20 @@ import {
   BLUE,
   BODY,
   expectedNet,
+  FRONT_BLOCK,
   FRONT_RIGHT_COLUMN,
   GREEN,
+  netDragFor,
   ORANGE,
   pagePointInCube,
+  pagePointInNet,
   probeCanvas,
   QUARTER_TURN_DRAG,
   RED,
   WHITE,
   YELLOW,
   type CanvasProbe,
+  type NetView,
 } from './sceneContract.ts';
 
 // The net after R, block by block in probe order, written out rather than
@@ -82,6 +86,37 @@ const NET_AFTER_R2 = [
   YELLOW, YELLOW, WHITE,
 ];
 
+// The net after U, written out the same way. U carries each side face's top
+// row round onto the face to its left, so the left takes the front's green,
+// the front takes the right's red, the right takes the back's blue and the
+// back takes the left's orange. Up turns in place and stays one color.
+const NET_AFTER_U = [
+  // Up
+  WHITE, WHITE, WHITE,
+  WHITE, WHITE, WHITE,
+  WHITE, WHITE, WHITE,
+  // Left
+  GREEN, GREEN, GREEN,
+  ORANGE, ORANGE, ORANGE,
+  ORANGE, ORANGE, ORANGE,
+  // Front
+  RED, RED, RED,
+  GREEN, GREEN, GREEN,
+  GREEN, GREEN, GREEN,
+  // Right
+  BLUE, BLUE, BLUE,
+  RED, RED, RED,
+  RED, RED, RED,
+  // Back
+  ORANGE, ORANGE, ORANGE,
+  BLUE, BLUE, BLUE,
+  BLUE, BLUE, BLUE,
+  // Down, untouched
+  YELLOW, YELLOW, YELLOW,
+  YELLOW, YELLOW, YELLOW,
+  YELLOW, YELLOW, YELLOW,
+];
+
 /**
  * A drag that commits one turn without going near a boundary.
  *
@@ -97,6 +132,13 @@ const VIEWPORT = { width: 1200, height: 1200 };
 
 function sameGrid(a: number[][], b: number[][]): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** Whether a cut surface is showing, which only happens mid-turn. */
+function showsBody(probe: CanvasProbe): boolean {
+  return probe.cubeGrid.some(
+    (cell) => JSON.stringify(cell) === JSON.stringify(BODY),
+  );
 }
 
 /** Presses the front face's right column, ready to drag. */
@@ -142,10 +184,10 @@ test('dragging the right column turns the cube and the net follows', async ({
 
   const midDrag = await probeCanvas(page);
 
-  // The turn is only a picture until it is released: the net draws the
-  // logical cube, and the logical cube has not changed yet.
-  expect(midDrag.net).toEqual(expectedNet());
+  // Both views move together now, so the net has changed too. It is still
+  // only a picture: the logical cube changes when the release settles.
   expect(sameGrid(midDrag.cubeGrid, atRest.cubeGrid)).toBe(false);
+  expect(sameGrid(midDrag.net, expectedNet())).toBe(false);
 
   // The layer has swung away from the rest of the cube, so the cut it leaves
   // behind has to be filled rather than showing the background through it.
@@ -158,12 +200,13 @@ test('dragging the right column turns the cube and the net follows', async ({
     NET_AFTER_R,
   );
 
-  const turned = await probeCanvas(page);
+  // The cut in the 3D view closes when the snap actually stops, which is a
+  // frame or two after the net has arrived at the settled drawing.
+  await expect.poll(async () => showsBody(await probeCanvas(page))).toBe(false);
 
   // R moves no sticker that the three face samples read, so the rest of the
   // contract still holds exactly.
-  assertFacesAndCorners(turned);
-  expect(turned.cubeGrid).not.toContainEqual(BODY);
+  assertFacesAndCorners(await probeCanvas(page));
 
   expect(pageErrors).toEqual([]);
 });
@@ -205,6 +248,67 @@ test('two drags in quick succession both turn the cube', async ({ page }) => {
 
   await expect.poll(async () => (await probeCanvas(page)).net).toEqual(
     NET_AFTER_R2,
+  );
+});
+
+/** Drags the net's front block top middle cell to the left, which means U. */
+async function dragNetTopRowLeft(
+  page: Page,
+  probe: CanvasProbe,
+  view: NetView,
+): Promise<void> {
+  const grab = pagePointInNet(probe, view, FRONT_BLOCK, 1, 0);
+  await page.mouse.move(grab.x, grab.y);
+  await page.mouse.down();
+  await page.mouse.move(grab.x - netDragFor(probe, view, SHORT_TURN), grab.y, {
+    steps: 8,
+  });
+  await page.mouse.up();
+}
+
+test('dragging a net cell turns the cube', async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error)));
+
+  await page.goto('./');
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+
+  const atRest = await probeCanvas(page);
+  assertSceneContract(atRest);
+
+  await dragNetTopRowLeft(page, atRest, 'both');
+
+  await expect.poll(async () => (await probeCanvas(page)).net).toEqual(
+    NET_AFTER_U,
+  );
+
+  // The gesture started in the net, but the turn is the cube's: the 3D view
+  // shows it too, and comes back to rest along with the drawing below it.
+  const turned = await probeCanvas(page);
+  expect(turned.cubeGrid).not.toContainEqual(BODY);
+  expect(sameGrid(turned.cubeGrid, atRest.cubeGrid)).toBe(false);
+
+  expect(pageErrors).toEqual([]);
+});
+
+test('the net is draggable when it is the only view', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+
+  await page.locator('button[data-view="net"]').click();
+  await expect(page.locator('button[data-view="net"]')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+
+  const netOnly = await probeCanvas(page);
+  await dragNetTopRowLeft(page, netOnly, 'net');
+
+  // Read the result back in the shared layout, which is where the probe's
+  // sample points are; the net-only layout puts the same cells elsewhere.
+  await page.locator('button[data-view="both"]').click();
+  await expect.poll(async () => (await probeCanvas(page)).net).toEqual(
+    NET_AFTER_U,
   );
 });
 

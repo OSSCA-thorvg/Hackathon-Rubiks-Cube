@@ -82,7 +82,8 @@ test('Both is default and 3D, Net, and Home view controls preserve gameplay', as
   await expect(net).toHaveAttribute('aria-pressed', 'true');
   await expect(canvas).toHaveAttribute('data-view-mode', 'net');
 
-  // Net is display-only: a canvas drag is declined and changes no pixels.
+  // The net is something to work on rather than to look at: a drag across a
+  // cell turns a layer here just as one on the cube does.
   const before = await canvas.evaluate(
     (element) => (element as HTMLCanvasElement).toDataURL(),
   );
@@ -92,11 +93,14 @@ test('Both is default and 3D, Net, and Home view controls preserve gameplay', as
   await page.mouse.down();
   await page.mouse.move(box!.x + box!.width * 0.75, box!.y + box!.height / 2);
   await page.mouse.up();
-  expect(
-    await canvas.evaluate(
-      (element) => (element as HTMLCanvasElement).toDataURL(),
-    ),
-  ).toBe(before);
+  await expect
+    .poll(async () =>
+      canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL()),
+    )
+    .not.toBe(before);
+
+  // Put the cube back, so what follows is about the view controls alone.
+  await page.locator('#reset').click();
 
   await both.click();
   await orbitOnce(page);

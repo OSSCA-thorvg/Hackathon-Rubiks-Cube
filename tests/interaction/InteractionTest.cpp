@@ -120,6 +120,26 @@ Settled settle(InteractionController& controller)
     return result;
 }
 
+/**
+ * How long a played move takes to settle, to the millisecond.
+ *
+ * A finer step than a frame because what is being compared is a duration
+ * against another duration, and sixteen milliseconds of quantization is
+ * coarse next to the shortest settles.
+ */
+double played_duration(int quarter_turns, double tempo_ms)
+{
+    InteractionController controller(kSize);
+    REQUIRE(controller.start_move(
+        CubeMove{Axis::X, rubiks::cube::layer(0), quarter_turns}, tempo_ms));
+
+    double elapsed = 0.0;
+    while (controller.advance(1.0) && elapsed < 10000.0) elapsed += 1.0;
+
+    REQUIRE(elapsed < 10000.0);
+    return elapsed;
+}
+
 /** Press, drag, release and settle: one whole gesture. */
 Settled perform(const Vec3& grab, const Vec2& direction, float degrees)
 {
@@ -400,6 +420,95 @@ TEST_CASE("programmatic moves reject invalid or concurrent work")
     const Vec2 at = screen_of(kFrontCenter);
     REQUIRE_FALSE(
         controller.pointer_down(at.x, at.y, cube_camera(), cube_rect()));
+}
+
+TEST_CASE("a played move is paced in time per quarter turn, not per move")
+{
+    // So a half turn takes twice as long as a quarter however fast the
+    // sequence is being played, and a speed control is one number rather than
+    // one number per size of turn.
+    const double quarter = played_duration(1, 200.0);
+    const double half = played_duration(2, 200.0);
+    const double brisk = played_duration(1, 100.0);
+
+    REQUIRE(half == Approx(2.0 * quarter).epsilon(0.03));
+    REQUIRE(brisk == Approx(0.5 * quarter).epsilon(0.03));
+}
+
+TEST_CASE("the shortest settle never outlasts a whole quarter turn")
+{
+    // The floor is there so that a tiny correction is still visible as
+    // motion. Left absolute it would outlast the turn itself once the tempo
+    // came below it, and the pacing would quietly stop being the caller's.
+    constexpr double kBrisk = 0.25 * kMinSnapMs;
+
+    REQUIRE(played_duration(1, kBrisk) == Approx(kBrisk).margin(2.0 * kFrameMs));
+}
+
+TEST_CASE("a played move lifts its piece from the drawing every time")
+{
+    // A sequence leaves no resting frame between its moves, so the lift never
+    // gets the moment at rest that would put it down. Read from the last
+    // move's height, every move after the first would begin fully lifted and
+    // the piece would flicker once per move.
+    constexpr double kTempo = kOpeningMs;
+    InteractionController controller(kSize);
+
+    REQUIRE(controller.start_move(rubiks::cube::moves::R(kSize), kTempo));
+    REQUIRE(controller.active_rotation()->opening == Approx(0.0f));
+
+    // Run to the frame that commits and no further -- exactly where a
+    // consumer playing a sequence starts the next move.
+    while (!controller.take_committed_move()) {
+        REQUIRE(controller.advance(kFrameMs));
+    }
+    REQUIRE_FALSE(controller.is_busy());
+
+    REQUIRE(controller.start_move(rubiks::cube::moves::U(kSize), kTempo));
+    REQUIRE(controller.active_rotation()->opening == Approx(0.0f));
+
+    static_cast<void>(controller.advance(0.5 * kOpeningMs));
+    REQUIRE(controller.active_rotation()->opening > 0.0f);
+}
+
+TEST_CASE("an orbit can begin without a pick, and without waiting for a snap")
+{
+    // Looking around takes nothing away from a turn that is settling, and a
+    // caller playing a sequence back has one running nearly all of the time.
+    InteractionController controller(kSize);
+    const Rect viewport = cube_rect();
+
+    REQUIRE(controller.start_move(rubiks::cube::moves::R(kSize)));
+    REQUIRE(controller.start_orbit(10.0f, 10.0f, viewport));
+
+    controller.pointer_move(10.0f + 0.25f * viewport.width, 10.0f);
+    const auto delta = controller.take_orbit_delta();
+    REQUIRE(delta);
+    REQUIRE(delta->yaw_degrees < 0.0f);
+
+    // And the turn that was being watched still arrives.
+    controller.pointer_up();
+    const Settled settled = settle(controller);
+    REQUIRE(settled.commits == 1);
+}
+
+TEST_CASE("an orbit refuses what it cannot measure or does not own")
+{
+    InteractionController controller(kSize);
+
+    // No extent to measure a sweep against. Left unguarded this is a division
+    // by zero, and the infinity it yields makes the viewpoint permanently NaN.
+    REQUIRE_FALSE(controller.start_orbit(10.0f, 10.0f, Rect{}));
+    REQUIRE_FALSE(
+        controller.start_orbit(std::numeric_limits<float>::quiet_NaN(), 10.0f,
+                               cube_rect()));
+
+    // Nothing was begun, so the pointer is still free.
+    const Vec2 at = screen_of(kFrontCenter);
+    REQUIRE(controller.pointer_down(at.x, at.y, cube_camera(), cube_rect()));
+
+    // And a gesture that owns the pointer keeps it.
+    REQUIRE_FALSE(controller.start_orbit(10.0f, 10.0f, cube_rect()));
 }
 
 TEST_CASE("cancelling a drag leaves the cube alone")

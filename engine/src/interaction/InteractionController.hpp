@@ -152,21 +152,51 @@ public:
                                           const RingsPick& pick) noexcept;
 
     /**
+     * Starts a sweep of the viewpoint, wherever the press landed.
+     *
+     * The way in for a caller that has already decided the press is not for
+     * the cube -- a sequence playing back, which lets the user look round it
+     * but not turn it. Nothing is picked, so the coordinates only say where
+     * the sweep starts from.
+     *
+     * A snap in flight does not stand in the way, unlike everywhere else: a
+     * viewpoint has no commit to protect, and the caller with the most use for
+     * this has one running nearly all of the time.
+     *
+     * @return true when the sweep began; false when another gesture already
+     *         owns the pointer, the coordinates are not finite, or the region
+     *         has no extent to measure the sweep against.
+     */
+    [[nodiscard]] bool start_orbit(float x, float y,
+                                   const graphics::Rect& viewport) noexcept;
+
+    /**
      * Starts an animated move without a pointer gesture.
      *
-     * Used by keyboard and DOM controls so every input reaches the same snap
-     * and commit path. Layers outside the cube, whole-turn no-ops and input
-     * while busy are rejected; the turn keeps the direction it was asked for.
+     * Used by keyboard and DOM controls, and by a sequence being played back,
+     * so every input reaches the same snap and commit path. Layers outside the
+     * cube, whole-turn no-ops and input while busy are rejected; the turn keeps
+     * the direction it was asked for.
+     *
+     * `tempo_ms` is milliseconds per quarter turn rather than a duration, so a
+     * half turn takes twice as long as a quarter however fast it is played.
      *
      * @return true when the animation started.
      */
-    [[nodiscard]] bool start_move(const cube::CubeMove& move) noexcept;
+    [[nodiscard]] bool start_move(
+        const cube::CubeMove& move,
+        double tempo_ms = kSnapMsPerQuarterTurn) noexcept;
 
     /** Updates the turn angle, locking the axis once the drag is deliberate. */
     void pointer_move(float x, float y) noexcept;
 
-    /** Releases the gesture, starting the snap when an axis was locked. */
-    void pointer_up() noexcept;
+    /**
+     * Releases the gesture, starting the snap when an axis was locked.
+     *
+     * `tempo_ms` paces the settle in the same units `start_move` takes, so one
+     * speed control can reach a released drag and a played move alike.
+     */
+    void pointer_up(double tempo_ms = kSnapMsPerQuarterTurn) noexcept;
 
     /**
      * Ends a snap at its target, handing back the move it had decided.
@@ -352,7 +382,7 @@ private:
 
     /** Begins the run-down from a released drag's angle to its quarter turn. */
     void start_snap(cube::Axis axis, cube::LayerMask layers,
-                    float angle_degrees) noexcept;
+                    float angle_degrees, double tempo_ms) noexcept;
 
     [[nodiscard]] float snap_angle() const noexcept;
 

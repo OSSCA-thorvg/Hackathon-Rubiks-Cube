@@ -53,17 +53,26 @@ constexpr float kDegreesPerQuarterTurn = 90.0f;
     return std::copysign(turns * kDegreesPerQuarterTurn, angle_degrees);
 }
 
-[[nodiscard]] double snap_duration(float remaining_degrees) noexcept
+/**
+ * How long a settle takes, at a pace given as milliseconds per quarter turn.
+ *
+ * The pace rather than the total, so a half turn takes twice as long as a
+ * quarter and a small correction is over quickly.
+ */
+[[nodiscard]] double snap_duration(float remaining_degrees,
+                                   double tempo_ms) noexcept
 {
     const float magnitude = std::abs(remaining_degrees);
 
     // Nothing left to travel: the next frame commits. Anything else takes at
-    // least the floor, so a tiny correction is still visible as motion.
+    // least the floor, so a tiny correction is still visible as motion -- but
+    // never longer than a whole quarter turn would take, or at a brisk pace
+    // the floor stops guarding the pacing and becomes it.
     if (magnitude <= 0.0f) return 0.0;
 
-    return std::max(kMinSnapMs, kSnapMsPerQuarterTurn *
-                                    static_cast<double>(magnitude) /
-                                    kDegreesPerQuarterTurn);
+    return std::max(std::min(kMinSnapMs, tempo_ms),
+                    tempo_ms * static_cast<double>(magnitude) /
+                        kDegreesPerQuarterTurn);
 }
 
 [[nodiscard]] double sanitized_delta(double elapsed_ms) noexcept
@@ -96,13 +105,24 @@ bool InteractionController::pointer_down(
 
     // Missing the cube is not nothing: it is a request to look around it.
     // Where the press landed does not matter, only that it was not the cube.
-    if (!pick) {
-        orbit_ = Orbit{viewport, math::Vec2{x, y}};
-        return true;
-    }
+    if (!pick) return start_orbit(x, y, viewport);
 
     gesture_ = Gesture{camera, viewport, *pick, math::Vec2{x, y},
                        std::nullopt, 0.0f};
+    return true;
+}
+
+bool InteractionController::start_orbit(
+    float x, float y, const graphics::Rect& viewport) noexcept
+{
+    // A running snap is not consulted, unlike everywhere else. Looking around
+    // takes nothing away from a turn that is settling, and a caller playing a
+    // sequence back has one running almost all of the time.
+    if (gesture_running()) return false;
+    if (!finite_point(x, y)) return false;
+    if (viewport.width <= 0.0f || viewport.height <= 0.0f) return false;
+
+    orbit_ = Orbit{viewport, math::Vec2{x, y}};
     return true;
 }
 
@@ -131,7 +151,8 @@ bool InteractionController::rings_pointer_down(float x, float y,
     return true;
 }
 
-bool InteractionController::start_move(const cube::CubeMove& move) noexcept
+bool InteractionController::start_move(const cube::CubeMove& move,
+                                       double tempo_ms) noexcept
 {
     if (is_busy()) return false;
     if (move.layers == 0 || move.layers >= cube::layer(size_)) return false;
@@ -147,9 +168,15 @@ bool InteractionController::start_move(const cube::CubeMove& move) noexcept
     const float target =
         static_cast<float>(quarter_turns) * kDegreesPerQuarterTurn;
 
-    // The turn starts at rest, so the whole target is still to travel.
-    snap_ = Snap{move.axis, move.layers, 0.0f, target, 0.0,
-                 snap_duration(target)};
+    // The turn starts at rest, and so does the piece: nobody has hold of it,
+    // so it has to be lifted rather than found already up. Without this a move
+    // asked for while the previous one is still being cleared away -- which,
+    // played back, is every move after the first -- starts at full height.
+    opened_ms_ = 0.0;
+
+    // The whole target is still to travel.
+    snap_ = Snap{move.axis, move.layers, 0.0f, target,
+                 0.0,       snap_duration(target, tempo_ms)};
     return true;
 }
 
@@ -311,7 +338,7 @@ void InteractionController::advance_rings_gesture(float x, float y) noexcept
                                     kDegreesPerQuarterTurn;
 }
 
-void InteractionController::pointer_up() noexcept
+void InteractionController::pointer_up(double tempo_ms) noexcept
 {
     // Nothing to settle or commit, and the accumulated sweep stays behind to
     // be taken: a viewpoint is where the user left it, not something to undo.
@@ -324,7 +351,7 @@ void InteractionController::pointer_up() noexcept
     // down to its quarter, and one that never did was a tap inside the dead
     // zone. Only one of the two can be in flight, so both are let go.
     if (const auto turn = locked_turn()) {
-        start_snap(turn->axis, turn->layers, turn->angle_degrees);
+        start_snap(turn->axis, turn->layers, turn->angle_degrees, tempo_ms);
     }
 
     gesture_.reset();
@@ -333,12 +360,13 @@ void InteractionController::pointer_up() noexcept
 }
 
 void InteractionController::start_snap(cube::Axis axis, cube::LayerMask layers,
-                                       float angle_degrees) noexcept
+                                       float angle_degrees,
+                                       double tempo_ms) noexcept
 {
     const float target = snap_target(angle_degrees);
 
     snap_ = Snap{axis,          layers, angle_degrees, target, 0.0,
-                 snap_duration(target - angle_degrees)};
+                 snap_duration(target - angle_degrees, tempo_ms)};
 }
 
 std::optional<cube::CubeMove> InteractionController::finish_snap() noexcept

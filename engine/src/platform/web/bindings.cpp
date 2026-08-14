@@ -167,7 +167,7 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_view_mode(int mode) noexcept
     constexpr int kFirstMode =
         static_cast<int>(rubiks::graphics::ViewMode::Cube3D);
     constexpr int kLastMode =
-        static_cast<int>(rubiks::graphics::ViewMode::Net);
+        static_cast<int>(rubiks::graphics::ViewMode::Flat);
     if (mode < kFirstMode || mode > kLastMode) return 0;
 
     return rubiks::app::set_view_mode(
@@ -180,6 +180,27 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_view_mode(int mode) noexcept
 EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_view_mode() noexcept
 {
     return static_cast<int>(rubiks::app::view_mode());
+}
+
+/** Chooses which drawing fills the flat region; invalid values are rejected. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_flat_style(int style) noexcept
+{
+    constexpr int kFirstStyle =
+        static_cast<int>(rubiks::graphics::FlatStyle::Net);
+    constexpr int kLastStyle =
+        static_cast<int>(rubiks::graphics::FlatStyle::Both);
+    if (style < kFirstStyle || style > kLastStyle) return 0;
+
+    return rubiks::app::set_flat_style(
+               static_cast<rubiks::graphics::FlatStyle>(style))
+               ? 1
+               : 0;
+}
+
+/** Returns the current graphics::FlatStyle integer. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_flat_style() noexcept
+{
+    return static_cast<int>(rubiks::app::flat_style());
 }
 
 /** Restores only the turntable camera. */

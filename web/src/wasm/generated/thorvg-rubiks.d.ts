@@ -41,6 +41,10 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_set_view_mode(mode: number): number;
   /** The current graphics::ViewMode as an integer. */
   _thorvg_rubiks_view_mode(): number;
+  /** Returns 1 when the style was accepted; invalid values are rejected. */
+  _thorvg_rubiks_set_flat_style(style: number): number;
+  /** The current graphics::FlatStyle as an integer. */
+  _thorvg_rubiks_flat_style(): number;
   /** Restores the turntable camera and nothing else. */
   _thorvg_rubiks_reset_view(): void;
   /** Returns 1 while a gesture, animation, or pending commit is active. */

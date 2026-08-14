@@ -45,6 +45,8 @@ if host_machine.system() == 'emscripten'
     '_thorvg_rubiks_turn_face',
     '_thorvg_rubiks_set_view_mode',
     '_thorvg_rubiks_view_mode',
+    '_thorvg_rubiks_set_flat_style',
+    '_thorvg_rubiks_flat_style',
     '_thorvg_rubiks_reset_view',
     '_thorvg_rubiks_is_busy',
   ]

@@ -4,6 +4,7 @@ import {
   computeDrawingBufferSize,
   CubeFace,
   CubeEngine,
+  CubeFlatStyle,
   CubeViewMode,
   MAX_DIMENSION,
 } from '../../src/wasm/CubeEngine.ts';
@@ -33,6 +34,8 @@ function createFakeModule() {
     turnFaceResult: 1,
     setViewModeResult: 1,
     viewMode: CubeViewMode.Both,
+    flatStyle: CubeFlatStyle.Net,
+    setFlatStyleResult: 1,
     busyResult: 0,
     pixelBufferOverride: null as number | null,
     pixelByteLengthOverride: null as number | null,
@@ -94,6 +97,11 @@ function createFakeModule() {
       },
     ),
     _thorvg_rubiks_view_mode: vi.fn((): number => behavior.viewMode),
+    _thorvg_rubiks_set_flat_style: vi.fn((style: number): number => {
+      if (behavior.setFlatStyleResult !== 0) behavior.flatStyle = style;
+      return behavior.setFlatStyleResult;
+    }),
+    _thorvg_rubiks_flat_style: vi.fn((): number => behavior.flatStyle),
     _thorvg_rubiks_reset_view: vi.fn((): void => {}),
     _thorvg_rubiks_is_busy: vi.fn((): number => behavior.busyResult),
   } satisfies ThorvgRubiksModule;
@@ -415,8 +423,22 @@ describe('CubeEngine gameplay and view controls', () => {
     const { engine, behavior } = await createEngine();
 
     expect(engine.viewMode()).toBe(CubeViewMode.Both);
-    engine.setViewMode(CubeViewMode.Net);
-    expect(engine.viewMode()).toBe(CubeViewMode.Net);
+    engine.setViewMode(CubeViewMode.Flat);
+    expect(engine.viewMode()).toBe(CubeViewMode.Flat);
+
+    // The flat style is its own axis, and its own validation.
+    expect(engine.flatStyle()).toBe(CubeFlatStyle.Net);
+    engine.setFlatStyle(CubeFlatStyle.Rings);
+    expect(engine.flatStyle()).toBe(CubeFlatStyle.Rings);
+    engine.setFlatStyle(CubeFlatStyle.Both);
+    expect(engine.flatStyle()).toBe(CubeFlatStyle.Both);
+    behavior.flatStyle = 3;
+    expect(() => engine.flatStyle()).toThrow('invalid flat style');
+    behavior.flatStyle = CubeFlatStyle.Net;
+
+    // The value that used to be a fourth mode is not one.
+    behavior.viewMode = 3;
+    expect(() => engine.viewMode()).toThrow('invalid view mode');
 
     behavior.viewMode = 99;
     expect(() => engine.viewMode()).toThrow('invalid view mode');

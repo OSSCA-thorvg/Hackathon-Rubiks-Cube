@@ -5,12 +5,16 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include "EngineLifecycle.hpp"
+#include "cube/Surface.hpp"
+#include "graphics/Layout.hpp"
 #include "graphics/NetGeometry.hpp"
+#include "graphics/RingsGeometry.hpp"
 #include "graphics/Palette.hpp"
 #include "interaction/InteractionController.hpp"
 
@@ -510,4 +514,91 @@ TEST_CASE("pressing a net cell draws the rings it could turn on")
     REQUIRE(rubiks::app::render());
     REQUIRE(beside() > 0);
     REQUIRE(below() == 0);
+}
+
+TEST_CASE("the ring diagram renders every sticker and the loops beneath them")
+{
+    constexpr std::uint32_t kSize = 1024;
+
+    const rubiks::test::EngineLifecycle engine(kSize, kSize);
+    REQUIRE(rubiks::app::set_view_mode(rubiks::graphics::ViewMode::Flat));
+    REQUIRE(rubiks::app::set_flat_style(rubiks::graphics::FlatStyle::Rings));
+
+    const auto rect = rubiks::graphics::layout(
+                          kSize, kSize, rubiks::graphics::ViewMode::Flat,
+                          rubiks::graphics::FlatStyle::Rings)
+                          .rings;
+
+    const auto sticker_at = [&](const rubiks::cube::SurfaceSticker& sticker) {
+        const auto at = rubiks::graphics::rings_slot_position(sticker, rect, 3);
+        REQUIRE(at.has_value());
+        return *at;
+    };
+
+    REQUIRE(rubiks::app::render());
+
+    // Every face's middle sticker shows that face's own color: nine circles
+    // and fifty-four crossings, and the one this sticker is drawn at is the
+    // one the layout says it is.
+    const std::array<std::pair<rubiks::cube::Face, Rgba>, 6> middles{{
+        {rubiks::cube::Face::Right, kRed},
+        {rubiks::cube::Face::Left, kOrange},
+        {rubiks::cube::Face::Up, kWhite},
+        {rubiks::cube::Face::Down, kYellow},
+        {rubiks::cube::Face::Front, kGreen},
+        {rubiks::cube::Face::Back, kBlue},
+    }};
+
+    for (const auto& [face, color] : middles) {
+        rubiks::cube::SurfaceSticker sticker{1, 1, 1, face};
+        const int outer = rubiks::cube::outer_layer(face, 3);
+        switch (rubiks::cube::axis_of(face)) {
+            case rubiks::cube::Axis::X:
+                sticker.x = outer;
+                break;
+            case rubiks::cube::Axis::Y:
+                sticker.y = outer;
+                break;
+            case rubiks::cube::Axis::Z:
+                sticker.z = outer;
+                break;
+        }
+
+        const auto at = sticker_at(sticker);
+        INFO("face " << static_cast<int>(face));
+        require_pixel(pixel_at(at.x, at.y, kSize, kSize), color);
+    }
+
+    // Those samples are also what says the loops are drawn under the stickers
+    // rather than over them. Every sticker sits where two circles cross, so
+    // both of them run through the very point sampled above; drawn afterwards
+    // they would paint their own color over each one.
+
+    // And the loops are drawn: a fair share of the canvas carries one ring's
+    // color, which no sticker and no background can. The rings are slightly
+    // transparent, so what to look for is that color composited over the
+    // background rather than the color itself.
+    const auto ring = rubiks::graphics::guide_color(rubiks::cube::Axis::X);
+    const auto over_background = [&](std::uint8_t channel,
+                                     std::uint8_t under) {
+        return static_cast<int>(
+            (static_cast<int>(channel) * ring.a +
+             static_cast<int>(under) * (255 - ring.a)) / 255);
+    };
+    const std::array<int, 3> expected{over_background(ring.r, kBackground[0]),
+                                      over_background(ring.g, kBackground[1]),
+                                      over_background(ring.b, kBackground[2])};
+
+    std::size_t drawn = 0;
+    for (std::uint32_t y = 0; y < kSize; ++y) {
+        for (std::uint32_t x = 0; x < kSize; ++x) {
+            const auto* pixel = pixel_at(x, y, kSize);
+            const bool matched =
+                std::abs(static_cast<int>(pixel[0]) - expected[0]) <= 2 &&
+                std::abs(static_cast<int>(pixel[1]) - expected[1]) <= 2 &&
+                std::abs(static_cast<int>(pixel[2]) - expected[2]) <= 2;
+            if (matched) ++drawn;
+        }
+    }
+    REQUIRE(drawn > 1000);
 }

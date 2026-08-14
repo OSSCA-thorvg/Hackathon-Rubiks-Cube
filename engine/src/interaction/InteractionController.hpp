@@ -6,10 +6,12 @@
 #include "cube/CubeMove.hpp"
 #include "graphics/ActiveRotation.hpp"
 #include "graphics/NetGeometry.hpp"
+#include "graphics/RingsGeometry.hpp"
 #include "graphics/Camera.hpp"
 #include "graphics/Rect.hpp"
 #include "interaction/DragResolver.hpp"
 #include "interaction/NetPicking.hpp"
+#include "interaction/RingsPicking.hpp"
 #include "interaction/Picking.hpp"
 #include "math/Types.hpp"
 
@@ -135,6 +137,21 @@ public:
                                         const NetPick& pick) noexcept;
 
     /**
+     * Starts a layer drag on the ring diagram instead.
+     *
+     * The sticker is passed in for the same reason the net's cell is: the
+     * caller has to know whether the press landed on one before it can decide
+     * this is a ring gesture at all, and picking it twice would let the two
+     * answers disagree.
+     *
+     * @return true when a gesture began; false only when another gesture or a
+     *         snap is already running, or the coordinates are not finite.
+     */
+    [[nodiscard]] bool rings_pointer_down(float x, float y,
+                                          const graphics::Rect& rect,
+                                          const RingsPick& pick) noexcept;
+
+    /**
      * Starts an animated move without a pointer gesture.
      *
      * Used by keyboard and DOM controls so every input reaches the same snap
@@ -204,6 +221,15 @@ public:
      */
     [[nodiscard]] std::vector<graphics::NetGuide> net_guides() const;
 
+    /**
+     * The rings a press on the diagram is offering, or the one it has locked.
+     *
+     * Empty at every other moment, the same as the net's guides -- except that
+     * these are not lines to draw but loops already drawn, so what a caller
+     * does with them is pick them out rather than add to the picture.
+     */
+    [[nodiscard]] std::vector<graphics::RingsGuide> rings_guides() const;
+
     /** The turn to draw, or nothing when the cube is at rest. */
     [[nodiscard]] std::optional<graphics::ActiveRotation> active_rotation()
         const noexcept;
@@ -250,6 +276,32 @@ private:
         float angle_degrees = 0.0f;
     };
 
+    /** The turn a ring drag locked onto. */
+    struct RingsLock {
+        cube::Axis axis;
+        int layer;
+        cube::LayerMask layers;
+    };
+
+    /** A drag in progress around the ring diagram. */
+    struct RingsGesture {
+        graphics::Rect rect;
+        RingsPick pick;
+        math::Vec2 start;
+        std::optional<RingsLock> lock;
+        /** Where round the locked ring the pointer was, as a slot index. */
+        float previous_slot = 0.0f;
+        /**
+         * Slots travelled since the press, unwrapped.
+         *
+         * Accumulated a step at a time rather than measured from the press,
+         * because a ring closes: a drag carried right round would otherwise
+         * read as having come back to where it started.
+         */
+        float swept_slots = 0.0f;
+        float angle_degrees = 0.0f;
+    };
+
     /** A drag sweeping the viewpoint. */
     struct Orbit {
         graphics::Rect viewport;
@@ -292,6 +344,12 @@ private:
     /** Updates a net drag's lock and angle from the pointer's position. */
     void advance_net_gesture(float x, float y) noexcept;
 
+    /** The same for a drag round the ring diagram. */
+    void advance_rings_gesture(float x, float y) noexcept;
+
+    /** The two rings the pressed sticker sits on, in axis order. */
+    [[nodiscard]] std::vector<graphics::RingsGuide> rings_through_pick() const;
+
     /** Begins the run-down from a released drag's angle to its quarter turn. */
     void start_snap(cube::Axis axis, cube::LayerMask layers,
                     float angle_degrees) noexcept;
@@ -322,6 +380,7 @@ private:
     int size_;
     std::optional<Gesture> gesture_;
     std::optional<NetGesture> net_gesture_;
+    std::optional<RingsGesture> rings_gesture_;
     std::optional<Orbit> orbit_;
     std::optional<Snap> snap_;
     std::optional<cube::CubeMove> committed_;

@@ -42,12 +42,29 @@ export type CubeFace = (typeof CubeFace)[keyof typeof CubeFace];
 export const CubeViewMode = {
   Cube3D: 0,
   Both: 1,
-  Net: 2,
+  Flat: 2,
 } as const;
 
 /** One render-region mode value. */
 export type CubeViewMode =
   (typeof CubeViewMode)[keyof typeof CubeViewMode];
+
+/**
+ * Which drawing fills the flat region, wherever that region is.
+ *
+ * A second axis rather than more entries in the list above: which regions are
+ * up and what the flat one shows are independent, so a single list would have
+ * to hold every pairing and grow by a factor each time a drawing is added.
+ */
+export const CubeFlatStyle = {
+  Net: 0,
+  Rings: 1,
+  Both: 2,
+} as const;
+
+/** One flat-drawing value. */
+export type CubeFlatStyle =
+  (typeof CubeFlatStyle)[keyof typeof CubeFlatStyle];
 
 /** Face-relative turns accepted by programmatic move controls. */
 export type FaceTurns = -1 | 1 | 2;
@@ -329,11 +346,33 @@ export class CubeEngine {
     if (
       mode !== CubeViewMode.Cube3D &&
       mode !== CubeViewMode.Both &&
-      mode !== CubeViewMode.Net
+      mode !== CubeViewMode.Flat
     ) {
       throw new Error(`Engine returned an invalid view mode ${mode}.`);
     }
     return mode;
+  }
+
+  /** Changes which drawing the flat region shows. */
+  setFlatStyle(style: CubeFlatStyle): void {
+    this.assertUsable();
+    if (this.module._thorvg_rubiks_set_flat_style(style) === 0) {
+      throw new Error(`Engine rejected flat style ${style}.`);
+    }
+  }
+
+  /** Returns the drawing the flat region is showing. */
+  flatStyle(): CubeFlatStyle {
+    this.assertUsable();
+    const style = this.module._thorvg_rubiks_flat_style();
+    if (
+      style !== CubeFlatStyle.Net &&
+      style !== CubeFlatStyle.Rings &&
+      style !== CubeFlatStyle.Both
+    ) {
+      throw new Error(`Engine returned an invalid flat style ${style}.`);
+    }
+    return style;
   }
 
   /** Restores only the turntable camera. */

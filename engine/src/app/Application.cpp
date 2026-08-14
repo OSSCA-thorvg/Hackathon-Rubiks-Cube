@@ -13,11 +13,13 @@
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/NetGeometry.hpp"
+#include "graphics/RingsGeometry.hpp"
 #include "graphics/OrbitCamera.hpp"
 #include "graphics/Pipeline.hpp"
 #include "graphics/RenderScene.hpp"
 #include "interaction/InteractionController.hpp"
 #include "interaction/NetPicking.hpp"
+#include "interaction/RingsPicking.hpp"
 #include "math/Transform.hpp"
 #include "render/Renderer.hpp"
 #include "render/ThorVGSoftwareRenderer.hpp"
@@ -54,6 +56,7 @@ struct ApplicationState {
     cube::CubeState cube_state{kCubeSize};
     interaction::InteractionController interaction{kCubeSize};
     graphics::ViewMode view_mode = graphics::ViewMode::Both;
+    graphics::FlatStyle flat_style = graphics::FlatStyle::Net;
     std::uint32_t user_move_count = 0;
 };
 
@@ -63,7 +66,8 @@ void adopt_surface(std::uint32_t width, std::uint32_t height) noexcept
 {
     state->surface_width = width;
     state->surface_height = height;
-    state->placement = graphics::layout(width, height, state->view_mode);
+    state->placement = graphics::layout(width, height, state->view_mode,
+                                        state->flat_style);
 }
 
 [[nodiscard]] graphics::Camera current_camera() noexcept
@@ -118,10 +122,76 @@ void adopt_surface(std::uint32_t width, std::uint32_t height) noexcept
     switch (mode) {
         case graphics::ViewMode::Cube3D:
         case graphics::ViewMode::Both:
-        case graphics::ViewMode::Net:
+        case graphics::ViewMode::Flat:
             return true;
     }
     return false;
+}
+
+[[nodiscard]] bool valid_flat_style(graphics::FlatStyle style) noexcept
+{
+    switch (style) {
+        case graphics::FlatStyle::Net:
+        case graphics::FlatStyle::Rings:
+        case graphics::FlatStyle::Both:
+            return true;
+    }
+    return false;
+}
+
+/**
+ * What a mode puts on the screen, said once for everything that has to ask.
+ *
+ * Routing a press and drawing a frame both used to ask by saying which mode it
+ * is not -- "anything but Net draws the cube", "anything but Cube3D draws the
+ * net" -- which is true of the modes that existed and quietly wrong of any
+ * added afterwards. Naming what is shown instead means a new mode shows only
+ * what it says it shows, and the compiler asks about it here.
+ */
+struct VisibleViews {
+    bool cube;
+    bool flat;
+};
+
+[[nodiscard]] VisibleViews visible_views(graphics::ViewMode mode) noexcept
+{
+    switch (mode) {
+        case graphics::ViewMode::Cube3D:
+            return VisibleViews{true, false};
+        case graphics::ViewMode::Flat:
+            return VisibleViews{false, true};
+        case graphics::ViewMode::Both:
+            break;
+    }
+    return VisibleViews{true, true};
+}
+
+/** Which drawings the flat region holds, said once for everything asking. */
+struct FlatParts {
+    bool net;
+    bool rings;
+};
+
+/**
+ * The drawings the flat region actually holds right now.
+ *
+ * Folds in whether that region is on screen at all, because every caller wants
+ * both questions answered together and answering them apart left the same
+ * conditional written out at each of them.
+ */
+[[nodiscard]] FlatParts flat_parts() noexcept
+{
+    if (!visible_views(state->view_mode).flat) return FlatParts{false, false};
+
+    switch (state->flat_style) {
+        case graphics::FlatStyle::Net:
+            return FlatParts{true, false};
+        case graphics::FlatStyle::Rings:
+            return FlatParts{false, true};
+        case graphics::FlatStyle::Both:
+            break;
+    }
+    return FlatParts{true, true};
 }
 
 /**
@@ -205,19 +275,28 @@ bool pointer_down(float x, float y) noexcept
     // is a change.
     if (!std::isfinite(x) || !std::isfinite(y)) return false;
 
-    // The layout is what routes the press. The net owns every cell inside its
-    // own block, and the 3D region and the background around it own the rest,
-    // so the two views never contend for the same pixel.
+    // The layout is what routes the press. The flat view owns every cell or
+    // sticker inside its own region, and the 3D region and the background
+    // around it own the rest, so the two never contend for the same pixel.
+    const auto shown = visible_views(state->view_mode);
+    const auto flat = flat_parts();
+
+    // The two drawings never share a rectangle, so asking both in turn cannot
+    // give two answers.
     std::optional<interaction::NetPick> net_pick;
-    if (state->view_mode != graphics::ViewMode::Cube3D) {
+    std::optional<interaction::RingsPick> rings_pick;
+    if (flat.net) {
         net_pick = interaction::pick_net(x, y, state->placement.net, kCubeSize);
     }
+    if (!net_pick && flat.rings) {
+        rings_pick =
+            interaction::pick_rings(x, y, state->placement.rings, kCubeSize);
+    }
 
-    // Nothing to start: the net is the only view showing and the press missed
-    // it. Sweeping the viewpoint is not the fallback here, because there is no
-    // viewpoint on screen to sweep.
-    const bool cube_visible = state->view_mode != graphics::ViewMode::Net;
-    if (!net_pick && !cube_visible) return false;
+    // Nothing to start: the flat view is the only one showing and the press
+    // missed everything in it. Sweeping the viewpoint is not the fallback
+    // here, because there is no viewpoint on screen to sweep.
+    if (!net_pick && !rings_pick && !shown.cube) return false;
 
     // A snap still animating already knows its turn, so it is applied here
     // rather than made to block the new gesture: that is what kept fast
@@ -233,6 +312,11 @@ bool pointer_down(float x, float y) noexcept
     if (net_pick) {
         return state->interaction.net_pointer_down(x, y, state->placement.net,
                                                    *net_pick);
+    }
+
+    if (rings_pick) {
+        return state->interaction.rings_pointer_down(
+            x, y, state->placement.rings, *rings_pick);
     }
 
     return state->interaction.pointer_down(x, y, current_camera(),
@@ -284,8 +368,10 @@ bool render() noexcept
     const math::Transform model;
     const graphics::Camera camera = current_camera();
 
+    const auto shown = visible_views(state->view_mode);
+
     graphics::RenderScene scene;
-    if (state->view_mode != graphics::ViewMode::Net) {
+    if (shown.cube) {
         scene = graphics::build_cube_scene(
                     state->cube_state, state->interaction.active_rotation())  //
                 | graphics::transform(model)                                  //
@@ -302,10 +388,12 @@ bool render() noexcept
             scene, graphics::build_axis_gizmo(camera, state->placement.cube));
     }
 
-    if (state->view_mode != graphics::ViewMode::Cube3D) {
+    const auto flat = flat_parts();
+
+    if (flat.net) {
         // The net is already screen-space, so it only has to be appended. It
         // gets the same rotation as the 3D scene, which is what makes one
-        // gesture move both views in the same frame.
+        // gesture move every view in the same frame.
         graphics::append_scene(
             scene, graphics::build_net_scene(
                        state->cube_state, state->placement.net,
@@ -317,6 +405,17 @@ bool render() noexcept
             scene, graphics::build_net_guides(state->interaction.net_guides(),
                                               state->placement.net,
                                               kCubeSize));
+    }
+
+    if (flat.rings) {
+        // The same rotation again. The rings a press is offering come with it,
+        // since picking one out is a matter of drawing it heavier rather than
+        // adding a line.
+        graphics::append_scene(
+            scene, graphics::build_rings_scene(
+                       state->cube_state, state->placement.rings,
+                       state->interaction.active_rotation(),
+                       state->interaction.rings_guides()));
     }
 
     return state->renderer->render(scene);
@@ -386,6 +485,24 @@ bool set_view_mode(graphics::ViewMode mode) noexcept
 graphics::ViewMode view_mode() noexcept
 {
     return state ? state->view_mode : graphics::ViewMode::Both;
+}
+
+bool set_flat_style(graphics::FlatStyle style) noexcept
+{
+    if (!state || !valid_flat_style(style)) return false;
+    if (style == state->flat_style) return true;
+
+    // A drag holds a rectangle that is about to move or vanish, so it goes the
+    // same way a resize sends it. A snap only animates an angle and carries on.
+    state->interaction.cancel();
+    state->flat_style = style;
+    adopt_surface(state->surface_width, state->surface_height);
+    return true;
+}
+
+graphics::FlatStyle flat_style() noexcept
+{
+    return state ? state->flat_style : graphics::FlatStyle::Net;
 }
 
 void reset_view() noexcept

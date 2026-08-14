@@ -949,7 +949,7 @@ TEST_CASE("view modes place only the regions they render")
     REQUIRE(cube.net.width == 0.0f);
     REQUIRE(cube.net.height == 0.0f);
 
-    const CanvasLayout net = layout(1000, 800, ViewMode::Net);
+    const CanvasLayout net = layout(1000, 800, ViewMode::Flat);
     REQUIRE(net.cube.width == 0.0f);
     REQUIRE(net.cube.height == 0.0f);
     REQUIRE(net.net.width > 0.0f);

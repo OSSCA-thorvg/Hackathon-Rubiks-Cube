@@ -47,10 +47,17 @@ export function bootstrap(
         <output id="timer" aria-label="Elapsed time" aria-live="off">00:00.00</output>
       </header>
 
-      <div class="view-switch" role="group" aria-label="View mode">
-        <button type="button" data-view="3d" aria-pressed="false">3D</button>
-        <button type="button" data-view="both" aria-pressed="true">Both</button>
-        <button type="button" data-view="net" aria-pressed="false">Net</button>
+      <div class="view-switch">
+        <div class="view-switch__group" role="group" aria-label="View mode">
+          <button type="button" data-view="3d" aria-pressed="false">3D</button>
+          <button type="button" data-view="both" aria-pressed="true">Both</button>
+          <button type="button" data-view="2d" aria-pressed="false">2D</button>
+        </div>
+        <div class="view-switch__group view-switch__group--flat" role="group" aria-label="Flat view style">
+          <button type="button" data-flat="net" aria-pressed="true">Net</button>
+          <button type="button" data-flat="rings" aria-pressed="false">Rings</button>
+          <button type="button" data-flat="both" aria-pressed="false">Net + Rings</button>
+        </div>
       </div>
 
       <div class="game-actions" aria-label="Game actions">
@@ -97,6 +104,9 @@ export function bootstrap(
     homeViewButton: app.querySelector<HTMLButtonElement>('#home-view')!,
     viewButtons: [
       ...app.querySelectorAll<HTMLButtonElement>('[data-view]'),
+    ],
+    flatButtons: [
+      ...app.querySelectorAll<HTMLButtonElement>('[data-flat]'),
     ],
     moveButtons: [
       ...app.querySelectorAll<HTMLButtonElement>('[data-face]'),

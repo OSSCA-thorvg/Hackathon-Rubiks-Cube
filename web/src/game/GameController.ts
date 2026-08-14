@@ -1,5 +1,6 @@
 import {
   CubeFace,
+  CubeFlatStyle,
   CubeViewMode,
   type FaceTurns,
 } from '../wasm/CubeEngine.ts';
@@ -21,6 +22,8 @@ export type GameEngine = {
   turnFace(face: CubeFace, faceTurns: FaceTurns): boolean;
   setViewMode(mode: CubeViewMode): void;
   viewMode(): CubeViewMode;
+  setFlatStyle(style: CubeFlatStyle): void;
+  flatStyle(): CubeFlatStyle;
   resetView(): void;
   isBusy(): boolean;
   render(): void;
@@ -36,6 +39,7 @@ export type GameUi = {
   readonly resetButton: HTMLButtonElement;
   readonly homeViewButton: HTMLButtonElement;
   readonly viewButtons: readonly HTMLButtonElement[];
+  readonly flatButtons: readonly HTMLButtonElement[];
   readonly moveButtons: readonly HTMLButtonElement[];
 };
 
@@ -81,13 +85,25 @@ const FACE_BY_LETTER: Readonly<Record<string, CubeFace>> = {
 const VIEW_BY_NAME: Readonly<Record<string, CubeViewMode>> = {
   '3d': CubeViewMode.Cube3D,
   both: CubeViewMode.Both,
-  net: CubeViewMode.Net,
+  '2d': CubeViewMode.Flat,
 };
 
 const VIEW_NAME_BY_MODE: Readonly<Record<CubeViewMode, string>> = {
   [CubeViewMode.Cube3D]: '3d',
   [CubeViewMode.Both]: 'both',
-  [CubeViewMode.Net]: 'net',
+  [CubeViewMode.Flat]: '2d',
+};
+
+const FLAT_BY_NAME: Readonly<Record<string, CubeFlatStyle>> = {
+  net: CubeFlatStyle.Net,
+  rings: CubeFlatStyle.Rings,
+  both: CubeFlatStyle.Both,
+};
+
+const FLAT_NAME_BY_STYLE: Readonly<Record<CubeFlatStyle, string>> = {
+  [CubeFlatStyle.Net]: 'net',
+  [CubeFlatStyle.Rings]: 'rings',
+  [CubeFlatStyle.Both]: 'both',
 };
 
 /** Produces a uint32 seed using Web Crypto. */
@@ -109,6 +125,36 @@ function isEditableTarget(target: EventTarget | null): boolean {
 /** Parses a data-view value into the primitive engine enum. */
 function viewModeOf(button: HTMLButtonElement): CubeViewMode | null {
   return VIEW_BY_NAME[button.dataset.view ?? ''] ?? null;
+}
+
+/** Parses a data-flat value into the primitive engine enum. */
+function flatStyleOf(button: HTMLButtonElement): CubeFlatStyle | null {
+  return FLAT_BY_NAME[button.dataset.flat ?? ''] ?? null;
+}
+
+/**
+ * Wires one group of choice buttons, each of which names a value.
+ *
+ * The view regions and the flat style are two such groups and were two copies
+ * of the same thirteen lines, differing only in how a button names its value
+ * and what is done with it.
+ */
+function bindChoices<T>(
+  buttons: readonly HTMLButtonElement[],
+  parse: (button: HTMLButtonElement) => T | null,
+  choose: (value: T) => void,
+): Map<HTMLButtonElement, () => void> {
+  const listeners = new Map<HTMLButtonElement, () => void>();
+  for (const button of buttons) {
+    const listener = (): void => {
+      const value = parse(button);
+      if (value === null) return;
+      choose(value);
+    };
+    listeners.set(button, listener);
+    button.addEventListener('click', listener);
+  }
+  return listeners;
 }
 
 /** Parses a DOM move button into one typed face turn. */
@@ -162,13 +208,22 @@ export function attachGameController(
     ui.status.textContent = message;
   };
 
-  const updateViewButtons = (): void => {
+  const updateViewControls = (): void => {
     const selected = engine.viewMode();
     for (const button of ui.viewButtons) {
       const mode = viewModeOf(button);
       button.setAttribute('aria-pressed', String(mode === selected));
     }
     ui.canvas.dataset.viewMode = VIEW_NAME_BY_MODE[selected];
+
+    const style = engine.flatStyle();
+    for (const button of ui.flatButtons) {
+      const value = flatStyleOf(button);
+      button.setAttribute('aria-pressed', String(value === style));
+      // The toggle only means something while the flat region is on screen.
+      button.hidden = selected === CubeViewMode.Cube3D;
+    }
+    ui.canvas.dataset.flatStyle = FLAT_NAME_BY_STYLE[style];
   };
 
   const updateMoveAvailability = (): void => {
@@ -225,20 +280,21 @@ export function attachGameController(
     });
   };
 
-  const viewListeners = new Map<HTMLButtonElement, () => void>();
-  for (const button of ui.viewButtons) {
-    const listener = (): void => {
-      const mode = viewModeOf(button);
-      if (mode === null) return;
-      run((): void => {
-        engine.setViewMode(mode);
-        engine.render();
-        updateViewButtons();
-      });
-    };
-    viewListeners.set(button, listener);
-    button.addEventListener('click', listener);
-  }
+  const viewListeners = bindChoices(ui.viewButtons, viewModeOf, (mode) => {
+    run((): void => {
+      engine.setViewMode(mode);
+      engine.render();
+      updateViewControls();
+    });
+  });
+
+  const flatListeners = bindChoices(ui.flatButtons, flatStyleOf, (style) => {
+    run((): void => {
+      engine.setFlatStyle(style);
+      engine.render();
+      updateViewControls();
+    });
+  });
 
   const moveListeners = new Map<HTMLButtonElement, () => void>();
   for (const button of ui.moveButtons) {
@@ -279,7 +335,8 @@ export function attachGameController(
   ui.resetButton.disabled = false;
   ui.homeViewButton.disabled = false;
   for (const button of ui.viewButtons) button.disabled = false;
-  updateViewButtons();
+  for (const button of ui.flatButtons) button.disabled = false;
+  updateViewControls();
   updateMoveAvailability();
 
   return {
@@ -321,11 +378,15 @@ export function attachGameController(
       ui.resetButton.disabled = true;
       ui.homeViewButton.disabled = true;
       for (const button of ui.viewButtons) button.disabled = true;
+      for (const button of ui.flatButtons) button.disabled = true;
       for (const button of ui.moveButtons) button.disabled = true;
       ui.scrambleButton.removeEventListener('click', onScramble);
       ui.resetButton.removeEventListener('click', onReset);
       ui.homeViewButton.removeEventListener('click', onHomeView);
       for (const [button, listener] of viewListeners) {
+        button.removeEventListener('click', listener);
+      }
+      for (const [button, listener] of flatListeners) {
         button.removeEventListener('click', listener);
       }
       for (const [button, listener] of moveListeners) {

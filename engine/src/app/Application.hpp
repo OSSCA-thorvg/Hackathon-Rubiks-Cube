@@ -117,6 +117,17 @@ void reset_cube() noexcept;
 /** Returns the current view mode, defaulting to Both outside a lifecycle. */
 [[nodiscard]] graphics::ViewMode view_mode() noexcept;
 
+/**
+ * Chooses which drawing fills the flat region, wherever that region is.
+ *
+ * Independent of the view mode, so it can be changed while the flat view is
+ * not on screen and be waiting when it comes back.
+ */
+[[nodiscard]] bool set_flat_style(graphics::FlatStyle style) noexcept;
+
+/** Returns the current flat style, defaulting to Net outside a lifecycle. */
+[[nodiscard]] graphics::FlatStyle flat_style() noexcept;
+
 /** Restores the home camera without changing cube or view mode. */
 void reset_view() noexcept;
 

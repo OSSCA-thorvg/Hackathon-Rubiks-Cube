@@ -178,6 +178,18 @@ button[aria-pressed="true"] {
   left: calc(100% + var(--side-panel-gap));
 }
 
+.view-switch__group {
+  display: grid;
+  gap: 0.45rem;
+}
+
+/* The flat style is a choice within the 2D view, so it reads as a sub-group
+   rather than as three more peers of 3D and Both. */
+.view-switch__group--flat {
+  padding-left: 0.5rem;
+  border-left: 2px solid rgb(255 255 255 / 18%);
+}
+
 .view-switch button,
 .game-actions button {
   width: 100%;
@@ -304,6 +316,19 @@ button[aria-pressed="true"] {
   .game-actions {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .view-switch {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .view-switch__group {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+
+  .view-switch__group--flat {
+    padding-left: 0.4rem;
   }
 
   .view-switch button,

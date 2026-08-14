@@ -4,6 +4,7 @@
 #include <map>
 #include <set>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 #include <catch2/catch_approx.hpp>
@@ -12,6 +13,7 @@
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
 #include "cube/Surface.hpp"
+#include "graphics/Layout.hpp"
 #include "graphics/Palette.hpp"
 #include "graphics/RingsGeometry.hpp"
 
@@ -387,5 +389,52 @@ TEST_CASE("the diagram stays inside the rectangle it is given")
                 REQUIRE(point.y <= rect.y + rect.height + 0.5f);
             }
         }
+    }
+}
+
+TEST_CASE("a stack of flat views keeps them apart and inside the canvas")
+{
+    using rubiks::graphics::FlatStyle;
+    using rubiks::graphics::ViewMode;
+
+    const auto overlaps = [](const Rect& a, const Rect& b) {
+        return a.x < b.x + b.width && b.x < a.x + a.width &&
+               a.y < b.y + b.height && b.y < a.y + a.height;
+    };
+    const auto inside = [](const Rect& part, float width, float height) {
+        return part.x >= 0.0f && part.y >= 0.0f &&
+               part.x + part.width <= width + 0.5f &&
+               part.y + part.height <= height + 0.5f;
+    };
+
+    for (const auto shape : {std::pair{1000U, 1000U}, std::pair{1400U, 700U},
+                             std::pair{600U, 1200U}}) {
+        const auto [width, height] = shape;
+
+        // The net over the rings, and neither of them over the other.
+        const auto flat = layout(width, height, ViewMode::Flat, FlatStyle::Both);
+        REQUIRE(flat.net.height > 0.0f);
+        REQUIRE(flat.rings.height > 0.0f);
+        REQUIRE(flat.net.y + flat.net.height <= flat.rings.y);
+        REQUIRE_FALSE(overlaps(flat.net, flat.rings));
+        REQUIRE(inside(flat.net, static_cast<float>(width),
+                       static_cast<float>(height)));
+        REQUIRE(inside(flat.rings, static_cast<float>(width),
+                       static_cast<float>(height)));
+
+        // And with the cube as well, all three in that order.
+        const auto all = layout(width, height, ViewMode::Both, FlatStyle::Both);
+        REQUIRE(all.cube.height > 0.0f);
+        REQUIRE(all.cube.y + all.cube.height <= all.net.y);
+        REQUIRE(all.net.y + all.net.height <= all.rings.y);
+        REQUIRE_FALSE(overlaps(all.cube, all.net));
+        REQUIRE_FALSE(overlaps(all.net, all.rings));
+        REQUIRE(inside(all.cube, static_cast<float>(width),
+                       static_cast<float>(height)));
+        REQUIRE(inside(all.rings, static_cast<float>(width),
+                       static_cast<float>(height)));
+
+        // The 3D region stays square, which is what pins the camera aspect.
+        REQUIRE(all.cube.width == Approx(all.cube.height));
     }
 }

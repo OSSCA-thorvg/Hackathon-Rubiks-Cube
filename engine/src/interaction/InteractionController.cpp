@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "graphics/NetGeometry.hpp"
+#include "graphics/RingsGeometry.hpp"
 
 namespace rubiks::interaction {
 namespace {
@@ -117,6 +118,19 @@ bool InteractionController::net_pointer_down(float x, float y,
     return true;
 }
 
+bool InteractionController::rings_pointer_down(float x, float y,
+                                               const graphics::Rect& rect,
+                                               const RingsPick& pick) noexcept
+{
+    if (snap_ || gesture_running()) return false;
+    if (!finite_point(x, y)) return false;
+    if (rect.width <= 0.0f || rect.height <= 0.0f) return false;
+
+    rings_gesture_ = RingsGesture{rect, pick, math::Vec2{x, y}, std::nullopt,
+                                  0.0f, 0.0f, 0.0f};
+    return true;
+}
+
 bool InteractionController::start_move(const cube::CubeMove& move) noexcept
 {
     if (is_busy()) return false;
@@ -159,6 +173,12 @@ void InteractionController::pointer_move(float x, float y) noexcept
     if (net_gesture_) {
         if (!finite_point(x, y)) return;
         advance_net_gesture(x, y);
+        return;
+    }
+
+    if (rings_gesture_) {
+        if (!finite_point(x, y)) return;
+        advance_rings_gesture(x, y);
         return;
     }
 
@@ -221,6 +241,76 @@ void InteractionController::advance_net_gesture(float x, float y) noexcept
         lock.sign * along * net_degrees_per_pixel(net_gesture_->rect);
 }
 
+void InteractionController::advance_rings_gesture(float x, float y) noexcept
+{
+    const math::Vec2 at{x, y};
+    const auto& rect = rings_gesture_->rect;
+
+    if (!rings_gesture_->lock) {
+        const math::Vec2 drag{x - rings_gesture_->start.x,
+                              y - rings_gesture_->start.y};
+        const float dead_zone = kDeadZoneFraction * rect.width;
+        if (math::length(drag) < dead_zone) return;
+
+        // The pressed sticker is on exactly two rings, so the drag is choosing
+        // between two candidates rather than searching. Each ring's tangent
+        // where the sticker sits is the way a positive turn carries it, so the
+        // better match is the ring and the sign of the match is the direction
+        // -- there is no table of faces anywhere in this.
+        std::optional<RingsLock> best;
+        float strongest = 0.0f;
+
+        for (const auto& candidate : rings_through_pick()) {
+            const auto tangent = graphics::rings_slot_tangent(
+                candidate.axis, candidate.layer, rect, size_,
+                rings_gesture_->pick.sticker);
+            if (!tangent) continue;
+
+            const float along = drag.x * tangent->x + drag.y * tangent->y;
+            if (std::abs(along) <= std::abs(strongest)) continue;
+
+            strongest = along;
+            best = RingsLock{candidate.axis, candidate.layer,
+                             cube::layer(candidate.layer)};
+        }
+
+        if (!best) return;
+        rings_gesture_->lock = *best;
+
+        // Counted from the press rather than from here, so the turn does not
+        // jump by however far the drag had to travel to leave the dead zone.
+        const auto from = graphics::rings_slot_at(
+            best->axis, best->layer, rect, size_, rings_gesture_->start);
+        if (!from) {
+            rings_gesture_->lock.reset();
+            return;
+        }
+        rings_gesture_->previous_slot = *from;
+    }
+
+    const auto& lock = *rings_gesture_->lock;
+    const auto now =
+        graphics::rings_slot_at(lock.axis, lock.layer, rect, size_, at);
+    if (!now) return;
+
+    // The step since the last position, brought back into half a loop either
+    // way. A pointer cannot cross more than that between two events, so this
+    // is what lets a drag go round and round without the angle folding over.
+    const auto slots = static_cast<float>(4 * size_);
+    float step = *now - rings_gesture_->previous_slot;
+    while (step <= -0.5f * slots) step += slots;
+    while (step > 0.5f * slots) step -= slots;
+
+    rings_gesture_->previous_slot = *now;
+    rings_gesture_->swept_slots += step;
+
+    // N slots is a quarter turn, whichever ring it is, and slots run the way a
+    // positive turn does -- so the angle needs no sign of its own.
+    rings_gesture_->angle_degrees = rings_gesture_->swept_slots /
+                                    static_cast<float>(size_) *
+                                    kDegreesPerQuarterTurn;
+}
+
 void InteractionController::pointer_up() noexcept
 {
     // Nothing to settle or commit, and the accumulated sweep stays behind to
@@ -239,6 +329,7 @@ void InteractionController::pointer_up() noexcept
 
     gesture_.reset();
     net_gesture_.reset();
+    rings_gesture_.reset();
 }
 
 void InteractionController::start_snap(cube::Axis axis, cube::LayerMask layers,
@@ -261,6 +352,7 @@ void InteractionController::cancel() noexcept
 {
     gesture_.reset();
     net_gesture_.reset();
+    rings_gesture_.reset();
 
     // Same as a release for an orbit: there is no commit to withhold, and the
     // sweep already made stays pending rather than being thrown away.
@@ -426,7 +518,7 @@ std::optional<graphics::ActiveRotation> InteractionController::active_rotation()
 bool InteractionController::gesture_running() const noexcept
 {
     return gesture_.has_value() || net_gesture_.has_value() ||
-           orbit_.has_value();
+           rings_gesture_.has_value() || orbit_.has_value();
 }
 
 std::optional<InteractionController::LockedTurn>
@@ -447,7 +539,40 @@ InteractionController::locked_turn() const noexcept
                           net_gesture_->angle_degrees};
     }
 
+    if (rings_gesture_ && rings_gesture_->lock) {
+        return LockedTurn{rings_gesture_->lock->axis,
+                          rings_gesture_->lock->layers,
+                          rings_gesture_->angle_degrees};
+    }
+
     return std::nullopt;
+}
+
+std::vector<graphics::RingsGuide> InteractionController::rings_through_pick()
+    const
+{
+    std::vector<graphics::RingsGuide> rings;
+    if (!rings_gesture_) return rings;
+
+    // Every axis but the one the sticker's own face points along: a turn about
+    // that one spins it where it is rather than carrying it anywhere.
+    const auto& sticker = rings_gesture_->pick.sticker;
+    for (const auto axis : {cube::Axis::X, cube::Axis::Y, cube::Axis::Z}) {
+        if (axis == cube::axis_of(sticker.face)) continue;
+        rings.push_back(
+            graphics::RingsGuide{axis, cube::coordinate_on(axis, sticker)});
+    }
+    return rings;
+}
+
+std::vector<graphics::RingsGuide> InteractionController::rings_guides() const
+{
+    if (!rings_gesture_) return {};
+
+    if (const auto& lock = rings_gesture_->lock) {
+        return {graphics::RingsGuide{lock->axis, lock->layer}};
+    }
+    return rings_through_pick();
 }
 
 bool InteractionController::is_busy() const noexcept
@@ -455,13 +580,15 @@ bool InteractionController::is_busy() const noexcept
     // An orbit is deliberately absent: it has no commit to protect, so a
     // sweep in progress blocks neither moves nor, later, queued playback.
     return gesture_.has_value() || net_gesture_.has_value() ||
-           snap_.has_value() || committed_.has_value();
+           rings_gesture_.has_value() || snap_.has_value() ||
+           committed_.has_value();
 }
 
 void InteractionController::reset() noexcept
 {
     gesture_.reset();
     net_gesture_.reset();
+    rings_gesture_.reset();
     orbit_.reset();
     snap_.reset();
     committed_.reset();

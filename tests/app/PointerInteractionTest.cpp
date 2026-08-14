@@ -12,6 +12,8 @@
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/NetGeometry.hpp"
+#include "graphics/RingsGeometry.hpp"
+#include "graphics/SlotRing.hpp"
 #include "interaction/DragResolver.hpp"
 #include "interaction/InteractionController.hpp"
 
@@ -528,7 +530,7 @@ TEST_CASE("a press off the net in net-only view confirms nothing")
 
     // Switching the view cancels gestures but never a snap, so one is still
     // running under a view with no 3D region to fall back on.
-    REQUIRE(rubiks::app::set_view_mode(rubiks::graphics::ViewMode::Net));
+    REQUIRE(rubiks::app::set_view_mode(rubiks::graphics::ViewMode::Flat));
     REQUIRE(rubiks::app::advance(kFrameMs));
 
     // The corner of the canvas, clear of the net block. There is no viewpoint
@@ -629,11 +631,11 @@ TEST_CASE("the net is draggable in net-only view")
 {
     const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
-    REQUIRE(rubiks::app::set_view_mode(rubiks::graphics::ViewMode::Net));
+    REQUIRE(rubiks::app::set_view_mode(rubiks::graphics::ViewMode::Flat));
 
     // The net-only layout is a different rectangle from the shared one.
     const auto net = rubiks::graphics::layout(kCanvas, kCanvas,
-                                              rubiks::graphics::ViewMode::Net)
+                                              rubiks::graphics::ViewMode::Flat)
                          .net;
     const float face_side =
         net.width / static_cast<float>(rubiks::graphics::kNetColumns);
@@ -681,9 +683,9 @@ TEST_CASE("an empty corner of the cross is not a net cell")
 
     // With only the net on screen there is no viewpoint behind it either, so
     // the same press starts nothing at all.
-    REQUIRE(rubiks::app::set_view_mode(rubiks::graphics::ViewMode::Net));
+    REQUIRE(rubiks::app::set_view_mode(rubiks::graphics::ViewMode::Flat));
     const auto only = rubiks::graphics::layout(kCanvas, kCanvas,
-                                               rubiks::graphics::ViewMode::Net)
+                                               rubiks::graphics::ViewMode::Flat)
                           .net;
     const float only_face =
         only.width / static_cast<float>(rubiks::graphics::kNetColumns);
@@ -949,4 +951,139 @@ TEST_CASE("shutdown clears the gesture along with the cube")
     require_up_right_column(kWhite);
 
     rubiks::app::shutdown();
+}
+
+namespace {
+
+/** The rectangle the ring diagram fills when it is the only view. */
+rubiks::graphics::Rect rings_rect()
+{
+    return rubiks::graphics::layout(kCanvas, kCanvas,
+                                    rubiks::graphics::ViewMode::Flat,
+                                    rubiks::graphics::FlatStyle::Rings)
+        .rings;
+}
+
+/** Switches to the ring diagram alone and hands back its rectangle. */
+rubiks::graphics::Rect show_rings()
+{
+    REQUIRE(rubiks::app::set_view_mode(rubiks::graphics::ViewMode::Flat));
+    REQUIRE(
+        rubiks::app::set_flat_style(rubiks::graphics::FlatStyle::Rings));
+    return rings_rect();
+}
+
+/**
+ * Drags a finger `slots` of the way round one ring, starting on a slot.
+ *
+ * Along the loop rather than straight across it, because that is what a hand
+ * following the sticker it grabbed actually does -- and what the drawing does
+ * with that sticker.
+ */
+void drag_round_ring(const rubiks::graphics::SlotRing& ring, float from,
+                     float slots)
+{
+    const auto start = ring.at(from).position;
+    REQUIRE(rubiks::app::pointer_down(start.x, start.y));
+
+    constexpr int kSteps = 32;
+    for (int step = 1; step <= kSteps; ++step) {
+        const float along =
+            from + slots * static_cast<float>(step) / static_cast<float>(kSteps);
+        const auto at = ring.at(along).position;
+        rubiks::app::pointer_move(at.x, at.y);
+    }
+}
+
+}  // namespace
+
+TEST_CASE("dragging a sticker round its ring turns that layer")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    const auto rect = show_rings();
+    const auto ring = rubiks::graphics::rings_ring(rubiks::cube::Axis::X, 2,
+                                                   rect, kCubeSize);
+    REQUIRE_FALSE(ring.empty());
+
+    // Three slots is a quarter turn on any ring, so a little past three is
+    // comfortably past the commit boundary and short of the next one.
+    drag_round_ring(ring, 0.0f, 3.4f);
+    rubiks::app::pointer_up();
+    settle();
+
+    REQUIRE(rubiks::app::committed_move_count() == 1);
+    REQUIRE_FALSE(rubiks::app::is_solved());
+
+    // Exactly one positive quarter turn of the layer that ring belongs to,
+    // which is R -- so R' puts the cube back and nothing else would.
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, -1));
+    settle();
+    REQUIRE(rubiks::app::is_solved());
+}
+
+TEST_CASE("a ring drag the other way turns the same layer back")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    const auto rect = show_rings();
+    const auto ring = rubiks::graphics::rings_ring(rubiks::cube::Axis::X, 2,
+                                                   rect, kCubeSize);
+
+    // Slots run the way a positive turn carries stickers, so going back down
+    // them is the negative turn -- there is no sign table to get wrong.
+    drag_round_ring(ring, 6.0f, -3.4f);
+    rubiks::app::pointer_up();
+    settle();
+
+    REQUIRE(rubiks::app::committed_move_count() == 1);
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1));
+    settle();
+    REQUIRE(rubiks::app::is_solved());
+}
+
+TEST_CASE("a ring drag carried right round the loop commits nothing")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    const auto rect = show_rings();
+    const auto ring = rubiks::graphics::rings_ring(rubiks::cube::Axis::Y, 1,
+                                                   rect, kCubeSize);
+
+    // Twelve slots is the whole loop. The sweep is accumulated a step at a
+    // time rather than measured from the press, so it reads as four quarter
+    // turns rather than folding back to none part way round.
+    drag_round_ring(ring, 0.0f, 12.0f);
+    rubiks::app::pointer_up();
+    settle();
+
+    REQUIRE(rubiks::app::committed_move_count() == 0);
+    REQUIRE(rubiks::app::is_solved());
+}
+
+TEST_CASE("a press away from the ring diagram's stickers starts nothing")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    const auto rect = show_rings();
+
+    // A corner of the region: inside the view, outside every circle, and on no
+    // sticker. Note that an axis's own centre would not do -- the middle
+    // circles have the radius of the centre separation, so they run through
+    // the other two centres and cross there, putting a sticker on each.
+    const auto middle = rubiks::math::Vec2{rect.x + 2.0f, rect.y + 2.0f};
+
+    // A drag on the cube, released, so a snap is running with a turn decided.
+    drag_upward(kQuarterTurnDrag);
+    rubiks::app::pointer_up();
+    REQUIRE(rubiks::app::is_busy());
+    REQUIRE(rubiks::app::committed_move_count() == 0);
+
+    // The press misses, and being refused it cannot have confirmed the snap
+    // on its way out. Phase 7 put every reason to refuse ahead of that.
+    REQUIRE_FALSE(rubiks::app::pointer_down(middle.x, middle.y));
+    REQUIRE(rubiks::app::committed_move_count() == 0);
+
+    settle();
+    REQUIRE(rubiks::app::committed_move_count() == 1);
 }

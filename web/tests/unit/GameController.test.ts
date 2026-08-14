@@ -9,6 +9,7 @@ import {
 import type { TimerEnvironment } from '../../src/game/SolveTimer.ts';
 import {
   CubeFace,
+  CubeFlatStyle,
   CubeViewMode,
 } from '../../src/wasm/CubeEngine.ts';
 
@@ -24,7 +25,10 @@ function createUi(): GameUi {
     <button id="home-view" type="button">Home</button>
     <button data-view="3d" type="button">3D</button>
     <button data-view="both" type="button">Both</button>
-    <button data-view="net" type="button">Net</button>
+    <button data-view="2d" type="button">2D</button>
+    <button data-flat="net" type="button">Net</button>
+    <button data-flat="rings" type="button">Rings</button>
+    <button data-flat="both" type="button">Net + Rings</button>
     <button data-face="r" data-turn="1" type="button">R</button>
     <button data-face="r" data-turn="-1" type="button">R prime</button>
   `;
@@ -39,6 +43,7 @@ function createUi(): GameUi {
     resetButton: root.querySelector<HTMLButtonElement>('#reset')!,
     homeViewButton: root.querySelector<HTMLButtonElement>('#home-view')!,
     viewButtons: [...root.querySelectorAll<HTMLButtonElement>('[data-view]')],
+    flatButtons: [...root.querySelectorAll<HTMLButtonElement>('[data-flat]')],
     moveButtons: [...root.querySelectorAll<HTMLButtonElement>('[data-face]')],
   };
 }
@@ -50,6 +55,7 @@ function createHarness() {
   let moveCount = 0;
   let busy = false;
   let viewMode = CubeViewMode.Both;
+  let flatStyle = CubeFlatStyle.Net;
 
   const engine = {
     scramble: vi.fn((): void => {
@@ -73,6 +79,10 @@ function createHarness() {
       viewMode = mode;
     }),
     viewMode: vi.fn((): CubeViewMode => viewMode),
+    setFlatStyle: vi.fn((style: CubeFlatStyle): void => {
+      flatStyle = style;
+    }),
+    flatStyle: vi.fn((): CubeFlatStyle => flatStyle),
     resetView: vi.fn(),
     isBusy: vi.fn((): boolean => busy),
     render: vi.fn(),
@@ -248,15 +258,38 @@ describe('attachGameController', () => {
     expect(harness.engine.turnFace).toHaveBeenCalledTimes(1);
   });
 
-  it('switches all three views and resets only the camera', () => {
+  it('switches regions and flat style separately, and resets only the camera', () => {
     const harness = createHarness();
-    const net = harness.ui.viewButtons.find(
-      (button) => button.dataset.view === 'net',
+    const flat = harness.ui.viewButtons.find(
+      (button) => button.dataset.view === '2d',
+    )!;
+    const cube = harness.ui.viewButtons.find(
+      (button) => button.dataset.view === '3d',
+    )!;
+    const rings = harness.ui.flatButtons.find(
+      (button) => button.dataset.flat === 'rings',
     )!;
 
-    net.click();
-    expect(harness.engine.setViewMode).toHaveBeenCalledWith(CubeViewMode.Net);
-    expect(net.getAttribute('aria-pressed')).toBe('true');
+    flat.click();
+    expect(harness.engine.setViewMode).toHaveBeenCalledWith(CubeViewMode.Flat);
+    expect(flat.getAttribute('aria-pressed')).toBe('true');
+
+    // The style is the other axis, so choosing it does not touch the regions.
+    rings.click();
+    expect(harness.engine.setFlatStyle).toHaveBeenCalledWith(
+      CubeFlatStyle.Rings,
+    );
+    expect(rings.getAttribute('aria-pressed')).toBe('true');
+    expect(flat.getAttribute('aria-pressed')).toBe('true');
+    expect(harness.ui.canvas.dataset.flatStyle).toBe('rings');
+
+    // And it survives the flat view going away and coming back, while the
+    // toggle itself is put out of the way meanwhile.
+    cube.click();
+    expect(rings.hidden).toBe(true);
+    flat.click();
+    expect(rings.hidden).toBe(false);
+    expect(rings.getAttribute('aria-pressed')).toBe('true');
 
     harness.ui.homeViewButton.click();
     expect(harness.engine.resetView).toHaveBeenCalledTimes(1);

@@ -8,6 +8,7 @@ interaction_lib = static_library(
     'InteractionController.cpp',
     'NetPicking.cpp',
     'Picking.cpp',
+    'RingsPicking.cpp',
   ),
   dependencies: [graphics_dep],
 )

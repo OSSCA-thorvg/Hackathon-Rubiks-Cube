@@ -28,13 +28,13 @@ async function orbitOnce(page: Page): Promise<void> {
 }
 
 /**
- * Pins the one word production takes from Web Crypto, so the real WASM
- * generator produces the same sequence every run.
+ * Reloads the page with the one word production takes from Web Crypto pinned,
+ * so the real WASM generator produces the same sequence every run.
  *
- * The caller has to reload afterwards: the script is installed for documents
- * created from here on.
+ * The reload is part of it: the script is installed for documents created from
+ * here on, so the page already up was built without it.
  */
-async function pinSeed(page: Page, seed: number): Promise<void> {
+async function restartWithSeed(page: Page, seed: number): Promise<void> {
   await page.addInitScript(`
     const originalGetRandomValues = Crypto.prototype.getRandomValues;
     Crypto.prototype.getRandomValues = function(array) {
@@ -45,13 +45,13 @@ async function pinSeed(page: Page, seed: number): Promise<void> {
       return originalGetRandomValues.call(this, array);
     };
   `);
+  await page.reload();
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 }
 
 /** Sets the scramble length, the way a person changing the box would. */
 async function setScrambleMoves(page: Page, count: number): Promise<void> {
-  const moves = page.locator('#scramble-moves');
-  await moves.fill(String(count));
-  await moves.dispatchEvent('change');
+  await page.locator('#scramble-moves').fill(String(count));
 }
 
 test.beforeEach(async ({ page }) => {
@@ -201,9 +201,7 @@ test('a scramble is turned into the cube where it can be watched', async ({
 test('a drag over the cube while a scramble plays only sweeps the view', async ({
   page,
 }) => {
-  await pinSeed(page, 42);
-  await page.reload();
-  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+  await restartWithSeed(page, 42);
 
   const root = page.locator('.game-shell');
 
@@ -243,9 +241,7 @@ test('a drag over the cube while a scramble plays only sweeps the view', async (
 test('a fixed scramble solved through keyboard controls stops the timer', async ({
   page,
 }) => {
-  await pinSeed(page, 42);
-  await page.reload();
-  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+  await restartWithSeed(page, 42);
 
   // Three moves rather than twenty. This sequence has to be taken from the
   // generator by hand, and the length only decides how much of that there is

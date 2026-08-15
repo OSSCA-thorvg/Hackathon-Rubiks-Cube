@@ -85,7 +85,7 @@ export class GameSession {
 
   /** A scramble has been accepted and is now being turned into the cube. */
   beginScramble(): void {
-    this.previousMoveCount = 0;
+    this.previousMoveCount = this.engine.committedMoveCount();
     this.timer.reset();
     this.setState('scrambling');
     this.announce('Scrambling the cube…');
@@ -93,7 +93,7 @@ export class GameSession {
 
   /** The cube has been restored, so there is nothing under way. */
   restart(): void {
-    this.previousMoveCount = 0;
+    this.previousMoveCount = this.engine.committedMoveCount();
     this.timer.reset();
     this.setState('idle');
     this.announce('Cube reset.');

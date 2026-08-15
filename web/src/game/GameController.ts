@@ -215,8 +215,16 @@ export function attachGameController(
     ui.canvas.dataset.flatStyle = FLAT_NAME_BY_STYLE[style];
   };
 
+  // What the move buttons were last set to. Written only on a change: this
+  // runs once per frame, and a played sequence keeps frames coming for
+  // seconds at a time with the answer the same throughout.
+  let movesDisabled: boolean | null = null;
+
   const updateMoveAvailability = (): void => {
     const disabled = engine.isBusy();
+    if (disabled === movesDisabled) return;
+
+    movesDisabled = disabled;
     for (const button of ui.moveButtons) button.disabled = disabled;
   };
 

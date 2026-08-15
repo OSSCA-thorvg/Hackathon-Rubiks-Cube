@@ -57,7 +57,8 @@ summary:focus-visible {
   outline-offset: 3px;
 }
 
-button:disabled {
+button:disabled,
+.scramble-length input:disabled {
   cursor: not-allowed;
   opacity: 0.46;
 }
@@ -218,10 +219,6 @@ button[aria-pressed="true"] {
   font: inherit;
   text-align: right;
   background: rgb(20 22 28 / 72%);
-}
-
-.scramble-length input:disabled {
-  opacity: 0.5;
 }
 
 .move-controls {

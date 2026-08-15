@@ -88,15 +88,22 @@ constexpr float kDegreesPerQuarterTurn = 90.0f;
 
 }  // namespace
 
+bool InteractionController::can_begin(
+    float x, float y, const graphics::Rect& region) const noexcept
+{
+    // A second pointer during a gesture is not a second gesture, a point that
+    // is not a point cannot start one, and a region of no extent gives nothing
+    // to measure a drag against -- dividing by its width later.
+    return !gesture_running() && finite_point(x, y) && region.width > 0.0f &&
+           region.height > 0.0f;
+}
+
 bool InteractionController::pointer_down(
     float x, float y, const graphics::Camera& camera,
     const graphics::Rect& viewport) noexcept
 {
-    // A snap owns the cube until it finishes, and a second pointer during a
-    // gesture is not a second gesture.
-    if (snap_ || gesture_running()) return false;
-    if (!finite_point(x, y)) return false;
-    if (viewport.width <= 0.0f || viewport.height <= 0.0f) return false;
+    // A snap owns the cube until it finishes.
+    if (snap_ || !can_begin(x, y, viewport)) return false;
 
     std::optional<Pick> pick;
     if (const auto ray = pointer_ray(x, y, camera, viewport)) {
@@ -115,12 +122,10 @@ bool InteractionController::pointer_down(
 bool InteractionController::start_orbit(
     float x, float y, const graphics::Rect& viewport) noexcept
 {
-    // A running snap is not consulted, unlike everywhere else. Looking around
-    // takes nothing away from a turn that is settling, and a caller playing a
+    // The one entry point that does not consult the snap. Looking around takes
+    // nothing away from a turn that is settling, and a caller playing a
     // sequence back has one running almost all of the time.
-    if (gesture_running()) return false;
-    if (!finite_point(x, y)) return false;
-    if (viewport.width <= 0.0f || viewport.height <= 0.0f) return false;
+    if (!can_begin(x, y, viewport)) return false;
 
     orbit_ = Orbit{viewport, math::Vec2{x, y}};
     return true;
@@ -130,9 +135,7 @@ bool InteractionController::net_pointer_down(float x, float y,
                                              const graphics::Rect& rect,
                                              const NetPick& pick) noexcept
 {
-    if (snap_ || gesture_running()) return false;
-    if (!finite_point(x, y)) return false;
-    if (rect.width <= 0.0f || rect.height <= 0.0f) return false;
+    if (snap_ || !can_begin(x, y, rect)) return false;
 
     net_gesture_ = NetGesture{rect, pick, math::Vec2{x, y}, std::nullopt, 0.0f};
     return true;
@@ -142,9 +145,7 @@ bool InteractionController::rings_pointer_down(float x, float y,
                                                const graphics::Rect& rect,
                                                const RingsPick& pick) noexcept
 {
-    if (snap_ || gesture_running()) return false;
-    if (!finite_point(x, y)) return false;
-    if (rect.width <= 0.0f || rect.height <= 0.0f) return false;
+    if (snap_ || !can_begin(x, y, rect)) return false;
 
     rings_gesture_ = RingsGesture{rect, pick, math::Vec2{x, y}, std::nullopt,
                                   0.0f, 0.0f, 0.0f};

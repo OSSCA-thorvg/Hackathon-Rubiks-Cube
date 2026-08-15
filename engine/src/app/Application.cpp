@@ -298,19 +298,22 @@ void advance_playback() noexcept
 {
     if (!state->playback) return;
 
+    // A turn of the sequence is still settling. The next one waits for it --
+    // and so does the end of the sequence, which outlives its last move: the
+    // player is what makes the application busy and what says the commit just
+    // made was nobody's, and both have to hold on the frame that move lands.
+    if (state->interaction.is_busy()) return;
+
     Player& player = *state->playback;
     while (player.next < player.plan.size()) {
-        if (state->interaction.is_busy()) return;
         if (state->interaction.start_move(player.plan[player.next++],
                                           player.tempo_ms)) {
             return;
         }
     }
 
-    // The sequence outlives its last move: it is what makes the application
-    // busy, and it is what says the commit just made was nobody's. Both have
-    // to still be true on the frame that move lands.
-    if (!state->interaction.is_busy()) state->playback.reset();
+    // Nothing left to take, and nothing left turning.
+    state->playback.reset();
 }
 
 }  // namespace

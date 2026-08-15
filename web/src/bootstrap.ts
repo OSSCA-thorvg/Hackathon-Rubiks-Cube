@@ -117,10 +117,11 @@ export function bootstrap(
       ...app.querySelectorAll<HTMLButtonElement>('[data-face]'),
     ],
   };
-  for (const button of app.querySelectorAll<HTMLButtonElement>('button')) {
-    button.disabled = true;
+  for (const control of app.querySelectorAll<
+    HTMLButtonElement | HTMLInputElement
+  >('button, input')) {
+    control.disabled = true;
   }
-  gameUi.scrambleMovesInput.disabled = true;
 
   const setState = (state: AppState, message: string): void => {
     app.dataset.state = state;

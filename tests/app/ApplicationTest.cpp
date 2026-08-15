@@ -1,5 +1,7 @@
 #include "app/Application.hpp"
 
+#include <array>
+#include <cstddef>
 #include <cstdlib>
 #include <vector>
 
@@ -7,6 +9,7 @@
 
 #include "EngineLifecycle.hpp"
 #include "cube/CubeMove.hpp"
+#include "cube/Cubie.hpp"
 #include "cube/Scramble.hpp"
 
 namespace {
@@ -19,7 +22,7 @@ void settle_application()
     int frames = 0;
     while (rubiks::app::advance(16.0)) {
         ++frames;
-        REQUIRE(frames < 4000);
+        REQUIRE(frames < 1000);
     }
 }
 
@@ -30,6 +33,10 @@ void settle_application()
  * of nothing but outer faces, so every move of one can be spoken back through
  * `turn_face`. The sign is there because half of the six turn negatively about
  * their axis.
+ *
+ * Read out of the named moves rather than restated here. Which layer each face
+ * is and which way it turns about its axis are facts the domain already holds,
+ * and a second copy of them would go on agreeing after the first had changed.
  */
 struct NamedFace {
     rubiks::cube::Face face;
@@ -38,19 +45,20 @@ struct NamedFace {
 
 [[nodiscard]] NamedFace named_face(const rubiks::cube::CubeMove& move)
 {
-    using rubiks::cube::Axis;
-    using rubiks::cube::Face;
+    using namespace rubiks::cube::moves;
+    const std::array<rubiks::cube::CubeMove, rubiks::cube::kFaceCount> named{
+        R(kSize), L(kSize), U(kSize), D(kSize), F(kSize), B(kSize)};
+    const auto all = rubiks::cube::faces();
 
-    const bool last = move.layers == rubiks::cube::layer(kSize - 1);
-    switch (move.axis) {
-        case Axis::X:
-            return last ? NamedFace{Face::Right, 1} : NamedFace{Face::Left, -1};
-        case Axis::Y:
-            return last ? NamedFace{Face::Up, 1} : NamedFace{Face::Down, -1};
-        case Axis::Z:
-            break;
+    for (std::size_t index = 0; index < all.size(); ++index) {
+        if (named[index].axis == move.axis &&
+            named[index].layers == move.layers) {
+            return NamedFace{all[index], named[index].quarter_turns};
+        }
     }
-    return last ? NamedFace{Face::Front, 1} : NamedFace{Face::Back, -1};
+
+    FAIL("no outer face turns this layer");
+    return NamedFace{all[0], 1};
 }
 
 /**
@@ -174,7 +182,7 @@ TEST_CASE("played moves are nobody's, and the cube is busy until the last one")
     while (rubiks::app::is_busy()) {
         REQUIRE(rubiks::app::advance(16.0));
         ++frames;
-        REQUIRE(frames < 4000);
+        REQUIRE(frames < 1000);
     }
 
     REQUIRE(frames > 0);

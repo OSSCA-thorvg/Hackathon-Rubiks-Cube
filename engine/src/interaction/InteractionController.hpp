@@ -368,6 +368,16 @@ private:
     /** True while a pointer owns a gesture of any of the three kinds. */
     [[nodiscard]] bool gesture_running() const noexcept;
 
+    /**
+     * Whether a press could begin any gesture at all in `region`.
+     *
+     * What every way in demands before it looks at what was pressed. Said once
+     * so that the one real difference between them -- that an orbit does not
+     * wait for a running snap -- is the only thing their first lines differ by.
+     */
+    [[nodiscard]] bool can_begin(float x, float y,
+                                 const graphics::Rect& region) const noexcept;
+
     /** The turn a finger is holding, or nothing when none has an axis yet. */
     [[nodiscard]] std::optional<LockedTurn> locked_turn() const noexcept;
 

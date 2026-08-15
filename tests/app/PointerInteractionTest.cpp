@@ -1128,7 +1128,7 @@ TEST_CASE("a sequence plays on while the viewpoint is being swept")
     while (rubiks::app::is_busy()) {
         REQUIRE(rubiks::app::advance(kFrameMs));
         ++frames;
-        REQUIRE(frames < 4000);
+        REQUIRE(frames < 1000);
     }
 
     rubiks::app::pointer_up();

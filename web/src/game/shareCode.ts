@@ -1,0 +1,237 @@
+import { CUBE_SIZE, MAX_SHARED_MOVES } from '../wasm/CubeEngine.ts';
+import { singleLayerIndex, unpackMove } from './notation.ts';
+
+/**
+ * How one cube state travels as text, and how it is read back.
+ *
+ * What is carried is a scramble sequence and the user's own applied moves --
+ * the two stretches of the engine's record, split at the scramble boundary --
+ * and nothing else. A sticker array would be shorter and would need checking
+ * on arrival, because an arbitrary one is not a cube any turning could reach;
+ * a list of moves is legal by construction, because every one of them is
+ * played into the cube the ordinary way.
+ *
+ * A seed is deliberately not carried. Carrying one would make the generator,
+ * its arithmetic, and its agreement between native and WASM a permanent
+ * compatibility contract of every link ever shared: fix the scramble rules
+ * afterwards and old links quietly restore a different cube. Carrying the
+ * moves costs eighty bytes for a twenty-move scramble and removes that
+ * coupling entirely.
+ */
+
+/**
+ * Which layout the bytes are in.
+ *
+ * Bumped rather than migrated: a payload whose version this build does not
+ * know is dropped and the page opens fresh. What would follow the bump is a
+ * cube of a size other than three, whose masks this layout will not carry.
+ */
+export const SHARE_VERSION = 1;
+
+/**
+ * The two stretches one shared state is made of, as packed words.
+ *
+ * Packed rather than decoded, because nothing between the engine and the text
+ * has any use for what a move means: the engine hands these words over and
+ * takes them back, and the encoding writes them down.
+ */
+export type SharedSession = {
+  /** Everything the cube was handed, which may be empty. */
+  readonly scramble: readonly number[];
+  /** The user's own moves that are on the cube, without a rewound tail. */
+  readonly user: readonly number[];
+};
+
+/**
+ * The byte layout, written out because it is a permanent contract.
+ *
+ * ```text
+ * version(1) | scramble_count(4) | packed(4) x scramble_count
+ *            | user_count(4)     | packed(4) x user_count
+ * ```
+ *
+ * Every multi-byte field is little-endian, and the reader says so explicitly
+ * through DataView rather than laying a Uint32Array over the bytes -- a typed
+ * array follows the platform's own byte order, which is no basis for a format
+ * that has to outlive the machine that wrote it.
+ *
+ * The counts are four bytes each where two would do. Two would bring a bound
+ * of sixty-five thousand moves along with the rule that refuses it, the
+ * message that explains it and the tests that hold it -- for a case reachable
+ * only by turning a layer every second for eighteen hours. Two more bytes
+ * remove the case instead of handling it.
+ */
+const VERSION_BYTES = 1;
+const COUNT_BYTES = 4;
+const MOVE_BYTES = 4;
+
+/** The smallest payload that could still be a session: both counts, no moves. */
+const MIN_PAYLOAD_BYTES = VERSION_BYTES + COUNT_BYTES * 2;
+
+/** The largest, at the bound the engine's restore buffer takes. */
+const MAX_PAYLOAD_BYTES = MIN_PAYLOAD_BYTES + MOVE_BYTES * MAX_SHARED_MOVES;
+
+/**
+ * The longest encoded string that could still be a payload.
+ *
+ * Measured before anything is decoded, which is the point of having it: a
+ * fragment of any size can be pasted into the address bar, and measuring the
+ * text first means an enormous one is refused as text rather than being
+ * unpacked into memory to be measured as bytes.
+ */
+export const MAX_ENCODED_LENGTH = Math.ceil((MAX_PAYLOAD_BYTES * 4) / 3);
+
+/** The alphabet base64url uses, which is the whole of what may appear. */
+const ENCODED_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * Whether a word is a move this version of the payload may carry.
+ *
+ * Stricter than "a move": the mask is held to a single layer of this cube.
+ * `CubeMove` itself is happy to hold several at once, and nothing in this
+ * application can make such a move -- so the move log treats a notation of
+ * null as unreachable rather than drawing it. A link is the one way a word
+ * could arrive from outside, so the restriction goes on the way in and the
+ * engine checks the same rule again on its own side.
+ */
+function isSharableMove(packed: number): boolean {
+  const move = unpackMove(packed);
+  if (move === null) return false;
+
+  const index = singleLayerIndex(move.layers);
+  return index !== null && index < CUBE_SIZE;
+}
+
+/** How many bytes a session of this shape occupies. */
+function payloadBytes(moveCount: number): number {
+  return MIN_PAYLOAD_BYTES + MOVE_BYTES * moveCount;
+}
+
+/**
+ * Writes one session as a base64url string, or returns null.
+ *
+ * Null for the sessions there is no link for: an empty record, one longer than
+ * the far end can take back, and one holding a word this version cannot carry.
+ * The share control never offers any of them, so this is the assembly side
+ * agreeing with the reading side rather than a path a person walks down.
+ */
+export function encodeSession(session: SharedSession): string | null {
+  const moves = [...session.scramble, ...session.user];
+  if (moves.length === 0 || moves.length > MAX_SHARED_MOVES) return null;
+  if (!moves.every(isSharableMove)) return null;
+
+  const bytes = new Uint8Array(payloadBytes(moves.length));
+  const view = new DataView(bytes.buffer);
+
+  view.setUint8(0, SHARE_VERSION);
+  let offset = VERSION_BYTES;
+  for (const section of [session.scramble, session.user]) {
+    view.setUint32(offset, section.length, true);
+    offset += COUNT_BYTES;
+    for (const packed of section) {
+      view.setUint32(offset, packed, true);
+      offset += MOVE_BYTES;
+    }
+  }
+
+  return base64urlEncode(bytes);
+}
+
+/**
+ * Reads a base64url string back as a session, or returns null.
+ *
+ * Everything is checked here, before a single move reaches the engine: the
+ * length of the text, its alphabet, the version, the two counts against the
+ * actual byte length in both directions, and every word. A payload with
+ * anything left over after the second stretch is refused as well -- a link
+ * carries one session and nothing after it.
+ *
+ * There is one answer for every way of failing, because there is one thing to
+ * do about all of them: open the page with a fresh cube.
+ */
+export function decodeSession(encoded: string): SharedSession | null {
+  if (encoded.length === 0 || encoded.length > MAX_ENCODED_LENGTH) return null;
+  if (!ENCODED_PATTERN.test(encoded)) return null;
+
+  const bytes = base64urlDecode(encoded);
+  if (bytes === null || bytes.length < MIN_PAYLOAD_BYTES) return null;
+
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint8(0) !== SHARE_VERSION) return null;
+
+  let offset = VERSION_BYTES;
+  const sections: number[][] = [];
+  for (let section = 0; section < 2; section += 1) {
+    // Checked before it is used as a length: a count read out of a truncated
+    // payload can be any number at all, and multiplying it out first is how a
+    // reader ends up asking for bytes that are not there.
+    if (offset + COUNT_BYTES > bytes.length) return null;
+    const count = view.getUint32(offset, true);
+    offset += COUNT_BYTES;
+
+    if (count > MAX_SHARED_MOVES) return null;
+    if (offset + count * MOVE_BYTES > bytes.length) return null;
+
+    const moves: number[] = [];
+    for (let index = 0; index < count; index += 1) {
+      const packed = view.getUint32(offset, true);
+      offset += MOVE_BYTES;
+      if (!isSharableMove(packed)) return null;
+      moves.push(packed);
+    }
+    sections.push(moves);
+  }
+
+  const [scramble, user] = sections as [number[], number[]];
+
+  // A session of nothing is not a state anybody shared, and it is also the
+  // count the engine's buffer refuses -- so keeping it out here is what makes
+  // "was a buffer asked for at all" an unambiguous question over there.
+  if (scramble.length + user.length === 0) return null;
+  if (scramble.length + user.length > MAX_SHARED_MOVES) return null;
+
+  // Nothing may follow the second stretch.
+  if (offset !== bytes.length) return null;
+
+  return { scramble, user };
+}
+
+/** How many characters of the input one chunk of the conversion takes. */
+const CHUNK = 0x8000;
+
+/** Writes bytes as base64url: the URL alphabet, and no padding to carry. */
+function base64urlEncode(bytes: Uint8Array): string {
+  // In chunks, because spreading a payload of thousands of bytes into an
+  // argument list is what overflows a call stack on the large end of the range.
+  let binary = '';
+  for (let start = 0; start < bytes.length; start += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(start, start + CHUNK));
+  }
+
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/** Reads base64url back, or returns null for text that is not any. */
+function base64urlDecode(encoded: string): Uint8Array | null {
+  // A length of one past a multiple of four cannot come from any byte string,
+  // and is the one malformed case atob accepts in some engines.
+  if (encoded.length % 4 === 1) return null;
+
+  const padded = encoded
+    .replace(/-/g, '+')
+    .replace(/_/g, '/')
+    .padEnd(Math.ceil(encoded.length / 4) * 4, '=');
+
+  let binary: string;
+  try {
+    binary = atob(padded);
+  } catch {
+    return null;
+  }
+
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}

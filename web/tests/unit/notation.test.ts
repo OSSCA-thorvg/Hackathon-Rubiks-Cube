@@ -83,6 +83,13 @@ describe('unpackMove', () => {
     expect(unpackMove(0x4)).toBeNull();
     expect(unpackMove(0x4c)).toBeNull();
 
+    // And the fourth axis code, which is the same kind of gap: two bits carry
+    // three axes. The engine never writes it either, but a shared link comes
+    // from outside, and a cast here would have turned it into an axis the
+    // notation table has no row for.
+    expect(unpackMove(0x47)).toBeNull();
+    expect(moveNotation(0x47, SIZE)).toBeNull();
+
     expect(unpackMove(-1)).toBeNull();
     expect(unpackMove(1.5)).toBeNull();
     expect(unpackMove(Number.NaN)).toBeNull();

@@ -122,6 +122,15 @@ export const MAX_SCRAMBLE_MOVES = 100;
 export const DEFAULT_SCRAMBLE_MOVES = 20;
 
 /**
+ * The longest record a shared state may carry; mirrors the engine's bound.
+ *
+ * Mirrored the way the scramble limit is, and for the same reason: the number
+ * is a fact about the engine, and having it on this side is what lets a
+ * payload be refused before anything crosses the boundary.
+ */
+export const MAX_SHARED_MOVES = 4096;
+
+/**
  * Computes the drawing buffer size for a CSS size and device pixel ratio.
  *
  * Non-finite inputs normalize to one pixel; the result is clamped to at
@@ -376,6 +385,57 @@ export class CubeEngine {
   resetCube(): void {
     this.assertUsable();
     this.module._thorvg_rubiks_reset_cube();
+  }
+
+  /**
+   * Puts a shared record on the cube, at once and without animation.
+   *
+   * The record crosses the way the pixels do and in the opposite direction:
+   * the engine hands over the address of a buffer it owns, this writes the
+   * packed words into it through a view, and one further call reads all of
+   * them. Nothing else may be called in between -- another call is free to
+   * grow the heap, which would leave the view pointing at memory that has
+   * moved -- and nothing is, so the view cannot go stale.
+   *
+   * Not a transaction on either side. A refusal leaves the cube exactly as it
+   * was, which at the only moment this is called is a cube that has just been
+   * made, so there is nothing to roll back and nothing to retry.
+   *
+   * @returns false when the engine would not take the record, which is an
+   *          answer about the record rather than a failure of the engine.
+   */
+  restoreSession(
+    scramble: readonly number[],
+    user: readonly number[],
+  ): boolean {
+    this.assertUsable();
+
+    const total = scramble.length + user.length;
+    if (total === 0 || total > MAX_SHARED_MOVES) return false;
+
+    const pointer = this.module._thorvg_rubiks_restore_buffer(total);
+
+    // The same metadata contract the pixel buffer is held to, for the same
+    // reason: a view built over a pointer that is not really there would write
+    // the record into whatever else lives at that address.
+    const byteLength = total * 4;
+    const usable =
+      Number.isSafeInteger(pointer) &&
+      pointer > 0 &&
+      pointer % 4 === 0 &&
+      pointer + byteLength <= this.module.HEAPU8.byteLength;
+    if (!usable) return false;
+
+    const words = new Uint32Array(this.module.HEAPU8.buffer, pointer, total);
+    words.set(scramble, 0);
+    words.set(user, scramble.length);
+
+    return (
+      this.module._thorvg_rubiks_restore_apply(
+        scramble.length,
+        user.length,
+      ) !== 0
+    );
   }
 
   /**

@@ -38,6 +38,20 @@ export const PACKED_LAYER_SHIFT = 4;
 /** The quarter turns a code stands for, indexed by the code itself. */
 const TURNS_BY_CODE: readonly (QuarterTurns | undefined)[] = [-1, 1, 2];
 
+/**
+ * The axis a code stands for, indexed by the code itself.
+ *
+ * A table for the same reason the turns have one: two bits carry three values,
+ * so one code names nothing, and the gap in the table is what says so. It
+ * matters for a word that did not come from the engine -- a shared link is
+ * free to contain that code, and a cast would have turned it into an axis.
+ */
+const AXIS_BY_CODE: readonly (MoveAxis | undefined)[] = [
+  MoveAxis.X,
+  MoveAxis.Y,
+  MoveAxis.Z,
+];
+
 /** The turns a written move can have; every other count normalizes to one. */
 export type QuarterTurns = -1 | 1 | 2;
 
@@ -104,20 +118,29 @@ export function unpackMove(packed: number): DecodedMove | null {
     return null;
   }
 
-  const axis = (packed & PACKED_AXIS_MASK) as MoveAxis;
+  const axis = AXIS_BY_CODE[packed & PACKED_AXIS_MASK];
   const quarterTurns =
     TURNS_BY_CODE[(packed >>> PACKED_TURNS_SHIFT) & PACKED_TURNS_MASK];
   const layers = packed >>> PACKED_LAYER_SHIFT;
 
-  // A move turns at least one layer and turns it by something, so a word
-  // failing either of those is not a move -- which is what makes zero, the
-  // engine's "no move here", fall out of the same check as a corrupt word.
-  if (quarterTurns === undefined || layers === 0) return null;
+  // A move turns at least one layer, about an axis, by some number of
+  // quarters. A word failing any of the three is not a move -- which is what
+  // makes zero, the engine's "no move here", fall out of the same check as a
+  // word somebody wrote by hand.
+  if (axis === undefined || quarterTurns === undefined || layers === 0) {
+    return null;
+  }
   return { axis, layers, quarterTurns };
 }
 
-/** The index of the single layer a mask selects, or null for anything else. */
-function singleLayer(layers: number): number | null {
+/**
+ * The index of the single layer a mask selects, or null for anything else.
+ *
+ * Exported because the same question is asked twice for different reasons:
+ * here it picks the row of the notation table, and a shared payload asks it to
+ * refuse the wide moves this cube has no way of making.
+ */
+export function singleLayerIndex(layers: number): number | null {
   if ((layers & (layers - 1)) !== 0) return null;
   return 31 - Math.clz32(layers);
 }
@@ -142,7 +165,7 @@ export function moveNotation(packed: number, size: number): string | null {
   const move = unpackMove(packed);
   if (move === null) return null;
 
-  const index = singleLayer(move.layers);
+  const index = singleLayerIndex(move.layers);
   if (index === null || index >= size) return null;
 
   // In range of a table with a row for every axis, so there is a cell here

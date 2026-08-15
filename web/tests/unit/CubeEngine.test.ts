@@ -9,6 +9,7 @@ import {
   CubeViewMode,
   MAX_DIMENSION,
   MAX_SCRAMBLE_MOVES,
+  MAX_SHARED_MOVES,
 } from '../../src/wasm/CubeEngine.ts';
 import type { ThorvgRubiksModule } from '../../src/wasm/generated/thorvg-rubiks.js';
 
@@ -57,7 +58,19 @@ function createFakeModule() {
     timelineMoveOverride: null as number | null,
     pixelBufferOverride: null as number | null,
     pixelByteLengthOverride: null as number | null,
+    // Where the engine would hand back its restore buffer, and whether it
+    // takes what is written into it.
+    restoreBufferOverride: null as number | null,
+    restoreApplyResult: 1,
   };
+
+  // The words the restore buffer was filled with, read back out of the heap
+  // the way the engine would read them.
+  let restorePointer = 1 << 16;
+  let restoreCount = 0;
+  const restoreWords = (): number[] => [
+    ...new Uint32Array(heap.buffer, restorePointer, restoreCount),
+  ];
 
   const module = {
     get HEAPU8(): Uint8Array<ArrayBuffer> {
@@ -103,6 +116,16 @@ function createFakeModule() {
     _thorvg_rubiks_advance: vi.fn((): number => behavior.advanceResult),
     _thorvg_rubiks_scramble: vi.fn((): number => behavior.scrambleResult),
     _thorvg_rubiks_reset_cube: vi.fn((): void => {}),
+    _thorvg_rubiks_restore_buffer: vi.fn((total: number): number => {
+      if (behavior.restoreBufferOverride !== null) {
+        return behavior.restoreBufferOverride;
+      }
+      restoreCount = total;
+      return restorePointer;
+    }),
+    _thorvg_rubiks_restore_apply: vi.fn(
+      (): number => behavior.restoreApplyResult,
+    ),
     _thorvg_rubiks_ambient_start: vi.fn(
       (): number => behavior.ambientStartResult,
     ),
@@ -173,7 +196,7 @@ function createFakeModule() {
     heap = new Uint8Array(next);
   };
 
-  return { module, behavior, growMemory };
+  return { module, behavior, growMemory, restoreWords };
 }
 
 /** Canvas stub exposing only what CubeEngine touches. */
@@ -656,6 +679,53 @@ describe('CubeEngine gameplay and view controls', () => {
       );
     }
     expect(module._thorvg_rubiks_ambient_start).not.toHaveBeenCalled();
+  });
+});
+
+describe('CubeEngine.restoreSession', () => {
+  it('writes both stretches into the engine buffer and applies them', async () => {
+    const { engine, module, restoreWords } = await createEngine();
+
+    expect(engine.restoreSession([0x44, 0x45], [0x46])).toBe(true);
+
+    expect(module._thorvg_rubiks_restore_buffer).toHaveBeenCalledWith(3);
+    // The scramble first and the user's own moves after it, which is the
+    // order the two counts describe on the other side.
+    expect(restoreWords()).toEqual([0x44, 0x45, 0x46]);
+    expect(module._thorvg_rubiks_restore_apply).toHaveBeenCalledWith(2, 1);
+  });
+
+  it('reports a refused record rather than throwing', async () => {
+    const { engine, behavior } = await createEngine();
+
+    behavior.restoreApplyResult = 0;
+    expect(engine.restoreSession([0x44], [])).toBe(false);
+  });
+
+  it('refuses a record the engine could not have taken', async () => {
+    const { engine, module } = await createEngine();
+
+    expect(engine.restoreSession([], [])).toBe(false);
+    expect(
+      engine.restoreSession(
+        new Array<number>(MAX_SHARED_MOVES + 1).fill(0x44),
+        [],
+      ),
+    ).toBe(false);
+    expect(module._thorvg_rubiks_restore_buffer).not.toHaveBeenCalled();
+  });
+
+  it('will not write through an address it cannot verify', async () => {
+    // The pixel buffer's contract, applied to the other direction: a view
+    // built over an address that is not really there would write the record
+    // into whatever else lives at it.
+    for (const pointer of [0, 5, 4096.5, 2 ** 53, 1 << 30]) {
+      const { engine, module, behavior } = await createEngine();
+      behavior.restoreBufferOverride = pointer;
+
+      expect(engine.restoreSession([0x44], [])).toBe(false);
+      expect(module._thorvg_rubiks_restore_apply).not.toHaveBeenCalled();
+    }
   });
 });
 

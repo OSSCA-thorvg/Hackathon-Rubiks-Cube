@@ -144,7 +144,7 @@ Solve가 끝났거나 중단된 상태에서 사용자가 수를 두면 cursor �
 Solve는 기록으로 남는 완주가 아니므로 timer는 정지하되 기록하지 않으며, 재생 중 중단할 수 있는 경로를 함께 제공합니다.
 Timer 측정 중의 undo는 그대로 허용하고 기록을 무효로 처리하지 않습니다. Undo에 드는 시간이 이미 손해이므로 별도의 무효 상태를 두지 않습니다.
 
-## [ ] Phase 12: [Move notation and move log](./12-move-notation-and-move-log.md)
+## [x] Phase 12: [Move notation and move log](./12-move-notation-and-move-log.md)
 
 Phase 11의 기록을 표준 표기법으로 렌더링해 수순 목록으로 보여 줍니다.
 별도의 기록 자료구조를 만들지 않고 Phase 11의 timeline을 인덱스로 조회하므로, 이 phase의 engine 작업은 조회 ABI 하나와 pack 시점의 turns 정규화에 한정됩니다. Timeline은 raw 수순을 보관합니다 — 기록 시점에 정규화하면 `-180°`로 돈 수의 redo가 반대 방향으로 돕니다. Scramble 구간과 사용자 구간의 구분은 timeline의 scramble 경계 query에서 파생되어, 이어 붙이거나 경계를 계산하는 코드가 없습니다.

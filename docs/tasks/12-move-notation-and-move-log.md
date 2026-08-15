@@ -2,7 +2,7 @@
 
 ## Status
 
-`Not started`
+`Completed`
 
 ## Objective
 
@@ -72,25 +72,25 @@ Phase 11의 기록이 timeline 하나이므로 조회도 하나입니다. 목록
 
 ### 1. Engine ABI
 
-- [ ] Packed 포맷 상수와 pack 함수, pack 시점 turns 정규화
-- [ ] `-2`로 기록된 수가 packed로는 `+2`, redo 재생으로는 `-180°` 그대로인 test (정규화가 timeline에 새지 않는지)
-- [ ] `timeline_move(index)` 구현: 범위 밖·초기화 전 0 반환
-- [ ] Pack known-answer test와 정규화 test (native)
+- [x] Packed 포맷 상수와 pack 함수, pack 시점 turns 정규화
+- [x] `-2`로 기록된 수가 packed로는 `+2`, redo 재생으로는 `-180°` 그대로인 test (정규화가 timeline에 새지 않는지)
+- [x] `timeline_move(index)` 구현: 범위 밖·초기화 전 0 반환
+- [x] Pack known-answer test와 정규화 test (native)
 
 ### 2. TS notation
 
-- [ ] Unpack과 포맷 상수 known-answer test (C++ 결과와 대조)
-- [ ] `(axis, layer) → {문자, 부호}` 9칸 표와 turns 접미사 조립
-- [ ] 표에 없는 mask(여러 layer, 불연속, 범위 밖)의 null 경로
-- [ ] 전수 test: 3축 × 3layer × 3turns = 27개 표기와, 표 밖 mask의 null 경로
+- [x] Unpack과 포맷 상수 known-answer test (C++ 결과와 대조)
+- [x] `(axis, layer) → {문자, 부호}` 9칸 표와 turns 접미사 조립
+- [x] 표에 없는 mask(여러 layer, 불연속, 범위 밖)의 null 경로
+- [x] 전수 test: 3축 × 3layer × 3turns = 27개 표기와, 표 밖 mask의 null 경로
 
 ### 3. Move log UI
 
-- [ ] Timeline 목록 렌더링과 적용 위치 강조, `timeline_scramble_end` 기준의 구간 구분 표시
-- [ ] Scramble이 반쯤 되감긴 상태의 표시 test
-- [ ] Commit/undo/redo 후 갱신 test (TS unit)
-- [ ] e2e: scramble 후 목록에 scramble 수순이 보이고, drag move가 표기로 추가되고, undo 시 cursor 강조가 이동
-- [ ] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
+- [x] Timeline 목록 렌더링과 적용 위치 강조, `timeline_scramble_end` 기준의 구간 구분 표시
+- [x] Scramble이 반쯤 되감긴 상태의 표시 test
+- [x] Commit/undo/redo 후 갱신 test (TS unit)
+- [x] e2e: scramble 후 목록에 scramble 수순이 보이고, drag move가 표기로 추가되고, undo 시 cursor 강조가 이동
+- [x] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
 
 ## Acceptance criteria
 
@@ -120,3 +120,29 @@ npm --prefix web run build
 - 이 문서의 status를 `Completed`로 변경합니다.
 - 상위 [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md)의 Phase 12를 완료 처리합니다.
 - 실제 구현과 차이가 생긴 결정을 이 문서에 기록합니다.
+
+## 개정 기록
+
+### 1. 구현하며 달라진 것
+
+**Pack은 `cube::pack` 자유 함수이고, 포맷 상수와 함께 `cube/PackedMove.hpp`에 있습니다.** 문서는 위치를 정하지 않았고 `CubeMove.hpp`에 얹을 수도 있었지만, 이 파일은 "move란 무엇인가"를 말하는 자리이고 packed 포맷은 **경계를 건너는 방법**입니다. 별도 header로 두면 비트 배치·정규화 규칙·`0 = invalid` 약속이 한 곳에 모여, 반대편 TS 상수가 마주 보는 대상이 파일 하나가 됩니다. Header-only `constexpr`이라 known-answer 하나는 `static_assert`로 고정되어 test를 돌리기 전에 컴파일이 막습니다.
+
+**"`-2`가 redo에서 `-180°` 그대로"는 cube 레벨에서 고정했습니다.** ±180°는 **같은 permutation**이라 상태로도 그림으로도 구분되지 않습니다(구분되는 것은 애니메이션 중간 frame뿐입니다). 그래서 app 레벨에서 재생 결과를 비교하는 대신 `tests/cube/PackedMoveTest.cpp`에서 **Player에게 건네지는 계획 자체**를 봅니다: `redo_plan`이 돌려주는 move의 `quarter_turns`가 여전히 `-2`이고 `pack`은 같은 것을 `+2`로 적습니다. 재생이 어느 쪽으로 도는지는 그 계획이 정하므로, 이것이 "정규화가 기록에 새지 않는다"의 관찰 가능한 전부입니다. App 레벨에는 `turn_face(Left, 2)`가 `0x18`로 읽히는 것만 남겼습니다.
+
+**`timelineMove`는 `countFrom`을 쓰지 않습니다.** Phase 11이 uint32 query 검증을 helper 하나로 모았지만, 그 helper는 **음수를 boundary 오류로 거절**합니다. Packed move는 개수가 아니라 비트 패턴이고 최상위 bit도 layer이므로, i32 경계가 음수로 넘긴 값을 거절하는 대신 `>>> 0`으로 되읽는 것이 맞습니다. 정수 여부만 확인하고 unsigned로 복원합니다.
+
+**목록은 세 수 중 하나라도 바뀌면 통째로 다시 그립니다.** "cursor만 움직였으면 표시만 옮기면 된다"는 더 싼 읽기는 틀립니다: undo 뒤에 새 move를 두면 redo tail이 잘리고 그 자리에 하나가 들어와, **길이가 그대로인 채 내용이 달라집니다**. 대신 세 수가 모두 같은 frame에서는 아무것도 하지 않으므로, 관람과 시점 sweep이 60fps로 목록을 재생성하지 않습니다.
+
+### 2. 계획에 없던 것
+
+**`CUBE_SIZE`를 `CubeEngine.ts`에 미러링했습니다.** `moveNotation`이 크기를 인자로 받는데 engine은 크기를 ABI로 넘기지 않습니다(3×3 고정 빌드입니다). `MAX_SCRAMBLE_MOVES`와 같은 성격의 미러 상수로 두었고, 크기가 선택이 되는 phase에서는 이 상수 대신 boundary가 답하게 됩니다.
+
+**빈 기록의 안내는 CSS `:empty::after`입니다.** Placeholder 요소를 넣었다 뺐다 하면 목록이 "항목 없음"이라는 항목을 갖게 되고, 그 항목은 index → move → 표기 파이프라인 밖에 있습니다. 표시만 CSS로 옮기면 `<ol>`의 자식은 언제나 기록의 move뿐입니다.
+
+**표기가 없는 move는 분기 없이 그대로 대입합니다.** `item.textContent = moveNotation(...)`이고, `null`을 검사하는 자리가 없습니다 — `textContent`가 `null`을 빈 문자열로 받으므로 "도달할 수 없는 표시를 위해 UI에 분기를 만들지 않는다"가 코드에서도 분기 0줄입니다.
+
+**목록은 stage 아래 자체 section입니다.** 좌우 rail은 한 칸 폭의 control 목록이고, 기록은 페이지에서 유일하게 한없이 길어지는 것입니다. 네 줄 높이에서 스크롤하고, cursor 항목이 늘 보이도록 panel을 따라 스크롤합니다 — 100수 scramble을 되감을 때 움직이는 끝이 화면 밖에 있으면 강조 표시가 무의미하기 때문입니다.
+
+### 3. 확인한 것
+
+**Drag로 만든 가운데 layer가 `E'`로 적히는지**는 e2e에서 net의 front block 가운데 줄을 끌어 확인합니다. 윗줄을 끌면 U가 도는 layer이므로, 그 아래 줄은 같은 방향으로 도는 E의 반대 표기입니다 — 9칸 표의 부호 칸이 브라우저까지 살아 있다는 뜻이고, 이 표기를 만들 수 있는 입력은 drag뿐이라 버튼이나 키로는 대신 확인할 수 없습니다.

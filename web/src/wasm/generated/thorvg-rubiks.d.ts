@@ -86,6 +86,10 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_set_flat_style(style: number): number;
   /** The current graphics::FlatStyle as an integer. */
   _thorvg_rubiks_flat_style(): number;
+  /** Returns 1 when the palette was accepted; invalid values are rejected. */
+  _thorvg_rubiks_set_palette(palette: number): number;
+  /** The current graphics::Palette as an integer. */
+  _thorvg_rubiks_palette(): number;
   /** Restores the turntable camera and nothing else. */
   _thorvg_rubiks_reset_view(): void;
   /** Returns 1 while a gesture, animation, or pending commit is active. */

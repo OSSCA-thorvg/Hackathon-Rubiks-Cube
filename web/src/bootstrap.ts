@@ -62,6 +62,12 @@ export function bootstrap(
           <button type="button" data-flat="rings" aria-pressed="false">Rings</button>
           <button type="button" data-flat="both" aria-pressed="false">Net + Rings</button>
         </div>
+        <div class="option-panel" role="group" aria-label="Presentation options">
+          <div class="option-panel__group" role="group" aria-label="Sticker colors">
+            <button type="button" data-palette="classic" aria-pressed="true">Classic</button>
+            <button type="button" data-palette="high-contrast" aria-pressed="false">High contrast</button>
+          </div>
+        </div>
       </div>
 
       <div class="game-actions" aria-label="Game actions">
@@ -134,6 +140,9 @@ export function bootstrap(
     ],
     flatButtons: [
       ...app.querySelectorAll<HTMLButtonElement>('[data-flat]'),
+    ],
+    paletteButtons: [
+      ...app.querySelectorAll<HTMLButtonElement>('[data-palette]'),
     ],
     moveButtons: [
       ...app.querySelectorAll<HTMLButtonElement>('[data-face]'),

@@ -66,6 +66,29 @@ export const CubeFlatStyle = {
 export type CubeFlatStyle =
   (typeof CubeFlatStyle)[keyof typeof CubeFlatStyle];
 
+/**
+ * Which six shades the stickers are drawn in.
+ *
+ * Two verified sets rather than a color picker: what `HighContrast` promises
+ * is that no pair of the six collapses under *any* of the three dichromacies,
+ * and that it is further apart than the standard cube under every one of
+ * them. That is a property of the set as a whole, which six freely chosen
+ * colors could not keep.
+ *
+ * All three and not the famous one, because they do not pull the same way:
+ * protanopia and deuteranopia lose the red-green axis and keep blue-yellow,
+ * and tritanopia loses exactly the axis they keep. A set tuned for the first
+ * pair alone drifts onto blue-yellow -- it is free distance there -- and
+ * arrives worse than the cube it was replacing for the third.
+ */
+export const CubePalette = {
+  Classic: 0,
+  HighContrast: 1,
+} as const;
+
+/** One sticker-palette value. */
+export type CubePalette = (typeof CubePalette)[keyof typeof CubePalette];
+
 /** Face-relative turns accepted by programmatic move controls. */
 export type FaceTurns = -1 | 1 | 2;
 
@@ -555,6 +578,33 @@ export class CubeEngine {
       throw new Error(`Engine returned an invalid flat style ${style}.`);
     }
     return style;
+  }
+
+  /**
+   * Changes which six shades the stickers are drawn in.
+   *
+   * Accepted while the engine is busy, unlike the view commands: the palette
+   * is read where a sticker becomes pixels and nowhere else, so it disturbs
+   * neither a turn in progress nor anything the cube is.
+   */
+  setPalette(palette: CubePalette): void {
+    this.assertUsable();
+    if (this.module._thorvg_rubiks_set_palette(palette) === 0) {
+      throw new Error(`Engine rejected palette ${palette}.`);
+    }
+  }
+
+  /** Returns the palette the stickers are being drawn in. */
+  palette(): CubePalette {
+    this.assertUsable();
+    const palette = this.module._thorvg_rubiks_palette();
+    if (
+      palette !== CubePalette.Classic &&
+      palette !== CubePalette.HighContrast
+    ) {
+      throw new Error(`Engine returned an invalid palette ${palette}.`);
+    }
+    return palette;
   }
 
   /** Restores only the turntable camera. */

@@ -1,6 +1,7 @@
 import {
   CubeFace,
   CubeFlatStyle,
+  CubePalette,
   CubeViewMode,
   DEFAULT_SCRAMBLE_MOVES,
   isValidScrambleMoves,
@@ -38,6 +39,8 @@ export type GameEngine = SessionEngine & {
   viewMode(): CubeViewMode;
   setFlatStyle(style: CubeFlatStyle): void;
   flatStyle(): CubeFlatStyle;
+  setPalette(palette: CubePalette): void;
+  palette(): CubePalette;
   resetView(): void;
   render(): void;
 };
@@ -66,6 +69,8 @@ export type GameUi = {
   readonly homeViewButton: HTMLButtonElement;
   readonly viewButtons: readonly HTMLButtonElement[];
   readonly flatButtons: readonly HTMLButtonElement[];
+  /** Which of the two verified sticker sets the cube is drawn in. */
+  readonly paletteButtons: readonly HTMLButtonElement[];
   readonly moveButtons: readonly HTMLButtonElement[];
 };
 
@@ -139,6 +144,11 @@ const FLAT_NAME_BY_STYLE: Readonly<Record<CubeFlatStyle, string>> = {
   [CubeFlatStyle.Both]: 'both',
 };
 
+const PALETTE_BY_NAME: Readonly<Record<string, CubePalette>> = {
+  classic: CubePalette.Classic,
+  'high-contrast': CubePalette.HighContrast,
+};
+
 /** Produces one arbitrary uint32 using Web Crypto. */
 export function randomUint32(): number {
   const value = new Uint32Array(1);
@@ -163,6 +173,11 @@ function viewModeOf(button: HTMLButtonElement): CubeViewMode | null {
 /** Parses a data-flat value into the primitive engine enum. */
 function flatStyleOf(button: HTMLButtonElement): CubeFlatStyle | null {
   return FLAT_BY_NAME[button.dataset.flat ?? ''] ?? null;
+}
+
+/** Parses a data-palette value into the primitive engine enum. */
+function paletteOf(button: HTMLButtonElement): CubePalette | null {
+  return PALETTE_BY_NAME[button.dataset.palette ?? ''] ?? null;
 }
 
 /**
@@ -246,6 +261,10 @@ export function attachGameController(
     ui.homeViewButton,
     ...ui.viewButtons,
     ...ui.flatButtons,
+    // In here rather than among the controls that follow the engine: a
+    // palette is not a command to the cube, so it stays live while one is
+    // playing. Reading the board is most wanted exactly while it moves.
+    ...ui.paletteButtons,
   ];
 
   const setCommandsDisabled = (disabled: boolean): void => {
@@ -268,6 +287,14 @@ export function attachGameController(
       button.hidden = selected === CubeViewMode.Cube3D;
     }
     ui.canvas.dataset.flatStyle = FLAT_NAME_BY_STYLE[style];
+  };
+
+  const updatePaletteControls = (): void => {
+    const selected = engine.palette();
+    for (const button of ui.paletteButtons) {
+      const value = paletteOf(button);
+      button.setAttribute('aria-pressed', String(value === selected));
+    }
   };
 
   const run = (action: () => void): void => {
@@ -576,6 +603,16 @@ export function attachGameController(
         updateViewControls();
       });
     }),
+    ...bindChoices(ui.paletteButtons, paletteOf, (palette) => {
+      run((): void => {
+        engine.setPalette(palette);
+        // Drawn here rather than left to the frame loop: with nothing moving
+        // there is no next frame to wait for, and the cube would keep the old
+        // shades until something else asked for one.
+        engine.render();
+        updatePaletteControls();
+      });
+    }),
     ...bindChoices(ui.moveButtons, moveOf, (move) => {
       startFaceTurn(move.face, move.turns);
     }),
@@ -613,6 +650,7 @@ export function attachGameController(
 
   setCommandsDisabled(false);
   updateViewControls();
+  updatePaletteControls();
   updateEngineControls();
 
   return {

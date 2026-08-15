@@ -10,6 +10,7 @@ import type { TimerEnvironment } from '../../src/game/SolveTimer.ts';
 import {
   CubeFace,
   CubeFlatStyle,
+  CubePalette,
   CubeViewMode,
 } from '../../src/wasm/CubeEngine.ts';
 
@@ -35,6 +36,8 @@ function createUi(): GameUi {
     <button data-flat="net" type="button">Net</button>
     <button data-flat="rings" type="button">Rings</button>
     <button data-flat="both" type="button">Net + Rings</button>
+    <button data-palette="classic" type="button" aria-pressed="true">Classic</button>
+    <button data-palette="high-contrast" type="button" aria-pressed="false">High contrast</button>
     <button data-face="r" data-turn="1" type="button">R</button>
     <button data-face="r" data-turn="-1" type="button">R prime</button>
     <ol id="move-log"></ol>
@@ -58,6 +61,9 @@ function createUi(): GameUi {
     homeViewButton: root.querySelector<HTMLButtonElement>('#home-view')!,
     viewButtons: [...root.querySelectorAll<HTMLButtonElement>('[data-view]')],
     flatButtons: [...root.querySelectorAll<HTMLButtonElement>('[data-flat]')],
+    paletteButtons: [
+      ...root.querySelectorAll<HTMLButtonElement>('[data-palette]'),
+    ],
     moveButtons: [...root.querySelectorAll<HTMLButtonElement>('[data-face]')],
   };
 }
@@ -72,6 +78,7 @@ function createHarness() {
   let busy = false;
   let viewMode = CubeViewMode.Both;
   let flatStyle = CubeFlatStyle.Net;
+  let palette = CubePalette.Classic;
   let watching = false;
 
   // The record the real engine keeps, in the same shape: one length and two
@@ -175,6 +182,10 @@ function createHarness() {
       flatStyle = style;
     }),
     flatStyle: vi.fn((): CubeFlatStyle => flatStyle),
+    setPalette: vi.fn((chosen: CubePalette): void => {
+      palette = chosen;
+    }),
+    palette: vi.fn((): CubePalette => palette),
     resetView: vi.fn(),
     isBusy: vi.fn((): boolean => busy),
     render: vi.fn(),
@@ -461,6 +472,60 @@ describe('attachGameController', () => {
     // guards above are what rejected it rather than a listener that is gone.
     harness.dispatchKey({ key: 'r' });
     expect(harness.engine.turnFace).toHaveBeenCalledTimes(1);
+  });
+
+  it('chooses a palette without touching the cube, and says which is on', () => {
+    const harness = createHarness();
+    const classic = harness.ui.paletteButtons.find(
+      (button) => button.dataset.palette === 'classic',
+    )!;
+    const highContrast = harness.ui.paletteButtons.find(
+      (button) => button.dataset.palette === 'high-contrast',
+    )!;
+
+    expect(classic.getAttribute('aria-pressed')).toBe('true');
+    expect(highContrast.getAttribute('aria-pressed')).toBe('false');
+
+    highContrast.click();
+    expect(harness.engine.setPalette).toHaveBeenCalledWith(
+      CubePalette.HighContrast,
+    );
+    expect(highContrast.getAttribute('aria-pressed')).toBe('true');
+    expect(classic.getAttribute('aria-pressed')).toBe('false');
+
+    // Drawn at once: with nothing moving there is no next frame to wait for.
+    expect(harness.engine.render).toHaveBeenCalled();
+
+    // A palette is not a command to the cube.
+    expect(harness.engine.turnFace).not.toHaveBeenCalled();
+    expect(harness.engine.resetCube).not.toHaveBeenCalled();
+    expect(harness.engine.scramble).not.toHaveBeenCalled();
+
+    classic.click();
+    expect(harness.engine.setPalette).toHaveBeenLastCalledWith(
+      CubePalette.Classic,
+    );
+    expect(classic.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('leaves the palette live while a sequence is playing', () => {
+    const harness = createHarness();
+    const highContrast = harness.ui.paletteButtons.find(
+      (button) => button.dataset.palette === 'high-contrast',
+    )!;
+
+    harness.ui.scrambleButton.click();
+    harness.controller.afterEngineFrame();
+
+    // The cube's own controls are out while it plays, and this one is not:
+    // reading the board is most wanted exactly while it is moving.
+    expect(harness.ui.moveButtons[0]!.disabled).toBe(true);
+    expect(highContrast.disabled).toBe(false);
+
+    highContrast.click();
+    expect(harness.engine.setPalette).toHaveBeenCalledWith(
+      CubePalette.HighContrast,
+    );
   });
 
   it('switches regions and flat style separately, and resets only the camera', () => {

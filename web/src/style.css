@@ -204,6 +204,30 @@ button[aria-pressed="true"]:hover:not(:disabled) {
   border-left: 2px solid rgb(255 255 255 / 18%);
 }
 
+/* How the cube is presented rather than which of it is shown: it belongs in
+   this column with the other display choices, but below a line, because the
+   two above change what is on screen and these change how it looks. */
+.option-panel {
+  display: grid;
+  gap: 0.45rem;
+  padding-top: 0.55rem;
+  border-top: 2px solid rgb(255 255 255 / 18%);
+}
+
+.option-panel__group {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 0.45rem;
+}
+
+/* Two to a row, so the longer of the two labels comes down with the width
+   rather than being cut. */
+.option-panel__group button {
+  padding-inline: 0.25rem;
+  font-size: clamp(0.62rem, 1.15vw, 0.78rem);
+}
+
 /* Undo, Redo and Solve are one idea -- walking back along what has been played
    -- so they share a row instead of reading as three more commands under
    Reset. Stop is not one of them: it is not a place on the record to go to but
@@ -548,6 +572,17 @@ button[aria-pressed="true"]:hover:not(:disabled) {
 
   .view-switch__group--flat {
     padding-left: 0.4rem;
+  }
+
+  /* The column has become two side by side here, so the options take a line
+     of their own under both rather than sitting in one of the cells. */
+  .option-panel {
+    grid-column: 1 / -1;
+  }
+
+  .option-panel__group button {
+    padding-inline: 0.4rem;
+    font-size: 0.84rem;
   }
 
   .view-switch button,

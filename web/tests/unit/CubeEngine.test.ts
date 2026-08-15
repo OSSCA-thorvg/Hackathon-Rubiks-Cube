@@ -5,6 +5,7 @@ import {
   CubeFace,
   CubeEngine,
   CubeFlatStyle,
+  CubePalette,
   CubeViewMode,
   MAX_DIMENSION,
   MAX_SCRAMBLE_MOVES,
@@ -37,6 +38,8 @@ function createFakeModule() {
     viewMode: CubeViewMode.Both,
     flatStyle: CubeFlatStyle.Net,
     setFlatStyleResult: 1,
+    palette: CubePalette.Classic,
+    setPaletteResult: 1,
     busyResult: 0,
     ambientStartResult: 1,
     ambientResult: 0,
@@ -143,6 +146,11 @@ function createFakeModule() {
       return behavior.setFlatStyleResult;
     }),
     _thorvg_rubiks_flat_style: vi.fn((): number => behavior.flatStyle),
+    _thorvg_rubiks_set_palette: vi.fn((palette: number): number => {
+      if (behavior.setPaletteResult !== 0) behavior.palette = palette;
+      return behavior.setPaletteResult;
+    }),
+    _thorvg_rubiks_palette: vi.fn((): number => behavior.palette),
     _thorvg_rubiks_reset_view: vi.fn((): void => {}),
     _thorvg_rubiks_is_busy: vi.fn((): number => behavior.busyResult),
   } satisfies ThorvgRubiksModule;
@@ -484,6 +492,19 @@ describe('CubeEngine gameplay and view controls', () => {
     behavior.flatStyle = 3;
     expect(() => engine.flatStyle()).toThrow('invalid flat style');
     behavior.flatStyle = CubeFlatStyle.Net;
+
+    // The palette is a third axis, validated the same way in both directions.
+    expect(engine.palette()).toBe(CubePalette.Classic);
+    engine.setPalette(CubePalette.HighContrast);
+    expect(engine.palette()).toBe(CubePalette.HighContrast);
+    behavior.palette = 2;
+    expect(() => engine.palette()).toThrow('invalid palette');
+    behavior.palette = CubePalette.Classic;
+    behavior.setPaletteResult = 0;
+    expect(() => engine.setPalette(CubePalette.HighContrast)).toThrow(
+      'rejected palette',
+    );
+    behavior.setPaletteResult = 1;
 
     // The value that used to be a fourth mode is not one.
     behavior.viewMode = 3;

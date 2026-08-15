@@ -2,7 +2,7 @@
 
 ## Status
 
-`Not started`
+`Completed`
 
 ## Objective
 
@@ -192,51 +192,51 @@ thorvg_rubiks_timeline_scramble_end() -> uint32
 
 ### 1. MoveTimeline
 
-- [ ] `TimelineEffect`와 `MoveTimeline` 구현, `begin_scramble`/`record`/`at`/`step(effect)`/`clear` 전수 test
-- [ ] `record()`가 cursor 뒤를 버리고 `scramble_end`를 함께 내리는 test (`min` 한 번으로 두 절단이 처리되는지)
-- [ ] `at(index)`가 기록된 그대로의 수를 반환함을 고정하는 test (뒤집지 않음)
-- [ ] 표현 불가능성을 이용한 단순화 확인: 두-기록 모델의 cursor 조합 불변식 test에 해당하는 것이 **존재하지 않음**을 문서로 남김 (배열 하나 + cursor 하나로는 위반 상태를 만들 수 없음)
+- [x] `TimelineEffect`와 `MoveTimeline` 구현, `begin_scramble`/`record`/`at`/`step(effect)`/`clear` 전수 test
+- [x] `record()`가 cursor 뒤를 버리고 `scramble_end`를 함께 내리는 test (`min` 한 번으로 두 절단이 처리되는지)
+- [x] `at(index)`가 기록된 그대로의 수를 반환함을 고정하는 test (뒤집지 않음)
+- [x] 표현 불가능성을 이용한 단순화 확인: 두-기록 모델의 cursor 조합 불변식 test에 해당하는 것이 **존재하지 않음**을 문서로 남김 (배열 하나 + cursor 하나로는 위반 상태를 만들 수 없음)
 
 ### 2. Timeline과 명령
 
-- [ ] Scramble이 `begin_scramble()`을, reset이 `clear()`를 부르는 연결
-- [ ] **Solve 완주 직후(`cursor 0 < scramble_end`) 사용자 move가 받아들여지고 timeline이 잘리는 test** (거절되지 않음)
-- [ ] Solve를 scramble 구간에서 중단한 뒤 사용자 move가 cursor까지 자르고 기록되는 test
-- [ ] Undo가 `scramble_end()` 아래로 내려가지 못하는 test
-- [ ] `cursor() == 0` = solved test: scramble 후 전부 되감으면 solved
+- [x] Scramble이 `begin_scramble()`을, reset이 `clear()`를 부르는 연결
+- [x] **Solve 완주 직후(`cursor 0 < scramble_end`) 사용자 move가 받아들여지고 timeline이 잘리는 test** (거절되지 않음)
+- [x] Solve를 scramble 구간에서 중단한 뒤 사용자 move가 cursor까지 자르고 기록되는 test
+- [x] Undo가 `scramble_end()` 아래로 내려가지 못하는 test
+- [x] `cursor() == 0` = solved test: scramble 후 전부 되감으면 solved
 
 ### 3. Commit과 되감기 공급
 
-- [ ] Player에 `timeline_effect`(기본값 없음)와 `stoppable`(기본 false) 추가, `commit_move(move)`의 두 갈래 분기 구현
-- [ ] **모든 생산자의 `timeline_effect` 명시**: Phase 9의 scramble에 `Advance`, Phase 10의 ambient에 `None` (ambient가 전진하면 cursor가 길이를 넘어섬)
-- [ ] 관람을 길게 돌린 뒤에도 `timeline_cursor`와 `timeline_length`가 진입 시점 그대로인 test
-- [ ] **저장 `user_move_count` 제거와 파생값 전환**: 기존 count ABI가 `cursor - scramble_end`를 반환하도록 바꾸고, undo 두 번 뒤의 count가 실제 적용 수와 일치하는 test (저장 counter였다면 어긋나는 시나리오)
-- [ ] Phase 7의 `finish_snap()` 확정 경로가 같은 함수를 통과하는 test (즉시 확정된 move가 timeline에 남는지)
-- [ ] `rewind_plan(to)`/`redo_plan(to)` 구현과 test: undo와 solve가 같은 함수에 다른 인자를 준 결과임을 고정
-- [ ] `rewind_plan(0)` known-answer: timeline `S0,S1,U0,U1` → `[U1⁻¹, U0⁻¹, S1⁻¹, S0⁻¹]`
-- [ ] `redo_plan(size)` known-answer: 전부 되감긴 상태에서 → `[S0, S1, U0, U1]`
-- [ ] **한 칸 plan table test**: undo(`to = cursor-1`)와 redo(`to = cursor+1`) 두 행으로, plan 길이가 각각 1인지
-- [ ] **Scramble-only solve test**: 사용자 수 없이 solve → scramble 전체가 역순으로 되감기고 underflow가 없는지
-- [ ] 수락 조건 표 test: scramble만 적용된 판과 solve가 scramble 구간까지 내려간 판에서 undo 거절
-- [ ] Busy(재생, gesture, scramble 재생, ambient) 중 undo/redo/solve가 거절되는 test
-- [ ] **Undo 한 번이 사용자의 원래 수를 재실행하지 않고 정확히 되돌리는 test**
-- [ ] **재생 integration test**: plan을 Player에 넘기고 소진할 때까지 돌려 순서·exactly-once commit·최종 cursor·cube 상태를 검사하고, 되감기가 `scramble_end` 경계를 끊김 없이 지나는 것을 명시적으로 assert
-- [ ] Phase 9 helper 재사용 test: solve 재생 중 reset → 이후 `advance()`를 여러 번 돌려도 아무 move가 시작되지 않고 최종 cube·cursor가 reset 상태
-- [ ] `stop_playback`은 폐기가 아니라 확정임을 구분하는 test (중단 시점의 cursor와 cube 상태가 일치, 이후 redo/undo 재개 가능)
-- [ ] `stop_playback`이 scramble·ambient 재생 중에는 no-op인 test (`stoppable` 기본값이 그 둘을 보호하는지)
-- [ ] Ambient가 timeline에 흔적을 남기지 않는 test
+- [x] Player에 `timeline_effect`(기본값 없음)와 `stoppable`(기본 false) 추가, `commit_move(move)`의 두 갈래 분기 구현
+- [x] **모든 생산자의 `timeline_effect` 명시**: Phase 9의 scramble에 `Advance`, Phase 10의 ambient에 `None` (ambient가 전진하면 cursor가 길이를 넘어섬)
+- [x] 관람을 길게 돌린 뒤에도 `timeline_cursor`와 `timeline_length`가 진입 시점 그대로인 test
+- [x] **저장 `user_move_count` 제거와 파생값 전환**: 기존 count ABI가 `cursor - scramble_end`를 반환하도록 바꾸고, undo 두 번 뒤의 count가 실제 적용 수와 일치하는 test (저장 counter였다면 어긋나는 시나리오)
+- [x] Phase 7의 `finish_snap()` 확정 경로가 같은 함수를 통과하는 test (즉시 확정된 move가 timeline에 남는지)
+- [x] `rewind_plan(to)`/`redo_plan(to)` 구현과 test: undo와 solve가 같은 함수에 다른 인자를 준 결과임을 고정
+- [x] `rewind_plan(0)` known-answer: timeline `S0,S1,U0,U1` → `[U1⁻¹, U0⁻¹, S1⁻¹, S0⁻¹]`
+- [x] `redo_plan(size)` known-answer: 전부 되감긴 상태에서 → `[S0, S1, U0, U1]`
+- [x] **한 칸 plan table test**: undo(`to = cursor-1`)와 redo(`to = cursor+1`) 두 행으로, plan 길이가 각각 1인지
+- [x] **Scramble-only solve test**: 사용자 수 없이 solve → scramble 전체가 역순으로 되감기고 underflow가 없는지
+- [x] 수락 조건 표 test: scramble만 적용된 판과 solve가 scramble 구간까지 내려간 판에서 undo 거절
+- [x] Busy(재생, gesture, scramble 재생, ambient) 중 undo/redo/solve가 거절되는 test
+- [x] **Undo 한 번이 사용자의 원래 수를 재실행하지 않고 정확히 되돌리는 test**
+- [x] **재생 integration test**: plan을 Player에 넘기고 소진할 때까지 돌려 순서·exactly-once commit·최종 cursor·cube 상태를 검사하고, 되감기가 `scramble_end` 경계를 끊김 없이 지나는 것을 명시적으로 assert
+- [x] Phase 9 helper 재사용 test: solve 재생 중 reset → 이후 `advance()`를 여러 번 돌려도 아무 move가 시작되지 않고 최종 cube·cursor가 reset 상태
+- [x] `stop_playback`은 폐기가 아니라 확정임을 구분하는 test (중단 시점의 cursor와 cube 상태가 일치, 이후 redo/undo 재개 가능)
+- [x] `stop_playback`이 scramble·ambient 재생 중에는 no-op인 test (`stoppable` 기본값이 그 둘을 보호하는지)
+- [x] Ambient가 timeline에 흔적을 남기지 않는 test
 
 ### 4. Boundary와 UI
 
-- [ ] C ABI 추가와 generated 산출물, fake fixture 갱신
-- [ ] Undo/Redo/Solve 버튼과 재생 중 stop control
-- [ ] Engine-solved 판별: 완주 관찰 시 `cursor == 0 && scramble_end > 0`이면 solve가 푼 판으로 분류 (보관하는 flag 없음)
-- [ ] **판별 TS unit test**: solve 완주는 기록에서 제외, 사용자가 직접 완성한 판과 solve 중단 후 직접 완성한 판은 정상 기록
-- [ ] Completion 안내 구분
-- [ ] TS unit test: `timeline_cursor` 관찰 기반 상태 전이와 reset/scramble handler의 기준값 갱신, undo로 solved 도달
-- [ ] **Timer 시작 관찰 test**: ready에서 Solve 재생이 timer를 시작하지 않고, 파생 사용자 수를 늘리는 첫 사용자 move만 시작하는지
-- [ ] e2e: scramble → 몇 수 → undo 두 번 → redo → Solve로 완주 → solved 전개도 검증
-- [ ] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
+- [x] C ABI 추가와 generated 산출물, fake fixture 갱신
+- [x] Undo/Redo/Solve 버튼과 재생 중 stop control
+- [x] Engine-solved 판별: 완주 관찰 시 `cursor == 0 && scramble_end > 0`이면 solve가 푼 판으로 분류 (보관하는 flag 없음)
+- [x] **판별 TS unit test**: solve 완주는 기록에서 제외, 사용자가 직접 완성한 판과 solve 중단 후 직접 완성한 판은 정상 기록
+- [x] Completion 안내 구분
+- [x] TS unit test: `timeline_cursor` 관찰 기반 상태 전이와 reset/scramble handler의 기준값 갱신, undo로 solved 도달
+- [x] **Timer 시작 관찰 test**: ready에서 Solve 재생이 timer를 시작하지 않고, 파생 사용자 수를 늘리는 첫 사용자 move만 시작하는지
+- [x] e2e: scramble → 몇 수 → undo 두 번 → redo → Solve로 완주 → solved 전개도 검증
+- [x] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
 
 ## Acceptance criteria
 
@@ -269,8 +269,33 @@ npm --prefix web run build
 
 ## Completion
 
-모든 acceptance criteria와 verification command를 통과한 뒤 다음 작업을 수행합니다.
+모든 acceptance criteria와 verification command를 통과했습니다.
 
-- 이 문서의 status를 `Completed`로 변경합니다.
-- 상위 [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md)의 Phase 11을 완료 처리합니다.
-- 실제 구현과 차이가 생긴 결정을 이 문서에 기록합니다.
+- Native `meson test -C build/native` **17개 전부 통과** (`move history` 하나가 늘었습니다)
+- WASM 재빌드, TypeScript unit **105개**, browser e2e **30개**, production build 통과
+
+## 개정 기록
+
+### 1. 구현하며 달라진 것
+
+**`rewind_plan`/`redo_plan`은 `MoveTimeline`의 멤버가 아니라 `cube`의 자유 함수입니다.** 문서의 선언은 뒤에 `const`가 붙어 멤버를 가리켰지만, 본문은 `timeline_.`을 쓰는 Application의 코드였습니다. 둘 중 어느 쪽으로 두어도 되지만 **known-answer test가 결정했습니다**: 이 phase는 `rewind_plan(0)`이 `[U1⁻¹, U0⁻¹, S1⁻¹, S0⁻¹]`임을, 즉 계획의 *내용*을 고정하라고 요구합니다. Application의 익명 namespace에 두면 그 내용은 engine을 띄우고 재생을 끝까지 돌린 결과로만 관찰되므로, 계획을 만드는 곳의 test가 아니라 재생의 test가 됩니다.
+
+`MoveTimeline.hpp`의 자유 함수는 두 요구를 동시에 만족합니다. `tests/cube`에서 engine 없이 직접 부를 수 있고, 컨테이너는 public 접근자만으로 답할 수 있는 질문을 멤버로 흡수하지 않아 "배열 하나와 인덱스 둘"인 채로 남습니다. Application은 `cube::rewind_plan(timeline, to)`를 부르는 한 줄이고, undo·solve가 인자 하나 차이라는 성질은 그대로입니다.
+
+**완주 판정이 `running`뿐 아니라 `ready`에서도 일어납니다.** 문서는 `running`에서의 판정만 다뤘는데, 그러면 아직 아무 수도 두지 않은 ready 상태에서 Solve를 누른 판이 **끝나지 않습니다** — 큐브는 solved인데 세션은 armed된 timer를 들고 첫 수를 기다리고, 그 다음 사용자 move가 이미 풀린 큐브 위에서 시계를 시작합니다. 그래서 완주를 보는 상태를 `ready`와 `running` 둘로 두었습니다. Timer의 시작 관찰은 문서대로 파생 사용자 수이므로, 이 확장이 "Solve가 timer를 시작하지 않는다"를 깨지 않습니다 — 오히려 그 시나리오를 끝까지 처리합니다.
+
+**Stop control은 숨김과 비활성을 함께 씁니다.** `hidden`만으로는 bootstrap이 시작 시 모든 버튼을 disable해 둔 것을 되돌릴 자리가 없어 버튼이 영영 눌리지 않습니다(e2e가 이것을 잡았습니다). Controller의 `rewinding` 값 하나가 두 속성을 함께 정하므로, 보이는 것과 닿을 수 있는 것이 어긋나지 않습니다. 그 값은 화면에 올릴지만 정하고, 눌렀을 때 무엇이 일어나는지는 여전히 engine의 `stoppable`이 정합니다.
+
+**한 frame의 engine 읽기를 `EngineFrame` 값 하나로 묶었습니다.** `observe(busy)`가 `observe(frame)`이 되었습니다. Session이 cursor·파생 사용자 수·scramble 경계를 모두 보게 되었는데, controller도 같은 값들로 세 버튼의 가부를 정하므로 각자 읽으면 한 frame 안에서 여섯 번의 boundary 호출이 생깁니다. 값 하나를 만들어 session과 controls가 나눠 쓰면 "둘이 다른 순간을 말할 수 없다"는 기존 주석의 약속이 필드가 늘어도 그대로 유지됩니다.
+
+**`CubeEngine`의 uint32 query 검증을 `countFrom` 하나로 모았습니다.** 이 phase가 count 계열 query를 셋 더하면서 `committedMoveCount`의 검증 네 줄이 네 벌이 될 참이었습니다. 이름만 인자로 받는 private helper 하나로 두어 boundary가 거절하는 값의 정의가 한 곳에 있습니다.
+
+### 2. 계획에 없던 것
+
+**Undo·Redo·Solve는 한 줄에 셋, Stop은 그 아래 한 칸입니다.** Side panel은 한 칸 폭의 세로 목록이라 버튼 셋을 그대로 얹으면 Scramble·Reset과 같은 무게로 읽히고 세로도 길어집니다. 셋을 `.game-actions__group` 한 줄로 묶고 글자만 한 단계 줄였습니다(모바일에서는 폭이 남으므로 이웃과 같은 크기로 돌아갑니다). Stop은 그 줄에 넣지 않았습니다 — 기록 위의 어디로 갈지를 고르는 셋과 달리 **가는 일 자체에서 빠져나오는 control**이고, 넷째 칸에 들어가면 폭이 모자라 글자가 잘립니다.
+
+**Ambient 중에도 Undo·Redo·Solve는 눌립니다.** Phase 10이 move 버튼에 대해 정한 것과 같은 이유입니다: 큐브를 바꾸는 명령은 관람을 먼저 끝내고 실행되므로, 버튼을 꺼 두면 "키는 듣는데 버튼은 안 눌리는" 어긋남이 생깁니다. 셋 다 `cubeCommand`를 지나므로 관람은 press 한 번에 끝나고 명령이 그 위에서 실행됩니다.
+
+### 3. 문서로만 남긴 것
+
+**두-기록 모델의 불변식 test가 없다는 사실**은 `tests/cube/MoveTimelineTest.cpp` 첫머리의 주석으로 남겼습니다. 없는 test를 목록에서 확인할 방법은 그것뿐이고, 다음에 이 파일을 여는 사람이 "왜 조합 규칙 test가 없지"를 묻는 자리가 바로 거기이기 때문입니다.

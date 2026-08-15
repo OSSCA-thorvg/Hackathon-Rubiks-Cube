@@ -130,7 +130,7 @@ Scramble의 solved 검사와 R 덧붙임은 Phase 6.5가 이미 걷어냈으므�
 관람에 들어갈 때 cube 상태를 snapshot하고, 큐브를 바꾸는 명령이 들어오면 즉시 멈추면서 그 상태로 되돌립니다. 관람 중의 move를 timeline에 남기면 자리를 비운 시간에 비례해 timeline이 무한히 자라고, 남기지 않으면 상태와 timeline이 어긋나 이후의 되감기와 복원이 전부 틀어집니다. 되돌리면 둘 다 피할 수 있습니다. 보는 방법을 바꾸는 것(canvas drag, 2D/3D, flat style, Home view)은 명령이 아니어서 관람을 끝내지 않고, scramble 재생이 같은 조작에 보이는 반응과 정확히 같습니다 — 시점과 view는 어느 순간에나 사용자의 것이고, 관람은 돌려 가며 볼 값어치가 있는 쪽입니다.
 탭이 보이지 않는 동안에는 frame loop를 돌리지 않아, 쉬는 화면이 배터리를 쓰지 않게 합니다.
 
-## [ ] Phase 11: [Move history, solve, and undo](./11-move-history-solve-and-undo.md)
+## [x] Phase 11: [Move history, solve, and undo](./11-move-history-solve-and-undo.md)
 
 Cube에 적용된 move를 되감을 수 있게 기록하고, 그 위에 solve와 undo를 함께 올립니다.
 기록은 하나의 선형 timeline입니다: scramble 수순과 사용자 move가 한 배열에 이어지고, cursor(적용된 개수)와 scramble_end(scramble 구간의 끝) 두 인덱스가 그 위를 가리킵니다. 큐브에 일어나는 일이 언제나 선형 수순이므로 자료구조도 그 모양을 따르고, "사용자 수는 완성된 scramble 위에서만 존재한다"는 불변식은 지킬 규칙이 아니라 **표현 불가능한 상태**가 됩니다 — cursor가 하나면 뒤의 수가 적용됐는데 앞의 수가 안 된 상태를 적을 방법이 없습니다. 화면과 공유의 두 구간 구분은 scramble_end 하나로 파생됩니다.

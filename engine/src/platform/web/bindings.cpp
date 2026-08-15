@@ -325,6 +325,26 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_flat_style() noexcept
     return static_cast<int>(rubiks::app::flat_style());
 }
 
+/** Chooses which six shades the stickers take; invalid values are rejected. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_palette(int palette) noexcept
+{
+    constexpr int kFirst = static_cast<int>(rubiks::graphics::Palette::Classic);
+    constexpr int kLast =
+        static_cast<int>(rubiks::graphics::Palette::HighContrast);
+    if (palette < kFirst || palette > kLast) return 0;
+
+    return rubiks::app::set_palette(
+               static_cast<rubiks::graphics::Palette>(palette))
+               ? 1
+               : 0;
+}
+
+/** Returns the current graphics::Palette integer. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_palette() noexcept
+{
+    return static_cast<int>(rubiks::app::palette());
+}
+
 /** Restores only the turntable camera. */
 EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_reset_view() noexcept
 {

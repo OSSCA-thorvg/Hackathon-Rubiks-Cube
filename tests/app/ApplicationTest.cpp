@@ -341,3 +341,70 @@ TEST_CASE("the flat view keeps its style whichever regions are on screen")
     REQUIRE_FALSE(rubiks::app::set_view_mode(static_cast<ViewMode>(3)));
     REQUIRE_FALSE(rubiks::app::set_flat_style(static_cast<FlatStyle>(3)));
 }
+
+TEST_CASE("the palette changes nothing but the shades")
+{
+    using rubiks::graphics::Palette;
+
+    const rubiks::test::EngineLifecycle engine(256, 256);
+
+    REQUIRE(rubiks::app::palette() == Palette::Classic);
+
+    REQUIRE(rubiks::app::scramble(11U, 20U));
+    settle();
+
+    // The whole record, read out move by move before the palette moves.
+    const std::uint32_t length = rubiks::app::timeline_length();
+    std::vector<std::uint32_t> record;
+    record.reserve(length);
+    for (std::uint32_t i = 0; i < length; ++i) {
+        record.push_back(rubiks::app::timeline_move(i));
+    }
+    const std::uint32_t cursor = rubiks::app::timeline_cursor();
+    const std::uint32_t scramble_end = rubiks::app::timeline_scramble_end();
+    const std::uint32_t user_moves = rubiks::app::committed_move_count();
+    const bool solved = rubiks::app::is_solved();
+
+    REQUIRE(rubiks::app::set_palette(Palette::HighContrast));
+    REQUIRE(rubiks::app::palette() == Palette::HighContrast);
+
+    REQUIRE(rubiks::app::timeline_length() == length);
+    for (std::uint32_t i = 0; i < length; ++i) {
+        REQUIRE(rubiks::app::timeline_move(i) == record[i]);
+    }
+    REQUIRE(rubiks::app::timeline_cursor() == cursor);
+    REQUIRE(rubiks::app::timeline_scramble_end() == scramble_end);
+    REQUIRE(rubiks::app::committed_move_count() == user_moves);
+    REQUIRE(rubiks::app::is_solved() == solved);
+    REQUIRE(rubiks::app::render());
+
+    // Back again, so the toggle is a toggle rather than a one-way door.
+    REQUIRE(rubiks::app::set_palette(Palette::Classic));
+    REQUIRE(rubiks::app::palette() == Palette::Classic);
+
+    REQUIRE_FALSE(rubiks::app::set_palette(static_cast<Palette>(2)));
+    REQUIRE(rubiks::app::palette() == Palette::Classic);
+}
+
+TEST_CASE("the palette can be changed in the middle of a turn")
+{
+    using rubiks::graphics::Palette;
+
+    const rubiks::test::EngineLifecycle engine(256, 256);
+
+    // A sequence still playing is the busiest the engine gets, and the palette
+    // is the one setting that is not a command to the cube: refusing it here
+    // would mean a person could not read the board while it was moving, which
+    // is exactly when they most want to.
+    REQUIRE(rubiks::app::scramble(7U, 20U));
+    REQUIRE(rubiks::app::is_busy());
+
+    REQUIRE(rubiks::app::set_palette(Palette::HighContrast));
+    REQUIRE(rubiks::app::is_busy());
+    REQUIRE(rubiks::app::render());
+
+    // And the sequence it was changed under still finishes.
+    settle();
+    REQUIRE_FALSE(rubiks::app::is_busy());
+    REQUIRE(rubiks::app::palette() == Palette::HighContrast);
+}

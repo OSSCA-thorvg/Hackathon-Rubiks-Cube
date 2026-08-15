@@ -6,6 +6,7 @@
 #include "cube/CubeMove.hpp"
 #include "cube/Cubie.hpp"
 #include "graphics/Layout.hpp"
+#include "graphics/Palette.hpp"
 
 namespace rubiks::app {
 
@@ -288,6 +289,19 @@ void stop_playback() noexcept;
 
 /** Returns the current flat style, defaulting to Net outside a lifecycle. */
 [[nodiscard]] graphics::FlatStyle flat_style() noexcept;
+
+/**
+ * Chooses which six shades the stickers are drawn in.
+ *
+ * Nothing but the next frame reads it -- not the cube, not the record, not the
+ * clock, not a turn in progress -- so unlike the view commands this one
+ * neither cancels a gesture nor relays out the surface, and is accepted while
+ * the engine is busy.
+ */
+[[nodiscard]] bool set_palette(graphics::Palette palette) noexcept;
+
+/** Returns the current palette, defaulting to Classic outside a lifecycle. */
+[[nodiscard]] graphics::Palette palette() noexcept;
 
 /** Restores the home camera without changing cube or view mode. */
 void reset_view() noexcept;

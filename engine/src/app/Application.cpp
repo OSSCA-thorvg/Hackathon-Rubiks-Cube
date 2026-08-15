@@ -146,6 +146,10 @@ struct ApplicationState {
     graphics::ViewMode view_mode = graphics::ViewMode::Both;
     graphics::FlatStyle flat_style = graphics::FlatStyle::Net;
 
+    // Which six shades the stickers are drawn in. Nothing but drawing reads
+    // it, so it is the one setting a turn in progress can be changed under.
+    graphics::Palette palette = graphics::Palette::Classic;
+
     // Everything that has happened to the cube, as one sequence. How many
     // moves are the user's own is read off it rather than counted alongside
     // it, so there is no second number to keep in step.
@@ -260,6 +264,16 @@ ambient_patterns()
 }
 
 /** Reports whether an enum arriving through a primitive boundary is valid. */
+[[nodiscard]] bool valid_palette(graphics::Palette palette) noexcept
+{
+    switch (palette) {
+        case graphics::Palette::Classic:
+        case graphics::Palette::HighContrast:
+            return true;
+    }
+    return false;
+}
+
 [[nodiscard]] bool valid_view_mode(graphics::ViewMode mode) noexcept
 {
     switch (mode) {
@@ -655,8 +669,9 @@ bool render() noexcept
 
     graphics::RenderScene scene;
     if (shown.cube) {
-        scene = graphics::build_cube_scene(
-                    state->cube_state, state->interaction.active_rotation())  //
+        scene = graphics::build_cube_scene(state->cube_state,
+                                           state->interaction.active_rotation(),
+                                           state->palette)  //
                 | graphics::transform(model)                                  //
                 | graphics::view(camera)                                      //
                 | graphics::project(camera)                                   //
@@ -680,7 +695,7 @@ bool render() noexcept
         graphics::append_scene(
             scene, graphics::build_net_scene(
                        state->cube_state, state->placement.net,
-                       state->interaction.active_rotation()));
+                       state->interaction.active_rotation(), state->palette));
 
         // The rings the pressed cell could turn on, drawn over the stickers
         // so the gesture says where it is about to go before it goes there.
@@ -698,7 +713,7 @@ bool render() noexcept
             scene, graphics::build_rings_scene(
                        state->cube_state, state->placement.rings,
                        state->interaction.active_rotation(),
-                       state->interaction.rings_guides()));
+                       state->interaction.rings_guides(), state->palette));
     }
 
     return state->renderer->render(scene);
@@ -940,6 +955,22 @@ bool set_flat_style(graphics::FlatStyle style) noexcept
 graphics::FlatStyle flat_style() noexcept
 {
     return state ? state->flat_style : graphics::FlatStyle::Net;
+}
+
+bool set_palette(graphics::Palette palette) noexcept
+{
+    if (!state || !valid_palette(palette)) return false;
+
+    // No cancel and no relayout: the palette is read where a sticker becomes
+    // pixels and nowhere else, so a drag keeps its grip and a snap keeps its
+    // angle. The change shows on the next frame that is drawn anyway.
+    state->palette = palette;
+    return true;
+}
+
+graphics::Palette palette() noexcept
+{
+    return state ? state->palette : graphics::Palette::Classic;
 }
 
 void reset_view() noexcept

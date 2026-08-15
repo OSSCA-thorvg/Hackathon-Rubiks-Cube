@@ -32,6 +32,7 @@ Palette는 나머지 둘과 달리 선행 phase에 의존하지 않아 한때 Ph
 - 색 외의 구분 수단(패턴, 기호 오버레이) — sticker quad에 문양을 그리는 일이라 rendering 작업이 별개로 커집니다
 - Haptic feedback
 - 효과음의 종류 선택 — 소리는 하나, on/off만 둡니다
+- **회전하는 동안의 스치는 소리** — [Phase 13.5](./13.5-turn-scrape-sound.md)로 분리했습니다. 이 phase의 효과음은 commit 순간의 클릭 하나이고 engine에 닿지 않는 web 전용 항목인데, 스침은 회전 각도를 읽어야 해서 ABI와 generated 산출물과 fixture를 함께 끌고 옵니다. 셋 중 유일하게 web 안에서 끝나는 항목에 그 무게를 얹지 않습니다. 그쪽이 mute toggle을 이 phase의 것 그대로 씁니다
 
 ## Architecture decisions
 
@@ -59,11 +60,14 @@ thorvg_rubiks_palette() -> int
 
 ### 회전 효과음
 
-- 관찰 대상은 Phase 11의 `timeline_cursor`입니다. 모든 commit이 cursor를 정확히 ±1 움직이므로, `GameController`가 frame마다 읽는 값이 이전과 다르면 그 frame에 commit이 있었던 것입니다 — 완료 판정이 쓰는 관찰과 같은 것이라 소리를 낼 지점을 새로 만들지 않습니다. **소리는 cursor가 변한 frame에 한 번입니다.** 한 관찰 창(≤16ms)에 commit이 둘 들어오는 극단적 입력에서도 클릭 하나로 들리는 것이 자연스러우므로, 개수를 세는 계약은 두지 않습니다.
-- Reset·scramble은 GameController 자신이 부르는 명령이라 그 handler가 기준값을 갱신해 소리가 새지 않고(Phase 11), 복원은 controller 부착 전에 끝나 관찰 창 밖입니다.
+- 관찰 대상은 Phase 11의 `timeline_cursor`입니다. 모든 commit이 cursor를 정확히 ±1 움직이므로, frame마다 읽는 값이 이전과 다르면 그 frame에 commit이 있었던 것입니다 — 완료 판정이 쓰는 관찰과 같은 것이라 소리를 낼 지점을 새로 만들지 않습니다. **소리는 cursor가 변한 frame에 한 번입니다.** 한 관찰 창(≤16ms)에 commit이 둘 들어오는 극단적 입력에서도 클릭 하나로 들리는 것이 자연스러우므로, 개수를 세는 계약은 두지 않습니다.
+- **그 관찰은 `GameController`가 아니라 `GameSession.observe()`에 이미 있습니다.** 완료 판정이 쓰는 `committed`가 정확히 이 값이므로, 소리는 그 자리에 붙는 한 줄이고 새 비교도 새 기준값도 생기지 않습니다. Session의 클래스 주석이 "the move log, the sound, the records and the history all watch a solve rather than a button"으로 이 자리를 이미 지목하고 있습니다. 초안은 이것을 controller의 관찰이라고 적었으나, 그대로 구현하면 같은 비교가 두 곳에 놓이고 아래의 기준값 갱신을 controller가 다시 만들게 됩니다.
+- Reset·scramble에서 소리가 새지 않는 것도 그래서 공짜입니다. `restart()`와 `beginScramble()`이 이미 `takeBaseline()`으로 기준값을 갱신하므로(Phase 11), 이 phase가 더할 갱신이 없습니다. 복원은 controller 부착 전에 끝나 관찰 창 밖입니다.
 - Scramble과 되감기 재생의 commit도 cursor를 움직이므로 재생 연출에 소리가 함께 붙습니다. Ambient만 cursor를 움직이지 않아 자연히 무음입니다 — 화면 보호기에 맞는 결과이고, web이 ambient 여부를 조회해 분기할 필요가 없습니다.
 - 소리는 WebAudio oscillator + gain envelope로 합성한 수십 ms의 클릭입니다. 외부 asset이 없어 빌드와 배포가 바뀌지 않습니다.
-- `AudioContext`는 첫 사용자 gesture에서 생성/resume합니다(autoplay 정책). Mute toggle은 기본 off(소리 남)로 두되, context를 만들 수 없는 환경에서는 조용히 무음으로 강등합니다.
+- 소리를 내는 쪽은 `GameSessionOptions`에 주입하는 port 하나입니다 — `TimerEnvironment`가 이미 같은 모양으로 들어오고 있으므로 관례가 그대로 있습니다. jsdom에는 `AudioContext`가 없으므로, 이 seam이 unit test가 재생 횟수를 셀 수 있게 하는 유일한 수단이기도 합니다.
+- **`AudioContext`는 window의 one-shot gesture 리스너에서 생성/resume하고 리스너는 스스로 떨어집니다.** 첫 commit에서 lazy하게 만드는 방식은 동작하지 않습니다: commit은 frame 안에서 관찰되므로 그 호출은 gesture의 콜스택 밖이고, autoplay 정책은 생성·resume이 gesture 콜스택 안에서 일어나기를 요구합니다. Mute toggle은 기본 off(소리 남)라 그 버튼을 첫 gesture로 삼을 수도 없습니다.
+- Context를 만들 수 없거나 resume이 거절되면 조용히 무음으로 강등합니다 — 예외를 밖으로 내보내지 않습니다. 소리는 부가 기능이라 실패가 앱 오류로 승격되지 않습니다.
 - 빠른 재생에서 앞 소리의 envelope가 끝나기 전에 다음 소리가 시작될 수 있으므로, 겹쳐도 클리핑하지 않도록 gain을 제한합니다.
 
 ### Animation 속도
@@ -93,9 +97,9 @@ thorvg_rubiks_set_speed_scale(scale: float) -> int
 
 ### 2. 효과음
 
-- [ ] WebAudio 합성 클릭과 gain 제한 구현 (injectable audio seam)
-- [ ] 첫 gesture에서의 context 생성/resume과 실패 시 무음 강등
-- [ ] `timeline_cursor` 관찰 연결과 mute toggle
+- [ ] WebAudio 합성 클릭과 gain 제한 구현, `GameSessionOptions`의 port로 주입
+- [ ] One-shot gesture 리스너에서의 context 생성/resume과 실패 시 무음 강등
+- [ ] `GameSession.observe()`의 기존 `committed`에 연결하고 mute toggle 추가
 - [ ] TS unit test: cursor가 변한 frame마다 한 번 재생, reset·ambient에서 무음, mute 시 무음, context 부재 안전 (복원 무음은 복원이 생기는 Phase 14에서 검증)
 
 ### 3. 속도

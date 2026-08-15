@@ -156,8 +156,20 @@ C ABI는 primitive type만 사용하므로 engine은 layer mask와 회전량을 
 
 보이고 들리는 방식을 사용자가 고를 수 있게 합니다. 서로 독립적인 세 옵션이 하나의 옵션 면에 함께 놓입니다.
 적록색약에서 구분되는 대체 palette를 더하고 두 벌 중 하나를 고르게 합니다. 검증은 명도 대비가 아니라 deuteranopia 변환을 거친 뒤의 색 거리로 합니다. 명도만 보면 두 색이 색약에서 무너져도 test가 통과해, 목적 자체를 확인하지 못하기 때문입니다. Palette는 `to_color` 한 곳에 모여 있고 cube·interaction·history 어디에도 닿지 않아 나머지 둘과 달리 의존이 없습니다 — 한때 Phase 7.5로 앞당겨 두었으나, 그러면 toggle을 단독으로 붙였다가 이 phase의 옵션 면으로 옮기게 되므로 UI를 한 번만 만들도록 되돌렸습니다. 임의 색 지정은 기각했습니다: 색 거리 test가 성립하지 않게 되고, 저장 계층이 없어 매번 사라지며, 손으로 설정하는 접근성은 검증된 preset보다 나쁩니다.
-회전이 commit되는 순간의 효과음을 더합니다. 모든 commit이 timeline cursor를 정확히 ±1 움직이므로, game controller가 완료 판정에 쓰는 cursor 관찰이 곧 소리를 낼 지점이고 별도의 commit counter가 없습니다. 소리는 cursor가 변한 frame에 한 번입니다.
+회전이 commit되는 순간의 효과음을 더합니다. 모든 commit이 timeline cursor를 정확히 ±1 움직이므로, `GameSession`이 완료 판정에 쓰는 cursor 관찰이 그대로 소리를 낼 지점이고 별도의 commit counter도 새 기준값도 없습니다 — reset·scramble에서 소리가 새지 않는 것도 그 기준값 갱신이 이미 거기 있어서 공짜입니다. 소리는 cursor가 변한 frame에 한 번입니다. `AudioContext`는 첫 gesture의 콜스택 안에서 만들어야 하므로 one-shot 리스너로 세웁니다 — commit은 frame 안에서 관찰되어 gesture 밖이라, 첫 소리에서 lazy하게 만드는 방식은 autoplay 정책에 걸립니다.
 Animation 속도를 조절할 수 있게 합니다. Phase 9가 tempo를 `start_move`의 인자로 모아 두므로 그 인자에 배율을 곱하는 일이고, 사용자 snap과 scramble, Phase 11의 되감기 재생이 슬라이더 하나를 함께 씁니다.
+
+## [ ] Phase 13.5: [Turn scrape sound](./13.5-turn-scrape-sound.md)
+
+레이어가 도는 동안 큐비가 스치는 소리를 더해, Phase 13의 클릭이 채우지 못하는 구간을 채웁니다.
+값어치의 대부분은 drag에 있습니다 — 클릭은 손을 뗀 뒤에야 울리지만 스침은 레이어를 붙잡고 미는 동안 손의 속도를 따라가므로, 클릭이 원리적으로 줄 수 없는 감각입니다. 재생 연출에 붙는 소리는 그 부수 효과입니다.
+Phase 13에서 떼어낸 이유는 비용의 종류가 다르기 때문입니다. 클릭은 engine에 한 줄도 닿지 않는 web 전용 항목인데, 스침은 회전 각도를 읽어야 해서 ABI와 generated 산출물과 fixture를 함께 끌고 옵니다.
+각도 자체는 `InteractionController::active_rotation()`이 이미 frame마다 내놓고 있고 drag·snap·재생·관람이 전부 그 한 값으로 들어오므로, engine이 새로 계산하는 것은 없고 내보내기만 합니다. 각속도가 아니라 각도를 내보내는 것은 web이 이미 frame마다 관찰을 하고 있어 차분이 공짜인 반면, 속도는 engine에 dt 계약과 frame 간 상태를 새로 요구하기 때문입니다.
+각도는 commit에서 0으로 돌아가므로 그 frame의 차분은 회전이 아니라 리셋인데, 차분 크기로는 둘을 가를 수 없습니다 — 되감기 tempo 120ms/quarter에 Phase 13의 4× 배율이 걸리면 정상 회전이 60Hz에서 frame당 약 50°라 리셋(최대 90°)과 겹칩니다. 그래서 Phase 13이 클릭을 위해 이미 보고 있는 `timeline_cursor` 변화를 그대로 써서 그 frame만 정확히 걸러냅니다. 누적 회전량을 engine이 들고 내보내는 대안은 같은 답을 위해 상태를 하나 더 만드는 일이라 기각했습니다.
+소리는 oscillator가 아니라 루프하는 noise를 bandpass에 통과시키고 gain만 각속도로 움직이는 방식입니다. 회전마다 소스를 start/stop하면 그 지점마다 딱딱거려 클릭과 섞입니다.
+Ambient 무음은 여기서 공짜가 아닙니다. 클릭은 관람이 timeline을 건드리지 않아 저절로 조용했지만 각도는 관람 중에도 움직이므로, `isAmbient()` 분기와 그것을 고정하는 test 하나가 이 phase의 비용입니다. 관람에 소리를 넣는 쪽은 Phase 10이 그것을 화면 보호기로 규정했고 on/off가 하나뿐이라 "볼 때만 조용히"를 표현할 수 없어 기각했습니다.
+각속도를 frame에서만 갱신하므로 frame loop가 멈춘 자리에 gain이 얼어붙으면 배경에서 소리가 남습니다. Audio context의 suspend/resume을 `AppLifecycle`이 이미 들고 있는 loop 수명과 `visibilitychange`에 묶어, 쉬는 화면이 소리도 audio thread도 쓰지 않게 합니다.
+Mute는 Phase 13의 것 하나를 공유합니다. 소리가 둘이 되어도 켜고 끄는 것은 하나입니다.
 
 ## [ ] Phase 14: [Sharing and records](./14-sharing-and-records.md)
 

@@ -168,7 +168,7 @@ math::Quaternion layer_rotation(Axis axis, float degrees) noexcept
                                             -degrees * kPi / 180.0f);
 }
 
-WorldScene build_cube_scene(const cube::CubeState& state)
+WorldScene build_cube_scene(const cube::CubeState& state, Palette palette)
 {
     const int size = state.size();
     const float half_extent = sticker_half_extent(size);
@@ -191,7 +191,7 @@ WorldScene build_cube_scene(const cube::CubeState& state)
                         continue;
                     }
                     append_sticker(scene, center, half_extent, face,
-                                   to_color(cubie.sticker(face)));
+                                   to_color(cubie.sticker(face), palette));
                 }
             }
         }
@@ -200,9 +200,10 @@ WorldScene build_cube_scene(const cube::CubeState& state)
 }
 
 WorldScene build_cube_scene(const cube::CubeState& state,
-                            const std::optional<ActiveRotation>& active)
+                            const std::optional<ActiveRotation>& active,
+                            Palette palette)
 {
-    if (!active) return build_cube_scene(state);
+    if (!active) return build_cube_scene(state, palette);
 
     const int size = state.size();
     const float half_extent = sticker_half_extent(size);
@@ -240,7 +241,8 @@ WorldScene build_cube_scene(const cube::CubeState& state,
                         outer_layer(face, size)) {
                         continue;
                     }
-                    emit(center, face, to_color(cubie.sticker(face)), turning);
+                    emit(center, face, to_color(cubie.sticker(face), palette),
+                         turning);
                 }
 
                 // A cut surface appears wherever a turning layer meets a still

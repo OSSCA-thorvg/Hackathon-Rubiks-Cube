@@ -480,14 +480,16 @@ std::optional<float> rings_slot_at(Axis axis, int layer, const Rect& rect,
     return 0.0f;
 }
 
-RenderScene build_rings_scene(const cube::CubeState& state, const Rect& rect)
+RenderScene build_rings_scene(const cube::CubeState& state, const Rect& rect,
+                              Palette palette)
 {
-    return build_rings_scene(state, rect, std::nullopt);
+    return build_rings_scene(state, rect, std::nullopt, {}, palette);
 }
 
 RenderScene build_rings_scene(const cube::CubeState& state, const Rect& rect,
                               const std::optional<ActiveRotation>& active,
-                              const std::vector<RingsGuide>& guides)
+                              const std::vector<RingsGuide>& guides,
+                              Palette palette)
 {
     const int size = state.size();
     const RingsMetrics metrics = rings_metrics(rect);
@@ -557,7 +559,8 @@ RenderScene build_rings_scene(const cube::CubeState& state, const Rect& rect,
                           std::vector<RenderFace>& into) {
         RenderFace quad = sticker_quad(at, metrics.sticker);
         quad.color = to_color(
-            state.at(sticker.x, sticker.y, sticker.z).sticker(sticker.face));
+            state.at(sticker.x, sticker.y, sticker.z).sticker(sticker.face),
+            palette);
         into.push_back(quad);
     };
 

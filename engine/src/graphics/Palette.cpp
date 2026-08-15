@@ -2,7 +2,9 @@
 
 namespace rubiks::graphics {
 
-Color to_color(cube::FaceColor color) noexcept
+namespace {
+
+Color classic(cube::FaceColor color) noexcept
 {
     switch (color) {
         case cube::FaceColor::Red:
@@ -19,6 +21,62 @@ Color to_color(cube::FaceColor color) noexcept
             break;
     }
     return Color{0, 70, 173, 255};
+}
+
+/**
+ * The same six faces, chosen so no pair collapses for any dichromat.
+ *
+ * Picked by measuring rather than by eye: each candidate set was put through
+ * the protanopia, deuteranopia and tritanopia projections and scored by the
+ * smallest CIELAB distance among its fifteen pairs under *all three*. The
+ * standard cube scores 12 that way and this scores 40, and the test beside
+ * these values fixes that property rather than the numbers themselves.
+ *
+ * All three had to be scored together because the first two lose the opposite
+ * axis to the third. A set spread along blue-yellow reads beautifully to a
+ * deuteranope and collapses for a tritanope, and the first draft of this
+ * palette did exactly that -- it beat the standard cube for red-green
+ * deficiencies and came out *worse* than it for blue-yellow. The one
+ * dimension no deficiency takes away is lightness, so the set is first of all
+ * a ladder of it, and hue does the separating that is left over.
+ *
+ * Reading the ladder from the top: White, then Yellow as an amber and Green as
+ * a turquoise near each other in lightness but at opposite ends of what a
+ * dichromat still sees, then Orange as a dull plum, then Red and Blue at the
+ * bottom, apart because no deficiency touches how dark a colour is.
+ *
+ * Two things the measurement contradicted are worth keeping written down. Red
+ * and Orange are the pair a sighted person assumes is the problem, but on the
+ * standard cube Yellow/Orange collapses first. And protanopia needs no
+ * separate design: it and deuteranopia lose the same axis, so the set that
+ * clears one clears the other -- it is tritanopia, which nobody expects,
+ * that pulls against them.
+ */
+Color high_contrast(cube::FaceColor color) noexcept
+{
+    switch (color) {
+        case cube::FaceColor::Red:
+            return Color{120, 0, 0, 255};
+        case cube::FaceColor::Orange:
+            return Color{128, 64, 107, 255};
+        case cube::FaceColor::White:
+            return Color{255, 255, 255, 255};
+        case cube::FaceColor::Yellow:
+            return Color{240, 153, 10, 255};
+        case cube::FaceColor::Green:
+            return Color{56, 224, 208, 255};
+        case cube::FaceColor::Blue:
+            break;
+    }
+    return Color{0, 0, 123, 255};
+}
+
+}  // namespace
+
+Color to_color(cube::FaceColor color, Palette palette) noexcept
+{
+    return palette == Palette::HighContrast ? high_contrast(color)
+                                            : classic(color);
 }
 
 Color guide_color(cube::Axis axis) noexcept

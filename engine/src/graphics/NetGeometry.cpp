@@ -87,10 +87,12 @@ struct NetMetrics {
 [[nodiscard]] RenderFace resting_quad(const cube::CubeState& state,
                                       const NetCell& cell, const Vec2& origin,
                                       int col, int row,
-                                      const NetMetrics& metrics)
+                                      const NetMetrics& metrics,
+                                      Palette palette)
 {
     RenderFace quad = sticker_quad(origin, col, row, metrics);
-    quad.color = to_color(state.at(cell.x, cell.y, cell.z).sticker(cell.face));
+    quad.color =
+        to_color(state.at(cell.x, cell.y, cell.z).sticker(cell.face), palette);
     return quad;
 }
 
@@ -451,7 +453,8 @@ RenderScene build_net_guides(const std::vector<NetGuide>& guides,
     return scene;
 }
 
-RenderScene build_net_scene(const cube::CubeState& state, const Rect& rect)
+RenderScene build_net_scene(const cube::CubeState& state, const Rect& rect,
+                            Palette palette)
 {
     const int size = state.size();
     const NetMetrics metrics = net_metrics(rect, size);
@@ -465,8 +468,8 @@ RenderScene build_net_scene(const cube::CubeState& state, const Rect& rect)
         for (int row = 0; row < size; ++row) {
             for (int col = 0; col < size; ++col) {
                 const auto source = net_cell(face, col, row, size);
-                scene.faces.push_back(
-                    resting_quad(state, source, origin, col, row, metrics));
+                scene.faces.push_back(resting_quad(state, source, origin, col,
+                                                   row, metrics, palette));
             }
         }
     }
@@ -474,9 +477,10 @@ RenderScene build_net_scene(const cube::CubeState& state, const Rect& rect)
 }
 
 RenderScene build_net_scene(const cube::CubeState& state, const Rect& rect,
-                            const std::optional<ActiveRotation>& active)
+                            const std::optional<ActiveRotation>& active,
+                            Palette palette)
 {
-    if (!active) return build_net_scene(state, rect);
+    if (!active) return build_net_scene(state, rect, palette);
 
     const int size = state.size();
     const NetMetrics metrics = net_metrics(rect, size);
@@ -546,8 +550,8 @@ RenderScene build_net_scene(const cube::CubeState& state, const Rect& rect,
                     in_layers(active->layers,
                               coordinate_on(active->axis, source));
 
-                RenderFace quad =
-                    resting_quad(state, source, origin, col, row, metrics);
+                RenderFace quad = resting_quad(state, source, origin, col, row,
+                                               metrics, palette);
 
                 // The turn carries it away, or spins it in place, or leaves it
                 // alone. Every cell is exactly one of the three.

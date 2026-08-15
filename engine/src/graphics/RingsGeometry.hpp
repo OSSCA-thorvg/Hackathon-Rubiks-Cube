@@ -7,6 +7,7 @@
 #include "cube/CubeState.hpp"
 #include "cube/Surface.hpp"
 #include "graphics/ActiveRotation.hpp"
+#include "graphics/Palette.hpp"
 #include "graphics/Rect.hpp"
 #include "graphics/RenderScene.hpp"
 #include "graphics/SlotRing.hpp"
@@ -155,7 +156,8 @@ struct RingsGuide {
 
 /** Builds the ring diagram as screen-space quads and strokes filling `rect`. */
 [[nodiscard]] RenderScene build_rings_scene(const cube::CubeState& state,
-                                            const Rect& rect);
+                                            const Rect& rect,
+                                            Palette palette = Palette::Classic);
 
 /**
  * The same with a turn in progress drawn into it.
@@ -168,6 +170,7 @@ struct RingsGuide {
 [[nodiscard]] RenderScene build_rings_scene(
     const cube::CubeState& state, const Rect& rect,
     const std::optional<ActiveRotation>& active,
-    const std::vector<RingsGuide>& guides = {});
+    const std::vector<RingsGuide>& guides = {},
+    Palette palette = Palette::Classic);
 
 }  // namespace rubiks::graphics

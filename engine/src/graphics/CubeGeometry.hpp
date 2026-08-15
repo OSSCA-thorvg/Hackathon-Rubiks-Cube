@@ -6,6 +6,7 @@
 #include "cube/Cubie.hpp"
 #include "graphics/ActiveRotation.hpp"
 #include "graphics/Color.hpp"
+#include "graphics/Palette.hpp"
 #include "graphics/Scene.hpp"
 #include "math/Quaternion.hpp"
 #include "math/Types.hpp"
@@ -66,7 +67,8 @@ inline constexpr Color kBodyColor{70, 74, 82, 255};
  * visible exactly when that cubie sits in the outermost layer along the
  * face's axis. At N = 3 that is 54 quads, of which the fixed camera keeps 27.
  */
-[[nodiscard]] WorldScene build_cube_scene(const cube::CubeState& state);
+[[nodiscard]] WorldScene build_cube_scene(const cube::CubeState& state,
+                                          Palette palette = Palette::Classic);
 
 /**
  * Builds the scene for a cube state with a layer turn in progress.
@@ -81,6 +83,7 @@ inline constexpr Color kBodyColor{70, 74, 82, 255};
  */
 [[nodiscard]] WorldScene build_cube_scene(
     const cube::CubeState& state,
-    const std::optional<ActiveRotation>& active);
+    const std::optional<ActiveRotation>& active,
+    Palette palette = Palette::Classic);
 
 }  // namespace rubiks::graphics

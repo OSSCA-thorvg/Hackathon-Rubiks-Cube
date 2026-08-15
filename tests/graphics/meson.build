@@ -30,6 +30,14 @@ transient_test = executable(
 
 test('transient rotation', transient_test)
 
+palette_test = executable(
+  'palette-test',
+  files('PaletteTest.cpp'),
+  dependencies: [graphics_dep, catch2_dep],
+)
+
+test('palette', palette_test)
+
 rings_test = executable(
   'rings-test',
   files('RingsTest.cpp'),

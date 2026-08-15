@@ -9,6 +9,7 @@
 #include "cube/Cubie.hpp"
 #include "cube/Surface.hpp"
 #include "graphics/ActiveRotation.hpp"
+#include "graphics/Palette.hpp"
 #include "graphics/Rect.hpp"
 #include "graphics/RenderScene.hpp"
 
@@ -172,7 +173,8 @@ struct NetTurn {
 
 /** Builds the net as screen-space quads filling `rect`. */
 [[nodiscard]] RenderScene build_net_scene(const cube::CubeState& state,
-                                          const Rect& rect);
+                                          const Rect& rect,
+                                          Palette palette = Palette::Classic);
 
 /**
  * The same with a turn in progress drawn into it.
@@ -183,6 +185,7 @@ struct NetTurn {
  */
 [[nodiscard]] RenderScene build_net_scene(
     const cube::CubeState& state, const Rect& rect,
-    const std::optional<ActiveRotation>& active);
+    const std::optional<ActiveRotation>& active,
+    Palette palette = Palette::Classic);
 
 }  // namespace rubiks::graphics

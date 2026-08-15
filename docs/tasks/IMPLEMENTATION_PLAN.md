@@ -171,7 +171,7 @@ Ambient 무음은 여기서 공짜가 아닙니다. 클릭은 관람이 timeline
 각속도를 frame에서만 갱신하므로 frame loop가 멈춘 자리에 gain이 얼어붙으면 배경에서 소리가 남습니다. Audio context의 suspend/resume을 `AppLifecycle`이 이미 들고 있는 loop 수명과 `visibilitychange`에 묶어, 쉬는 화면이 소리도 audio thread도 쓰지 않게 합니다.
 Mute는 Phase 13의 것 하나를 공유합니다. 소리가 둘이 되어도 켜고 끄는 것은 하나입니다.
 
-## [ ] Phase 14: [Sharing and records](./14-sharing-and-records.md)
+## [x] Phase 14: [Sharing and records](./14-sharing-and-records.md)
 
 현재 상태의 URL 공유와, 세션 안에서만 유지되는 가벼운 기록을 더합니다.
 이 phase는 의도적으로 아무것도 저장하지 않습니다. 원래 계획했던 localStorage 저장 계층(세션 복원, 기록 영속화, 옵션 저장)은 뺐습니다. Timer를 직렬화하지 않는 이상 복원된 세션은 어차피 idle이라 지켜지는 것이 만지던 배열 하나뿐인데, 그 하나를 위해 자동 저장과 redo tail 보존, 시작 순서 계약이 전부 필요해지므로 비용이 가치를 넘기 때문입니다. Reload는 언제나 새 시작입니다.

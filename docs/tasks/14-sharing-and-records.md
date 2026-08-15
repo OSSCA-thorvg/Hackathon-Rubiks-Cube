@@ -2,7 +2,7 @@
 
 ## Status
 
-`Not started`
+`Completed`
 
 ## Objective
 
@@ -112,33 +112,33 @@ thorvg_rubiks_restore_apply(scramble_count: uint32, user_count: uint32) -> int
 
 ### 1. 직렬화와 복원 ABI
 
-- [ ] Packed payload 인코딩/디코딩과 전체 선검증 (TS): 길이 상한, trailing bytes, version, packed 형식
-- [ ] `restore_buffer`/`restore_apply` 구현: 상한 검증과 buffer 확보, apply의 일괄 검증, `begin_scramble` + `step(Advance)`/`record`로 timeline 구성과 cube 적용 (사용자 수는 timeline에서 파생되므로 따로 세울 counter가 없습니다)
-- [ ] 왕복 test: 세션 직렬화 → 복원 → cube 상태 동치 + 적용된 두 구간 동치 (전체 기록 동치가 아님)
-- [ ] **통합 test: 부분 solve → 사용자 move로 scramble 절단 → 공유 → 복원** (정상 조작으로 닿는 경로이고, 절단된 scramble이 그대로 실려 복원되는지 확인)
-- [ ] Redo tail이 있는 세션을 공유하면 받는 쪽에 tail이 없고 undo/solve는 정상인 test
-- [ ] `restore_apply`의 일괄 검증 test: 두 구간 합과 선언 개수의 불일치, 그리고 개수는 맞지만 그중 하나가 무효인 payload가 **전체** 거절되는지
-- [ ] 거절 시 TS가 `reset_cube()`로 초기 상태에서 시작하고 알림을 한 번 내는 test (같은 instance 재시도 계약 없음)
-- [ ] 복원 직후의 사용자 수가 payload의 사용자 구간 길이와 일치하는 test (파생값이라 초기화 코드가 없음)
-- [ ] **Scramble 없는 세션(user-only)의 공유 왕복 test**: `scramble_count = 0, user_count > 0` payload가 정상 복원되는지
-- [ ] 빈 timeline(`cursor == 0`)에서 공유 버튼이 비활성이고, `scramble_count + user_count == 0` payload가 decode에서 거절되는 test
-- [ ] **Multi-layer mask 거절 test**: 단일 layer가 아닌 mask를 담은 payload가 TS decode와 `restore_apply()` 양쪽에서 거절되는지 (Phase 12의 "표기 null은 도달 불가" 전제 보호)
-- [ ] **무효 axis code(`3`) 거절 test**: TS decode와 `restore_apply()` 양쪽 (2비트 필드가 만들 수 있는 유일한 무효 값)
-- [ ] Decode 거절 test: 잘린 payload, trailing bytes, 잘못된 base64url, 알 수 없는 version, 길이 상한 초과
-- [ ] v1 payload known-answer fixture 영구 test — 인코딩 문자열만이 아니라 `version → scramble_count → scramble moves → user_count → user moves` byte layout을 함께 드러내, seed가 다시 들어오는 회귀를 직접 잡게 합니다
-- [ ] Scramble이 미완성인 상태에서 공유 버튼이 비활성인 test
+- [x] Packed payload 인코딩/디코딩과 전체 선검증 (TS): 길이 상한, trailing bytes, version, packed 형식
+- [x] `restore_buffer`/`restore_apply` 구현: 상한 검증과 buffer 확보, apply의 일괄 검증, `begin_scramble` + `step(Advance)`/`record`로 timeline 구성과 cube 적용 (사용자 수는 timeline에서 파생되므로 따로 세울 counter가 없습니다)
+- [x] 왕복 test: 세션 직렬화 → 복원 → cube 상태 동치 + 적용된 두 구간 동치 (전체 기록 동치가 아님)
+- [x] **통합 test: 부분 solve → 사용자 move로 scramble 절단 → 공유 → 복원** (정상 조작으로 닿는 경로이고, 절단된 scramble이 그대로 실려 복원되는지 확인)
+- [x] Redo tail이 있는 세션을 공유하면 받는 쪽에 tail이 없고 undo/solve는 정상인 test
+- [x] `restore_apply`의 일괄 검증 test: 두 구간 합과 선언 개수의 불일치, 그리고 개수는 맞지만 그중 하나가 무효인 payload가 **전체** 거절되는지
+- [x] 거절 시 TS가 `reset_cube()`로 초기 상태에서 시작하고 알림을 한 번 내는 test (같은 instance 재시도 계약 없음)
+- [x] 복원 직후의 사용자 수가 payload의 사용자 구간 길이와 일치하는 test (파생값이라 초기화 코드가 없음)
+- [x] **Scramble 없는 세션(user-only)의 공유 왕복 test**: `scramble_count = 0, user_count > 0` payload가 정상 복원되는지
+- [x] 빈 timeline(`cursor == 0`)에서 공유 버튼이 비활성이고, `scramble_count + user_count == 0` payload가 decode에서 거절되는 test
+- [x] **Multi-layer mask 거절 test**: 단일 layer가 아닌 mask를 담은 payload가 TS decode와 `restore_apply()` 양쪽에서 거절되는지 (Phase 12의 "표기 null은 도달 불가" 전제 보호)
+- [x] **무효 axis code(`3`) 거절 test**: TS decode와 `restore_apply()` 양쪽 (2비트 필드가 만들 수 있는 유일한 무효 값)
+- [x] Decode 거절 test: 잘린 payload, trailing bytes, 잘못된 base64url, 알 수 없는 version, 길이 상한 초과
+- [x] v1 payload known-answer fixture 영구 test — 인코딩 문자열만이 아니라 `version → scramble_count → scramble moves → user_count → user moves` byte layout을 함께 드러내, seed가 다시 들어오는 회귀를 직접 잡게 합니다
+- [x] Scramble이 미완성인 상태에서 공유 버튼이 비활성인 test
 
 ### 2. URL과 기록
 
-- [ ] Fragment 파싱, load 시 복원, 성공·실패와 무관한 fragment 제거
-- [ ] 손상된 fragment로 열었다가 reload하면 오류가 반복되지 않고 새 시작인 test
-- [ ] 공유 버튼과 clipboard 복사, `role="status"` 알림, busy 중 비활성
-- [ ] 세션 기록 메모리 보관과 HUD 표시, 새 PB 안내
-- [ ] TS unit test: 기록 자격(solve가 푼 판 제외, undo 포함), 공유로 연 세션은 완주해도 기록 없음
-- [ ] 복원이 효과음·completion·timer 전이를 발생시키지 않는 test (부착 시 기준 cursor 초기화와 Phase 13의 무음 판정을 여기서 함께 검증)
-- [ ] 복원된 세션의 move log가 live 세션과 같은 두 구간 표시를 내는 test (Phase 12의 목록 렌더링)
-- [ ] e2e: 몇 수 두고 공유 URL을 새 컨텍스트에서 열어 같은 전개도와 undo/redo/solve 동작, 손상 URL이 초기 상태로 강등, reload 후 깨끗한 새 시작
-- [ ] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
+- [x] Fragment 파싱, load 시 복원, 성공·실패와 무관한 fragment 제거
+- [x] 손상된 fragment로 열었다가 reload하면 오류가 반복되지 않고 새 시작인 test
+- [x] 공유 버튼과 clipboard 복사, `role="status"` 알림, busy 중 비활성
+- [x] 세션 기록 메모리 보관과 HUD 표시, 새 PB 안내
+- [x] TS unit test: 기록 자격(solve가 푼 판 제외, undo 포함), 공유로 연 세션은 완주해도 기록 없음
+- [x] 복원이 효과음·completion·timer 전이를 발생시키지 않는 test (부착 시 기준 cursor 초기화와 Phase 13의 무음 판정을 여기서 함께 검증)
+- [x] 복원된 세션의 move log가 live 세션과 같은 두 구간 표시를 내는 test (Phase 12의 목록 렌더링)
+- [x] e2e: 몇 수 두고 공유 URL을 새 컨텍스트에서 열어 같은 전개도와 undo/redo/solve 동작, 손상 URL이 초기 상태로 강등, reload 후 깨끗한 새 시작
+- [x] Native, WASM, TypeScript unit, e2e와 production build 전체 실행
 
 ## Acceptance criteria
 
@@ -170,8 +170,16 @@ npm --prefix web run build
 
 ## Completion
 
-모든 acceptance criteria와 verification command를 통과한 뒤 다음 작업을 수행합니다.
+모든 acceptance criteria와 verification command를 통과했습니다.
 
-- 이 문서의 status를 `Completed`로 변경합니다.
-- 상위 [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md)의 Phase 14를 완료 처리합니다.
-- 실제 구현과 차이가 생긴 결정을 이 문서에 기록합니다.
+### 구현에서 결정되거나 달라진 것
+
+- **`kMaxRestoreMoves = 4096`.** 문서가 "개수 상한"만 말하고 값을 정하지 않았습니다. 세션이 닿는 크기(scramble 100 + 손으로 푸는 수십 수)보다 훨씬 크면서 링크가 여전히 링크일 수 있는 값으로 골랐습니다 — 이 상한에서 fragment는 약 21,900자입니다. TS의 `MAX_ENCODED_LENGTH`는 이 값에서 payload 최대 바이트를 거쳐 파생되므로, 두 쪽의 상한이 따로 놀 수 없습니다.
+- **공유 가능 조건은 `busy && !watching`입니다.** 문서는 "busy 중에는 비활성"과 "관람 중의 press는 먼저 관람을 끝낸다"를 둘 다 적었는데, 관람은 engine을 busy로 만들므로 둘이 충돌합니다. Phase 10이 move 버튼에 이미 내린 판정을 그대로 따랐습니다: 관람은 timeline을 건드리지 않으므로 공유할 상태가 그대로 있고, press는 관람을 끝낸 뒤 실제 세션을 읽습니다. 재생 중 비활성은 그대로입니다.
+- **`cube::unpack()`을 `PackedMove.hpp`에 추가했습니다.** 문서는 `restore_apply`가 axis·turns·mask를 검사하라고만 했는데, 그 검사는 "word를 move로 읽는 일"과 같은 것이라 packing 옆이 자리입니다. `pack`의 역이되 정규화까지는 되돌리지 않습니다(`-2`는 `+2`로 읽힙니다) — 밖에서 오는 word는 재생할 기록이 아니라 만들 move이므로 그것이 맞습니다. 단일 layer 제한은 v1 payload의 규칙이라 `Application`에 남겼습니다.
+- **TS의 `unpackMove`가 axis code를 검증하게 됐습니다.** 이전에는 2비트를 `MoveAxis`로 그냥 cast했고, 그래서 `moveNotation`이 axis `3`에 대해 표 조회에서 던졌습니다. Engine이 그 값을 쓰지 않으니 도달 불가였지만 공유 링크는 밖에서 오므로, turns와 같은 모양의 표(`AXIS_BY_CODE`)로 막았습니다. Notation의 안전성이 덤으로 따라옵니다.
+- **첫 solve도 "A new best"로 알립니다.** 최고 기록이 갱신되면 알린다는 규칙 하나만 두었고, 첫 판은 정의상 갱신입니다. "이전 기록이 있을 때만"은 규칙이 하나 더 늘고, 첫 판에서 기록 판이 말없이 나타나게 됩니다.
+- **Phase 13이 빠뜨린 ABI export 네 개를 채웠습니다.** `engine/src/meson.build`의 `EXPORTED_FUNCTIONS`에 palette·speed 함수가 없었습니다(`EMSCRIPTEN_KEEPALIVE` 덕에 동작은 했습니다). 그 목록은 "TypeScript에 내보내는 C ABI"라고 적혀 있으므로, restore 두 개를 넣는 김에 목록을 실제 ABI와 일치시켰습니다.
+- **e2e에서 fragment는 새 page로 엽니다.** 이미 로드된 page를 fragment만 다른 URL로 `goto`하면 브라우저가 same-document 이동으로 처리해 application이 다시 시작하지 않습니다. 손상 링크 test는 그래서 `context.newPage()`를 씁니다 — 실제 사용자의 경로(링크를 받아서 연다)와도 같은 모양입니다.
+- **`restore_buffer`가 검증 불가한 주소를 주면 거절이 아니라 예외입니다.** 문서는 복원 실패를 한 갈래("공유 링크를 불러오지 못했습니다")로 두었지만, 그 갈래에 들어가면 안 되는 경우가 하나 있습니다. 주소가 `0`인 것은 engine이 **기록을 거절**한 것이라 링크 문제가 맞지만, 정렬이 어긋났거나 heap 밖을 가리키는 주소는 engine이 자기 메모리를 잘못 안 것입니다. 이것을 링크 탓으로 돌리면 멀쩡한 링크를 두고 사용자를 엉뚱한 곳으로 보내게 되므로, pixel buffer가 같은 조건에서 그러듯 예외로 올려 `onError`가 받게 합니다.
+- **공유 가능 여부는 기록을 읽지 않고 판정합니다.** 초안은 버튼 상태를 "보낼 세션을 만들어 보고 null인가"로 물었는데, 그 질문은 frame마다 던져지고 기록 길이만큼 boundary를 넘습니다. Playback은 `busy`가 막지만 orbit sweep(의도적으로 busy가 아님)과 관람(busy이지만 버튼을 끄면 안 됨)이 그 가드를 지나가므로, 가장 흔한 조작에서 초당 수천 번을 쓰게 됩니다. 판정은 frame이 이미 읽은 네 숫자만 보는 술어이고, 기록은 실제로 누를 때만 읽습니다.

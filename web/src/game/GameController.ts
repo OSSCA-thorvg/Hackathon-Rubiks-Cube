@@ -8,6 +8,7 @@ import {
   MAX_SCRAMBLE_MOVES,
   type FaceTurns,
 } from '../wasm/CubeEngine.ts';
+import { createClickSound, type ClickSound } from './ClickSound.ts';
 import { MoveLog } from './MoveLog.ts';
 import {
   GameSession,
@@ -71,6 +72,8 @@ export type GameUi = {
   readonly flatButtons: readonly HTMLButtonElement[];
   /** Which of the two verified sticker sets the cube is drawn in. */
   readonly paletteButtons: readonly HTMLButtonElement[];
+  /** Silences the turn sound; pressed means silent. */
+  readonly muteButton: HTMLButtonElement;
   readonly moveButtons: readonly HTMLButtonElement[];
 };
 
@@ -99,6 +102,11 @@ export type GameControllerOptions = {
   readonly randomSource?: () => number;
   readonly timerEnvironment?: TimerEnvironment;
   readonly keyboardTarget?: KeyboardTarget;
+  /**
+   * The sound a committed turn makes. Injected whole rather than configured,
+   * so a test hears a counter and jsdom is never asked for an AudioContext.
+   */
+  readonly sound?: ClickSound;
 };
 
 /** Controller surface consumed by AppLifecycle. */
@@ -238,12 +246,36 @@ export function attachGameController(
   };
 
   let active = true;
-  const moveLog = new MoveLog(ui.moveLogList, engine);
-  const session = new GameSession({
-    engine,
-    ui,
-    timerEnvironment: options.timerEnvironment,
-  });
+  const sound = options.sound ?? createClickSound();
+
+  /**
+   * Runs one setup step, releasing the sound if it does not survive it.
+   *
+   * The sound is listening for a gesture from the moment it is made, which is
+   * before there is a controller to hand back. So a step that throws leaves
+   * nobody holding it: the caller sees an exception and has no teardown to
+   * call, and the listeners would sit on the window for the life of the page
+   * waiting to open an audio context nothing would ever close.
+   */
+  const setup = <T>(step: () => T): T => {
+    try {
+      return step();
+    } catch (error) {
+      sound.teardown();
+      throw error;
+    }
+  };
+
+  const moveLog = setup(() => new MoveLog(ui.moveLogList, engine));
+  const session = setup(
+    () =>
+      new GameSession({
+        engine,
+        ui,
+        timerEnvironment: options.timerEnvironment,
+        sound,
+      }),
+  );
 
   /**
    * Every control that is simply on while a controller is attached.
@@ -265,6 +297,7 @@ export function attachGameController(
     // palette is not a command to the cube, so it stays live while one is
     // playing. Reading the board is most wanted exactly while it moves.
     ...ui.paletteButtons,
+    ui.muteButton,
   ];
 
   const setCommandsDisabled = (disabled: boolean): void => {
@@ -295,6 +328,15 @@ export function attachGameController(
       const value = paletteOf(button);
       button.setAttribute('aria-pressed', String(value === selected));
     }
+  };
+
+  const updateMuteControl = (): void => {
+    ui.muteButton.setAttribute('aria-pressed', String(sound.isMuted()));
+  };
+
+  const onMute = (): void => {
+    sound.setMuted(!sound.isMuted());
+    updateMuteControl();
   };
 
   const run = (action: () => void): void => {
@@ -646,12 +688,16 @@ export function attachGameController(
   ui.stopButton.addEventListener('click', onStop);
   ui.ambientButton.addEventListener('click', onAmbient);
   ui.homeViewButton.addEventListener('click', onHomeView);
+  ui.muteButton.addEventListener('click', onMute);
   keyboardTarget.addEventListener('keydown', onKeyDown);
 
-  setCommandsDisabled(false);
-  updateViewControls();
-  updatePaletteControls();
-  updateEngineControls();
+  setup((): void => {
+    setCommandsDisabled(false);
+    updateViewControls();
+    updatePaletteControls();
+    updateMuteControl();
+    updateEngineControls();
+  });
 
   return {
     get state(): GameState {
@@ -704,10 +750,17 @@ export function attachGameController(
       ui.stopButton.removeEventListener('click', onStop);
       ui.ambientButton.removeEventListener('click', onAmbient);
       ui.homeViewButton.removeEventListener('click', onHomeView);
+      ui.muteButton.removeEventListener('click', onMute);
       for (const [button, listener] of choiceListeners) {
         button.removeEventListener('click', listener);
       }
       keyboardTarget.removeEventListener('keydown', onKeyDown);
+      // Last, because it is the only step here that can fail: closing an audio
+      // context is a browser call rather than a listener being unhooked, and
+      // one that threw from the middle of this sequence would take the
+      // removals below it down as well. The caller's own teardown catches it,
+      // so nothing above is left half-undone.
+      sound.teardown();
     },
   };
 }

@@ -38,6 +38,7 @@ function createUi(): GameUi {
     <button data-flat="both" type="button">Net + Rings</button>
     <button data-palette="classic" type="button" aria-pressed="true">Classic</button>
     <button data-palette="high-contrast" type="button" aria-pressed="false">High contrast</button>
+    <button id="mute" type="button" aria-pressed="false">Mute turns</button>
     <button data-face="r" data-turn="1" type="button">R</button>
     <button data-face="r" data-turn="-1" type="button">R prime</button>
     <ol id="move-log"></ol>
@@ -64,6 +65,7 @@ function createUi(): GameUi {
     paletteButtons: [
       ...root.querySelectorAll<HTMLButtonElement>('[data-palette]'),
     ],
+    muteButton: root.querySelector<HTMLButtonElement>('#mute')!,
     moveButtons: [...root.querySelectorAll<HTMLButtonElement>('[data-face]')],
   };
 }
@@ -211,6 +213,18 @@ function createHarness() {
   };
   const startFrameLoop = vi.fn();
   const onError = vi.fn();
+  // A sound that only counts, so the tests can hear it and jsdom is never
+  // asked for an AudioContext it does not have.
+  let muted = false;
+  const sound = {
+    play: vi.fn((): void => {}),
+    setMuted: vi.fn((next: boolean): void => {
+      muted = next;
+    }),
+    isMuted: vi.fn((): boolean => muted),
+    teardown: vi.fn((): void => {}),
+  };
+
   const controller = attachGameController({
     engine,
     ui,
@@ -219,11 +233,13 @@ function createHarness() {
     randomSource: () => 1234,
     timerEnvironment,
     keyboardTarget,
+    sound,
   });
 
   return {
     ui,
     engine,
+    sound,
     controller,
     startFrameLoop,
     onError,
@@ -472,6 +488,144 @@ describe('attachGameController', () => {
     // guards above are what rejected it rather than a listener that is gone.
     harness.dispatchKey({ key: 'r' });
     expect(harness.engine.turnFace).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases the sound when setup never finishes', () => {
+    const harness = createHarness();
+    harness.controller.teardown();
+
+    const sound = {
+      play: vi.fn(),
+      setMuted: vi.fn(),
+      isMuted: vi.fn((): boolean => false),
+      teardown: vi.fn(),
+    };
+    const broken = {
+      ...harness.engine,
+      palette: vi.fn((): CubePalette => {
+        throw new Error('engine gone');
+      }),
+    };
+
+    // The sound is listening for a gesture from the moment it is made, which
+    // is before there is a controller to hand back. A setup that throws leaves
+    // the caller with an exception and nothing to call teardown on, so the
+    // release has to happen on the way out.
+    expect(() =>
+      attachGameController({
+        engine: broken,
+        ui: harness.ui,
+        startFrameLoop: vi.fn(),
+        onError: vi.fn(),
+        sound,
+      }),
+    ).toThrow('engine gone');
+    expect(sound.teardown).toHaveBeenCalledTimes(1);
+  });
+
+  it('finishes unhooking even when closing the sound fails', () => {
+    const harness = createHarness();
+    expect(harness.keyListenerCount()).toBe(1);
+
+    harness.sound.teardown.mockImplementation((): void => {
+      throw new Error('context would not close');
+    });
+
+    // Closing an audio context is the one step of teardown that is a browser
+    // call rather than a listener being unhooked, so it goes last: a throw
+    // from it reaches the caller with everything else already undone.
+    expect(() => harness.controller.teardown()).toThrow(
+      'context would not close',
+    );
+    expect(harness.keyListenerCount()).toBe(0);
+  });
+
+  it('sounds once on every frame a move committed, and not otherwise', () => {
+    const harness = createHarness();
+
+    // A frame with nothing on it is silent, however many of them run.
+    harness.controller.afterEngineFrame();
+    harness.controller.afterEngineFrame();
+    expect(harness.sound.play).not.toHaveBeenCalled();
+
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.sound.play).toHaveBeenCalledTimes(1);
+
+    // The frames after it are silent again: it is the change that sounds, not
+    // the cube being somewhere other than where it started.
+    harness.controller.afterEngineFrame();
+    harness.controller.afterEngineFrame();
+    expect(harness.sound.play).toHaveBeenCalledTimes(1);
+
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.sound.play).toHaveBeenCalledTimes(2);
+  });
+
+  it('sounds a rewind, in the direction it is going', () => {
+    const harness = createHarness();
+
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.sound.play).toHaveBeenCalledTimes(1);
+
+    // Undo moves the cursor too, so taking a move back is heard exactly as
+    // making it was. Which way it went is not something an ear can tell.
+    harness.ui.undoButton.click();
+    harness.finishRewind();
+    harness.controller.afterEngineFrame();
+    expect(harness.sound.play).toHaveBeenCalledTimes(2);
+  });
+
+  it('stays silent through a reset and through watching', () => {
+    const harness = createHarness();
+
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.sound.play).toHaveBeenCalledTimes(1);
+
+    // A reset throws the record away, which is a far bigger jump than any
+    // commit -- and it is not one. The baseline the session takes when the
+    // command runs is what keeps it from being heard as one.
+    harness.ui.resetButton.click();
+    harness.controller.afterEngineFrame();
+    expect(harness.sound.play).toHaveBeenCalledTimes(1);
+
+    // Watching turns the cube without touching the record, so the frames it
+    // runs are silent with nothing here having to ask whether it is on.
+    harness.ui.ambientButton.click();
+    harness.controller.afterEngineFrame();
+    harness.controller.afterEngineFrame();
+    expect(harness.sound.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('mutes and unmutes, and says which it is', () => {
+    const harness = createHarness();
+
+    expect(harness.ui.muteButton.getAttribute('aria-pressed')).toBe('false');
+
+    harness.ui.muteButton.click();
+    expect(harness.sound.setMuted).toHaveBeenCalledWith(true);
+    expect(harness.ui.muteButton.getAttribute('aria-pressed')).toBe('true');
+
+    // Muting is the sound's own business, not a reason to stop watching the
+    // record: the session goes on asking and the sound goes on refusing.
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.sound.play).toHaveBeenCalledTimes(1);
+
+    harness.ui.muteButton.click();
+    expect(harness.sound.setMuted).toHaveBeenLastCalledWith(false);
+    expect(harness.ui.muteButton.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('releases the sound when the controller goes', () => {
+    const harness = createHarness();
+
+    harness.controller.teardown();
+    expect(harness.sound.teardown).toHaveBeenCalledTimes(1);
+    expect(harness.ui.muteButton.disabled).toBe(true);
   });
 
   it('chooses a palette without touching the cube, and says which is on', () => {

@@ -1,3 +1,4 @@
+import type { CommitSound } from './ClickSound.ts';
 import {
   formatElapsed,
   SolveTimer,
@@ -62,6 +63,8 @@ export type GameSessionOptions = {
   readonly engine: SessionEngine;
   readonly ui: SessionUi;
   readonly timerEnvironment?: TimerEnvironment;
+  /** Sounded once on every frame a move committed; absent is silent. */
+  readonly sound?: CommitSound;
 };
 
 /**
@@ -80,6 +83,7 @@ export class GameSession {
   private readonly engine: SessionEngine;
   private readonly ui: SessionUi;
   private readonly timer: SolveTimer;
+  private readonly sound: CommitSound | null;
 
   private currentState: GameState = 'idle';
   // Replaced by the constructor's own baseline before a frame is ever read;
@@ -90,6 +94,7 @@ export class GameSession {
   constructor(options: GameSessionOptions) {
     this.engine = options.engine;
     this.ui = options.ui;
+    this.sound = options.sound ?? null;
 
     // Assigning value on an <output> publishes the text too, so the DOM only
     // has to be written once per tick.
@@ -139,12 +144,23 @@ export class GameSession {
    * wrong move can be what solves the cube. The clock, though, starts on the
    * user's own moves: a rewind commits moves too, and a solve pressed from a
    * ready cube would otherwise start the clock it is about to stop.
+   *
+   * The sound is that same observation heard rather than a second one. Most of
+   * its behaviour falls out of that: a scramble and a rewind move the cursor
+   * and so are played with sound, a reset takes a new baseline here and is
+   * silent, and a watched pattern never touches the record at all -- so
+   * nobody has to ask whether one is running.
    */
   observe(frame: EngineFrame): void {
     const committed = frame.cursor !== this.previousCursor;
     const played = frame.userMoves > this.previousUserMoves;
     this.previousCursor = frame.cursor;
     this.previousUserMoves = frame.userMoves;
+
+    // Once for the frame, not once per move. Two commits inside one
+    // observation window are a sixtieth of a second apart, which is one click
+    // to an ear, so nothing here counts how many landed.
+    if (committed) this.sound?.play();
 
     // Asked as a state rather than as a change, so a one-move scramble that
     // has already finished by the first observed frame is still seen to

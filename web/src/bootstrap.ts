@@ -67,6 +67,7 @@ export function bootstrap(
             <button type="button" data-palette="classic" aria-pressed="true">Classic</button>
             <button type="button" data-palette="high-contrast" aria-pressed="false">High contrast</button>
           </div>
+          <button type="button" id="mute" aria-pressed="false">Mute turns</button>
         </div>
       </div>
 
@@ -144,6 +145,7 @@ export function bootstrap(
     paletteButtons: [
       ...app.querySelectorAll<HTMLButtonElement>('[data-palette]'),
     ],
+    muteButton: app.querySelector<HTMLButtonElement>('#mute')!,
     moveButtons: [
       ...app.querySelectorAll<HTMLButtonElement>('[data-face]'),
     ],

@@ -68,6 +68,11 @@ export function bootstrap(
             <button type="button" data-palette="high-contrast" aria-pressed="false">High contrast</button>
           </div>
           <button type="button" id="mute" aria-pressed="false">Mute turns</button>
+          <label class="option-panel__slider" for="speed">
+            <span>Speed</span>
+            <input type="range" id="speed" min="0.25" max="4" step="0.25" value="1">
+            <output id="speed-value" for="speed">1.00×</output>
+          </label>
         </div>
       </div>
 
@@ -146,6 +151,8 @@ export function bootstrap(
       ...app.querySelectorAll<HTMLButtonElement>('[data-palette]'),
     ],
     muteButton: app.querySelector<HTMLButtonElement>('#mute')!,
+    speedInput: app.querySelector<HTMLInputElement>('#speed')!,
+    speedValue: app.querySelector<HTMLOutputElement>('#speed-value')!,
     moveButtons: [
       ...app.querySelectorAll<HTMLButtonElement>('[data-face]'),
     ],

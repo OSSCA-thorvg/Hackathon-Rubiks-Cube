@@ -39,6 +39,8 @@ function createUi(): GameUi {
     <button data-palette="classic" type="button" aria-pressed="true">Classic</button>
     <button data-palette="high-contrast" type="button" aria-pressed="false">High contrast</button>
     <button id="mute" type="button" aria-pressed="false">Mute turns</button>
+    <input id="speed" type="range" min="0.25" max="4" step="0.25" value="1">
+    <output id="speed-value"></output>
     <button data-face="r" data-turn="1" type="button">R</button>
     <button data-face="r" data-turn="-1" type="button">R prime</button>
     <ol id="move-log"></ol>
@@ -66,6 +68,8 @@ function createUi(): GameUi {
       ...root.querySelectorAll<HTMLButtonElement>('[data-palette]'),
     ],
     muteButton: root.querySelector<HTMLButtonElement>('#mute')!,
+    speedInput: root.querySelector<HTMLInputElement>('#speed')!,
+    speedValue: root.querySelector<HTMLOutputElement>('#speed-value')!,
     moveButtons: [...root.querySelectorAll<HTMLButtonElement>('[data-face]')],
   };
 }
@@ -74,13 +78,16 @@ function createUi(): GameUi {
 const SCRAMBLE_MOVES = 3;
 
 /** Creates a fake engine and manually controlled timer/keyboard environment. */
-function createHarness() {
+function createHarness(overrides: { prefersReducedMotion?: boolean } = {}) {
   const ui = createUi();
   let solved = true;
   let busy = false;
   let viewMode = CubeViewMode.Both;
   let flatStyle = CubeFlatStyle.Net;
   let palette = CubePalette.Classic;
+  // Clamped the way the engine clamps, so the control is tested against the
+  // answer it will actually be given rather than the one it asked for.
+  let speedScale = 1;
   let watching = false;
 
   // The record the real engine keeps, in the same shape: one length and two
@@ -188,6 +195,10 @@ function createHarness() {
       palette = chosen;
     }),
     palette: vi.fn((): CubePalette => palette),
+    setSpeedScale: vi.fn((scale: number): void => {
+      speedScale = Math.min(4, Math.max(0.25, scale));
+    }),
+    speedScale: vi.fn((): number => speedScale),
     resetView: vi.fn(),
     isBusy: vi.fn((): boolean => busy),
     render: vi.fn(),
@@ -234,6 +245,7 @@ function createHarness() {
     timerEnvironment,
     keyboardTarget,
     sound,
+    prefersReducedMotion: overrides.prefersReducedMotion ?? false,
   });
 
   return {
@@ -488,6 +500,54 @@ describe('attachGameController', () => {
     // guards above are what rejected it rather than a listener that is gone.
     harness.dispatchKey({ key: 'r' });
     expect(harness.engine.turnFace).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends the slider to the engine and writes back what it took', () => {
+    const harness = createHarness();
+
+    expect(harness.ui.speedValue.value).toBe('1.00×');
+
+    harness.ui.speedInput.value = '2';
+    harness.ui.speedInput.dispatchEvent(new Event('input'));
+    expect(harness.engine.setSpeedScale).toHaveBeenCalledWith(2);
+    expect(harness.ui.speedValue.value).toBe('2.00×');
+
+    // Read back rather than echoed: the engine clamps, so a value past the end
+    // has to come back as the end or the number would be describing a speed
+    // the cube is not running at.
+    harness.ui.speedInput.value = '9';
+    harness.ui.speedInput.dispatchEvent(new Event('input'));
+    expect(harness.ui.speedValue.value).toBe('4.00×');
+    expect(harness.ui.speedInput.value).toBe('4');
+  });
+
+  it('opens quicker for someone who asked for less motion, but not fixed', () => {
+    const harness = createHarness({ prefersReducedMotion: true });
+
+    // Offered, not imposed: the animation is what the app is for, so the
+    // slider opens at the quick end and moves back like any other.
+    expect(harness.engine.setSpeedScale).toHaveBeenCalledWith(2);
+    expect(harness.ui.speedValue.value).toBe('2.00×');
+
+    harness.ui.speedInput.value = '0.5';
+    harness.ui.speedInput.dispatchEvent(new Event('input'));
+    expect(harness.ui.speedValue.value).toBe('0.50×');
+  });
+
+  it('leaves the speed live while a sequence is playing', () => {
+    const harness = createHarness();
+
+    harness.ui.scrambleButton.click();
+    harness.controller.afterEngineFrame();
+
+    // Like the palette, and for the same reason: it is not a command to the
+    // cube. A turn already running keeps its own duration, so the frames of
+    // the sequence it is changed under do not jump.
+    expect(harness.ui.speedInput.disabled).toBe(false);
+
+    harness.ui.speedInput.value = '4';
+    harness.ui.speedInput.dispatchEvent(new Event('input'));
+    expect(harness.engine.setSpeedScale).toHaveBeenCalledWith(4);
   });
 
   it('releases the sound when setup never finishes', () => {

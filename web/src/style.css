@@ -228,6 +228,39 @@ button[aria-pressed="true"]:hover:not(:disabled) {
   font-size: clamp(0.62rem, 1.15vw, 0.78rem);
 }
 
+/* The name and the reading share the top line and the track has the width to
+   itself. Three across fits, but in a column this narrow it leaves the track a
+   few dozen pixels -- and a slider you cannot aim is not a control. */
+.option-panel__slider {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.15rem 0.4rem;
+  padding-inline: 0.4rem;
+  color: rgb(255 255 255 / 72%);
+  font-size: clamp(0.68rem, 1.4vw, 0.85rem);
+}
+
+.option-panel__slider input {
+  /* Placed rather than left to flow: the track spans both columns on the
+     second line, and the reading has to come back up beside the name rather
+     than being pushed onto a third. */
+  grid-row: 2;
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  accent-color: rgb(255 255 255 / 78%);
+}
+
+/* Tabular figures, so the reading does not shuffle sideways as it changes. */
+.option-panel__slider output {
+  grid-row: 1;
+  grid-column: 2;
+  min-width: 3.1rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Undo, Redo and Solve are one idea -- walking back along what has been played
    -- so they share a row instead of reading as three more commands under
    Reset. Stop is not one of them: it is not a place on the record to go to but
@@ -583,6 +616,17 @@ button[aria-pressed="true"]:hover:not(:disabled) {
   .option-panel__group button {
     padding-inline: 0.4rem;
     font-size: 0.84rem;
+  }
+
+  /* Room across on this layout, so the three parts go back on one line. */
+  .option-panel__slider {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .option-panel__slider input,
+  .option-panel__slider output {
+    grid-row: auto;
+    grid-column: auto;
   }
 
   .view-switch button,

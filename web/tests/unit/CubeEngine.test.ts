@@ -40,6 +40,8 @@ function createFakeModule() {
     setFlatStyleResult: 1,
     palette: CubePalette.Classic,
     setPaletteResult: 1,
+    speedScale: 1,
+    setSpeedScaleResult: 1,
     busyResult: 0,
     ambientStartResult: 1,
     ambientResult: 0,
@@ -151,6 +153,14 @@ function createFakeModule() {
       return behavior.setPaletteResult;
     }),
     _thorvg_rubiks_palette: vi.fn((): number => behavior.palette),
+    _thorvg_rubiks_set_speed_scale: vi.fn((scale: number): number => {
+      // Clamped rather than refused, the way the engine does it.
+      if (behavior.setSpeedScaleResult !== 0) {
+        behavior.speedScale = Math.min(4, Math.max(0.25, scale));
+      }
+      return behavior.setSpeedScaleResult;
+    }),
+    _thorvg_rubiks_speed_scale: vi.fn((): number => behavior.speedScale),
     _thorvg_rubiks_reset_view: vi.fn((): void => {}),
     _thorvg_rubiks_is_busy: vi.fn((): number => behavior.busyResult),
   } satisfies ThorvgRubiksModule;
@@ -505,6 +515,22 @@ describe('CubeEngine gameplay and view controls', () => {
       'rejected palette',
     );
     behavior.setPaletteResult = 1;
+
+    // The speed comes back clamped rather than echoed, and a value that is
+    // not a number is the one thing the engine refuses outright.
+    expect(engine.speedScale()).toBe(1);
+    engine.setSpeedScale(2);
+    expect(engine.speedScale()).toBe(2);
+    engine.setSpeedScale(99);
+    expect(engine.speedScale()).toBe(4);
+    behavior.setSpeedScaleResult = 0;
+    expect(() => engine.setSpeedScale(Number.NaN)).toThrow(
+      'rejected speed scale',
+    );
+    behavior.setSpeedScaleResult = 1;
+    behavior.speedScale = 0;
+    expect(() => engine.speedScale()).toThrow('invalid speed scale');
+    behavior.speedScale = 1;
 
     // The value that used to be a fourth mode is not one.
     behavior.viewMode = 3;

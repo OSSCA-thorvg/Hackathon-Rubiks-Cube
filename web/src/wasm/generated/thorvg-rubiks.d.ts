@@ -90,6 +90,10 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_set_palette(palette: number): number;
   /** The current graphics::Palette as an integer. */
   _thorvg_rubiks_palette(): number;
+  /** Returns 1 when taken; out-of-range values are clamped, not refused. */
+  _thorvg_rubiks_set_speed_scale(scale: number): number;
+  /** The current animation speed multiplier. */
+  _thorvg_rubiks_speed_scale(): number;
   /** Restores the turntable camera and nothing else. */
   _thorvg_rubiks_reset_view(): void;
   /** Returns 1 while a gesture, animation, or pending commit is active. */

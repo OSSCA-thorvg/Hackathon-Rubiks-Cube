@@ -42,6 +42,8 @@ export type GameEngine = SessionEngine & {
   flatStyle(): CubeFlatStyle;
   setPalette(palette: CubePalette): void;
   palette(): CubePalette;
+  setSpeedScale(scale: number): void;
+  speedScale(): number;
   resetView(): void;
   render(): void;
 };
@@ -74,6 +76,10 @@ export type GameUi = {
   readonly paletteButtons: readonly HTMLButtonElement[];
   /** Silences the turn sound; pressed means silent. */
   readonly muteButton: HTMLButtonElement;
+  /** How much faster than the written tempos every animation runs. */
+  readonly speedInput: HTMLInputElement;
+  /** What the slider currently means, written out beside it. */
+  readonly speedValue: HTMLOutputElement;
   readonly moveButtons: readonly HTMLButtonElement[];
 };
 
@@ -102,6 +108,11 @@ export type GameControllerOptions = {
   readonly randomSource?: () => number;
   readonly timerEnvironment?: TimerEnvironment;
   readonly keyboardTarget?: KeyboardTarget;
+  /**
+   * Whether the person has asked for less motion. Injectable so a test can
+   * say so without a media query.
+   */
+  readonly prefersReducedMotion?: boolean;
   /**
    * The sound a committed turn makes. Injected whole rather than configured,
    * so a test hears a counter and jsdom is never asked for an AudioContext.
@@ -151,6 +162,9 @@ const FLAT_NAME_BY_STYLE: Readonly<Record<CubeFlatStyle, string>> = {
   [CubeFlatStyle.Rings]: 'rings',
   [CubeFlatStyle.Both]: 'both',
 };
+
+/** Where the slider opens for someone who asked their system for less. */
+const REDUCED_MOTION_SPEED = 2;
 
 const PALETTE_BY_NAME: Readonly<Record<string, CubePalette>> = {
   classic: CubePalette.Classic,
@@ -298,6 +312,7 @@ export function attachGameController(
     // playing. Reading the board is most wanted exactly while it moves.
     ...ui.paletteButtons,
     ui.muteButton,
+    ui.speedInput,
   ];
 
   const setCommandsDisabled = (disabled: boolean): void => {
@@ -328,6 +343,51 @@ export function attachGameController(
       const value = paletteOf(button);
       button.setAttribute('aria-pressed', String(value === selected));
     }
+  };
+
+  /**
+   * Writes out what the slider means, from the engine rather than the input.
+   *
+   * The engine clamps, so a value typed past the end comes back as the end,
+   * and reading it back is what keeps the number under the handle honest.
+   */
+  const updateSpeedControl = (): void => {
+    const scale = engine.speedScale();
+    ui.speedInput.value = String(scale);
+    ui.speedValue.value = `${scale.toFixed(2)}×`;
+  };
+
+  const onSpeedChange = (): void => {
+    run((): void => {
+      const typed = Number(ui.speedInput.value);
+      // A range input cannot produce anything else, but it is the one control
+      // here whose value is a number rather than a name, and the engine
+      // refuses what is not one.
+      if (!Number.isFinite(typed)) {
+        updateSpeedControl();
+        return;
+      }
+
+      engine.setSpeedScale(typed);
+      updateSpeedControl();
+    });
+  };
+
+  /**
+   * The speed to open at, which is not always the written one.
+   *
+   * Someone who has asked their system for less motion is offered the quick
+   * end rather than being given it: the animation is what this app is for, so
+   * it is not taken away, and the slider is right there to put back. A setting
+   * that is a suggestion has to remain one.
+   */
+  const initialSpeedScale = (): number => {
+    const reduced =
+      options.prefersReducedMotion ??
+      (typeof window !== 'undefined' &&
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    return reduced ? REDUCED_MOTION_SPEED : 1;
   };
 
   const updateMuteControl = (): void => {
@@ -689,6 +749,9 @@ export function attachGameController(
   ui.ambientButton.addEventListener('click', onAmbient);
   ui.homeViewButton.addEventListener('click', onHomeView);
   ui.muteButton.addEventListener('click', onMute);
+  // `input` rather than `change`, so the reading follows the handle while it
+  // is being dragged. Nothing in flight is re-timed, so the stream is safe.
+  ui.speedInput.addEventListener('input', onSpeedChange);
   keyboardTarget.addEventListener('keydown', onKeyDown);
 
   setup((): void => {
@@ -696,6 +759,8 @@ export function attachGameController(
     updateViewControls();
     updatePaletteControls();
     updateMuteControl();
+    engine.setSpeedScale(initialSpeedScale());
+    updateSpeedControl();
     updateEngineControls();
   });
 
@@ -751,6 +816,7 @@ export function attachGameController(
       ui.ambientButton.removeEventListener('click', onAmbient);
       ui.homeViewButton.removeEventListener('click', onHomeView);
       ui.muteButton.removeEventListener('click', onMute);
+      ui.speedInput.removeEventListener('input', onSpeedChange);
       for (const [button, listener] of choiceListeners) {
         button.removeEventListener('click', listener);
       }

@@ -607,6 +607,31 @@ export class CubeEngine {
     return palette;
   }
 
+  /**
+   * Sets how much faster than the written tempos every animation runs.
+   *
+   * `duration = base / scale`, so 2 is twice as fast and 0.5 is half. One
+   * value covers a drag release, a scramble, a rewind and a watched pattern.
+   * Values outside the engine's range are clamped by it rather than refused,
+   * so what comes back here is only ever a value that was not a number.
+   */
+  setSpeedScale(scale: number): void {
+    this.assertUsable();
+    if (this.module._thorvg_rubiks_set_speed_scale(scale) === 0) {
+      throw new Error(`Engine rejected speed scale ${scale}.`);
+    }
+  }
+
+  /** Returns the multiplier the engine settled on, after its own clamp. */
+  speedScale(): number {
+    this.assertUsable();
+    const scale = this.module._thorvg_rubiks_speed_scale();
+    if (!Number.isFinite(scale) || scale <= 0) {
+      throw new Error(`Engine returned an invalid speed scale ${scale}.`);
+    }
+    return scale;
+  }
+
   /** Restores only the turntable camera. */
   resetView(): void {
     this.assertUsable();

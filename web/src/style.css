@@ -69,6 +69,19 @@ button[aria-pressed="true"] {
   background: #f7f7f8;
 }
 
+/*
+ * A chosen button under the pointer, which needs saying twice over.
+ *
+ * The plain hover rule is the more specific of the two, so on its own it
+ * paints the unchosen background beneath the chosen foreground and the label
+ * goes dark on dark -- most visibly on a button the pointer stays on after
+ * pressing it, which is what the watch toggle is.
+ */
+button[aria-pressed="true"]:hover:not(:disabled) {
+  border-color: #fff;
+  background: #fff;
+}
+
 #app {
   width: 100%;
 }

@@ -84,7 +84,7 @@ export function bootstrap(
   </section>
 
   <section class="move-log" aria-labelledby="move-log-title">
-    <h2 class="move-log__title" id="move-log-title">Move log</h2>
+    <h2 class="move-log__title" id="move-log-title">Your moves</h2>
     <ol class="move-log__list" id="move-log" aria-labelledby="move-log-title"></ol>
   </section>
 

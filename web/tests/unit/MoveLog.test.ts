@@ -21,29 +21,39 @@ function createLog(moves: readonly number[]) {
 function entries(list: HTMLElement): string[] {
   return [...list.children].map((child) => {
     const item = child as HTMLElement;
-    return `${item.textContent} ${item.dataset.part} ${item.dataset.state}`;
+    return `${item.textContent} ${item.dataset.state}`;
   });
 }
 
-/** A whole record with everything in it applied. */
-function frame(length: number, cursor: number, scrambleEnd: number): MoveLogFrame {
+/** One reading of the record: how long, how much of it is on, where it splits. */
+function frame(
+  length: number,
+  cursor: number,
+  scrambleEnd: number,
+): MoveLogFrame {
   return { length, cursor, scrambleEnd };
 }
 
 describe('MoveLog', () => {
-  it('writes out the record, marking where the cursor is', () => {
+  it('writes out the moves of your own, marking where the cursor is', () => {
     const { list, log } = createLog([R, U, F, R_PRIME]);
 
-    log.update(frame(4, 4, 3));
+    log.update(frame(4, 4, 2));
 
-    // The scramble and the user's own moves come off one list and are told
-    // apart by where the boundary is, not by which query they came from.
-    expect(entries(list)).toEqual([
-      'R scramble applied',
-      'U scramble applied',
-      'F scramble applied',
-      "R' user current",
-    ]);
+    // Two of the four are the scramble, and the log begins where it ends.
+    expect(entries(list)).toEqual(['F applied', "R' current"]);
+  });
+
+  it('has nothing to write for a scramble nobody has moved on', () => {
+    const { list, log, timelineMove } = createLog([R, U, F]);
+
+    // A whole scramble, all of it on the cube, and none of it the user's.
+    log.update(frame(3, 3, 3));
+    expect(list.children).toHaveLength(0);
+
+    // Not drawn and not even read: the boundary is where the drawing starts,
+    // so the moves below it are never asked for.
+    expect(timelineMove).not.toHaveBeenCalled();
   });
 
   it('has nothing to write for a record with nothing in it', () => {
@@ -56,33 +66,34 @@ describe('MoveLog', () => {
   it('marks what a rewind has taken off the cube', () => {
     const { list, log } = createLog([R, U, F, R_PRIME]);
 
-    log.update(frame(4, 4, 3));
-    log.update(frame(4, 2, 3));
+    log.update(frame(4, 4, 2));
+    log.update(frame(4, 3, 2));
 
-    // Two of them are still on the cube and two are waiting to be put back --
-    // and one of the two waiting is a move of the scramble, which is exactly
-    // what a rewind that ran past the boundary leaves behind. Which stretch
-    // an entry belongs to does not move with the cursor.
-    expect(entries(list)).toEqual([
-      'R scramble applied',
-      'U scramble current',
-      'F scramble pending',
-      "R' user pending",
-    ]);
+    // One of them is still on the cube and one is waiting to be put back.
+    expect(entries(list)).toEqual(['F current', "R' pending"]);
+
+    // Down to the end of the scramble: both are waiting, and nothing is
+    // marked, because none of these moves is on the cube any more.
+    log.update(frame(4, 2, 2));
+    expect(entries(list)).toEqual(['F pending', "R' pending"]);
+
+    // And on into the scramble, where a solve goes. The cursor is below
+    // everything drawn here, so it marks nothing rather than the first entry.
+    log.update(frame(4, 1, 2));
+    expect(entries(list)).toEqual(['F pending', "R' pending"]);
   });
 
-  it('has no move marked on a cube a rewind emptied', () => {
-    const { list, log } = createLog([R, U]);
+  it('follows a boundary that a new move pulled down', () => {
+    const { list, log } = createLog([R, U, F]);
 
-    log.update(frame(2, 2, 2));
-    log.update(frame(2, 0, 2));
+    // A solve took the cursor to nothing, and a move was made there: the
+    // record cut the scramble off behind it, so what was scramble a moment
+    // ago is a move of the user's own now, and the log says so.
+    log.update(frame(3, 3, 3));
+    expect(entries(list)).toEqual([]);
 
-    // Everything is waiting and nothing is current: there is no last applied
-    // move, which is the one reading where the mark is nowhere.
-    expect(entries(list)).toEqual([
-      'R scramble pending',
-      'U scramble pending',
-    ]);
+    log.update(frame(1, 1, 0));
+    expect(entries(list)).toEqual(['R current']);
   });
 
   it('redraws when the record changed underneath a length that did not', () => {
@@ -92,40 +103,32 @@ describe('MoveLog', () => {
       timelineMove: (index: number): number => moves[index] ?? 0,
     });
 
-    log.update(frame(3, 3, 2));
-    expect(entries(list)).toEqual([
-      'R scramble applied',
-      'U scramble applied',
-      'F user current',
-    ]);
+    log.update(frame(3, 3, 1));
+    expect(entries(list)).toEqual(['U applied', 'F current']);
 
     // One move taken back...
-    log.update(frame(3, 2, 2));
+    log.update(frame(3, 2, 1));
 
     // ...and a different one made in its place, which cuts off what there was
     // to redo. The record is the same length it was two frames ago with
     // something else at the end of it, so a redraw that was decided on the
     // length would leave the move that is no longer there on the screen.
     moves[2] = R_PRIME;
-    log.update(frame(3, 3, 2));
-    expect(entries(list)).toEqual([
-      'R scramble applied',
-      'U scramble applied',
-      "R' user current",
-    ]);
+    log.update(frame(3, 3, 1));
+    expect(entries(list)).toEqual(['U applied', "R' current"]);
   });
 
   it('draws nothing at all for a frame that says the same thing', () => {
     const { log, timelineMove } = createLog([R, U]);
 
-    log.update(frame(2, 2, 2));
+    log.update(frame(2, 2, 0));
     expect(timelineMove).toHaveBeenCalledTimes(2);
 
     // Frames keep coming while a pattern is watched or the view is swept, and
     // none of them touches the record.
     timelineMove.mockClear();
-    log.update(frame(2, 2, 2));
-    log.update(frame(2, 2, 2));
+    log.update(frame(2, 2, 0));
+    log.update(frame(2, 2, 0));
     expect(timelineMove).not.toHaveBeenCalled();
   });
 });

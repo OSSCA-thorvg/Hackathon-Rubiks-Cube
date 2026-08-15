@@ -321,7 +321,7 @@ button[aria-pressed="true"]:hover:not(:disabled) {
 }
 
 /*
- * The record, written out in the notation a solver reads.
+ * The moves you made, in the notation a solver reads.
  *
  * Below the cube rather than beside it: it is the one thing on the page that
  * grows without limit, and the rails either side of the stage are sized for
@@ -346,8 +346,8 @@ button[aria-pressed="true"]:hover:not(:disabled) {
   text-transform: uppercase;
 }
 
-/* Four rows deep and scrolling past that: a hundred-move scramble would
-   otherwise push the cube off the top of the screen. */
+/* Four rows deep and scrolling past that: a long solve would otherwise push
+   the cube off the top of the screen. */
 .move-log__list {
   display: flex;
   flex-wrap: wrap;
@@ -363,7 +363,7 @@ button[aria-pressed="true"]:hover:not(:disabled) {
 /* An empty record says so here rather than through a placeholder element the
    log would have to put in and take out again. */
 .move-log__list:empty::after {
-  content: "Nothing has been turned yet.";
+  content: "No moves of your own yet.";
   color: rgb(255 255 255 / 40%);
   font-size: 0.82rem;
   text-transform: none;
@@ -383,21 +383,17 @@ button[aria-pressed="true"]:hover:not(:disabled) {
   text-align: center;
 }
 
-/* The scramble is the cube somebody was handed, not something they did, so it
-   is drawn as the outline of a move rather than as one of their own. */
-.move-log__item[data-part="scramble"] {
+/* Off the cube: rewound behind and waiting to be put back. Drawn as the
+   outline of a move rather than as one, because that is what it is now. */
+.move-log__item[data-state="pending"] {
   border-style: dashed;
-  color: rgb(255 255 255 / 58%);
+  color: rgb(255 255 255 / 46%);
   background: none;
 }
 
-/* Off the cube: rewound behind and waiting to be put back. */
-.move-log__item[data-state="pending"] {
-  opacity: 0.36;
-}
-
 /* Where the cursor is -- the last move still on the cube, which is what a
-   rewind is walking down through. */
+   rewind is walking down through. Nothing is marked once a rewind has gone
+   below the scramble boundary: none of these moves is on the cube then. */
 .move-log__item[data-state="current"] {
   border-color: #8bc5ff;
   border-style: solid;

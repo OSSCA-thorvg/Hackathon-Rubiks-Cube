@@ -12,7 +12,8 @@ export type MoveLogEngine = {
  * Three numbers, and everything on the screen comes out of them. Where the
  * scramble stops is one of them rather than something the log remembers from
  * when a scramble was started, so a session restored from somewhere else draws
- * the same as one that has just been played.
+ * the same as one that has just been played -- and so the moves that are the
+ * user's own are a stretch of the record rather than a list kept apart.
  */
 export type MoveLogFrame = {
   readonly cursor: number;
@@ -21,12 +22,19 @@ export type MoveLogFrame = {
 };
 
 /**
- * The record, written out in standard notation.
+ * The moves you made, written out in standard notation.
  *
  * Owns one list element and nothing else. It holds no record of its own: the
  * engine's is the record, and this is a reading of it -- which is why undo,
  * redo, a scramble and a cut redo tail all arrive here as the same event, a
  * frame whose three numbers differ from the last one's.
+ *
+ * The scramble is not written out. It is the cube somebody was handed rather
+ * than anything they did, and reading twenty moves of it to find your own two
+ * is worse than not having them. Nothing is filtered out to leave it off: the
+ * record is one list with the scramble at the front of it, so the moves that
+ * are yours are the stretch above the boundary, and that is where the drawing
+ * starts.
  */
 export class MoveLog {
   private readonly list: HTMLElement;
@@ -65,15 +73,17 @@ export class MoveLog {
     this.drawn = frame;
 
     const items: HTMLLIElement[] = [];
-    for (let index = 0; index < frame.length; index += 1) {
+    for (let index = frame.scrambleEnd; index < frame.length; index += 1) {
       items.push(this.item(index, frame));
     }
     this.list.replaceChildren(...items);
 
     // The cursor is the point of the list, so it is what stays on screen: a
-    // hundred-move scramble is taller than the panel, and a rewind walking
-    // down through it would otherwise leave the moving end out of sight.
-    const current = items[frame.cursor - 1];
+    // long solve runs past the bottom of the panel, and a rewind walking down
+    // through it would otherwise leave the moving end out of sight. A cursor
+    // that has been rewound into the scramble is below everything drawn here,
+    // and lands outside the list rather than on its first entry.
+    const current = items[frame.cursor - 1 - frame.scrambleEnd];
     if (current !== undefined) this.reveal(current);
   }
 
@@ -81,11 +91,6 @@ export class MoveLog {
   private item(index: number, frame: MoveLogFrame): HTMLLIElement {
     const item = document.createElement('li');
     item.className = 'move-log__item';
-
-    // Which stretch of the record this belongs to, derived rather than
-    // remembered -- and derived the same way for a scramble half taken off
-    // the cube, where the boundary sits above the cursor.
-    item.dataset.part = index < frame.scrambleEnd ? 'scramble' : 'user';
 
     // Applied, the last of the applied, or waiting to be put back. The three
     // are one attribute because no entry is ever two of them.

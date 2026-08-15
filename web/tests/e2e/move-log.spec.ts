@@ -46,7 +46,7 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 });
 
-test('the record is written out in notation as it is made', async ({
+test('your own moves are written out in notation as you make them', async ({
   page,
 }) => {
   const shell = page.locator('.game-shell');
@@ -55,73 +55,56 @@ test('the record is written out in notation as it is made', async ({
   // Nothing has been turned, so there is nothing written down.
   await expect(entries).toHaveCount(0);
 
-  const requested = Number(
-    await page.locator('#scramble-moves').inputValue(),
-  );
   await page.locator('#scramble').click();
-
-  // The whole scramble is in the record from the moment it is accepted, so
-  // the list is as long as the scramble that was asked for.
-  await expect(entries).toHaveCount(requested);
   await expect(shell).toHaveAttribute('data-game-state', 'ready');
+
+  // A whole scramble is on the cube and the list is still empty: it is the
+  // cube you were handed rather than anything you did.
+  await expect(entries).toHaveCount(0);
+  await expect(page.locator('#move-log')).toBeEmpty();
+
+  // A turn made from the keyboard is the first thing on it, written the
+  // standard way.
+  await page.keyboard.press('r');
+  await expect(entries).toHaveCount(1);
+  await expect(entries.nth(0)).toHaveText('R');
+  await expect(entries.nth(0)).toHaveAttribute('data-state', 'current');
+
+  await page.keyboard.press('Shift+U');
+  await expect(entries).toHaveCount(2);
+  await expect(entries.nth(1)).toHaveText("U'");
+
+  // And a middle slice, which only a drag can make: the top row of the front
+  // face turns the way U does, so the row below it is E the other way round.
+  const probe = await probeCanvas(page);
+  await dragNetRowLeft(page, probe, 'both', 1);
+  await expect(entries).toHaveCount(3);
+  await expect(entries.nth(2)).toHaveText("E'");
+  await expect(entries.nth(2)).toHaveAttribute('data-state', 'current');
 
   // Every one of them reads as a move a solver would recognize.
   for (const text of await entries.allTextContents()) {
     expect(text).toMatch(NOTATION);
   }
 
-  // The scramble is on the cube: the last of it is where the cursor is, and
-  // it is drawn as the scramble rather than as anything the user did.
-  await expect(entries.nth(requested - 1)).toHaveAttribute(
-    'data-state',
-    'current',
-  );
-  await expect(entries.nth(0)).toHaveAttribute('data-part', 'scramble');
-  await expect(entries.nth(0)).toHaveAttribute('data-state', 'applied');
-
-  // A turn made from the keyboard goes on the end, written the standard way.
-  await page.keyboard.press('r');
-  await expect(entries).toHaveCount(requested + 1);
-  await expect(entries.nth(requested)).toHaveText('R');
-  await expect(entries.nth(requested)).toHaveAttribute('data-part', 'user');
-  await expect(entries.nth(requested)).toHaveAttribute('data-state', 'current');
-
-  await page.keyboard.press('Shift+U');
-  await expect(entries.nth(requested + 1)).toHaveText("U'");
-
-  // And a middle slice, which only a drag can make: the top row of the front
-  // face turns the way U does, so the row below it is E the other way round.
-  const probe = await probeCanvas(page);
-  await dragNetRowLeft(page, probe, 'both', 1);
-  await expect(entries).toHaveCount(requested + 3);
-  await expect(entries.nth(requested + 2)).toHaveText("E'");
-
   // Taken back: the move stays on the list, because it is still there to be
   // put back, and the mark moves down to what is left on the cube.
   await page.locator('#undo').click();
-  await expect(entries.nth(requested + 2)).toHaveAttribute(
-    'data-state',
-    'pending',
-  );
-  await expect(entries.nth(requested + 1)).toHaveAttribute(
-    'data-state',
-    'current',
-  );
-  await expect(entries).toHaveCount(requested + 3);
+  await expect(entries.nth(2)).toHaveAttribute('data-state', 'pending');
+  await expect(entries.nth(1)).toHaveAttribute('data-state', 'current');
+  await expect(entries).toHaveCount(3);
 
-  // Rewound past the end of the scramble, where nothing is on the cube and
-  // nothing is marked -- and the scramble is still drawn as the scramble.
+  // Rewound through the scramble as well, which leaves all three waiting and
+  // none of them marked -- and puts nothing of the scramble on the list.
   await page.locator('#solve').click();
   await expect(shell).toHaveAttribute('data-game-state', 'completed');
+  await expect(entries).toHaveCount(3);
   await expect(page.locator('#move-log li[data-state="current"]')).toHaveCount(
     0,
   );
   await expect(
-    page.locator('#move-log li[data-part="scramble"]'),
-  ).toHaveCount(requested);
-  await expect(
     page.locator('#move-log li[data-state="pending"]'),
-  ).toHaveCount(requested + 3);
+  ).toHaveCount(3);
 
   // A new cube has no record at all.
   await page.locator('#reset').click();

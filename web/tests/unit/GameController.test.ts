@@ -818,7 +818,7 @@ describe('attachGameController', () => {
     expect(harness.engine.stopPlayback).not.toHaveBeenCalled();
   });
 
-  it('writes the record out and follows it as the cursor moves', () => {
+  it('writes your own moves out and follows them as the cursor moves', () => {
     const harness = createHarness();
     const log = harness.ui.moveLogList;
 
@@ -826,63 +826,44 @@ describe('attachGameController', () => {
     const entries = (): string[] =>
       [...log.children].map((child) => {
         const item = child as HTMLElement;
-        return `${item.textContent} ${item.dataset.part} ${item.dataset.state}`;
+        return `${item.textContent} ${item.dataset.state}`;
       });
 
     // Nothing has been turned, so there is nothing written down.
     expect(entries()).toEqual([]);
 
-    // A scramble is written out the moment it is accepted, before any of it
-    // has been turned into the cube: the record holds the whole of it and the
-    // cursor is how much has arrived.
+    // A scramble is the cube you were handed rather than anything you did,
+    // and it stays out of the list from the moment it is accepted to the
+    // moment it has all arrived.
     harness.ui.scrambleButton.click();
-    expect(entries()).toEqual([
-      'R scramble pending',
-      'U scramble pending',
-      'F scramble pending',
-    ]);
-
+    expect(entries()).toEqual([]);
     harness.finishScramble();
-    expect(entries()).toEqual([
-      'R scramble applied',
-      'U scramble applied',
-      'F scramble current',
-    ]);
+    expect(entries()).toEqual([]);
 
     harness.commitMove();
     harness.controller.afterEngineFrame();
-    expect(entries()).toEqual([
-      'R scramble applied',
-      'U scramble applied',
-      'F scramble applied',
-      "R' user current",
-    ]);
+    expect(entries()).toEqual(["R' current"]);
+
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(entries()).toEqual(["R' applied", "R' current"]);
 
     // Taken back: the move stays on the list, because it is still there to be
     // put back, and the mark moves down to what is left on the cube.
     harness.ui.undoButton.click();
     harness.finishRewind();
-    expect(entries()).toEqual([
-      'R scramble applied',
-      'U scramble applied',
-      'F scramble current',
-      "R' user pending",
-    ]);
+    expect(entries()).toEqual(["R' current", "R' pending"]);
 
     harness.ui.redoButton.click();
     harness.finishRewind();
-    expect(entries()[3]).toBe("R' user current");
+    expect(entries()).toEqual(["R' applied", "R' current"]);
 
-    // A solve walks the cursor down past the end of the scramble, and the
-    // stretch each move belongs to does not move with it.
+    // A solve walks the cursor down past the end of the scramble. Both moves
+    // are waiting to be put back and neither is on the cube, so nothing is
+    // marked -- and the scramble it rewound through is still not on the list.
     harness.ui.solveButton.click();
     harness.finishRewind();
-    expect(entries()).toEqual([
-      'R scramble pending',
-      'U scramble pending',
-      'F scramble pending',
-      "R' user pending",
-    ]);
+    expect(entries()).toEqual(["R' pending", "R' pending"]);
 
     // A new cube has no record at all.
     harness.ui.resetButton.click();

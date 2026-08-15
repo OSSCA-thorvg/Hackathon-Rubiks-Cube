@@ -15,6 +15,13 @@ import {
   type GameEngine,
   type GameUi,
 } from './game/GameController.ts';
+import { decodeSession } from './game/shareCode.ts';
+import {
+  clearShareFragment,
+  readShareFragment,
+  type HistoryLike,
+  type LocationLike,
+} from './game/shareLink.ts';
 
 /** Top-level availability of the page. */
 export type AppState = 'loading' | 'ready' | 'unsupported' | 'error';
@@ -27,7 +34,29 @@ export type EngineLike = PointerTarget &
     dispose(): void;
     /** @returns true while further frames still have to be drawn. */
     advance(elapsedMs: number): boolean;
+    /** @returns false when the engine would not take the shared record. */
+    restoreSession(
+      scramble: readonly number[],
+      user: readonly number[],
+    ): boolean;
   };
+
+/**
+ * What a fragment turned out to hold, which the ready message is made from.
+ *
+ * Carried out to the one place that writes a status line rather than being
+ * announced from here. An announcement of its own would be overwritten by the
+ * "Ready" that always follows it, and making the two depend on the order they
+ * happen to run in is exactly the thing this avoids.
+ */
+type OpeningState = 'fresh' | 'shared' | 'unreadable';
+
+/** What the status line says about how the page opened. */
+const READY_MESSAGE: Readonly<Record<OpeningState, string>> = {
+  fresh: 'Ready. Scramble the cube to begin.',
+  shared: 'Ready. This cube came from a shared link.',
+  unreadable: 'That shared link could not be read. Ready with a fresh cube.',
+};
 
 /** Minimal ResizeObserver surface, injectable for unit tests. */
 export type ObserverLike = {
@@ -67,6 +96,8 @@ export type StartAppOptions = {
   readonly createObserver?: (callback: () => void) => ObserverLike;
   readonly targetWindow?: WindowLike;
   readonly targetDocument?: DocumentLike;
+  readonly targetLocation?: LocationLike;
+  readonly targetHistory?: HistoryLike;
   readonly requestFrame?: (callback: (timestamp: number) => void) => number;
   readonly cancelFrame?: (handle: number) => void;
   readonly createGameController?: (
@@ -78,6 +109,39 @@ export type AppController = {
   /** Releases the observer, the listeners, and the engine together. */
   teardown(): void;
 };
+
+/**
+ * Opens whatever state the address carries, if it carries any.
+ *
+ * The fragment is taken off the address whether or not it could be read: one
+ * left behind would replay the same refusal on every reload, and a reload here
+ * is always a fresh start.
+ *
+ * There is no rollback and no second attempt. This runs before anything has
+ * happened to the cube, so what a refusal falls back to is the cube the engine
+ * has just made -- and reset_cube() is called for the one case where the
+ * engine looked at a record and turned it down, because the answer for a
+ * damaged link is a clean session and there is nothing else to try.
+ */
+function openSharedState(
+  engine: EngineLike,
+  location: LocationLike,
+  history: HistoryLike,
+): OpeningState {
+  const encoded = readShareFragment(location.hash);
+  if (encoded === null) return 'fresh';
+
+  clearShareFragment(location, history);
+
+  const shared = decodeSession(encoded);
+  if (shared === null) return 'unreadable';
+
+  if (!engine.restoreSession(shared.scramble, shared.user)) {
+    engine.resetCube();
+    return 'unreadable';
+  }
+  return 'shared';
+}
 
 /**
  * Owns the page lifecycle around one engine instance: initial render,
@@ -98,6 +162,8 @@ export async function startApp(
     ((callback: () => void) => new ResizeObserver(callback));
   const win: WindowLike = options.targetWindow ?? window;
   const doc: DocumentLike = options.targetDocument ?? document;
+  const loc: LocationLike = options.targetLocation ?? window.location;
+  const hist: HistoryLike = options.targetHistory ?? window.history;
   const requestFrame =
     options.requestFrame ??
     ((callback: (timestamp: number) => void) =>
@@ -111,7 +177,13 @@ export async function startApp(
 
   const engine = await createEngine(canvas);
 
+  let opening: OpeningState = 'fresh';
   try {
+    // Ahead of the first render, which is the point of the order. Nothing is
+    // animating after a restore, so no frame loop starts on its own -- a
+    // restore behind this line would leave the logical cube shared and the
+    // canvas still showing the solved one the engine was made with.
+    opening = openSharedState(engine, loc, hist);
     engine.render();
   } catch (error) {
     engine.dispose();
@@ -295,7 +367,10 @@ export async function startApp(
     win.addEventListener('pageshow', onPageShow);
     doc.addEventListener('visibilitychange', onVisibilityChange);
 
-    setState('ready', 'Ready. Scramble the cube to begin.');
+    // The controller is attached after the restore, so the cursor it takes as
+    // its baseline is the restored one: a restore is not a commit, and
+    // nothing here sounds, completes, or starts a clock because of one.
+    setState('ready', READY_MESSAGE[opening]);
   } catch (error) {
     teardown();
     throw error;

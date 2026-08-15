@@ -10,6 +10,7 @@ import type {
   GameControllerOptions,
   GameUi,
 } from '../../src/game/GameController.ts';
+import { encodeSession } from '../../src/game/shareCode.ts';
 
 /**
  * The gameplay DOM the lifecycle forwards. GameController owns what the
@@ -25,6 +26,9 @@ function createGameUi(): GameUi {
     scrambleButton: button(),
     scrambleMovesInput: document.createElement('input'),
     resetButton: button(),
+    shareButton: button(),
+    recordBest: document.createElement('p'),
+    recordList: document.createElement('ol'),
     ambientButton: button(),
     homeViewButton: button(),
     viewButtons: [],
@@ -41,6 +45,8 @@ function createGameUi(): GameUi {
 function createHarness(overrides: {
   createObserver?: (callback: () => void) => ObserverLike;
   createGameController?: (options: GameControllerOptions) => GameController;
+  /** What the address bar holds when the page opens. */
+  hash?: string;
 } = {}) {
   const canvasListeners = new Map<string, Set<(event: Event) => void>>();
 
@@ -88,6 +94,7 @@ function createHarness(overrides: {
     flatStyle: vi.fn(() => 0),
     resetView: vi.fn(),
     isBusy: vi.fn(() => false),
+    restoreSession: vi.fn(() => true),
     pointerDown: vi.fn(() => true),
     pointerMove: vi.fn(),
     pointerUp: vi.fn(),
@@ -141,6 +148,20 @@ function createHarness(overrides: {
   const states: Array<[string, string]> = [];
   const onError = vi.fn();
 
+  // The address bar, as much of it as the lifecycle touches: one fragment on
+  // the way in, and one replaceState that has to take it off again.
+  const hash = overrides.hash ?? '';
+  const targetLocation = {
+    href: `https://example.test/cube/${hash}`,
+    hash,
+  };
+  const replaced: string[] = [];
+  const targetHistory = {
+    replaceState: vi.fn((_data: unknown, _unused: string, url: string) => {
+      replaced.push(url);
+    }),
+  };
+
   // A stand-in for the game controller: the lifecycle only has to build it,
   // call it once per frame, and release it in the right order.
   const game = {
@@ -172,6 +193,8 @@ function createHarness(overrides: {
         }),
       targetWindow,
       targetDocument,
+      targetLocation,
+      targetHistory,
       requestFrame,
       cancelFrame,
     });
@@ -230,6 +253,8 @@ function createHarness(overrides: {
     cancelFrame,
     states,
     onError,
+    targetHistory,
+    replaced,
   };
 }
 
@@ -663,5 +688,88 @@ describe('startApp', () => {
 
     expect(harness.engine.dispose).toHaveBeenCalledTimes(1);
     expect(harness.observer.disconnect).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('startApp and a shared link', () => {
+  /** One session encoded the way a share button would write it. */
+  const SHARED = encodeSession({ scramble: [0x44], user: [0x45] })!;
+
+  it('starts fresh when the address carries nothing', async () => {
+    const harness = createHarness();
+    await harness.start();
+
+    expect(harness.engine.restoreSession).not.toHaveBeenCalled();
+    expect(harness.targetHistory.replaceState).not.toHaveBeenCalled();
+    expect(harness.states.at(-1)).toEqual([
+      'ready',
+      'Ready. Scramble the cube to begin.',
+    ]);
+  });
+
+  it('restores the cube before the first frame is drawn', async () => {
+    const harness = createHarness({ hash: `#s=${SHARED}` });
+    // Ordered against the render, because the order is the point: nothing
+    // animates after a restore, so a frame drawn before it would be the only
+    // frame, and it would be showing a solved cube.
+    const order: string[] = [];
+    harness.engine.restoreSession.mockImplementation(() => {
+      order.push('restore');
+      return true;
+    });
+    harness.engine.render.mockImplementation(() => {
+      order.push('render');
+    });
+
+    await harness.start();
+
+    expect(harness.engine.restoreSession).toHaveBeenCalledWith(
+      [0x44],
+      [0x45],
+    );
+    expect(order).toEqual(['restore', 'render']);
+    expect(harness.states.at(-1)).toEqual([
+      'ready',
+      'Ready. This cube came from a shared link.',
+    ]);
+  });
+
+  it('takes the fragment off the address whichever way it went', async () => {
+    for (const hash of [`#s=${SHARED}`, '#s=not-a-payload']) {
+      const harness = createHarness({ hash });
+      await harness.start();
+
+      // A fragment left behind would replay the same reading -- and, for a
+      // damaged one, the same refusal -- on every reload.
+      expect(harness.replaced).toEqual(['/cube/']);
+    }
+  });
+
+  it('degrades a payload it cannot read to a fresh cube', async () => {
+    const harness = createHarness({ hash: '#s=@@@not-base64@@@' });
+    await harness.start();
+
+    expect(harness.engine.restoreSession).not.toHaveBeenCalled();
+    expect(harness.engine.resetCube).not.toHaveBeenCalled();
+    expect(harness.states.at(-1)).toEqual([
+      'ready',
+      'That shared link could not be read. Ready with a fresh cube.',
+    ]);
+  });
+
+  it('starts a clean session when the engine turns the record down', async () => {
+    const harness = createHarness({ hash: `#s=${SHARED}` });
+    harness.engine.restoreSession.mockReturnValue(false);
+
+    await harness.start();
+
+    // No rollback and no second attempt: a damaged link gets a new cube,
+    // which is the only thing anybody could do about it.
+    expect(harness.engine.resetCube).toHaveBeenCalledTimes(1);
+    expect(harness.engine.restoreSession).toHaveBeenCalledTimes(1);
+    expect(harness.states.at(-1)).toEqual([
+      'ready',
+      'That shared link could not be read. Ready with a fresh cube.',
+    ]);
   });
 });

@@ -1,5 +1,6 @@
 #include "app/Application.hpp"
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <memory>
@@ -46,20 +47,43 @@ constexpr double kUserTempoMs = interaction::kSnapMsPerQuarterTurn;
 constexpr double kScrambleTempoMs = interaction::kOpeningMs;
 
 /**
+ * The same for a pattern being watched, which is not waited on at all.
+ *
+ * Slower than either: nobody is waiting for it to arrive anywhere, and the
+ * point of it is to be looked at. At this pace the shortest of the patterns
+ * comes back round to where it started in a little over a minute.
+ */
+constexpr double kAmbientTempoMs = 300.0;
+
+/**
  * One scripted sequence being played back, with how to play it.
  *
  * A value rather than a queue and a flag beside it: a sequence and the way it
  * is being played are set up together and die together, and two pieces of
  * state with one lifetime are one object. Later phases add fields here -- a
- * repeat for the ambient pattern, a timeline effect for a rewind -- rather
- * than adding names to an enum of where the moves came from, because nothing
- * downstream asks where they came from, only what to do with them.
+ * timeline effect for a rewind -- rather than adding names to an enum of where
+ * the moves came from, because nothing downstream asks where they came from,
+ * only what to do with them.
  */
 struct Player {
     std::vector<cube::CubeMove> plan;
     std::size_t next = 0;
     /** Milliseconds per quarter turn, as `start_move` takes it. */
     double tempo_ms;
+    /** Whether running out of moves starts the sequence again. */
+    bool repeats = false;
+    /**
+     * The cube to put back when this player is stopped rather than thrown away.
+     *
+     * Here rather than beside the player because the two have exactly one
+     * lifetime: a snapshot is taken when a pattern starts repeating and means
+     * nothing at any other moment. Keeping it here is also what makes
+     * "a scramble, a reset or a shutdown ends the watching without putting
+     * anything back" true without a line of its own -- those throw the player
+     * away, and the snapshot goes with it, which is right, because the state
+     * such a command makes is the one that should stand.
+     */
+    std::optional<cube::CubeState> restore_to;
 };
 
 /**
@@ -136,6 +160,53 @@ void adopt_surface(std::uint32_t width, std::uint32_t height) noexcept
             break;
     }
     return cube::moves::B(kCubeSize);
+}
+
+/**
+ * The middle slice between L and R, turning the way L does.
+ *
+ * Not one of `cube::moves`, which are the six outer faces of a cube of any
+ * size. A slice of an N x N x N cube would have to say which of its N - 2
+ * inner layers was meant, and at the one size this application builds there is
+ * nothing to say.
+ */
+[[nodiscard]] cube::CubeMove middle_slice() noexcept
+{
+    return cube::CubeMove{cube::Axis::X, cube::layer(kCubeSize / 2), -1};
+}
+
+/**
+ * The patterns the watching mode repeats, one of which a choice picks out.
+ *
+ * Moves only. Which of them comes back round soonest is worked out in the
+ * phase document and is what put these four here rather than four others;
+ * carrying those numbers in the code would be carrying values nothing reads.
+ *
+ * Built from the named moves rather than written out as axes and layers, so
+ * which layer a face is and which way it turns stay facts of the domain with
+ * one copy. Built once, on first use, because those names are functions.
+ */
+[[nodiscard]] const std::array<std::vector<cube::CubeMove>,
+                               kAmbientPatternCount>&
+ambient_patterns()
+{
+    using namespace cube::moves;
+
+    static const std::array<std::vector<cube::CubeMove>, kAmbientPatternCount>
+        patterns{{
+            // R U M' F
+            {R(kCubeSize), U(kCubeSize), inverse(middle_slice()),
+             F(kCubeSize)},
+            // R U' D' F
+            {R(kCubeSize), inverse(U(kCubeSize)), inverse(D(kCubeSize)),
+             F(kCubeSize)},
+            // R U F' D
+            {R(kCubeSize), U(kCubeSize), inverse(F(kCubeSize)), D(kCubeSize)},
+            // R U F D
+            {R(kCubeSize), U(kCubeSize), F(kCubeSize), D(kCubeSize)},
+        }};
+
+    return patterns;
 }
 
 /** Reports whether a face value is one of the six external cube faces. */
@@ -256,6 +327,18 @@ void commit_move(const cube::CubeMove& move) noexcept
 }
 
 /**
+ * Whether the sequence playing is a pattern being watched.
+ *
+ * Which is to say whether there is a cube waiting to be put back. Watching is
+ * a playback with somewhere to return to and no end of its own, so having the
+ * snapshot is not a symptom of it -- it is the whole of what it is.
+ */
+[[nodiscard]] bool ambient_running() noexcept
+{
+    return state->playback && state->playback->restore_to.has_value();
+}
+
+/**
  * Applies whatever sweep the controller has accumulated.
  *
  * Called from every point where a camera is about to be used, so the camera
@@ -305,6 +388,11 @@ void advance_playback() noexcept
     if (state->interaction.is_busy()) return;
 
     Player& player = *state->playback;
+
+    // The whole of repeating: a player that has run out starts over, and so
+    // never runs out. Nothing counts the rounds, because nothing needs to.
+    if (player.repeats && player.next >= player.plan.size()) player.next = 0;
+
     while (player.next < player.plan.size()) {
         if (state->interaction.start_move(player.plan[player.next++],
                                           player.tempo_ms)) {
@@ -377,6 +465,12 @@ bool pointer_down(float x, float y) noexcept
     // no longer reachable. With no cube on screen there is nothing to look
     // around either, so the press is refused rather than aimed at a region
     // that has no size -- which would make the viewpoint permanently NaN.
+    //
+    // A watched pattern is a sequence like any other here, and so is looked
+    // around rather than interrupted. Looking is not input into the cube: the
+    // viewpoint is the user's at every moment, including this one, and a
+    // pattern is worth turning round to watch. What ends the watching is a
+    // command, which a drag is not.
     if (state->playback) {
         if (!visible_views(state->view_mode).cube) return false;
 
@@ -556,7 +650,10 @@ bool scramble(std::uint32_t seed, std::uint32_t move_count) noexcept
 
     // Turned rather than applied: the cube is still solved when this returns
     // and arrives at the scrambled state a few hundred frames later.
-    state->playback = Player{std::move(plan), 0, kScrambleTempoMs};
+    // Runs out and has nowhere to go back to: a scramble is where the cube is
+    // meant to be left, not an interlude.
+    state->playback =
+        Player{std::move(plan), 0, kScrambleTempoMs, false, std::nullopt};
     return true;
 }
 
@@ -568,6 +665,44 @@ void reset_cube() noexcept
     discard_playback();
     state->cube_state = cube::CubeState(kCubeSize);
     state->user_move_count = 0;
+}
+
+const std::vector<cube::CubeMove>& ambient_pattern(
+    std::uint32_t choice) noexcept
+{
+    return ambient_patterns()[choice % kAmbientPatternCount];
+}
+
+bool ambient_start(std::uint32_t choice) noexcept
+{
+    if (!state) return false;
+    if (ambient_running()) return false;
+
+    // Whatever else was playing gives way, the way it does for a scramble.
+    // Nothing is put back on the way in: the cube being watched is the cube
+    // that was there, which is exactly what the snapshot below records.
+    discard_playback();
+
+    state->playback = Player{ambient_pattern(choice), 0, kAmbientTempoMs, true,
+                             state->cube_state};
+    return true;
+}
+
+void ambient_stop() noexcept
+{
+    if (!state || !ambient_running()) return;
+
+    // Taken out of the player before the player is thrown away, and put back
+    // afterwards: the discard is what stops a turn already in flight, and a
+    // cube restored ahead of it would have that turn land on top of it.
+    cube::CubeState origin = std::move(*state->playback->restore_to);
+    discard_playback();
+    state->cube_state = std::move(origin);
+}
+
+bool is_ambient() noexcept
+{
+    return state && ambient_running();
 }
 
 bool is_solved() noexcept

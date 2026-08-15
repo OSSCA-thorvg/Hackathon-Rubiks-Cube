@@ -22,7 +22,14 @@ pointer_interaction_test = executable(
   dependencies: [application_dep, catch2_dep],
 )
 
+ambient_test = executable(
+  'ambient-test',
+  files('AmbientTest.cpp'),
+  dependencies: [application_dep, catch2_dep],
+)
+
 test('application lifecycle', application_test)
+test('ambient watching', ambient_test)
 test('pointer interaction wiring', pointer_interaction_test)
 test('rendered scene contract', render_contract_test)
 test('input validation', input_validation_test)

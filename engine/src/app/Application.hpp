@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 
+#include "cube/CubeMove.hpp"
 #include "cube/Cubie.hpp"
 #include "graphics/Layout.hpp"
 
@@ -63,6 +65,10 @@ namespace rubiks::app {
  * reaches a pick, and it is refused outright when the 3D cube is not on screen,
  * for the same reason a press off the net is refused in the flat-only view.
  *
+ * A watched pattern is a sequence like any other here, so it too is looked
+ * around rather than interrupted; watching ends at a command, and a drag is
+ * not one.
+ *
  * @return true when a gesture began. False only when none could: before
  *         initialization, for non-finite coordinates, while another gesture is
  *         already running, and for a press with nothing on screen it could
@@ -113,6 +119,60 @@ inline constexpr std::uint32_t kMaxScrambleMoves = 100;
 /** Restores the logical cube and clears the current solve session. */
 void reset_cube() noexcept;
 
+/** How many repeating patterns the watching mode chooses between. */
+inline constexpr std::uint32_t kAmbientPatternCount = 4;
+
+/**
+ * How many times a pattern may repeat before the cube is back where it began.
+ *
+ * A bound rather than the exact orders, which are worked out in the phase
+ * document and live nowhere else. Nothing in the engine reads an order -- the
+ * repeat just keeps taking the next move -- so writing them down here would be
+ * a set of numbers that only the tests guarding them ever looked at. What the
+ * watching actually promises is that it comes back round within a while, and
+ * that is a bound; it goes on holding when the table is edited, which is when
+ * the promise is easiest to break.
+ */
+inline constexpr int kAmbientMaxPeriod = 200;
+
+/**
+ * The pattern one choice selects, taken modulo the size of the table.
+ *
+ * Every value is a valid choice, so there is no rejection path and no size to
+ * ask for before choosing. The table is fixed and public because the property
+ * that matters about it -- that each of its patterns brings the cube back
+ * round within kAmbientMaxPeriod -- is arithmetic, and checking arithmetic
+ * needs the numbers rather than an application to play them into.
+ */
+[[nodiscard]] const std::vector<cube::CubeMove>& ambient_pattern(
+    std::uint32_t choice) noexcept;
+
+/**
+ * Begins watching: the cube is put away and a pattern repeats until stopped.
+ *
+ * The pattern is played through the same path a scramble takes, so the moves
+ * are turned rather than applied and none of them is anybody's. It never runs
+ * out, so the application stays busy and asking for frames until it is stopped.
+ *
+ * @return true when watching began; false before initialization and when it
+ *         had already begun.
+ */
+[[nodiscard]] bool ambient_start(std::uint32_t choice) noexcept;
+
+/**
+ * Ends watching and puts back the cube from the moment it began.
+ *
+ * Without animation: this is not a move but the undoing of an interlude, and
+ * there is nothing about it to watch. The move count and the viewpoint are
+ * untouched, so nothing that happened while watching is left behind.
+ *
+ * A no-op when nothing is being watched.
+ */
+void ambient_stop() noexcept;
+
+/** Returns whether a pattern is being watched right now. */
+[[nodiscard]] bool is_ambient() noexcept;
+
 /** Returns whether the committed logical cube is solved. */
 [[nodiscard]] bool is_solved() noexcept;
 
@@ -154,7 +214,8 @@ void reset_view() noexcept;
  *
  * An orbit sweep is not busy; the viewpoint can move while the cube cannot.
  * A sequence being played is, from the moment it is accepted until its last
- * turn has settled, so the value never falls away between two of its moves.
+ * turn has settled, so the value never falls away between two of its moves --
+ * and a pattern being watched, which has no last turn, for as long as it runs.
  */
 [[nodiscard]] bool is_busy() noexcept;
 

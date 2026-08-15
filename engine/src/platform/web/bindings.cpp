@@ -136,6 +136,36 @@ EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_reset_cube() noexcept
     rubiks::app::reset_cube();
 }
 
+/**
+ * Begins watching a repeating pattern, chosen by `choice` modulo the table.
+ *
+ * Every value is a valid choice, so this is where the arbitrariness comes in:
+ * the browser has a random source and the engine has none.
+ *
+ * @return one when watching began; zero when it had already begun.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_ambient_start(
+    std::uint32_t choice) noexcept
+{
+    return rubiks::app::ambient_start(choice) ? 1 : 0;
+}
+
+/**
+ * Ends watching, putting back the cube from the moment it began.
+ *
+ * Immediate rather than animated, and a no-op when nothing is being watched.
+ */
+EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_ambient_stop() noexcept
+{
+    rubiks::app::ambient_stop();
+}
+
+/** Returns one while a pattern is being watched. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_is_ambient() noexcept
+{
+    return rubiks::app::is_ambient() ? 1 : 0;
+}
+
 /** Returns one when the committed logical cube is solved. */
 EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_is_solved() noexcept
 {

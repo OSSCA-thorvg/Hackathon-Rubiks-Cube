@@ -89,6 +89,7 @@ export function bootstrap(
           <button type="button" id="solve">Solve</button>
         </div>
         <button type="button" id="stop" hidden>Stop</button>
+        <button type="button" id="share">Share</button>
         <button type="button" id="ambient" aria-pressed="false">Watch</button>
         <button type="button" id="home-view">Home view</button>
       </div>
@@ -98,6 +99,12 @@ export function bootstrap(
   <section class="move-log" aria-labelledby="move-log-title">
     <h2 class="move-log__title" id="move-log-title">Your moves</h2>
     <ol class="move-log__list" id="move-log" aria-labelledby="move-log-title"></ol>
+  </section>
+
+  <section class="records" aria-labelledby="records-title">
+    <h2 class="records__title" id="records-title">This session</h2>
+    <p class="records__best" id="record-best">No solves yet.</p>
+    <ol class="records__list" id="record-list" aria-labelledby="records-title"></ol>
   </section>
 
   <details class="move-controls">
@@ -138,6 +145,9 @@ export function bootstrap(
     redoButton: app.querySelector<HTMLButtonElement>('#redo')!,
     solveButton: app.querySelector<HTMLButtonElement>('#solve')!,
     stopButton: app.querySelector<HTMLButtonElement>('#stop')!,
+    shareButton: app.querySelector<HTMLButtonElement>('#share')!,
+    recordBest: app.querySelector<HTMLParagraphElement>('#record-best')!,
+    recordList: app.querySelector<HTMLOListElement>('#record-list')!,
     moveLogList: app.querySelector<HTMLOListElement>('#move-log')!,
     ambientButton: app.querySelector<HTMLButtonElement>('#ambient')!,
     homeViewButton: app.querySelector<HTMLButtonElement>('#home-view')!,

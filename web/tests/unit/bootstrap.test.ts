@@ -33,6 +33,13 @@ describe('bootstrap', () => {
 
     expect(app.querySelector('canvas')).not.toBeNull();
     expect(app.querySelector('#reset')).not.toBeNull();
+    expect(app.querySelector('#share')).not.toBeNull();
+    // The board a session's solves are written on, which starts empty and
+    // says so through the markup rather than waiting for a first draw.
+    expect(app.querySelector('#record-best')?.textContent).toBe(
+      'No solves yet.',
+    );
+    expect(app.querySelector('#record-list')?.children).toHaveLength(0);
     expect(app.querySelector('#ambient')?.getAttribute('aria-pressed')).toBe(
       'false',
     );

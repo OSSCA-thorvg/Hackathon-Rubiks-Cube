@@ -458,6 +458,49 @@ button[aria-pressed="true"]:hover:not(:disabled) {
   background: #8bc5ff;
 }
 
+/*
+ * How this sitting has gone. Nothing here survives a reload, which is why it
+ * says "this session" rather than pretending to be a record book.
+ */
+.records {
+  width: min(100%, 48rem);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 0.9rem;
+  padding: 0.6rem 1rem 0.7rem;
+  background: rgb(20 22 28 / 72%);
+}
+
+.records__title {
+  margin: 0 0 0.45rem;
+  color: rgb(255 255 255 / 52%);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.records__best {
+  margin: 0 0 0.4rem;
+  color: #8bc5ff;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.records__list {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.records__item {
+  color: rgb(255 255 255 / 62%);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .move-controls {
   width: min(100%, 48rem);
   border: 1px solid rgb(255 255 255 / 10%);
@@ -511,10 +554,13 @@ button[aria-pressed="true"]:hover:not(:disabled) {
 
 #app[data-state="loading"] .move-controls,
 #app[data-state="loading"] .move-log,
+#app[data-state="loading"] .records,
 #app[data-state="unsupported"] .move-controls,
 #app[data-state="unsupported"] .move-log,
+#app[data-state="unsupported"] .records,
 #app[data-state="error"] .move-controls,
-#app[data-state="error"] .move-log {
+#app[data-state="error"] .move-log,
+#app[data-state="error"] .records {
   display: none;
 }
 
@@ -642,6 +688,12 @@ button[aria-pressed="true"]:hover:not(:disabled) {
 
   .move-log__list {
     max-height: 3.4rem;
+  }
+
+  /* The same trim as the log beside it: the board is a footnote to the cube
+     on a screen this size, not a second panel competing with it. */
+  .records {
+    padding: 0.5rem 0.75rem 0.6rem;
   }
 
   .move-grid {

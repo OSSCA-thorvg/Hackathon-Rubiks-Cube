@@ -1,4 +1,5 @@
 import type { CommitSound } from './ClickSound.ts';
+import type { SolveRecord } from './SessionRecords.ts';
 import {
   formatElapsed,
   SolveTimer,
@@ -65,6 +66,20 @@ export type GameSessionOptions = {
   readonly timerEnvironment?: TimerEnvironment;
   /** Sounded once on every frame a move committed; absent is silent. */
   readonly sound?: CommitSound;
+  /**
+   * Told about a solve the person finished themselves.
+   *
+   * Called only where the announcement below says "Solved", so what counts as
+   * a solve worth keeping is decided once, in the branch that already had to
+   * tell the two apart. A cube a rewind took down, and one opened from a
+   * shared link, never reach it -- the first fails that branch and the second
+   * is never under way, because a session only arms its clock after a
+   * scramble it started.
+   *
+   * @returns whether this is the fastest so far, which is said as part of the
+   *          completion message rather than announced over the top of it.
+   */
+  readonly onSolve?: (record: SolveRecord) => boolean;
 };
 
 /**
@@ -84,6 +99,7 @@ export class GameSession {
   private readonly ui: SessionUi;
   private readonly timer: SolveTimer;
   private readonly sound: CommitSound | null;
+  private readonly onSolve: ((record: SolveRecord) => boolean) | null;
 
   private currentState: GameState = 'idle';
   // Replaced by the constructor's own baseline before a frame is ever read;
@@ -95,6 +111,7 @@ export class GameSession {
     this.engine = options.engine;
     this.ui = options.ui;
     this.sound = options.sound ?? null;
+    this.onSolve = options.onSolve ?? null;
 
     // Assigning value on an <output> publishes the text too, so the DOM only
     // has to be written once per tick.
@@ -185,10 +202,23 @@ export class GameSession {
       // an undo stops at the end of the scramble, so a solve is the one thing
       // that can take the cursor below it, and a cube the user finished
       // themselves always has moves of their own still on it.
+      if (frame.cursor === 0 && frame.scrambleEnd > 0) {
+        this.announce(
+          `Rewound to solved in ${formatElapsed(finalMs)}. Not a solve of your own.`,
+        );
+        return;
+      }
+
+      // Kept, and told whether it is the best of the sitting. The answer joins
+      // the message rather than following it, because a second announcement
+      // would replace this one on the very line it was written to.
+      const isBest = this.onSolve?.({
+        elapsedMs: finalMs,
+        scrambleLength: frame.scrambleEnd,
+        userMoveCount: frame.userMoves,
+      });
       this.announce(
-        frame.cursor === 0 && frame.scrambleEnd > 0
-          ? `Rewound to solved in ${formatElapsed(finalMs)}. Not a solve of your own.`
-          : `Solved in ${formatElapsed(finalMs)}.`,
+        `Solved in ${formatElapsed(finalMs)}.${isBest === true ? ' A new best.' : ''}`,
       );
     }
   }

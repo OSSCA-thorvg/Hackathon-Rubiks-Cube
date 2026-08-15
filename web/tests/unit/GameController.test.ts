@@ -6,6 +6,7 @@ import {
   type GameUi,
   type KeyboardTarget,
 } from '../../src/game/GameController.ts';
+import { decodeSession } from '../../src/game/shareCode.ts';
 import type { TimerEnvironment } from '../../src/game/SolveTimer.ts';
 import {
   CubeFace,
@@ -28,6 +29,7 @@ function createUi(): GameUi {
     <button id="redo" type="button">Redo</button>
     <button id="solve" type="button">Solve</button>
     <button id="stop" type="button" hidden>Stop</button>
+    <button id="share" type="button">Share</button>
     <button id="ambient" type="button" aria-pressed="false">Watch</button>
     <button id="home-view" type="button">Home</button>
     <button data-view="3d" type="button">3D</button>
@@ -44,6 +46,8 @@ function createUi(): GameUi {
     <button data-face="r" data-turn="1" type="button">R</button>
     <button data-face="r" data-turn="-1" type="button">R prime</button>
     <ol id="move-log"></ol>
+    <p id="record-best"></p>
+    <ol id="record-list"></ol>
   `;
   document.body.replaceChildren(root);
 
@@ -59,6 +63,9 @@ function createUi(): GameUi {
     redoButton: root.querySelector<HTMLButtonElement>('#redo')!,
     solveButton: root.querySelector<HTMLButtonElement>('#solve')!,
     stopButton: root.querySelector<HTMLButtonElement>('#stop')!,
+    shareButton: root.querySelector<HTMLButtonElement>('#share')!,
+    recordBest: root.querySelector<HTMLParagraphElement>('#record-best')!,
+    recordList: root.querySelector<HTMLOListElement>('#record-list')!,
     moveLogList: root.querySelector<HTMLOListElement>('#move-log')!,
     ambientButton: root.querySelector<HTMLButtonElement>('#ambient')!,
     homeViewButton: root.querySelector<HTMLButtonElement>('#home-view')!,
@@ -78,7 +85,18 @@ function createUi(): GameUi {
 const SCRAMBLE_MOVES = 3;
 
 /** Creates a fake engine and manually controlled timer/keyboard environment. */
-function createHarness(overrides: { prefersReducedMotion?: boolean } = {}) {
+function createHarness(
+  overrides: {
+    prefersReducedMotion?: boolean;
+    /**
+     * A record already on the cube when the controller is attached.
+     *
+     * What a shared link leaves behind: the restore happens before anything
+     * is wired up, so this is the state the very first frame observes.
+     */
+    opened?: { readonly scrambleEnd: number; readonly moves: number[] };
+  } = {},
+) {
   const ui = createUi();
   let solved = true;
   let busy = false;
@@ -105,6 +123,14 @@ function createHarness(overrides: { prefersReducedMotion?: boolean } = {}) {
   // Where a rewind that is playing will end up, and whether Stop may reach it.
   let rewindTo: number | null = null;
   let stoppable = false;
+
+  if (overrides.opened !== undefined) {
+    moves = [...overrides.opened.moves];
+    length = moves.length;
+    cursor = moves.length;
+    scrambleEnd = overrides.opened.scrambleEnd;
+    solved = false;
+  }
 
   const startRewind = (to: number): boolean => {
     rewindTo = to;
@@ -224,6 +250,19 @@ function createHarness(overrides: { prefersReducedMotion?: boolean } = {}) {
   };
   const startFrameLoop = vi.fn();
   const onError = vi.fn();
+
+  // A clipboard that keeps what it was handed, and can be made to refuse the
+  // way a browser outside a secure context does.
+  const copied: string[] = [];
+  let copyFails = false;
+  const shareTarget = {
+    currentUrl: (): string => 'https://example.test/cube/',
+    copy: vi.fn((text: string): Promise<void> => {
+      if (copyFails) return Promise.reject(new Error('No clipboard.'));
+      copied.push(text);
+      return Promise.resolve();
+    }),
+  };
   // A sound that only counts, so the tests can hear it and jsdom is never
   // asked for an AudioContext it does not have.
   let muted = false;
@@ -245,6 +284,7 @@ function createHarness(overrides: { prefersReducedMotion?: boolean } = {}) {
     timerEnvironment,
     keyboardTarget,
     sound,
+    shareTarget,
     prefersReducedMotion: overrides.prefersReducedMotion ?? false,
   });
 
@@ -255,6 +295,11 @@ function createHarness(overrides: { prefersReducedMotion?: boolean } = {}) {
     controller,
     startFrameLoop,
     onError,
+    shareTarget,
+    copied,
+    failCopy: (value: boolean): void => {
+      copyFails = value;
+    },
     setNow: (value: number): void => {
       now = value;
     },
@@ -447,7 +492,9 @@ describe('attachGameController', () => {
     harness.controller.afterEngineFrame();
     expect(harness.controller.state).toBe('completed');
     expect(harness.ui.timer.value).toBe('00:02.34');
-    expect(harness.ui.status.textContent).toBe('Solved in 00:02.34.');
+    expect(harness.ui.status.textContent).toBe(
+      'Solved in 00:02.34. A new best.',
+    );
   });
 
   it('does not start without a committed move', () => {
@@ -1054,7 +1101,9 @@ describe('attachGameController', () => {
 
     expect(harness.controller.state).toBe('completed');
     expect(harness.ui.timer.value).toBe('00:02.34');
-    expect(harness.ui.status.textContent).toBe('Solved in 00:02.34.');
+    expect(harness.ui.status.textContent).toBe(
+      'Solved in 00:02.34. A new best.',
+    );
   });
 
   it('stops watching before a rewind, the way every cube command does', () => {
@@ -1159,5 +1208,233 @@ describe('attachGameController', () => {
     expect(harness.onError).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'scramble failed' }),
     );
+  });
+});
+
+describe('sharing the cube', () => {
+  it('has nothing to share until something has happened to the cube', () => {
+    const harness = createHarness();
+
+    expect(harness.ui.shareButton.disabled).toBe(true);
+
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.ui.shareButton.disabled).toBe(false);
+  });
+
+  it('copies a link carrying the record as it stands', async () => {
+    const harness = createHarness();
+
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+
+    harness.ui.shareButton.click();
+    await vi.waitFor(() => expect(harness.copied).toHaveLength(1));
+
+    const url = new URL(harness.copied[0]!);
+    expect(url.origin + url.pathname).toBe('https://example.test/cube/');
+
+    // The scramble the cube was handed and the one move made on top of it,
+    // which is exactly what the record holds.
+    const shared = decodeSession(url.hash.replace('#s=', ''));
+    expect(shared).toEqual({ scramble: [0x44, 0x45, 0x46], user: [0x40] });
+    expect(harness.ui.status.textContent).toBe('Link copied. It opens this cube.');
+  });
+
+  it('leaves out the moves the sender took back', async () => {
+    const harness = createHarness();
+
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+    harness.commitMove();
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+
+    harness.ui.undoButton.click();
+    harness.finishRewind();
+
+    harness.ui.shareButton.click();
+    await vi.waitFor(() => expect(harness.copied).toHaveLength(1));
+
+    // Two were made and one was withdrawn, so one travels: what is shared is
+    // a cube, and a move its sender undid is not part of one.
+    const shared = decodeSession(
+      new URL(harness.copied[0]!).hash.replace('#s=', ''),
+    );
+    expect(shared?.user).toEqual([0x40]);
+  });
+
+  it('says so when the clipboard will not take it', async () => {
+    const harness = createHarness();
+    harness.failCopy(true);
+
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    harness.ui.shareButton.click();
+
+    // Sharing is an extra, so a browser that cannot copy is something to
+    // mention rather than a failure that takes the application down.
+    await vi.waitFor(() =>
+      expect(harness.ui.status.textContent).toBe('Could not copy the link.'),
+    );
+    expect(harness.onError).not.toHaveBeenCalled();
+  });
+
+  it('is out of reach while anything is playing', () => {
+    const harness = createHarness();
+
+    harness.ui.scrambleButton.click();
+    harness.controller.afterEngineFrame();
+    expect(harness.ui.shareButton.disabled).toBe(true);
+
+    harness.finishScramble();
+    expect(harness.ui.shareButton.disabled).toBe(false);
+  });
+
+  it('is out of reach for a solve stopped inside the scramble', () => {
+    const harness = createHarness();
+
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+
+    harness.ui.solveButton.click();
+    harness.ui.stopButton.click();
+
+    // Below the boundary the payload has no shape for: the two counts say
+    // where the scramble stops, and nothing in them says how much of it is on
+    // the cube.
+    expect(harness.ui.shareButton.disabled).toBe(true);
+  });
+
+  it('stops watching before it reads the cube', async () => {
+    const harness = createHarness();
+
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+
+    harness.ui.ambientButton.click();
+    expect(harness.engine.isAmbient()).toBe(true);
+
+    harness.ui.shareButton.click();
+    await vi.waitFor(() => expect(harness.copied).toHaveLength(1));
+
+    // What travels is the session, never the position an interlude happened
+    // to leave the cube in.
+    expect(harness.engine.isAmbient()).toBe(false);
+  });
+});
+
+describe('the records of a sitting', () => {
+  it('keeps a solve you finished and says when it is the best', () => {
+    const harness = createHarness();
+
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+    harness.setNow(100);
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+
+    harness.setSolved(true);
+    harness.commitMove();
+    harness.setNow(20_100);
+    harness.controller.afterEngineFrame();
+
+    expect(harness.ui.status.textContent).toBe('Solved in 00:20.00. A new best.');
+    expect(harness.ui.recordBest.textContent).toBe('Best 00:20.00');
+    expect(harness.ui.recordList.children).toHaveLength(1);
+
+    // A slower second solve joins the list without taking the best.
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+    harness.setNow(30_000);
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+
+    harness.setSolved(true);
+    harness.commitMove();
+    harness.setNow(60_000);
+    harness.controller.afterEngineFrame();
+
+    expect(harness.ui.status.textContent).toBe('Solved in 00:30.00.');
+    expect(harness.ui.recordBest.textContent).toBe('Best 00:20.00');
+    expect(harness.ui.recordList.children).toHaveLength(2);
+  });
+
+  it('keeps nothing for a cube a rewind took down', () => {
+    const harness = createHarness();
+
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+    harness.setNow(100);
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+
+    harness.ui.solveButton.click();
+    harness.setNow(5000);
+    harness.finishRewind();
+
+    expect(harness.controller.state).toBe('completed');
+    expect(harness.ui.status.textContent).toContain('Not a solve of your own');
+    expect(harness.ui.recordBest.textContent).toBe('No solves yet.');
+    expect(harness.ui.recordList.children).toHaveLength(0);
+  });
+
+  it('keeps nothing for a cube that was opened rather than scrambled', () => {
+    const harness = createHarness();
+
+    // What a shared link leaves behind: a record with moves on it and a
+    // session that was never started, because starting one is a scramble.
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.controller.state).toBe('idle');
+
+    harness.setSolved(true);
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+
+    expect(harness.controller.state).toBe('idle');
+    expect(harness.ui.recordBest.textContent).toBe('No solves yet.');
+    expect(harness.ui.recordList.children).toHaveLength(0);
+  });
+});
+
+describe('a controller attached to a cube that was already restored', () => {
+  /** A scramble of two with one move of the user's own on top of it. */
+  const OPENED = { scrambleEnd: 2, moves: [0x44, 0x45, 0x40] };
+
+  it('does not hear the restore as a move landing', () => {
+    const harness = createHarness({ opened: OPENED });
+
+    // The baseline is taken when the session is built, and the restore was
+    // already done by then -- so the first frame sees no change at all.
+    harness.controller.afterEngineFrame();
+    expect(harness.sound.play).not.toHaveBeenCalled();
+  });
+
+  it('does not complete, start a clock, or keep a record for it', () => {
+    const harness = createHarness({ opened: OPENED });
+    harness.setSolved(true);
+
+    harness.controller.afterEngineFrame();
+
+    // A shared link opens an idle session: the clock is armed by a scramble
+    // this application played, and there was none.
+    expect(harness.controller.state).toBe('idle');
+    expect(harness.ui.timer.value).toBe('00:00.00');
+    expect(harness.ui.recordBest.textContent).toBe('No solves yet.');
+  });
+
+  it('writes out the moves it was given, and lets them be taken back', () => {
+    const harness = createHarness({ opened: OPENED });
+
+    // The log is a reading of the record, so a session that arrived from
+    // somewhere else draws exactly like one that was played here.
+    expect(harness.ui.moveLogList.children).toHaveLength(1);
+    expect(harness.ui.moveLogList.children[0]?.textContent).toBe("R'");
+    expect(harness.ui.undoButton.disabled).toBe(false);
+    expect(harness.ui.redoButton.disabled).toBe(true);
+    expect(harness.ui.shareButton.disabled).toBe(false);
   });
 });

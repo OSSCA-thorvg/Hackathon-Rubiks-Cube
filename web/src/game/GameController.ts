@@ -16,6 +16,9 @@ import {
   type GameState,
   type SessionEngine,
 } from './GameSession.ts';
+import { SessionRecords, type SolveRecord } from './SessionRecords.ts';
+import { encodeSession, type SharedSession } from './shareCode.ts';
+import { shareUrl } from './shareLink.ts';
 import type { TimerEnvironment } from './SolveTimer.ts';
 
 export type { GameState } from './GameSession.ts';
@@ -65,6 +68,12 @@ export type GameUi = {
   readonly solveButton: HTMLButtonElement;
   /** Breaks a rewind off, and is only on screen while one is playing. */
   readonly stopButton: HTMLButtonElement;
+  /** Copies a link that opens this cube; out of reach when there is none. */
+  readonly shareButton: HTMLButtonElement;
+  /** The fastest solve of the sitting, written out in one line. */
+  readonly recordBest: HTMLElement;
+  /** The latest few solves, newest first. */
+  readonly recordList: HTMLOListElement;
   /** Where the record is written out; the log owns everything inside it. */
   readonly moveLogList: HTMLOListElement;
   /** Starts and stops watching; pressed while a pattern is running. */
@@ -81,6 +90,20 @@ export type GameUi = {
   /** What the slider currently means, written out beside it. */
   readonly speedValue: HTMLOutputElement;
   readonly moveButtons: readonly HTMLButtonElement[];
+};
+
+/**
+ * Where a shared link is built from and where it is put; injectable for tests.
+ *
+ * Two capabilities rather than the two globals they come from, because a test
+ * has neither: `navigator.clipboard` is absent outside a secure context, and
+ * the page a test runs on is not the page a link should point at.
+ */
+export type ShareTarget = {
+  /** The address of this page. */
+  currentUrl(): string;
+  /** Puts one string on the clipboard, or rejects when it cannot. */
+  copy(text: string): Promise<void>;
 };
 
 /** Minimal keyboard event target, injectable for tests. */
@@ -108,6 +131,8 @@ export type GameControllerOptions = {
   readonly randomSource?: () => number;
   readonly timerEnvironment?: TimerEnvironment;
   readonly keyboardTarget?: KeyboardTarget;
+  /** Where a share goes; production uses the address bar and the clipboard. */
+  readonly shareTarget?: ShareTarget;
   /**
    * Whether the person has asked for less motion. Injectable so a test can
    * say so without a media query.
@@ -250,6 +275,16 @@ export function attachGameController(
 ): GameController {
   const { engine, ui, startFrameLoop, onError } = options;
   const randomSource = options.randomSource ?? randomUint32;
+  const shareTarget: ShareTarget = options.shareTarget ?? {
+    currentUrl: (): string => window.location.href,
+    copy: (text: string): Promise<void> =>
+      // Absent outside a secure context, which is a refusal like any other:
+      // sharing is an extra, so being unable to copy is something to say
+      // rather than a failure that takes the application down.
+      navigator.clipboard === undefined
+        ? Promise.reject(new Error('No clipboard here.'))
+        : navigator.clipboard.writeText(text),
+  };
   const keyboardTarget: KeyboardTarget = options.keyboardTarget ?? {
     addEventListener: (_type, listener): void => {
       window.addEventListener('keydown', listener);
@@ -281,6 +316,9 @@ export function attachGameController(
   };
 
   const moveLog = setup(() => new MoveLog(ui.moveLogList, engine));
+  const records = setup(
+    () => new SessionRecords(ui.recordBest, ui.recordList),
+  );
   const session = setup(
     () =>
       new GameSession({
@@ -288,6 +326,7 @@ export function attachGameController(
         ui,
         timerEnvironment: options.timerEnvironment,
         sound,
+        onSolve: (record: SolveRecord): boolean => records.add(record),
       }),
   );
 
@@ -446,6 +485,38 @@ export function attachGameController(
   let rewinding = false;
 
   /**
+   * The session a link would carry right now, or null when there is none.
+   *
+   * Read off the record rather than remembered: the scramble is everything
+   * below the boundary and the user's own moves are what sits between the
+   * boundary and the cursor, so a tail the sender has rewound behind is left
+   * out by where the reading stops rather than by a rule against it. What the
+   * far side gets is the cube as it stands, and undo and solve work through
+   * everything it was given -- but the moves their sender took back are not
+   * theirs to put back, because they are not part of a cube.
+   */
+  const sharableNow = (now: EngineFrame): SharedSession | null => {
+    // Watching is not in the way, for the same reason it is not in the way of
+    // a move button: it leaves the record untouched, and a press ends it
+    // first. Anything else being played is, because the middle of a sequence
+    // is a cube nobody has been handed yet.
+    if (now.busy && !now.watching) return null;
+    if (now.cursor === 0 || now.cursor < now.scrambleEnd) return null;
+
+    const scramble: number[] = [];
+    for (let index = 0; index < now.scrambleEnd; index += 1) {
+      scramble.push(engine.timelineMove(index));
+    }
+
+    const user: number[] = [];
+    for (let index = now.scrambleEnd; index < now.cursor; index += 1) {
+      user.push(engine.timelineMove(index));
+    }
+
+    return { scramble, user };
+  };
+
+  /**
    * Puts the controls that follow the engine into the state it is in.
    *
    * One reading for all of them, so they cannot describe different moments.
@@ -470,6 +541,12 @@ export function attachGameController(
     ui.undoButton.disabled = movesOff || now.cursor <= now.scrambleEnd;
     ui.redoButton.disabled = movesOff || now.cursor >= now.length;
     ui.solveButton.disabled = movesOff || now.cursor === 0;
+
+    // Live exactly when there is a state to send: something on the cube,
+    // because an untouched one is what a link would open anyway, and the
+    // cursor at or above the scramble boundary, because a solve stopped
+    // inside the scramble is a state the payload has no shape for.
+    ui.shareButton.disabled = sharableNow(now) === null;
 
     // Off the screen and out of reach together: it is not a control that is
     // sometimes unavailable but one that only exists while there is a rewind
@@ -677,6 +754,43 @@ export function attachGameController(
     });
   };
 
+  /**
+   * Copies a link that opens this cube.
+   *
+   * A cube command, so watching gives way to it first -- what a link should
+   * carry is the session, never the position an interlude happened to leave
+   * the cube in. Reading the record after that is what makes the state on the
+   * clipboard the state on the screen.
+   *
+   * The copying itself is the only thing here that finishes later, and both
+   * of its endings are the same kind of news: sharing is an extra, so a
+   * clipboard that refuses is something to mention rather than a fault.
+   */
+  const onShare = (): void => {
+    cubeCommand((): void => {
+      const shared = sharableNow(engineNow());
+      if (shared === null) return;
+
+      const encoded = encodeSession(shared);
+      if (encoded === null) {
+        session.announce('This cube cannot be written into a link.');
+        return;
+      }
+
+      // Guarded on the way back rather than on the way out: a controller torn
+      // down while the clipboard was thinking has no status line left to
+      // write to, and the elements are no longer this controller's.
+      void shareTarget.copy(shareUrl(shareTarget.currentUrl(), encoded)).then(
+        (): void => {
+          if (active) session.announce('Link copied. It opens this cube.');
+        },
+        (): void => {
+          if (active) session.announce('Could not copy the link.');
+        },
+      );
+    });
+  };
+
   // Where the camera is put back, which is a way of looking rather than a
   // command: it leaves a scramble playing and it leaves a pattern watched.
   const onHomeView = (): void => {
@@ -746,6 +860,7 @@ export function attachGameController(
   ui.redoButton.addEventListener('click', onRedo);
   ui.solveButton.addEventListener('click', onSolve);
   ui.stopButton.addEventListener('click', onStop);
+  ui.shareButton.addEventListener('click', onShare);
   ui.ambientButton.addEventListener('click', onAmbient);
   ui.homeViewButton.addEventListener('click', onHomeView);
   ui.muteButton.addEventListener('click', onMute);
@@ -795,6 +910,7 @@ export function attachGameController(
         ui.redoButton,
         ui.solveButton,
         ui.stopButton,
+        ui.shareButton,
         ui.ambientButton,
       ]) {
         button.disabled = true;
@@ -813,6 +929,7 @@ export function attachGameController(
       ui.redoButton.removeEventListener('click', onRedo);
       ui.solveButton.removeEventListener('click', onSolve);
       ui.stopButton.removeEventListener('click', onStop);
+      ui.shareButton.removeEventListener('click', onShare);
       ui.ambientButton.removeEventListener('click', onAmbient);
       ui.homeViewButton.removeEventListener('click', onHomeView);
       ui.muteButton.removeEventListener('click', onMute);

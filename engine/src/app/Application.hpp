@@ -303,6 +303,24 @@ void stop_playback() noexcept;
 /** Returns the current palette, defaulting to Classic outside a lifecycle. */
 [[nodiscard]] graphics::Palette palette() noexcept;
 
+/**
+ * Sets how much faster than the written tempos every animation runs.
+ *
+ * `duration = base / scale`, so 2 is twice as fast and 0.5 is half. One value
+ * covers a user's own release, a scramble, a rewind and a watched pattern,
+ * because a speed is a property of the cube rather than of who turned it.
+ *
+ * Out-of-range values are clamped and accepted; only a value that is not a
+ * number at all is refused. A turn already running keeps the duration it
+ * began with.
+ *
+ * @return true when the engine was there to take it.
+ */
+[[nodiscard]] bool set_speed_scale(float scale) noexcept;
+
+/** Returns the current multiplier, defaulting to 1 outside a lifecycle. */
+[[nodiscard]] float speed_scale() noexcept;
+
 /** Restores the home camera without changing cube or view mode. */
 void reset_view() noexcept;
 

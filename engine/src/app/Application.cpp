@@ -1,5 +1,6 @@
 #include "app/Application.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -66,6 +67,28 @@ constexpr double kAmbientTempoMs = 300.0;
  * arrives.
  */
 constexpr double kRewindTempoMs = kScrambleTempoMs;
+
+/**
+ * The bounds a speed multiplier is held inside.
+ *
+ * Four times either way. Faster than that and a quarter turn is over inside
+ * two frames, so a sequence stops being an animation and becomes a slideshow;
+ * slower and a scramble outlasts anyone's patience for watching it.
+ */
+constexpr float kMinSpeedScale = 0.25f;
+constexpr float kMaxSpeedScale = 4.0f;
+
+/**
+ * How a multiplier turns a tempo into a duration.
+ *
+ * `duration = base / scale`, so 2 is twice as fast and 0.5 is half. Written
+ * once here because it is the whole meaning of the setting, and the two places
+ * a tempo is handed over both go through it.
+ */
+[[nodiscard]] double scaled_tempo(double base_ms, float scale) noexcept
+{
+    return base_ms / static_cast<double>(scale);
+}
 
 /**
  * One scripted sequence being played back, with how to play it.
@@ -137,6 +160,11 @@ struct ApplicationState {
     // the layout whenever one is needed rather than stored, so there is no
     // second copy to keep in step and no way to forget to rebuild it.
     graphics::OrbitCamera orbit = graphics::home_orbit();
+
+    // How much faster than the written tempos everything turns. One value for
+    // every animation, because a person setting a speed means the speed of the
+    // cube and not of one of the ways it can be moved.
+    float speed_scale = 1.0f;
 
     // The logical cube, only ever holding quarter turns. A drag in progress
     // lives in the controller instead, and reaches this through a committed
@@ -458,8 +486,9 @@ void advance_playback() noexcept
     if (player.repeats && player.next >= player.plan.size()) player.next = 0;
 
     while (player.next < player.plan.size()) {
-        if (state->interaction.start_move(player.plan[player.next++],
-                                          player.tempo_ms)) {
+        if (state->interaction.start_move(
+                player.plan[player.next++],
+                scaled_tempo(player.tempo_ms, state->speed_scale))) {
             return;
         }
     }
@@ -627,7 +656,10 @@ void pointer_up() noexcept
 {
     if (!state) return;
 
-    state->interaction.pointer_up(kUserTempoMs);
+    // The multiplier reaches a drag release as much as a played sequence: one
+    // slider for how fast the cube turns, whoever turned it.
+    state->interaction.pointer_up(
+        scaled_tempo(kUserTempoMs, state->speed_scale));
 }
 
 void pointer_cancel() noexcept
@@ -971,6 +1003,28 @@ bool set_palette(graphics::Palette palette) noexcept
 graphics::Palette palette() noexcept
 {
     return state ? state->palette : graphics::Palette::Classic;
+}
+
+bool set_speed_scale(float scale) noexcept
+{
+    if (!state) return false;
+
+    // Not-a-number and infinity are refused rather than clamped: they are not
+    // a speed someone asked for and got trimmed, they are not a speed at all,
+    // and a duration made from either stops an animation from ever ending.
+    if (!std::isfinite(scale)) return false;
+
+    state->speed_scale = std::clamp(scale, kMinSpeedScale, kMaxSpeedScale);
+
+    // A turn already running keeps the duration it started with. The value is
+    // read where a move begins, so nothing in flight is re-timed halfway and
+    // no frame jumps under a slider being dragged.
+    return true;
+}
+
+float speed_scale() noexcept
+{
+    return state ? state->speed_scale : 1.0f;
 }
 
 void reset_view() noexcept

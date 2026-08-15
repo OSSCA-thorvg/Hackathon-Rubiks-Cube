@@ -4,6 +4,14 @@ application_test = executable(
   dependencies: [application_dep, catch2_dep],
 )
 
+speed_test = executable(
+  'speed-test',
+  files('SpeedTest.cpp'),
+  dependencies: [application_dep, catch2_dep],
+)
+
+test('animation speed', speed_test)
+
 render_contract_test = executable(
   'render-contract-test',
   files('RenderContractTest.cpp'),

@@ -345,6 +345,24 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_palette() noexcept
     return static_cast<int>(rubiks::app::palette());
 }
 
+/**
+ * Sets how much faster than the written tempos every animation runs.
+ *
+ * Out-of-range values are clamped rather than refused -- a slider that ran
+ * past its end still meant the end -- so a zero comes back only from a value
+ * that is not a number or from there being no engine.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_speed_scale(float scale) noexcept
+{
+    return rubiks::app::set_speed_scale(scale) ? 1 : 0;
+}
+
+/** Returns the current multiplier, or 1 outside a lifecycle. */
+EMSCRIPTEN_KEEPALIVE float thorvg_rubiks_speed_scale() noexcept
+{
+    return rubiks::app::speed_scale();
+}
+
 /** Restores only the turntable camera. */
 EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_reset_view() noexcept
 {

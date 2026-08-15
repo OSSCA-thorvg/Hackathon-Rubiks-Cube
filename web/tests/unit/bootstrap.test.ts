@@ -33,6 +33,9 @@ describe('bootstrap', () => {
 
     expect(app.querySelector('canvas')).not.toBeNull();
     expect(app.querySelector('#reset')).not.toBeNull();
+    expect(app.querySelector('#ambient')?.getAttribute('aria-pressed')).toBe(
+      'false',
+    );
     expect(app.querySelector('[data-view="both"]')?.getAttribute('aria-pressed')).toBe('true');
     expect(app.querySelector('[data-view="2d"]')?.getAttribute('aria-pressed')).toBe('false');
     expect(app.querySelector('[data-flat="net"]')?.getAttribute('aria-pressed')).toBe('true');

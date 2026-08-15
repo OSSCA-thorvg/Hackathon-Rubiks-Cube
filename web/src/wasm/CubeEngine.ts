@@ -132,6 +132,18 @@ export function isValidScrambleMoves(value: number): boolean {
 }
 
 /**
+ * Reports whether a value crosses the boundary as the uint32 it looks like.
+ *
+ * Two arguments are one: a scramble's seed and a watching pattern's choice.
+ * The engine has no random source, so both are how arbitrariness gets into it,
+ * and anything the Emscripten i32 boundary would quietly reinterpret has to be
+ * stopped on this side of it.
+ */
+export function isUint32(value: number): boolean {
+  return Number.isInteger(value) && value >= 0 && value <= 0xffffffff;
+}
+
+/**
  * Owns one engine module instance and presents its pixel buffer on a canvas.
  */
 export class CubeEngine {
@@ -317,7 +329,7 @@ export class CubeEngine {
    */
   scramble(seed: number, moveCount: number): void {
     this.assertUsable();
-    if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) {
+    if (!isUint32(seed)) {
       throw new Error(`Invalid scramble seed ${seed}.`);
     }
     if (!isValidScrambleMoves(moveCount)) {
@@ -332,6 +344,39 @@ export class CubeEngine {
   resetCube(): void {
     this.assertUsable();
     this.module._thorvg_rubiks_reset_cube();
+  }
+
+  /**
+   * Begins watching a repeating pattern, picked by `choice`.
+   *
+   * Every uint32 names a pattern, so this cannot be refused for the value --
+   * only for watching having already begun, which is what false means. The
+   * caller has to run frames, the same as for a scramble; unlike a scramble
+   * they never stop coming until watching does.
+   */
+  ambientStart(choice: number): boolean {
+    this.assertUsable();
+    if (!isUint32(choice)) {
+      throw new Error(`Invalid ambient choice ${choice}.`);
+    }
+    return this.module._thorvg_rubiks_ambient_start(choice) !== 0;
+  }
+
+  /**
+   * Ends watching and puts the cube from before it straight back.
+   *
+   * A no-op when nothing is being watched. Nothing is animated, so the caller
+   * draws once afterwards rather than running frames.
+   */
+  ambientStop(): void {
+    this.assertUsable();
+    this.module._thorvg_rubiks_ambient_stop();
+  }
+
+  /** Reports whether a pattern is being watched right now. */
+  isAmbient(): boolean {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_is_ambient() !== 0;
   }
 
   /** Reports whether the committed logical cube is solved. */

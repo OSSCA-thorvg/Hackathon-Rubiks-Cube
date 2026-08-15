@@ -21,6 +21,9 @@ export type GameEngine = SessionEngine & {
   isBusy(): boolean;
   scramble(seed: number, moveCount: number): void;
   resetCube(): void;
+  ambientStart(choice: number): boolean;
+  ambientStop(): void;
+  isAmbient(): boolean;
   turnFace(face: CubeFace, faceTurns: FaceTurns): boolean;
   setViewMode(mode: CubeViewMode): void;
   viewMode(): CubeViewMode;
@@ -40,6 +43,8 @@ export type GameUi = {
   /** How many moves the next scramble is, as a plain integer. */
   readonly scrambleMovesInput: HTMLInputElement;
   readonly resetButton: HTMLButtonElement;
+  /** Starts and stops watching; pressed while a pattern is running. */
+  readonly ambientButton: HTMLButtonElement;
   readonly homeViewButton: HTMLButtonElement;
   readonly viewButtons: readonly HTMLButtonElement[];
   readonly flatButtons: readonly HTMLButtonElement[];
@@ -61,7 +66,14 @@ export type GameControllerOptions = {
   readonly ui: GameUi;
   readonly startFrameLoop: () => void;
   readonly onError: (error: unknown) => void;
-  readonly seedSource?: () => number;
+  /**
+   * One arbitrary uint32 per call.
+   *
+   * Both things the engine cannot decide for itself take one: which scramble
+   * to make, and which pattern to watch. They ask at different moments and
+   * never share an answer, so one source serves both.
+   */
+  readonly randomSource?: () => number;
   readonly timerEnvironment?: TimerEnvironment;
   readonly keyboardTarget?: KeyboardTarget;
 };
@@ -109,8 +121,8 @@ const FLAT_NAME_BY_STYLE: Readonly<Record<CubeFlatStyle, string>> = {
   [CubeFlatStyle.Both]: 'both',
 };
 
-/** Produces a uint32 seed using Web Crypto. */
-export function randomSeed(): number {
+/** Produces one arbitrary uint32 using Web Crypto. */
+export function randomUint32(): number {
   const value = new Uint32Array(1);
   crypto.getRandomValues(value);
   return value[0] ?? 0;
@@ -182,7 +194,7 @@ export function attachGameController(
   options: GameControllerOptions,
 ): GameController {
   const { engine, ui, startFrameLoop, onError } = options;
-  const seedSource = options.seedSource ?? randomSeed;
+  const randomSource = options.randomSource ?? randomUint32;
   const keyboardTarget: KeyboardTarget = options.keyboardTarget ?? {
     addEventListener: (_type, listener): void => {
       window.addEventListener('keydown', listener);
@@ -202,9 +214,10 @@ export function attachGameController(
   /**
    * Every control that is simply on while a controller is attached.
    *
-   * The move buttons are deliberately not here: whether a layer can be turned
-   * by hand is the engine's answer rather than the controller's, and
-   * `updateMoveAvailability` is what carries it. Listed once so that adding a
+   * The move buttons and the watch toggle are deliberately not here: whether a
+   * layer can be turned by hand is the engine's answer and whether a pattern
+   * can be watched is the session's, and `updateMoveAvailability` and
+   * `updateAmbientControl` are what carry them. Listed once so that adding a
    * control cannot enable it without disabling it again at teardown.
    */
   const commands: readonly (HTMLButtonElement | HTMLInputElement)[] = [
@@ -238,34 +251,109 @@ export function attachGameController(
     ui.canvas.dataset.flatStyle = FLAT_NAME_BY_STYLE[style];
   };
 
-  // What the move buttons were last set to. Written only on a change: this
-  // runs once per frame, and a played sequence keeps frames coming for
-  // seconds at a time with the answer the same throughout.
-  let movesDisabled: boolean | null = null;
-
-  // `busy` is passed in on the frame path, where it has already been read for
-  // the session; the command paths have nobody to take it from and ask here.
-  const updateMoveAvailability = (busy = engine.isBusy()): void => {
-    if (busy === movesDisabled) return;
-
-    movesDisabled = busy;
-    for (const button of ui.moveButtons) button.disabled = busy;
-  };
-
-  const run = (command: () => void): void => {
+  const run = (action: () => void): void => {
     if (!active) return;
     try {
-      command();
+      action();
     } catch (error) {
       onError(error);
     }
   };
 
-  const startFaceTurn = (face: CubeFace, turns: FaceTurns): void => {
+  /**
+   * The states a session can be watched from: not one that is under way.
+   *
+   * With the timer armed or running, an interlude that takes the cube away and
+   * gives it back is a stretch of a solve that nothing can account for, so it
+   * is not offered rather than being quietly harmless.
+   */
+  const WATCHABLE: ReadonlySet<GameState> = new Set<GameState>([
+    'idle',
+    'completed',
+  ]);
+
+  /** What the engine says about itself, for the controls that follow it. */
+  type EngineNow = { readonly busy: boolean; readonly watching: boolean };
+
+  const engineNow = (): EngineNow => ({
+    busy: engine.isBusy(),
+    watching: engine.isAmbient(),
+  });
+
+  // What the move buttons were last set to. Written only on a change: this
+  // runs once per frame, and a played sequence keeps frames coming for
+  // seconds at a time with the answer the same throughout.
+  let movesDisabled: boolean | null = null;
+
+
+  /**
+   * Puts the controls that follow the engine into the state it is in.
+   *
+   * One reading for all of them, so they cannot describe different moments.
+   * The frame path has already taken it for the session and hands it in; the
+   * command paths have nobody to take it from and ask here.
+   */
+  const updateEngineControls = (now = engineNow()): void => {
+    // Watching makes the engine busy, but a press on a move button stops the
+    // watching and then turns -- exactly as the same letter on the keyboard
+    // does. So the buttons stay live for it, where anything else that made the
+    // engine busy would put them out.
+    const movesOff = now.busy && !now.watching;
+    if (movesOff !== movesDisabled) {
+      movesDisabled = movesOff;
+      for (const button of ui.moveButtons) button.disabled = movesOff;
+    }
+
+    ui.ambientButton.setAttribute('aria-pressed', String(now.watching));
+    ui.ambientButton.disabled =
+      !now.watching && !WATCHABLE.has(session.state);
+  };
+
+  /**
+   * Ends watching, if it is on, and puts the restored cube on the screen.
+   *
+   * Drawing here rather than leaving it to the frame loop that watching keeps
+   * running: that loop is stopped while the tab is away, and the cube nobody
+   * drew would still be showing the pattern's last position when it came back.
+   *
+   * @returns whether there was anything to stop.
+   */
+  const leaveAmbient = (): boolean => {
+    if (!engine.isAmbient()) return false;
+
+    engine.ambientStop();
+    engine.render();
+    // Whatever asked for this may have something of its own to say, and says
+    // it over this one.
+    session.announce('Watching stopped.');
+    return true;
+  };
+
+  /**
+   * Runs a control that acts on the cube, ending any watching first.
+   *
+   * The line this draws is the same one the engine draws for a press, and the
+   * same one a scramble has always been on the other side of: changing the
+   * cube is a command and watching gives way to it, while changing how the
+   * cube is looked at is not, and watching carries on through it. Which is
+   * why the view and style buttons do not come through here -- they leave a
+   * scramble playing, and there is no reason a pattern should fare worse.
+   *
+   * The watch toggle is the one control that acts on the cube and still does
+   * not come through here: stopping first would turn a press meant to end
+   * watching into ending it and starting it again.
+   */
+  const cubeCommand = (action: () => void): void => {
     run((): void => {
-      if (!engine.turnFace(face, turns)) return;
-      updateMoveAvailability();
-      startFrameLoop();
+      leaveAmbient();
+      action();
+      updateEngineControls();
+    });
+  };
+
+  const startFaceTurn = (face: CubeFace, turns: FaceTurns): void => {
+    cubeCommand((): void => {
+      if (engine.turnFace(face, turns)) startFrameLoop();
     });
   };
 
@@ -320,10 +408,9 @@ export function attachGameController(
   };
 
   const onScramble = (): void => {
-    run((): void => {
-      engine.scramble(seedSource(), scrambleMoves);
+    cubeCommand((): void => {
+      engine.scramble(randomSource(), scrambleMoves);
       session.beginScramble();
-      updateMoveAvailability();
 
       // The cube is still solved: the scramble is turned into it over the
       // frames that follow, and nothing else is running to ask for them. No
@@ -334,14 +421,35 @@ export function attachGameController(
   };
 
   const onReset = (): void => {
-    run((): void => {
+    cubeCommand((): void => {
       engine.resetCube();
       engine.render();
       session.restart();
-      updateMoveAvailability();
     });
   };
 
+  /**
+   * The watch toggle, which is the one control that does not leave first.
+   *
+   * Pressing it while a pattern runs means stop, and stopping is the whole of
+   * what it does then: putting it through the ordinary command path would stop
+   * the watching and then start it again in the same press.
+   */
+  const onAmbient = (): void => {
+    run((): void => {
+      if (!leaveAmbient() && engine.ambientStart(randomSource())) {
+        session.announce('Watching. Look around freely; press Watch to stop.');
+        // Nothing else is running to ask for frames, and a pattern that is
+        // never over asks for them until it is stopped.
+        startFrameLoop();
+      }
+
+      updateEngineControls();
+    });
+  };
+
+  // Where the camera is put back, which is a way of looking rather than a
+  // command: it leaves a scramble playing and it leaves a pattern watched.
   const onHomeView = (): void => {
     run((): void => {
       engine.resetView();
@@ -351,7 +459,8 @@ export function attachGameController(
   };
 
   // All three groups are buttons that name a value, so all three go through
-  // the same binder and land in one map for teardown to walk.
+  // the same binder and land in one map for teardown to walk. Only the last
+  // of them acts on the cube.
   const choiceListeners = new Map<HTMLButtonElement, () => void>([
     ...bindChoices(ui.viewButtons, viewModeOf, (mode) => {
       run((): void => {
@@ -394,12 +503,13 @@ export function attachGameController(
   ui.scrambleMovesInput.addEventListener('animationend', onRefusalFlashEnd);
   ui.scrambleButton.addEventListener('click', onScramble);
   ui.resetButton.addEventListener('click', onReset);
+  ui.ambientButton.addEventListener('click', onAmbient);
   ui.homeViewButton.addEventListener('click', onHomeView);
   keyboardTarget.addEventListener('keydown', onKeyDown);
 
   setCommandsDisabled(false);
   updateViewControls();
-  updateMoveAvailability();
+  updateEngineControls();
 
   return {
     get state(): GameState {
@@ -409,11 +519,13 @@ export function attachGameController(
     afterEngineFrame(): void {
       if (!active) return;
       run((): void => {
-        // One reading of the engine for the two things that want it, so the
-        // status line and the controls cannot describe different frames.
-        const busy = engine.isBusy();
-        session.observe(busy);
-        updateMoveAvailability(busy);
+        // One reading of the engine for everything that wants it, so the
+        // status line and the controls cannot describe different frames. The
+        // session goes first: whether watching can be offered follows the
+        // state this frame may just have moved it to.
+        const now = engineNow();
+        session.observe(now.busy);
+        updateEngineControls(now);
       });
     },
 
@@ -422,8 +534,11 @@ export function attachGameController(
       active = false;
       session.teardown();
       setCommandsDisabled(true);
-      // The one moment the move buttons are not the engine's to decide.
-      for (const button of ui.moveButtons) button.disabled = true;
+      // The one moment the move buttons and the watch toggle are not the
+      // engine's and the session's to decide.
+      for (const button of [...ui.moveButtons, ui.ambientButton]) {
+        button.disabled = true;
+      }
       ui.scrambleMovesInput.removeEventListener(
         'change',
         onScrambleMovesChange,
@@ -434,6 +549,7 @@ export function attachGameController(
       );
       ui.scrambleButton.removeEventListener('click', onScramble);
       ui.resetButton.removeEventListener('click', onReset);
+      ui.ambientButton.removeEventListener('click', onAmbient);
       ui.homeViewButton.removeEventListener('click', onHomeView);
       for (const [button, listener] of choiceListeners) {
         button.removeEventListener('click', listener);

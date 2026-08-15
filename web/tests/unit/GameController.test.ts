@@ -23,6 +23,7 @@ function createUi(): GameUi {
     <input id="scramble-moves" type="number" min="1" max="100" value="20">
     <button id="scramble" type="button">Scramble</button>
     <button id="reset" type="button">Reset</button>
+    <button id="ambient" type="button" aria-pressed="false">Watch</button>
     <button id="home-view" type="button">Home</button>
     <button data-view="3d" type="button">3D</button>
     <button data-view="both" type="button">Both</button>
@@ -43,6 +44,7 @@ function createUi(): GameUi {
     scrambleButton: root.querySelector<HTMLButtonElement>('#scramble')!,
     scrambleMovesInput: root.querySelector<HTMLInputElement>('#scramble-moves')!,
     resetButton: root.querySelector<HTMLButtonElement>('#reset')!,
+    ambientButton: root.querySelector<HTMLButtonElement>('#ambient')!,
     homeViewButton: root.querySelector<HTMLButtonElement>('#home-view')!,
     viewButtons: [...root.querySelectorAll<HTMLButtonElement>('[data-view]')],
     flatButtons: [...root.querySelectorAll<HTMLButtonElement>('[data-flat]')],
@@ -58,6 +60,7 @@ function createHarness() {
   let busy = false;
   let viewMode = CubeViewMode.Both;
   let flatStyle = CubeFlatStyle.Net;
+  let watching = false;
 
   const engine = {
     scramble: vi.fn((): void => {
@@ -65,12 +68,26 @@ function createHarness() {
       // into it over the frames that follow.
       moveCount = 0;
       busy = true;
+      watching = false;
     }),
     resetCube: vi.fn((): void => {
       solved = true;
       moveCount = 0;
       busy = false;
+      watching = false;
     }),
+    ambientStart: vi.fn((): boolean => {
+      if (watching) return false;
+      // A pattern that never runs out: busy, and staying so.
+      watching = true;
+      busy = true;
+      return true;
+    }),
+    ambientStop: vi.fn((): void => {
+      watching = false;
+      busy = false;
+    }),
+    isAmbient: vi.fn((): boolean => watching),
     isSolved: vi.fn((): boolean => solved),
     committedMoveCount: vi.fn((): number => moveCount),
     turnFace: vi.fn((): boolean => {
@@ -116,7 +133,7 @@ function createHarness() {
     ui,
     startFrameLoop,
     onError,
-    seedSource: () => 1234,
+    randomSource: () => 1234,
     timerEnvironment,
     keyboardTarget,
   });
@@ -401,6 +418,146 @@ describe('attachGameController', () => {
     harness.dispatchKey({ key: 'r' });
     expect(harness.engine.resetCube).not.toHaveBeenCalled();
     expect(harness.engine.turnFace).not.toHaveBeenCalled();
+  });
+
+  it('watches from a session that is not under way, and not from one that is', () => {
+    const harness = createHarness();
+    const watch = harness.ui.ambientButton;
+
+    expect(watch.disabled).toBe(false);
+
+    watch.click();
+    expect(harness.engine.ambientStart).toHaveBeenCalledWith(1234);
+    expect(watch.getAttribute('aria-pressed')).toBe('true');
+    expect(harness.startFrameLoop).toHaveBeenCalledTimes(1);
+    expect(harness.ui.status.textContent).toContain('Look around freely');
+
+    // Watching makes the engine busy, but the move buttons stay live through
+    // it: pressing one is a way out of it, the same as the letter it carries.
+    expect(harness.ui.moveButtons[0]?.disabled).toBe(false);
+
+    // Pressing again stops it rather than stopping and starting it again.
+    watch.click();
+    expect(harness.engine.ambientStop).toHaveBeenCalledTimes(1);
+    expect(harness.engine.ambientStart).toHaveBeenCalledTimes(1);
+    expect(watch.getAttribute('aria-pressed')).toBe('false');
+    expect(harness.ui.status.textContent).toBe('Watching stopped.');
+    expect(harness.ui.moveButtons[0]?.disabled).toBe(false);
+
+    // A scramble arms the clock, and from there the offer is withdrawn.
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+    expect(harness.controller.state).toBe('ready');
+    expect(watch.disabled).toBe(true);
+  });
+
+  it('is offered again once a solve is over', () => {
+    const harness = createHarness();
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+    expect(harness.ui.ambientButton.disabled).toBe(true);
+
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.controller.state).toBe('running');
+    expect(harness.ui.ambientButton.disabled).toBe(true);
+
+    harness.setSolved(true);
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.controller.state).toBe('completed');
+    expect(harness.ui.ambientButton.disabled).toBe(false);
+  });
+
+  it('stops watching before doing what a cube command was pressed for', () => {
+    const harness = createHarness();
+
+    for (const press of [
+      (): void => harness.ui.resetButton.click(),
+      (): void => harness.ui.scrambleButton.click(),
+      (): void => harness.ui.moveButtons[0]!.click(),
+      (): void => {
+        harness.dispatchKey({ key: 'r' });
+      },
+    ]) {
+      harness.ui.ambientButton.click();
+      expect(harness.engine.isAmbient()).toBe(true);
+
+      press();
+      expect(harness.engine.isAmbient()).toBe(false);
+      expect(harness.ui.ambientButton.getAttribute('aria-pressed')).toBe(
+        'false',
+      );
+
+      // Back to a cube that can be watched again, whatever the press did.
+      harness.ui.resetButton.click();
+    }
+
+    // Every one of them did its own work as well as stopping the watching.
+    expect(harness.engine.scramble).toHaveBeenCalledTimes(1);
+    expect(harness.engine.turnFace).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps watching through the controls that only change the view', () => {
+    const harness = createHarness();
+    harness.ui.ambientButton.click();
+
+    // The same answer these give a scramble part way through: which regions
+    // are on screen, which drawing fills the flat one and where the camera
+    // sits are ways of looking at the cube, not things done to it.
+    for (const press of [
+      (): void => harness.ui.viewButtons[0]!.click(),
+      (): void => harness.ui.flatButtons[1]!.click(),
+      (): void => harness.ui.homeViewButton.click(),
+    ]) {
+      press();
+      expect(harness.engine.isAmbient()).toBe(true);
+      expect(harness.ui.ambientButton.getAttribute('aria-pressed')).toBe(
+        'true',
+      );
+    }
+
+    expect(harness.engine.setViewMode).toHaveBeenCalledTimes(1);
+    expect(harness.engine.setFlatStyle).toHaveBeenCalledTimes(1);
+    expect(harness.engine.resetView).toHaveBeenCalledTimes(1);
+    expect(harness.engine.ambientStop).not.toHaveBeenCalled();
+  });
+
+  it('lets a control say its own thing over the end of watching', () => {
+    const harness = createHarness();
+
+    harness.ui.ambientButton.click();
+    harness.ui.resetButton.click();
+
+    expect(harness.ui.status.textContent).toBe('Cube reset.');
+    harness.controller.afterEngineFrame();
+    expect(harness.ui.status.textContent).toBe('Cube reset.');
+  });
+
+  it('leaves nothing of a watched pattern in the session', () => {
+    const harness = createHarness();
+
+    harness.ui.ambientButton.click();
+    // Frames of a pattern playing: busy throughout, and no move of it is the
+    // user's, so the session stays exactly where it was.
+    harness.controller.afterEngineFrame();
+    harness.controller.afterEngineFrame();
+
+    expect(harness.controller.state).toBe('idle');
+    expect(harness.ui.timer.value).toBe('00:00.00');
+
+    harness.ui.ambientButton.click();
+    expect(harness.controller.state).toBe('idle');
+    expect(harness.ui.timer.value).toBe('00:00.00');
+  });
+
+  it('teardown puts the watch toggle out with the rest', () => {
+    const harness = createHarness();
+    harness.controller.teardown();
+
+    expect(harness.ui.ambientButton.disabled).toBe(true);
+    harness.ui.ambientButton.click();
+    expect(harness.engine.ambientStart).not.toHaveBeenCalled();
   });
 
   it('routes command failures to the lifecycle error handler', () => {

@@ -36,6 +36,17 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_scramble(seed: number, moveCount: number): number;
   /** Restores the solved cube, keeping the camera and the view mode. */
   _thorvg_rubiks_reset_cube(): void;
+  /**
+   * Returns 1 when watching began; 0 when it had already begun.
+   *
+   * `choice` picks a pattern modulo the table, so every value is a valid one
+   * and the arbitrariness comes from here rather than from the engine.
+   */
+  _thorvg_rubiks_ambient_start(choice: number): number;
+  /** Ends watching, putting the cube from before it back without animating. */
+  _thorvg_rubiks_ambient_stop(): void;
+  /** Returns 1 while a pattern is being watched. */
+  _thorvg_rubiks_is_ambient(): number;
   /** Returns 1 when the committed logical cube is solved. */
   _thorvg_rubiks_is_solved(): number;
   /** User moves committed since the latest scramble or reset. */

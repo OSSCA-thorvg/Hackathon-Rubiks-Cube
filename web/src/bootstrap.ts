@@ -71,6 +71,7 @@ export function bootstrap(
         </label>
         <button type="button" id="scramble">Scramble</button>
         <button type="button" id="reset">Reset</button>
+        <button type="button" id="ambient" aria-pressed="false">Watch</button>
         <button type="button" id="home-view">Home view</button>
       </div>
     </div>
@@ -110,6 +111,7 @@ export function bootstrap(
     scrambleButton: app.querySelector<HTMLButtonElement>('#scramble')!,
     scrambleMovesInput: app.querySelector<HTMLInputElement>('#scramble-moves')!,
     resetButton: app.querySelector<HTMLButtonElement>('#reset')!,
+    ambientButton: app.querySelector<HTMLButtonElement>('#ambient')!,
     homeViewButton: app.querySelector<HTMLButtonElement>('#home-view')!,
     viewButtons: [
       ...app.querySelectorAll<HTMLButtonElement>('[data-view]'),

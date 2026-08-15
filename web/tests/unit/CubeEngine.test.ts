@@ -38,6 +38,8 @@ function createFakeModule() {
     flatStyle: CubeFlatStyle.Net,
     setFlatStyleResult: 1,
     busyResult: 0,
+    ambientStartResult: 1,
+    ambientResult: 0,
     pixelBufferOverride: null as number | null,
     pixelByteLengthOverride: null as number | null,
   };
@@ -86,6 +88,11 @@ function createFakeModule() {
     _thorvg_rubiks_advance: vi.fn((): number => behavior.advanceResult),
     _thorvg_rubiks_scramble: vi.fn((): number => behavior.scrambleResult),
     _thorvg_rubiks_reset_cube: vi.fn((): void => {}),
+    _thorvg_rubiks_ambient_start: vi.fn(
+      (): number => behavior.ambientStartResult,
+    ),
+    _thorvg_rubiks_ambient_stop: vi.fn((): void => {}),
+    _thorvg_rubiks_is_ambient: vi.fn((): number => behavior.ambientResult),
     _thorvg_rubiks_is_solved: vi.fn((): number => behavior.solvedResult),
     _thorvg_rubiks_committed_move_count: vi.fn(
       (): number => behavior.moveCount,
@@ -462,6 +469,37 @@ describe('CubeEngine gameplay and view controls', () => {
 
     behavior.moveCount = -1;
     expect(() => engine.committedMoveCount()).toThrow('invalid move count');
+  });
+
+  it('carries a watching choice across and reports a refused start', async () => {
+    const { engine, module, behavior } = await createEngine();
+
+    expect(engine.isAmbient()).toBe(false);
+    expect(engine.ambientStart(0xffffffff)).toBe(true);
+    expect(module._thorvg_rubiks_ambient_start).toHaveBeenCalledWith(
+      0xffffffff,
+    );
+
+    // Refused rather than thrown: the only reason a valid choice is turned
+    // down is that watching had already begun, which is an answer.
+    behavior.ambientStartResult = 0;
+    expect(engine.ambientStart(0)).toBe(false);
+
+    behavior.ambientResult = 1;
+    expect(engine.isAmbient()).toBe(true);
+    engine.ambientStop();
+    expect(module._thorvg_rubiks_ambient_stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('validates a watching choice before crossing the C ABI', async () => {
+    const { engine, module } = await createEngine();
+
+    for (const choice of [-1, 1.5, Number.NaN, 0x1_0000_0000]) {
+      expect(() => engine.ambientStart(choice)).toThrow(
+        'Invalid ambient choice',
+      );
+    }
+    expect(module._thorvg_rubiks_ambient_start).not.toHaveBeenCalled();
   });
 });
 

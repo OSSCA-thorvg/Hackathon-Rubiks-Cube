@@ -69,6 +69,13 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_timeline_cursor(): number;
   /** Where the scramble stops and the user's own moves begin. */
   _thorvg_rubiks_timeline_scramble_end(): number;
+  /**
+   * The recorded move at `index`, packed as cube/PackedMove.hpp writes it:
+   * axis in bits 0-1, turns in bits 2-3, layer mask from bit 4 up.
+   *
+   * Zero for an index the record does not hold; a move is never zero.
+   */
+  _thorvg_rubiks_timeline_move(index: number): number;
   /** Returns 1 when the turn started; face and turns follow cube::Face. */
   _thorvg_rubiks_turn_face(face: number, faceTurns: number): number;
   /** Returns 1 when the mode was accepted; invalid values are rejected. */

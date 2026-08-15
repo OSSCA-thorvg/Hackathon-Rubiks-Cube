@@ -83,6 +83,15 @@ async function loadGeneratedModule(): Promise<ThorvgRubiksModule> {
 /** Largest drawing buffer dimension; mirrors the C++ engine limit. */
 export const MAX_DIMENSION = 8192;
 
+/**
+ * How many layers the cube has along an axis; mirrors the engine's own.
+ *
+ * Mirrored rather than asked for, because the engine builds one size and the
+ * number is a fact about the build. A cube whose size is a choice would carry
+ * it across the boundary instead, and everything reading this would read that.
+ */
+export const CUBE_SIZE = 3;
+
 /** Longest scramble the engine will play; mirrors its limit too. */
 export const MAX_SCRAMBLE_MOVES = 100;
 
@@ -470,6 +479,32 @@ export class CubeEngine {
       this.module._thorvg_rubiks_timeline_scramble_end(),
       'timeline scramble end',
     );
+  }
+
+  /**
+   * The recorded move at `index`, packed into one word.
+   *
+   * The notation is assembled from it on this side, so nothing but numbers
+   * crosses the boundary and a change of notation never reaches the engine.
+   *
+   * @returns zero for an index the record does not hold, which is a value a
+   *          packed move can never take.
+   */
+  timelineMove(index: number): number {
+    this.assertUsable();
+    if (!isUint32(index)) {
+      throw new Error(`Invalid timeline index ${index}.`);
+    }
+    const packed = this.module._thorvg_rubiks_timeline_move(index);
+    if (!Number.isSafeInteger(packed)) {
+      throw new Error(`Engine returned an invalid packed move ${packed}.`);
+    }
+
+    // Read back unsigned rather than checked for sign, which is what makes
+    // this the one query that does not go through countFrom: a count coming
+    // back negative is a boundary fault, but every bit of a packed move is
+    // data, and the topmost one is a layer like any other.
+    return packed >>> 0;
   }
 
   /** Starts one animated face turn, returning false while the engine is busy. */

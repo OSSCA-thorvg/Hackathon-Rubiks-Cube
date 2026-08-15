@@ -7,6 +7,7 @@ import {
   MAX_SCRAMBLE_MOVES,
   type FaceTurns,
 } from '../wasm/CubeEngine.ts';
+import { MoveLog } from './MoveLog.ts';
 import {
   GameSession,
   type EngineFrame,
@@ -31,6 +32,7 @@ export type GameEngine = SessionEngine & {
   stopPlayback(): void;
   timelineLength(): number;
   timelineScrambleEnd(): number;
+  timelineMove(index: number): number;
   turnFace(face: CubeFace, faceTurns: FaceTurns): boolean;
   setViewMode(mode: CubeViewMode): void;
   viewMode(): CubeViewMode;
@@ -57,6 +59,8 @@ export type GameUi = {
   readonly solveButton: HTMLButtonElement;
   /** Breaks a rewind off, and is only on screen while one is playing. */
   readonly stopButton: HTMLButtonElement;
+  /** Where the record is written out; the log owns everything inside it. */
+  readonly moveLogList: HTMLOListElement;
   /** Starts and stops watching; pressed while a pattern is running. */
   readonly ambientButton: HTMLButtonElement;
   readonly homeViewButton: HTMLButtonElement;
@@ -219,6 +223,7 @@ export function attachGameController(
   };
 
   let active = true;
+  const moveLog = new MoveLog(ui.moveLogList, engine);
   const session = new GameSession({
     engine,
     ui,
@@ -344,6 +349,12 @@ export function attachGameController(
     if (!now.busy) rewinding = false;
     ui.stopButton.hidden = !rewinding;
     ui.stopButton.disabled = !rewinding;
+
+    // The same reading the controls are set from, so the list can never be
+    // describing a different moment than the buttons above it. It draws only
+    // when the record has changed, which is what makes calling it every frame
+    // and after every command the simple thing to do.
+    moveLog.update(now);
 
     ui.ambientButton.setAttribute('aria-pressed', String(now.watching));
     ui.ambientButton.disabled =

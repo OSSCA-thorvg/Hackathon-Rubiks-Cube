@@ -83,6 +83,11 @@ export function bootstrap(
     </div>
   </section>
 
+  <section class="move-log" aria-labelledby="move-log-title">
+    <h2 class="move-log__title" id="move-log-title">Move log</h2>
+    <ol class="move-log__list" id="move-log" aria-labelledby="move-log-title"></ol>
+  </section>
+
   <details class="move-controls">
     <summary>Keyboard and move controls</summary>
     <p>Use R, L, U, D, F, or B. Hold Shift for a counter-clockwise turn.</p>
@@ -121,6 +126,7 @@ export function bootstrap(
     redoButton: app.querySelector<HTMLButtonElement>('#redo')!,
     solveButton: app.querySelector<HTMLButtonElement>('#solve')!,
     stopButton: app.querySelector<HTMLButtonElement>('#stop')!,
+    moveLogList: app.querySelector<HTMLOListElement>('#move-log')!,
     ambientButton: app.querySelector<HTMLButtonElement>('#ambient')!,
     homeViewButton: app.querySelector<HTMLButtonElement>('#home-view')!,
     viewButtons: [

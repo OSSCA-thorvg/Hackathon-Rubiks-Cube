@@ -46,6 +46,10 @@ function createFakeModule() {
     timelineLength: 0,
     timelineCursor: 0,
     timelineScrambleEnd: 0,
+    // The record itself, so a packed move can be read by index the way the
+    // engine hands them over.
+    timelineMoves: [] as number[],
+    timelineMoveOverride: null as number | null,
     pixelBufferOverride: null as number | null,
     pixelByteLengthOverride: null as number | null,
   };
@@ -118,6 +122,14 @@ function createFakeModule() {
     _thorvg_rubiks_timeline_scramble_end: vi.fn(
       (): number => behavior.timelineScrambleEnd,
     ),
+    _thorvg_rubiks_timeline_move: vi.fn((index: number): number => {
+      if (behavior.timelineMoveOverride !== null) {
+        return behavior.timelineMoveOverride;
+      }
+      // Zero for an index the record does not hold, which is what the engine
+      // answers rather than refusing the question.
+      return behavior.timelineMoves[index] ?? 0;
+    }),
     _thorvg_rubiks_turn_face: vi.fn((): number => behavior.turnFaceResult),
     _thorvg_rubiks_set_view_mode: vi.fn(
       (mode: number): number => {
@@ -539,6 +551,33 @@ describe('CubeEngine gameplay and view controls', () => {
     expect(engine.timelineLength()).toBe(22);
     expect(engine.timelineCursor()).toBe(21);
     expect(engine.timelineScrambleEnd()).toBe(20);
+  });
+
+  it('reads a packed move back by index', async () => {
+    const { engine, behavior } = await createEngine();
+
+    // Nothing recorded, so nothing at any index.
+    expect(engine.timelineMove(0)).toBe(0);
+
+    behavior.timelineMoves = [0x44, 0x10];
+    expect(engine.timelineMove(0)).toBe(0x44);
+    expect(engine.timelineMove(1)).toBe(0x10);
+    expect(engine.timelineMove(2)).toBe(0);
+
+    // The top bit of the mask is a layer like any other, so a word the i32
+    // boundary hands back as a negative number is read unsigned rather than
+    // refused the way a count would be.
+    behavior.timelineMoveOverride = -2147483644;
+    expect(engine.timelineMove(0)).toBe(0x8000_0004);
+
+    behavior.timelineMoveOverride = 1.5;
+    expect(() => engine.timelineMove(0)).toThrow('invalid packed move');
+
+    // An index that could not have come from a length is stopped on this side
+    // rather than being reinterpreted on the other.
+    behavior.timelineMoveOverride = null;
+    expect(() => engine.timelineMove(-1)).toThrow('Invalid timeline index');
+    expect(() => engine.timelineMove(1.5)).toThrow('Invalid timeline index');
   });
 
   it('carries a watching choice across and reports a refused start', async () => {

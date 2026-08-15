@@ -320,6 +320,91 @@ button[aria-pressed="true"]:hover:not(:disabled) {
   }
 }
 
+/*
+ * The record, written out in the notation a solver reads.
+ *
+ * Below the cube rather than beside it: it is the one thing on the page that
+ * grows without limit, and the rails either side of the stage are sized for
+ * controls. It is a list and reads as one -- no live region, because what a
+ * screen reader wants here is to walk back through the moves rather than to
+ * be told each one as it lands.
+ */
+.move-log {
+  width: min(100%, 48rem);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 0.9rem;
+  padding: 0.6rem 1rem 0.7rem;
+  background: rgb(20 22 28 / 72%);
+}
+
+.move-log__title {
+  margin: 0 0 0.45rem;
+  color: rgb(255 255 255 / 52%);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Four rows deep and scrolling past that: a hundred-move scramble would
+   otherwise push the cube off the top of the screen. */
+.move-log__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  max-height: 5.6rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+/* An empty record says so here rather than through a placeholder element the
+   log would have to put in and take out again. */
+.move-log__list:empty::after {
+  content: "Nothing has been turned yet.";
+  color: rgb(255 255 255 / 40%);
+  font-size: 0.82rem;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.move-log__item {
+  min-width: 2.1rem;
+  padding: 0.18rem 0.35rem;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 0.4rem;
+  color: rgb(255 255 255 / 84%);
+  background: rgb(255 255 255 / 5%);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  font-weight: 650;
+  text-align: center;
+}
+
+/* The scramble is the cube somebody was handed, not something they did, so it
+   is drawn as the outline of a move rather than as one of their own. */
+.move-log__item[data-part="scramble"] {
+  border-style: dashed;
+  color: rgb(255 255 255 / 58%);
+  background: none;
+}
+
+/* Off the cube: rewound behind and waiting to be put back. */
+.move-log__item[data-state="pending"] {
+  opacity: 0.36;
+}
+
+/* Where the cursor is -- the last move still on the cube, which is what a
+   rewind is walking down through. */
+.move-log__item[data-state="current"] {
+  border-color: #8bc5ff;
+  border-style: solid;
+  color: #0b0d12;
+  background: #8bc5ff;
+}
+
 .move-controls {
   width: min(100%, 48rem);
   border: 1px solid rgb(255 255 255 / 10%);
@@ -372,8 +457,11 @@ button[aria-pressed="true"]:hover:not(:disabled) {
 }
 
 #app[data-state="loading"] .move-controls,
+#app[data-state="loading"] .move-log,
 #app[data-state="unsupported"] .move-controls,
-#app[data-state="error"] .move-controls {
+#app[data-state="unsupported"] .move-log,
+#app[data-state="error"] .move-controls,
+#app[data-state="error"] .move-log {
   display: none;
 }
 
@@ -469,6 +557,16 @@ button[aria-pressed="true"]:hover:not(:disabled) {
   .view-switch button,
   .game-actions button {
     font-size: 0.84rem;
+  }
+
+  /* Two rows of moves rather than four: the cube is what the screen is for,
+     and the record is still there to be scrolled. */
+  .move-log {
+    padding: 0.5rem 0.75rem 0.6rem;
+  }
+
+  .move-log__list {
+    max-height: 3.4rem;
   }
 
   .move-grid {

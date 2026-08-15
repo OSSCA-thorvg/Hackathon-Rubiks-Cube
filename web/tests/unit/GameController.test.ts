@@ -37,6 +37,7 @@ function createUi(): GameUi {
     <button data-flat="both" type="button">Net + Rings</button>
     <button data-face="r" data-turn="1" type="button">R</button>
     <button data-face="r" data-turn="-1" type="button">R prime</button>
+    <ol id="move-log"></ol>
   `;
   document.body.replaceChildren(root);
 
@@ -52,6 +53,7 @@ function createUi(): GameUi {
     redoButton: root.querySelector<HTMLButtonElement>('#redo')!,
     solveButton: root.querySelector<HTMLButtonElement>('#solve')!,
     stopButton: root.querySelector<HTMLButtonElement>('#stop')!,
+    moveLogList: root.querySelector<HTMLOListElement>('#move-log')!,
     ambientButton: root.querySelector<HTMLButtonElement>('#ambient')!,
     homeViewButton: root.querySelector<HTMLButtonElement>('#home-view')!,
     viewButtons: [...root.querySelectorAll<HTMLButtonElement>('[data-view]')],
@@ -79,6 +81,11 @@ function createHarness() {
   let length = 0;
   let cursor = 0;
   let scrambleEnd = 0;
+  // The moves themselves, packed as the engine packs them, so the log can be
+  // read off the same record the counts describe. R, U and F for a scramble
+  // and R' for anything the user turns, which is enough to tell an entry that
+  // moved from one that was redrawn where it was.
+  let moves: number[] = [];
   // Where a rewind that is playing will end up, and whether Stop may reach it.
   let rewindTo: number | null = null;
   let stoppable = false;
@@ -98,6 +105,7 @@ function createHarness() {
       length = SCRAMBLE_MOVES;
       cursor = 0;
       scrambleEnd = SCRAMBLE_MOVES;
+      moves = [0x44, 0x45, 0x46];
       busy = true;
       watching = false;
     }),
@@ -106,6 +114,7 @@ function createHarness() {
       length = 0;
       cursor = 0;
       scrambleEnd = 0;
+      moves = [];
       busy = false;
       watching = false;
     }),
@@ -136,6 +145,7 @@ function createHarness() {
     timelineLength: vi.fn((): number => length),
     timelineCursor: vi.fn((): number => cursor),
     timelineScrambleEnd: vi.fn((): number => scrambleEnd),
+    timelineMove: vi.fn((index: number): number => moves[index] ?? 0),
     ambientStart: vi.fn((): boolean => {
       if (watching) return false;
       // A pattern that never runs out: busy, and staying so.
@@ -229,6 +239,8 @@ function createHarness() {
     commitMove: (): void => {
       length = cursor;
       scrambleEnd = Math.min(scrambleEnd, cursor);
+      moves = moves.slice(0, cursor);
+      moves.push(0x40);
       length += 1;
       cursor += 1;
       busy = false;
@@ -804,6 +816,77 @@ describe('attachGameController', () => {
     expect(harness.engine.redo).not.toHaveBeenCalled();
     expect(harness.engine.solveRewind).not.toHaveBeenCalled();
     expect(harness.engine.stopPlayback).not.toHaveBeenCalled();
+  });
+
+  it('writes the record out and follows it as the cursor moves', () => {
+    const harness = createHarness();
+    const log = harness.ui.moveLogList;
+
+    /** What each entry says and where it stands, for one readable row. */
+    const entries = (): string[] =>
+      [...log.children].map((child) => {
+        const item = child as HTMLElement;
+        return `${item.textContent} ${item.dataset.part} ${item.dataset.state}`;
+      });
+
+    // Nothing has been turned, so there is nothing written down.
+    expect(entries()).toEqual([]);
+
+    // A scramble is written out the moment it is accepted, before any of it
+    // has been turned into the cube: the record holds the whole of it and the
+    // cursor is how much has arrived.
+    harness.ui.scrambleButton.click();
+    expect(entries()).toEqual([
+      'R scramble pending',
+      'U scramble pending',
+      'F scramble pending',
+    ]);
+
+    harness.finishScramble();
+    expect(entries()).toEqual([
+      'R scramble applied',
+      'U scramble applied',
+      'F scramble current',
+    ]);
+
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(entries()).toEqual([
+      'R scramble applied',
+      'U scramble applied',
+      'F scramble applied',
+      "R' user current",
+    ]);
+
+    // Taken back: the move stays on the list, because it is still there to be
+    // put back, and the mark moves down to what is left on the cube.
+    harness.ui.undoButton.click();
+    harness.finishRewind();
+    expect(entries()).toEqual([
+      'R scramble applied',
+      'U scramble applied',
+      'F scramble current',
+      "R' user pending",
+    ]);
+
+    harness.ui.redoButton.click();
+    harness.finishRewind();
+    expect(entries()[3]).toBe("R' user current");
+
+    // A solve walks the cursor down past the end of the scramble, and the
+    // stretch each move belongs to does not move with it.
+    harness.ui.solveButton.click();
+    harness.finishRewind();
+    expect(entries()).toEqual([
+      'R scramble pending',
+      'U scramble pending',
+      'F scramble pending',
+      "R' user pending",
+    ]);
+
+    // A new cube has no record at all.
+    harness.ui.resetButton.click();
+    expect(entries()).toEqual([]);
   });
 
   it('routes command failures to the lifecycle error handler', () => {

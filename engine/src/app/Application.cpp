@@ -11,6 +11,7 @@
 #include <thorvg.h>
 
 #include "cube/CubeState.hpp"
+#include "cube/MoveTimeline.hpp"
 #include "cube/Scramble.hpp"
 #include "graphics/AxisGizmo.hpp"
 #include "graphics/Camera.hpp"
@@ -56,22 +57,51 @@ constexpr double kScrambleTempoMs = interaction::kOpeningMs;
 constexpr double kAmbientTempoMs = 300.0;
 
 /**
+ * The same for a rewind, which is watched rather than made, like a scramble.
+ *
+ * A constant of its own despite the matching value: a solve can be dozens of
+ * moves and is the one sequence a user waits through, so it is the first thing
+ * that would be tuned, and tuning it should not quietly change how a scramble
+ * arrives.
+ */
+constexpr double kRewindTempoMs = kScrambleTempoMs;
+
+/**
  * One scripted sequence being played back, with how to play it.
  *
  * A value rather than a queue and a flag beside it: a sequence and the way it
  * is being played are set up together and die together, and two pieces of
- * state with one lifetime are one object. Later phases add fields here -- a
- * timeline effect for a rewind -- rather than adding names to an enum of where
- * the moves came from, because nothing downstream asks where they came from,
- * only what to do with them.
+ * state with one lifetime are one object. Fields here rather than names in an
+ * enum of where the moves came from, because nothing downstream asks where
+ * they came from, only what to do with them.
  */
 struct Player {
     std::vector<cube::CubeMove> plan;
     std::size_t next = 0;
     /** Milliseconds per quarter turn, as `start_move` takes it. */
     double tempo_ms;
+    /**
+     * What each commit of this sequence does to the record.
+     *
+     * Deliberately without a default: every producer says it, because a
+     * sequence handed the wrong one damages the record rather than merely
+     * looking wrong. Sitting ahead of the fields that do have defaults is what
+     * makes leaving it out visible at the call site.
+     */
+    cube::TimelineEffect timeline_effect;
     /** Whether running out of moves starts the sequence again. */
     bool repeats = false;
+    /**
+     * Whether stop_playback() may break this sequence off.
+     *
+     * Off by default, which is what protects the two sequences that must run
+     * to their end: a half-played scramble is a cube nobody asked for, and a
+     * watched pattern stopped this way would never put its cube back. Only a
+     * rewind or a replay turns it on -- and it is the engine's answer rather
+     * than the screen's, so a press arriving a frame after the controls went
+     * away cannot reach the wrong sequence.
+     */
+    bool stoppable = false;
     /**
      * The cube to put back when this player is stopped rather than thrown away.
      *
@@ -114,7 +144,11 @@ struct ApplicationState {
     interaction::InteractionController interaction{kCubeSize};
     graphics::ViewMode view_mode = graphics::ViewMode::Both;
     graphics::FlatStyle flat_style = graphics::FlatStyle::Net;
-    std::uint32_t user_move_count = 0;
+
+    // Everything that has happened to the cube, as one sequence. How many
+    // moves are the user's own is read off it rather than counted alongside
+    // it, so there is no second number to keep in step.
+    cube::MoveTimeline timeline;
 
     // The whole of the playback state. Its presence is what "a sequence is
     // playing" means, so there is no second flag to fall out of step with it.
@@ -313,11 +347,26 @@ void commit_move(const cube::CubeMove& move) noexcept
 {
     state->cube_state.apply(move);
 
-    // A played move is nobody's, so it is not counted and does not start the
-    // clock. Read here rather than passed in: while a sequence plays, every
-    // way of turning a layer by hand is shut, so there is no moment when the
-    // answer could differ from what the caller would have said.
-    if (!state->playback) ++state->user_move_count;
+    // Two branches and no more: a move being played is already in the record,
+    // so the cursor follows it the way its sequence says, and a move the user
+    // made is written down where the cursor is. Read here rather than passed
+    // in -- while a sequence plays, every way of turning a layer by hand is
+    // shut, so there is no moment when the answer could differ from what the
+    // caller would have said.
+    if (state->playback) {
+        state->timeline.step(state->playback->timeline_effect);
+    } else {
+        state->timeline.record(move);
+    }
+}
+
+/** How many of the moves on the cube right now are the user's own. */
+[[nodiscard]] std::size_t applied_user_moves() noexcept
+{
+    const auto& timeline = state->timeline;
+    return timeline.cursor() > timeline.scramble_end()
+               ? timeline.cursor() - timeline.scramble_end()
+               : 0;
 }
 
 /** Whether anything at all owns the cube, playback included. */
@@ -402,6 +451,32 @@ void advance_playback() noexcept
 
     // Nothing left to take, and nothing left turning.
     state->playback.reset();
+}
+
+/**
+ * Hands a rewind or a replay to the player, if there is anything in it.
+ *
+ * What the three commands share once each has worked out its own target: the
+ * plan is made in full here and consumed by the ordinary playback loop, so
+ * this phase adds no second way of playing moves into the cube. An empty plan
+ * is a refusal, which is what a command with nothing to do amounts to.
+ */
+[[nodiscard]] bool play_rewind(std::vector<cube::CubeMove> plan,
+                               cube::TimelineEffect effect) noexcept
+{
+    if (plan.empty()) return false;
+
+    // Stoppable, unlike either of the other two producers: this is the one
+    // sequence a user waits through, and a solve can be dozens of moves.
+    state->playback = Player{std::move(plan), 0,    kRewindTempoMs, effect,
+                             false,           true, std::nullopt};
+    return true;
+}
+
+/** Whether a rewind may be started at all, whatever it would rewind. */
+[[nodiscard]] bool can_rewind() noexcept
+{
+    return state && !busy();
 }
 
 }  // namespace
@@ -646,14 +721,25 @@ bool scramble(std::uint32_t seed, std::uint32_t move_count) noexcept
     // snap that would otherwise commit onto the new cube.
     discard_playback();
     state->cube_state = cube::CubeState(kCubeSize);
-    state->user_move_count = 0;
+
+    // The whole sequence is recorded before any of it has happened, and the
+    // cursor walks up it as the moves land -- so a scramble interrupted half
+    // way leaves a record of exactly what is on the cube.
+    state->timeline.begin_scramble(plan);
 
     // Turned rather than applied: the cube is still solved when this returns
     // and arrives at the scrambled state a few hundred frames later.
     // Runs out and has nowhere to go back to: a scramble is where the cube is
-    // meant to be left, not an interlude.
-    state->playback =
-        Player{std::move(plan), 0, kScrambleTempoMs, false, std::nullopt};
+    // meant to be left, not an interlude. Its moves are already written down,
+    // so each commit only carries the cursor forward -- the same thing a redo
+    // does, because it is the same thing.
+    state->playback = Player{std::move(plan),
+                             0,
+                             kScrambleTempoMs,
+                             cube::TimelineEffect::Advance,
+                             false,
+                             false,
+                             std::nullopt};
     return true;
 }
 
@@ -664,7 +750,7 @@ void reset_cube() noexcept
     // Same split as scramble(): the cube is the only thing this command owns.
     discard_playback();
     state->cube_state = cube::CubeState(kCubeSize);
-    state->user_move_count = 0;
+    state->timeline.clear();
 }
 
 const std::vector<cube::CubeMove>& ambient_pattern(
@@ -683,7 +769,15 @@ bool ambient_start(std::uint32_t choice) noexcept
     // that was there, which is exactly what the snapshot below records.
     discard_playback();
 
-    state->playback = Player{ambient_pattern(choice), 0, kAmbientTempoMs, true,
+    // Nothing of a watched pattern is written down: it is an interlude, and
+    // the cube it borrowed is put back at the end of it. Told to advance, its
+    // very first turn would carry the cursor past the end of the record.
+    state->playback = Player{ambient_pattern(choice),
+                             0,
+                             kAmbientTempoMs,
+                             cube::TimelineEffect::None,
+                             true,
+                             false,
                              state->cube_state};
     return true;
 }
@@ -712,7 +806,77 @@ bool is_solved() noexcept
 
 std::uint32_t committed_move_count() noexcept
 {
-    return state ? state->user_move_count : 0;
+    return state ? static_cast<std::uint32_t>(applied_user_moves()) : 0;
+}
+
+bool undo() noexcept
+{
+    if (!can_rewind()) return false;
+
+    const auto& timeline = state->timeline;
+
+    // The lower bound is the policy: what is below the end of the scramble is
+    // not the user's to take back, so a cube that has only been scrambled and
+    // one a solve has rewound into the scramble both refuse here without a
+    // case of their own.
+    if (timeline.cursor() <= timeline.scramble_end()) return false;
+
+    return play_rewind(cube::rewind_plan(timeline, timeline.cursor() - 1),
+                       cube::TimelineEffect::Rewind);
+}
+
+bool redo() noexcept
+{
+    if (!can_rewind()) return false;
+
+    const auto& timeline = state->timeline;
+    if (timeline.cursor() >= timeline.size()) return false;
+
+    // Forward through the record, which is the same thing a scramble arriving
+    // does -- so it carries the same effect.
+    return play_rewind(cube::redo_plan(timeline, timeline.cursor() + 1),
+                       cube::TimelineEffect::Advance);
+}
+
+bool solve_rewind() noexcept
+{
+    if (!can_rewind()) return false;
+
+    // Undo with a different target and nothing else: the plan is longer, and
+    // the length of it is the whole difference between the two commands.
+    return play_rewind(cube::rewind_plan(state->timeline, 0),
+                       cube::TimelineEffect::Rewind);
+}
+
+void stop_playback() noexcept
+{
+    if (!state || !state->playback || !state->playback->stoppable) return;
+
+    // Confirmed rather than discarded, and confirmed while the player is still
+    // here: the commit goes through the ordinary path, sees a sequence
+    // playing, and moves the cursor with it. So wherever a rewind is stopped,
+    // the record and the cube say the same thing.
+    if (const auto move = state->interaction.finish_snap()) {
+        commit_move(*move);
+    }
+
+    state->playback.reset();
+}
+
+std::uint32_t timeline_length() noexcept
+{
+    return state ? static_cast<std::uint32_t>(state->timeline.size()) : 0;
+}
+
+std::uint32_t timeline_cursor() noexcept
+{
+    return state ? static_cast<std::uint32_t>(state->timeline.cursor()) : 0;
+}
+
+std::uint32_t timeline_scramble_end() noexcept
+{
+    return state ? static_cast<std::uint32_t>(state->timeline.scramble_end())
+                 : 0;
 }
 
 bool turn_face(cube::Face face, int face_turns) noexcept

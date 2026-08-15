@@ -176,8 +176,79 @@ void ambient_stop() noexcept;
 /** Returns whether the committed logical cube is solved. */
 [[nodiscard]] bool is_solved() noexcept;
 
-/** Returns the number of user moves committed since the latest scramble. */
+/**
+ * Returns the number of user moves committed since the latest scramble.
+ *
+ * Derived from the record rather than counted: it is the part of the timeline
+ * past the scramble that is currently on the cube. A stored counter would need
+ * a correction of its own at every rewind, every discarded redo tail and every
+ * solve, and a derived one is right by construction at all of them.
+ */
 [[nodiscard]] std::uint32_t committed_move_count() noexcept;
+
+/**
+ * Takes back the user's last move, by turning it back rather than undoing it.
+ *
+ * The move is played as a sequence of one, so it settles on screen the way
+ * every other turn does and the cursor follows the commit.
+ *
+ * Refused while anything else owns the cube, and refused once the cursor has
+ * reached the end of the scramble: what is below that is not the user's to
+ * take back. Use stop_playback() to break off a sequence rather than waiting
+ * for one to end.
+ *
+ * @return true when a rewind began.
+ */
+[[nodiscard]] bool undo() noexcept;
+
+/**
+ * Plays back the move a rewind took off, exactly as it was made.
+ *
+ * @return true when a replay began; false when nothing has been rewound or
+ *         something else owns the cube.
+ */
+[[nodiscard]] bool redo() noexcept;
+
+/**
+ * Rewinds every applied move, leaving a solved cube.
+ *
+ * The same function undo uses with a different target, so a solve is a longer
+ * plan and nothing else. It can be broken off part way; where it stops, the
+ * record and the cube agree.
+ *
+ * @return true when a rewind began; false with nothing applied, or while
+ *         something else owns the cube.
+ */
+[[nodiscard]] bool solve_rewind() noexcept;
+
+/**
+ * Breaks off a rewind, keeping everything it has already turned.
+ *
+ * The turn in flight is confirmed rather than dropped -- winding a rotation
+ * back mid-way looks worse than letting it land, and confirming it goes
+ * through the same commit as every other move, so the record follows it.
+ *
+ * A no-op for anything else being played: a scramble broken off half way is a
+ * cube nobody asked for, and a watched pattern stopped this way would never
+ * put back the cube it borrowed.
+ */
+void stop_playback() noexcept;
+
+/** How many moves the record holds, scramble and user moves together. */
+[[nodiscard]] std::uint32_t timeline_length() noexcept;
+
+/** How many of those moves are on the cube right now. */
+[[nodiscard]] std::uint32_t timeline_cursor() noexcept;
+
+/**
+ * Where the scramble stops and the user's own moves begin.
+ *
+ * With the two above, everything the screen and a shared link need: the
+ * scramble is `[0, scramble_end)`, the user's moves are `[scramble_end,
+ * length)`, and a cursor of nothing on a scramble that exists is a cube a
+ * rewind solved rather than a person.
+ */
+[[nodiscard]] std::uint32_t timeline_scramble_end() noexcept;
 
 /**
  * Starts one animated face-relative turn.

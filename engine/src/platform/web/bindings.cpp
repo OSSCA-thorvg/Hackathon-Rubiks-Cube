@@ -172,11 +172,81 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_is_solved() noexcept
     return rubiks::app::is_solved() ? 1 : 0;
 }
 
-/** Returns user moves committed since the latest scramble or reset. */
+/**
+ * Returns user moves committed since the latest scramble or reset.
+ *
+ * Read off the record rather than counted, so a rewind takes moves out of it
+ * as surely as making them put them in.
+ */
 EMSCRIPTEN_KEEPALIVE std::uint32_t
 thorvg_rubiks_committed_move_count() noexcept
 {
     return rubiks::app::committed_move_count();
+}
+
+/**
+ * Turns the user's last move back.
+ *
+ * @return one when a rewind began; zero with nothing of the user's own on the
+ *         cube, or while anything else owns it.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_undo() noexcept
+{
+    return rubiks::app::undo() ? 1 : 0;
+}
+
+/**
+ * Plays back the move a rewind took off.
+ *
+ * @return one when a replay began; zero when nothing has been rewound.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_redo() noexcept
+{
+    return rubiks::app::redo() ? 1 : 0;
+}
+
+/**
+ * Rewinds every applied move, leaving a solved cube.
+ *
+ * @return one when a rewind began; zero with nothing applied.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_solve_rewind() noexcept
+{
+    return rubiks::app::solve_rewind() ? 1 : 0;
+}
+
+/**
+ * Breaks off a rewind, keeping everything it has already turned.
+ *
+ * A no-op for a scramble or a watched pattern, which have to reach their end.
+ */
+EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_stop_playback() noexcept
+{
+    rubiks::app::stop_playback();
+}
+
+/** How many moves the record holds, scramble and user moves together. */
+EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_timeline_length() noexcept
+{
+    return rubiks::app::timeline_length();
+}
+
+/**
+ * How many of those moves are on the cube right now.
+ *
+ * Every commit moves this by exactly one, so a caller watching it change is
+ * watching moves commit, and there is no counter beside it saying the same.
+ */
+EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_timeline_cursor() noexcept
+{
+    return rubiks::app::timeline_cursor();
+}
+
+/** Where the scramble stops and the user's own moves begin. */
+EMSCRIPTEN_KEEPALIVE std::uint32_t
+thorvg_rubiks_timeline_scramble_end() noexcept
+{
+    return rubiks::app::timeline_scramble_end();
 }
 
 /**

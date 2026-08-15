@@ -223,6 +223,41 @@ describe('attachGameController', () => {
     expect(harness.engine.scramble).toHaveBeenLastCalledWith(1234, 7);
   });
 
+  it('leaves a refusal on the box, where scrambling cannot overwrite it', () => {
+    const harness = createHarness();
+    const input = harness.ui.scrambleMovesInput;
+
+    input.value = '101';
+    input.dispatchEvent(new Event('change'));
+    expect(input.dataset.refused).toBeDefined();
+
+    // The spoken half goes to the shared line, which the very next press
+    // rewrites -- so the mark on the box has to outlive it.
+    harness.ui.scrambleButton.click();
+    expect(harness.ui.status.textContent).not.toContain('Kept');
+    expect(input.dataset.refused).toBeDefined();
+
+    // It lasts exactly as long as its flash.
+    input.dispatchEvent(new Event('animationend'));
+    expect(input.dataset.refused).toBeUndefined();
+  });
+
+  it('puts the refusal out as soon as the length is corrected', () => {
+    const harness = createHarness();
+    const input = harness.ui.scrambleMovesInput;
+
+    input.value = '0';
+    input.dispatchEvent(new Event('change'));
+    expect(input.dataset.refused).toBeDefined();
+
+    input.value = '9';
+    input.dispatchEvent(new Event('change'));
+    expect(input.dataset.refused).toBeUndefined();
+
+    harness.ui.scrambleButton.click();
+    expect(harness.engine.scramble).toHaveBeenLastCalledWith(1234, 9);
+  });
+
   it('holds at scrambling while the cube is still turning', () => {
     const harness = createHarness();
     harness.ui.scrambleButton.click();

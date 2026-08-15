@@ -274,16 +274,46 @@ export function attachGameController(
   let scrambleMoves = DEFAULT_SCRAMBLE_MOVES;
   ui.scrambleMovesInput.value = String(scrambleMoves);
 
+  /**
+   * Marks the box as having just refused an edit.
+   *
+   * Not `aria-invalid`: the value put back is a valid one, so the field is not
+   * in an invalid state -- what happened is an event, and this is how long it
+   * stays visible. It has to be visible on its own because the spoken half of
+   * the refusal goes to the shared status line, and pressing Scramble right
+   * after a refusal overwrites that line in the same interaction.
+   *
+   * Cleared out and re-set so that refusing twice running shows twice; setting
+   * an attribute that is already there restarts no animation.
+   */
+  const flashRefusal = (): void => {
+    const box = ui.scrambleMovesInput;
+    delete box.dataset.refused;
+    void box.offsetWidth;
+    box.dataset.refused = '';
+  };
+
+  // The mark lasts as long as its animation, which is why one always runs --
+  // the reduced-motion variant fades instead of moving rather than not being
+  // there, so this always arrives and the mark can never stick.
+  const onRefusalFlashEnd = (): void => {
+    delete ui.scrambleMovesInput.dataset.refused;
+  };
+
   const onScrambleMovesChange = (): void => {
     const typed = Number(ui.scrambleMovesInput.value);
     if (isValidScrambleMoves(typed)) {
       scrambleMoves = typed;
+      // A correction inside the flash puts it out early: the box is right
+      // again, and a mark still burning would be describing the last edit.
+      delete ui.scrambleMovesInput.dataset.refused;
       return;
     }
 
     // Put back rather than clamped: a hundred is not what someone typing a
     // thousand meant, and quietly substituting it hides the mistake.
     ui.scrambleMovesInput.value = String(scrambleMoves);
+    flashRefusal();
     session.announce(
       `A scramble is 1 to ${MAX_SCRAMBLE_MOVES} moves. Kept ${scrambleMoves}.`,
     );
@@ -361,6 +391,7 @@ export function attachGameController(
   };
 
   ui.scrambleMovesInput.addEventListener('change', onScrambleMovesChange);
+  ui.scrambleMovesInput.addEventListener('animationend', onRefusalFlashEnd);
   ui.scrambleButton.addEventListener('click', onScramble);
   ui.resetButton.addEventListener('click', onReset);
   ui.homeViewButton.addEventListener('click', onHomeView);
@@ -396,6 +427,10 @@ export function attachGameController(
       ui.scrambleMovesInput.removeEventListener(
         'change',
         onScrambleMovesChange,
+      );
+      ui.scrambleMovesInput.removeEventListener(
+        'animationend',
+        onRefusalFlashEnd,
       );
       ui.scrambleButton.removeEventListener('click', onScramble);
       ui.resetButton.removeEventListener('click', onReset);

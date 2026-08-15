@@ -221,6 +221,73 @@ button[aria-pressed="true"] {
   background: rgb(20 22 28 / 72%);
 }
 
+/*
+ * A refused edit, for as long as the flash lasts.
+ *
+ * A mark of its own rather than only the status line: pressing Scramble
+ * straight after a refusal rewrites that line in the same interaction, so the
+ * box the refusal came from is the one place it can still be seen. In the
+ * error page's colors, because it is the same kind of news.
+ *
+ * An animation always runs -- the reduced-motion one fades where this one also
+ * moves -- because its end is what takes the mark away again.
+ */
+.scramble-length input[data-refused] {
+  animation: scramble-length-refused 1.4s ease-out;
+}
+
+@keyframes scramble-length-refused {
+  0% {
+    border-color: rgb(230 57 70 / 90%);
+    color: #ff9ca5;
+    background: rgb(74 15 22 / 60%);
+    transform: translateX(0);
+  }
+
+  12% {
+    transform: translateX(-0.18rem);
+  }
+
+  36% {
+    transform: translateX(0.18rem);
+  }
+
+  60% {
+    transform: translateX(-0.09rem);
+  }
+
+  80% {
+    transform: translateX(0);
+  }
+
+  100% {
+    border-color: rgb(255 255 255 / 18%);
+    color: rgb(255 255 255 / 72%);
+    background: rgb(20 22 28 / 72%);
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scramble-length input[data-refused] {
+    animation-name: scramble-length-refused-still;
+  }
+}
+
+@keyframes scramble-length-refused-still {
+  from {
+    border-color: rgb(230 57 70 / 90%);
+    color: #ff9ca5;
+    background: rgb(74 15 22 / 60%);
+  }
+
+  to {
+    border-color: rgb(255 255 255 / 18%);
+    color: rgb(255 255 255 / 72%);
+    background: rgb(20 22 28 / 72%);
+  }
+}
+
 .move-controls {
   width: min(100%, 48rem);
   border: 1px solid rgb(255 255 255 / 10%);

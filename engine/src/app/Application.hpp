@@ -264,6 +264,60 @@ void stop_playback() noexcept;
 [[nodiscard]] std::uint32_t timeline_move(std::uint32_t index) noexcept;
 
 /**
+ * The largest record a shared state may bring in, both stretches together.
+ *
+ * Far past anything a session reaches -- a scramble is capped at a hundred and
+ * a solve by hand is a few dozen more -- and chosen instead by what a link can
+ * still be: at this bound the encoded fragment is about twenty thousand
+ * characters, which a browser carries and a person can still paste.
+ */
+inline constexpr std::uint32_t kMaxRestoreMoves = 4096;
+
+/**
+ * Takes the buffer a shared record is written into, and its address.
+ *
+ * The same arrangement the pixels use: the engine owns the memory and the
+ * caller writes into it through a view, so a record of any length crosses in
+ * one call rather than in one call per move. The words are packed exactly as
+ * timeline_move() hands them back, the scramble first and the user's own moves
+ * after it, and nothing is checked as it is written -- restore_apply() looks
+ * at all of it at once.
+ *
+ * Nothing else may be called on the engine between this and restore_apply():
+ * the address is a pointer into a vector, and any other call is free to grow
+ * the heap out from under the view.
+ *
+ * @return zero for a count of nothing, for one past kMaxRestoreMoves, and
+ *         before initialization.
+ */
+[[nodiscard]] std::uintptr_t restore_buffer(std::uint32_t total_count) noexcept;
+
+/**
+ * Reads the buffer back as a session and puts it on the cube, all at once.
+ *
+ * Not a transaction, because there is nothing to protect: this is called at
+ * startup, so the state it would be rolling back to is a cube that has just
+ * been made. Every word is checked before any of it is applied, so a refusal
+ * leaves the cube exactly as it was and the caller starts a fresh session
+ * rather than retrying.
+ *
+ * What is checked is what would otherwise be read out of range or turned into
+ * a move that cannot exist: the two counts summing to what restore_buffer was
+ * told, and each word's axis, turns and layer mask. The mask is held to a
+ * single layer of this cube, which is what keeps a hand-written link from
+ * bringing in a wide move that has no notation to be written in.
+ *
+ * The record is built through the ordinary timeline operations, so the cursor
+ * lands at the end of it and the user's move count follows from the record the
+ * way it always does. The cube arrives at once, without animation.
+ *
+ * @return false without a buffer to read, for counts that do not match it, and
+ *         for any word the payload cannot carry.
+ */
+[[nodiscard]] bool restore_apply(std::uint32_t scramble_count,
+                                 std::uint32_t user_count) noexcept;
+
+/**
  * Starts one animated face-relative turn.
  *
  * `face_turns` is 1 clockwise, -1 counter-clockwise, or 2 for a half turn as

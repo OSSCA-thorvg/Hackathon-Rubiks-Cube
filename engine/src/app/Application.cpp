@@ -186,6 +186,12 @@ struct ApplicationState {
     // The whole of the playback state. Its presence is what "a sequence is
     // playing" means, so there is no second flag to fall out of step with it.
     std::optional<Player> playback;
+
+    // Where a shared record is written before it is read. Empty except
+    // between restore_buffer() and restore_apply(), which is the whole of its
+    // lifetime -- so being empty is also what "no buffer was taken" means,
+    // and there is no flag beside it saying the same.
+    std::vector<std::uint32_t> restore;
 };
 
 std::unique_ptr<ApplicationState> state;
@@ -523,6 +529,23 @@ void advance_playback() noexcept
     return state && !busy();
 }
 
+/**
+ * Whether a layer set is one a shared record may carry.
+ *
+ * One layer of this cube and no other. The mask field is wide enough for wide
+ * moves and slices of a much larger cube, and a word arriving from a link is
+ * free to name any of them -- but nothing in this application can make one, so
+ * letting one in would put a move on the record that has no notation to be
+ * written in and no gesture that could have produced it.
+ */
+[[nodiscard]] bool restorable_layers(cube::LayerMask layers) noexcept
+{
+    for (int index = 0; index < kCubeSize; ++index) {
+        if (layers == cube::layer(index)) return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 bool initialize(std::uint32_t width, std::uint32_t height) noexcept
@@ -799,6 +822,71 @@ void reset_cube() noexcept
     discard_playback();
     state->cube_state = cube::CubeState(kCubeSize);
     state->timeline.clear();
+}
+
+std::uintptr_t restore_buffer(std::uint32_t total_count) noexcept
+{
+    if (!state) return 0;
+
+    // Nothing to restore is not a shorter restore: the caller has decoded a
+    // record and is here because it holds something, so an empty one is a
+    // fault rather than a case -- and refusing it is what keeps zero meaning
+    // "refused" for the address as well.
+    if (total_count == 0 || total_count > kMaxRestoreMoves) return 0;
+
+    state->restore.assign(total_count, 0);
+    return reinterpret_cast<std::uintptr_t>(state->restore.data());
+}
+
+bool restore_apply(std::uint32_t scramble_count,
+                   std::uint32_t user_count) noexcept
+{
+    if (!state) return false;
+
+    // Taken out before it is read, whichever way this goes: the buffer belongs
+    // to one restore, so a second call with nothing written into it is refused
+    // by the same emptiness that refuses a call without a buffer at all.
+    std::vector<std::uint32_t> words;
+    words.swap(state->restore);
+    if (words.empty()) return false;
+
+    // Widened before it is added. On wasm32 a size_t is thirty-two bits, so
+    // two counts that wrap would agree with the buffer's length while one of
+    // the two loops below walked off the end of it.
+    const std::uint64_t declared =
+        static_cast<std::uint64_t>(scramble_count) + user_count;
+    if (declared != words.size()) return false;
+
+    std::vector<cube::CubeMove> moves;
+    moves.reserve(words.size());
+    for (const std::uint32_t word : words) {
+        const auto move = cube::unpack(word);
+        if (!move || !restorable_layers(move->layers)) return false;
+        moves.push_back(*move);
+    }
+
+    // Past every refusal, so what follows cannot leave the cube half restored.
+    discard_playback();
+    state->cube_state = cube::CubeState(kCubeSize);
+
+    // Built through the ordinary operations rather than through a way in of
+    // its own: the scramble is begun and then walked up, and the user's moves
+    // are recorded on top of it, which is exactly what happened to the cube
+    // this record came from.
+    const auto scramble_end = static_cast<std::size_t>(scramble_count);
+    state->timeline.begin_scramble(std::vector<cube::CubeMove>(
+        moves.begin(), moves.begin() + static_cast<std::ptrdiff_t>(scramble_end)));
+
+    for (std::size_t index = 0; index < moves.size(); ++index) {
+        state->cube_state.apply(moves[index]);
+        if (index < scramble_end) {
+            state->timeline.step(cube::TimelineEffect::Advance);
+        } else {
+            state->timeline.record(moves[index]);
+        }
+    }
+
+    return true;
 }
 
 const std::vector<cube::CubeMove>& ambient_pattern(

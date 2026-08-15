@@ -137,6 +137,39 @@ EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_reset_cube() noexcept
 }
 
 /**
+ * Takes the buffer a shared record is written into, and returns its address.
+ *
+ * The pixel buffer's arrangement, for a record instead of a frame: the engine
+ * owns the memory and the caller fills it through a typed view, so a session
+ * of any length crosses in one call. Words are packed as
+ * thorvg_rubiks_timeline_move() hands them back, the scramble first.
+ *
+ * Nothing else may be called between this and thorvg_rubiks_restore_apply():
+ * another call may grow the heap and leave the view pointing at nothing.
+ *
+ * @return zero when the count is nothing or past the engine's bound.
+ */
+EMSCRIPTEN_KEEPALIVE std::uintptr_t thorvg_rubiks_restore_buffer(
+    std::uint32_t total_count) noexcept
+{
+    return rubiks::app::restore_buffer(total_count);
+}
+
+/**
+ * Puts the written record on the cube, after checking all of it at once.
+ *
+ * Applied without animation. A refusal leaves the cube untouched, so the
+ * caller starts a fresh session rather than retrying.
+ *
+ * @return one when the whole record was accepted and applied; otherwise zero.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_restore_apply(
+    std::uint32_t scramble_count, std::uint32_t user_count) noexcept
+{
+    return rubiks::app::restore_apply(scramble_count, user_count) ? 1 : 0;
+}
+
+/**
  * Begins watching a repeating pattern, chosen by `choice` modulo the table.
  *
  * Every value is a valid choice, so this is where the arbitrariness comes in:

@@ -37,6 +37,25 @@ export type ThorvgRubiksModule = {
   /** Restores the solved cube, keeping the camera and the view mode. */
   _thorvg_rubiks_reset_cube(): void;
   /**
+   * Takes the buffer a shared record is written into and returns its address.
+   *
+   * Words are packed as _thorvg_rubiks_timeline_move() hands them back, the
+   * scramble first. Nothing else may be called before restore_apply: another
+   * call may grow the heap and leave the caller's view pointing at nothing.
+   *
+   * Zero when the count is nothing or past the engine's bound.
+   */
+  _thorvg_rubiks_restore_buffer(totalCount: number): number;
+  /**
+   * Reads the whole buffer back onto the cube, without animation.
+   *
+   * Returns 1 when every word was accepted; 0 leaves the cube untouched.
+   */
+  _thorvg_rubiks_restore_apply(
+    scrambleCount: number,
+    userCount: number,
+  ): number;
+  /**
    * Returns 1 when watching began; 0 when it had already begun.
    *
    * `choice` picks a pattern modulo the table, so every value is a valid one

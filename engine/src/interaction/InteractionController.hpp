@@ -365,6 +365,17 @@ private:
         double duration_ms = 0.0;
     };
 
+    /**
+     * True while a pointer is turning a layer, by whichever of the three ways.
+     *
+     * The part `gesture_running()` and `is_busy()` share; what they add to it
+     * is the one thing each of them is actually about.
+     */
+    [[nodiscard]] bool layer_gesture_running() const noexcept;
+
+    /** Lets go of all three, for a release and for a cancel alike. */
+    void drop_layer_gestures() noexcept;
+
     /** True while a pointer owns a gesture of any of the three kinds. */
     [[nodiscard]] bool gesture_running() const noexcept;
 

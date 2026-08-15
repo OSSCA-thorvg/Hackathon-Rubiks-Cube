@@ -355,9 +355,7 @@ void InteractionController::pointer_up(double tempo_ms) noexcept
         start_snap(turn->axis, turn->layers, turn->angle_degrees, tempo_ms);
     }
 
-    gesture_.reset();
-    net_gesture_.reset();
-    rings_gesture_.reset();
+    drop_layer_gestures();
 }
 
 void InteractionController::start_snap(cube::Axis axis, cube::LayerMask layers,
@@ -379,9 +377,7 @@ std::optional<cube::CubeMove> InteractionController::finish_snap() noexcept
 
 void InteractionController::cancel() noexcept
 {
-    gesture_.reset();
-    net_gesture_.reset();
-    rings_gesture_.reset();
+    drop_layer_gestures();
 
     // Same as a release for an orbit: there is no commit to withhold, and the
     // sweep already made stays pending rather than being thrown away.
@@ -544,10 +540,22 @@ std::optional<graphics::ActiveRotation> InteractionController::active_rotation()
     return std::nullopt;
 }
 
-bool InteractionController::gesture_running() const noexcept
+bool InteractionController::layer_gesture_running() const noexcept
 {
     return gesture_.has_value() || net_gesture_.has_value() ||
-           rings_gesture_.has_value() || orbit_.has_value();
+           rings_gesture_.has_value();
+}
+
+void InteractionController::drop_layer_gestures() noexcept
+{
+    gesture_.reset();
+    net_gesture_.reset();
+    rings_gesture_.reset();
+}
+
+bool InteractionController::gesture_running() const noexcept
+{
+    return layer_gesture_running() || orbit_.has_value();
 }
 
 std::optional<InteractionController::LockedTurn>
@@ -608,17 +616,19 @@ bool InteractionController::is_busy() const noexcept
 {
     // An orbit is deliberately absent: it has no commit to protect, so a
     // sweep in progress blocks neither moves nor, later, queued playback.
-    return gesture_.has_value() || net_gesture_.has_value() ||
-           rings_gesture_.has_value() || snap_.has_value() ||
+    // That absence is the whole difference from gesture_running().
+    return layer_gesture_running() || snap_.has_value() ||
            committed_.has_value();
 }
 
 void InteractionController::reset() noexcept
 {
-    gesture_.reset();
-    net_gesture_.reset();
-    rings_gesture_.reset();
-    orbit_.reset();
+    // Everything cancel lets go of, and then the things it deliberately keeps:
+    // a settling turn, the move it had decided on, and the sweep still waiting
+    // to be taken. That this is cancel plus a named list is the difference
+    // between the two, rather than something to read off two similar bodies.
+    cancel();
+
     snap_.reset();
     committed_.reset();
     opened_ms_ = 0.0;

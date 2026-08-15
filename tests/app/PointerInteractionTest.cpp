@@ -45,7 +45,9 @@ constexpr float kRightSample[]{0.69f, 0.61f};
 
 constexpr std::uint32_t kCanvas = 1024;
 constexpr int kCubeSize = 3;
-constexpr double kFrameMs = 16.0;
+
+using rubiks::test::kFrameMs;
+using rubiks::test::settle;
 
 /**
  * Enough drag for the snap to land on one quarter turn.
@@ -84,17 +86,6 @@ float pixels_per_degree(std::uint32_t width, std::uint32_t height)
 {
     return rubiks::interaction::kQuarterTurnFraction *
            cube_rect(width, height).width / 90.0f;
-}
-
-/** Runs the animation out, so the cube is at rest afterwards. */
-int settle()
-{
-    int frames = 0;
-    while (rubiks::app::advance(kFrameMs)) {
-        ++frames;
-        REQUIRE(frames < 1000);
-    }
-    return frames;
 }
 
 const std::uint8_t* pixel_at(float x, float y, std::uint32_t width)

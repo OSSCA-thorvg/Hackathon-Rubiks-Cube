@@ -18,11 +18,16 @@ export type GameState =
   | 'running'
   | 'completed';
 
-/** What a session has to ask the engine, and nothing more. */
+/**
+ * What a session has to ask the engine, and nothing more.
+ *
+ * Whether anything is running is not here: the controller reads that once a
+ * frame for the controls as well, and one reading shared between them cannot
+ * disagree with itself halfway through a frame.
+ */
 export type SessionEngine = {
   isSolved(): boolean;
   committedMoveCount(): number;
-  isBusy(): boolean;
 };
 
 /** The elements a session writes to. */
@@ -99,8 +104,12 @@ export class GameSession {
     this.announce('Cube reset.');
   }
 
-  /** Reads the engine once, after a frame of it has run. */
-  observe(): void {
+  /**
+   * Reads the engine once, after a frame of it has run.
+   *
+   * `busy` is the frame's answer, handed in rather than asked for again.
+   */
+  observe(busy: boolean): void {
     const moveCount = this.engine.committedMoveCount();
     const committed = moveCount > this.previousMoveCount;
     this.previousMoveCount = moveCount;
@@ -108,7 +117,7 @@ export class GameSession {
     // Asked as a state rather than as a change, so a one-move scramble that
     // has already finished by the first observed frame is still seen to
     // finish. That the call was accepted is what says it began.
-    if (this.currentState === 'scrambling' && !this.engine.isBusy()) {
+    if (this.currentState === 'scrambling' && !busy) {
       this.timer.arm();
       this.setState('ready');
       this.announce('Scramble ready. The timer starts after your first move.');

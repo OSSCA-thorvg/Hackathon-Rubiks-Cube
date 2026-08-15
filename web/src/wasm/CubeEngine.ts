@@ -121,6 +121,17 @@ export function isValidDimension(value: number): boolean {
 }
 
 /**
+ * Reports whether a value is a scramble length the engine would accept.
+ *
+ * Said here rather than at each place that asks, because the box a length is
+ * typed into and the call that carries it across the boundary were checking
+ * the same thing in opposite directions, and only one of them mirrors C++.
+ */
+export function isValidScrambleMoves(value: number): boolean {
+  return Number.isInteger(value) && value >= 1 && value <= MAX_SCRAMBLE_MOVES;
+}
+
+/**
  * Owns one engine module instance and presents its pixel buffer on a canvas.
  */
 export class CubeEngine {
@@ -309,11 +320,7 @@ export class CubeEngine {
     if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) {
       throw new Error(`Invalid scramble seed ${seed}.`);
     }
-    if (
-      !Number.isInteger(moveCount) ||
-      moveCount < 1 ||
-      moveCount > MAX_SCRAMBLE_MOVES
-    ) {
+    if (!isValidScrambleMoves(moveCount)) {
       throw new Error(`Invalid scramble move count ${moveCount}.`);
     }
     if (this.module._thorvg_rubiks_scramble(seed, moveCount) === 0) {

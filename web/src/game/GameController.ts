@@ -3,6 +3,7 @@ import {
   CubeFlatStyle,
   CubeViewMode,
   DEFAULT_SCRAMBLE_MOVES,
+  isValidScrambleMoves,
   MAX_SCRAMBLE_MOVES,
   type FaceTurns,
 } from '../wasm/CubeEngine.ts';
@@ -17,6 +18,7 @@ export type { GameState } from './GameSession.ts';
 
 /** Engine surface required by gameplay controls. */
 export type GameEngine = SessionEngine & {
+  isBusy(): boolean;
   scramble(seed: number, moveCount: number): void;
   resetCube(): void;
   turnFace(face: CubeFace, faceTurns: FaceTurns): boolean;
@@ -197,6 +199,27 @@ export function attachGameController(
     timerEnvironment: options.timerEnvironment,
   });
 
+  /**
+   * Every control that is simply on while a controller is attached.
+   *
+   * The move buttons are deliberately not here: whether a layer can be turned
+   * by hand is the engine's answer rather than the controller's, and
+   * `updateMoveAvailability` is what carries it. Listed once so that adding a
+   * control cannot enable it without disabling it again at teardown.
+   */
+  const commands: readonly (HTMLButtonElement | HTMLInputElement)[] = [
+    ui.scrambleMovesInput,
+    ui.scrambleButton,
+    ui.resetButton,
+    ui.homeViewButton,
+    ...ui.viewButtons,
+    ...ui.flatButtons,
+  ];
+
+  const setCommandsDisabled = (disabled: boolean): void => {
+    for (const control of commands) control.disabled = disabled;
+  };
+
   const updateViewControls = (): void => {
     const selected = engine.viewMode();
     for (const button of ui.viewButtons) {
@@ -220,12 +243,13 @@ export function attachGameController(
   // seconds at a time with the answer the same throughout.
   let movesDisabled: boolean | null = null;
 
-  const updateMoveAvailability = (): void => {
-    const disabled = engine.isBusy();
-    if (disabled === movesDisabled) return;
+  // `busy` is passed in on the frame path, where it has already been read for
+  // the session; the command paths have nobody to take it from and ask here.
+  const updateMoveAvailability = (busy = engine.isBusy()): void => {
+    if (busy === movesDisabled) return;
 
-    movesDisabled = disabled;
-    for (const button of ui.moveButtons) button.disabled = disabled;
+    movesDisabled = busy;
+    for (const button of ui.moveButtons) button.disabled = busy;
   };
 
   const run = (command: () => void): void => {
@@ -252,11 +276,7 @@ export function attachGameController(
 
   const onScrambleMovesChange = (): void => {
     const typed = Number(ui.scrambleMovesInput.value);
-    if (
-      Number.isInteger(typed) &&
-      typed >= 1 &&
-      typed <= MAX_SCRAMBLE_MOVES
-    ) {
+    if (isValidScrambleMoves(typed)) {
       scrambleMoves = typed;
       return;
     }
@@ -272,12 +292,13 @@ export function attachGameController(
   const onScramble = (): void => {
     run((): void => {
       engine.scramble(seedSource(), scrambleMoves);
-      engine.render();
       session.beginScramble();
       updateMoveAvailability();
 
       // The cube is still solved: the scramble is turned into it over the
-      // frames that follow, and nothing else is running to ask for them.
+      // frames that follow, and nothing else is running to ask for them. No
+      // drawing here -- unlike a reset, the first of those frames is along
+      // immediately and would only repaint what this one had just drawn.
       startFrameLoop();
     });
   };
@@ -299,31 +320,27 @@ export function attachGameController(
     });
   };
 
-  const viewListeners = bindChoices(ui.viewButtons, viewModeOf, (mode) => {
-    run((): void => {
-      engine.setViewMode(mode);
-      engine.render();
-      updateViewControls();
-    });
-  });
-
-  const flatListeners = bindChoices(ui.flatButtons, flatStyleOf, (style) => {
-    run((): void => {
-      engine.setFlatStyle(style);
-      engine.render();
-      updateViewControls();
-    });
-  });
-
-  const moveListeners = new Map<HTMLButtonElement, () => void>();
-  for (const button of ui.moveButtons) {
-    const listener = (): void => {
-      const move = moveOf(button);
-      if (move !== null) startFaceTurn(move.face, move.turns);
-    };
-    moveListeners.set(button, listener);
-    button.addEventListener('click', listener);
-  }
+  // All three groups are buttons that name a value, so all three go through
+  // the same binder and land in one map for teardown to walk.
+  const choiceListeners = new Map<HTMLButtonElement, () => void>([
+    ...bindChoices(ui.viewButtons, viewModeOf, (mode) => {
+      run((): void => {
+        engine.setViewMode(mode);
+        engine.render();
+        updateViewControls();
+      });
+    }),
+    ...bindChoices(ui.flatButtons, flatStyleOf, (style) => {
+      run((): void => {
+        engine.setFlatStyle(style);
+        engine.render();
+        updateViewControls();
+      });
+    }),
+    ...bindChoices(ui.moveButtons, moveOf, (move) => {
+      startFaceTurn(move.face, move.turns);
+    }),
+  ]);
 
   const onKeyDown = (event: KeyboardEvent): void => {
     if (
@@ -349,12 +366,7 @@ export function attachGameController(
   ui.homeViewButton.addEventListener('click', onHomeView);
   keyboardTarget.addEventListener('keydown', onKeyDown);
 
-  ui.scrambleMovesInput.disabled = false;
-  ui.scrambleButton.disabled = false;
-  ui.resetButton.disabled = false;
-  ui.homeViewButton.disabled = false;
-  for (const button of ui.viewButtons) button.disabled = false;
-  for (const button of ui.flatButtons) button.disabled = false;
+  setCommandsDisabled(false);
   updateViewControls();
   updateMoveAvailability();
 
@@ -366,8 +378,11 @@ export function attachGameController(
     afterEngineFrame(): void {
       if (!active) return;
       run((): void => {
-        session.observe();
-        updateMoveAvailability();
+        // One reading of the engine for the two things that want it, so the
+        // status line and the controls cannot describe different frames.
+        const busy = engine.isBusy();
+        session.observe(busy);
+        updateMoveAvailability(busy);
       });
     },
 
@@ -375,12 +390,8 @@ export function attachGameController(
       if (!active) return;
       active = false;
       session.teardown();
-      ui.scrambleMovesInput.disabled = true;
-      ui.scrambleButton.disabled = true;
-      ui.resetButton.disabled = true;
-      ui.homeViewButton.disabled = true;
-      for (const button of ui.viewButtons) button.disabled = true;
-      for (const button of ui.flatButtons) button.disabled = true;
+      setCommandsDisabled(true);
+      // The one moment the move buttons are not the engine's to decide.
       for (const button of ui.moveButtons) button.disabled = true;
       ui.scrambleMovesInput.removeEventListener(
         'change',
@@ -389,13 +400,7 @@ export function attachGameController(
       ui.scrambleButton.removeEventListener('click', onScramble);
       ui.resetButton.removeEventListener('click', onReset);
       ui.homeViewButton.removeEventListener('click', onHomeView);
-      for (const [button, listener] of viewListeners) {
-        button.removeEventListener('click', listener);
-      }
-      for (const [button, listener] of flatListeners) {
-        button.removeEventListener('click', listener);
-      }
-      for (const [button, listener] of moveListeners) {
+      for (const [button, listener] of choiceListeners) {
         button.removeEventListener('click', listener);
       }
       keyboardTarget.removeEventListener('keydown', onKeyDown);

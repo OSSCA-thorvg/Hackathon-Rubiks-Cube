@@ -1,5 +1,9 @@
 import { startApp, type AppState, type StartAppOptions } from './AppLifecycle.ts';
 import type { GameUi } from './game/GameController.ts';
+import {
+  DEFAULT_SCRAMBLE_MOVES,
+  MAX_SCRAMBLE_MOVES,
+} from './wasm/CubeEngine.ts';
 
 /** Lifecycle entry point, injectable so tests can observe the wiring. */
 export type StartAppFn = (options: StartAppOptions) => Promise<unknown>;
@@ -63,7 +67,7 @@ export function bootstrap(
       <div class="game-actions" aria-label="Game actions">
         <label class="scramble-length" for="scramble-moves">
           <span>Moves</span>
-          <input type="number" id="scramble-moves" inputmode="numeric" min="1" max="100" step="1" value="20">
+          <input type="number" id="scramble-moves" inputmode="numeric" step="1" min="1" max="${MAX_SCRAMBLE_MOVES}" value="${DEFAULT_SCRAMBLE_MOVES}">
         </label>
         <button type="button" id="scramble">Scramble</button>
         <button type="button" id="reset">Reset</button>

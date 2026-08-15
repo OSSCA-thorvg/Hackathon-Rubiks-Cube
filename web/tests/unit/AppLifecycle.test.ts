@@ -25,8 +25,10 @@ function createGameUi(): GameUi {
     scrambleButton: button(),
     scrambleMovesInput: document.createElement('input'),
     resetButton: button(),
+    ambientButton: button(),
     homeViewButton: button(),
     viewButtons: [],
+    flatButtons: [],
     moveButtons: [],
   };
 }
@@ -74,11 +76,16 @@ function createHarness(overrides: {
     advance: vi.fn(() => false),
     scramble: vi.fn(),
     resetCube: vi.fn(),
+    ambientStart: vi.fn(() => true),
+    ambientStop: vi.fn(),
+    isAmbient: vi.fn(() => false),
     isSolved: vi.fn(() => true),
     committedMoveCount: vi.fn(() => 0),
     turnFace: vi.fn(() => true),
     setViewMode: vi.fn(),
     viewMode: vi.fn(() => 1),
+    setFlatStyle: vi.fn(),
+    flatStyle: vi.fn(() => 0),
     resetView: vi.fn(),
     isBusy: vi.fn(() => false),
     pointerDown: vi.fn(() => true),
@@ -116,6 +123,21 @@ function createHarness(overrides: {
     ),
   };
 
+  const documentListeners = new Map<string, Set<(event: Event) => void>>();
+  const targetDocument = {
+    hidden: false,
+    addEventListener: vi.fn((type: string, listener: (event: Event) => void) => {
+      const bucket = documentListeners.get(type) ?? new Set();
+      bucket.add(listener);
+      documentListeners.set(type, bucket);
+    }),
+    removeEventListener: vi.fn(
+      (type: string, listener: (event: Event) => void) => {
+        documentListeners.get(type)?.delete(listener);
+      },
+    ),
+  };
+
   const states: Array<[string, string]> = [];
   const onError = vi.fn();
 
@@ -149,6 +171,7 @@ function createHarness(overrides: {
           return game;
         }),
       targetWindow,
+      targetDocument,
       requestFrame,
       cancelFrame,
     });
@@ -191,6 +214,15 @@ function createHarness(overrides: {
     triggerObserver: () => observerCallback(),
     dispatch,
     listenerCount,
+    /** Takes the tab out of sight, or brings it back, as the browser would. */
+    setHidden: (hidden: boolean): void => {
+      targetDocument.hidden = hidden;
+      for (const listener of documentListeners.get('visibilitychange') ?? []) {
+        listener(new Event('visibilitychange'));
+      }
+    },
+    documentListenerCount: (type: string): number =>
+      documentListeners.get(type)?.size ?? 0,
     dispatchPointer,
     runFrame,
     hasPendingFrame: () => pendingFrame !== null,
@@ -566,6 +598,59 @@ describe('startApp', () => {
     expect(harness.engine.dispose).toHaveBeenCalledTimes(1);
     expect(harness.observer.observe).not.toHaveBeenCalled();
     expect(harness.listenerCount('resize')).toBe(0);
+  });
+
+  it('stops the frame loop while the tab is out of sight and gives it back', async () => {
+    const harness = createHarness();
+    await harness.start();
+
+    // Something that keeps asking for frames, which is what a watched pattern
+    // is: a loop that would otherwise run for as long as the tab is away.
+    harness.engine.advance.mockReturnValue(true);
+    harness.dispatchPointer('pointerdown', {});
+    harness.runFrame(1000);
+    expect(harness.hasPendingFrame()).toBe(true);
+
+    harness.setHidden(true);
+    expect(harness.cancelFrame).toHaveBeenCalledTimes(1);
+    expect(harness.hasPendingFrame()).toBe(false);
+
+    const framesWhileAway = harness.engine.advance.mock.calls.length;
+    harness.setHidden(false);
+    expect(harness.hasPendingFrame()).toBe(true);
+
+    // The hours the tab spent away are not an elapsed time: the first frame
+    // back measures nothing, so nothing animating jumps to its end.
+    harness.runFrame(9_999_000);
+    expect(harness.engine.advance).toHaveBeenCalledTimes(framesWhileAway + 1);
+    expect(harness.engine.advance).toHaveBeenLastCalledWith(0);
+  });
+
+  it('gives back no loop that was not taken away', async () => {
+    const harness = createHarness();
+    await harness.start();
+
+    // A still cube costs no frames, and going away and coming back is not a
+    // reason to start any.
+    harness.setHidden(true);
+    harness.setHidden(false);
+
+    expect(harness.cancelFrame).not.toHaveBeenCalled();
+    expect(harness.requestFrame).not.toHaveBeenCalled();
+  });
+
+  it('releases the visibility listener with everything else', async () => {
+    const harness = createHarness();
+    const controller = await harness.start();
+
+    expect(harness.documentListenerCount('visibilitychange')).toBe(1);
+
+    controller.teardown();
+    expect(harness.documentListenerCount('visibilitychange')).toBe(0);
+
+    // And a change arriving after that starts nothing.
+    harness.setHidden(false);
+    expect(harness.requestFrame).not.toHaveBeenCalled();
   });
 
   it('treats repeated teardown as a no-op', async () => {

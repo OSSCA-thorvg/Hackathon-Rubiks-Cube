@@ -42,6 +42,19 @@ export type WindowLike = {
   removeEventListener(type: string, listener: (event: Event) => void): void;
 };
 
+/**
+ * Minimal document surface, injectable for unit tests.
+ *
+ * Separate from WindowLike because visibility is the document's, and reading
+ * `hidden` off the same object that carries the listener is what keeps the two
+ * from being able to disagree.
+ */
+export type DocumentLike = {
+  readonly hidden: boolean;
+  addEventListener(type: string, listener: (event: Event) => void): void;
+  removeEventListener(type: string, listener: (event: Event) => void): void;
+};
+
 export type StartAppOptions = {
   readonly canvas: HTMLCanvasElement;
   /** Gameplay controls the lifecycle hands to the game controller. */
@@ -53,6 +66,7 @@ export type StartAppOptions = {
   readonly createEngine?: (canvas: HTMLCanvasElement) => Promise<EngineLike>;
   readonly createObserver?: (callback: () => void) => ObserverLike;
   readonly targetWindow?: WindowLike;
+  readonly targetDocument?: DocumentLike;
   readonly requestFrame?: (callback: (timestamp: number) => void) => number;
   readonly cancelFrame?: (handle: number) => void;
   readonly createGameController?: (
@@ -83,6 +97,7 @@ export async function startApp(
     options.createObserver ??
     ((callback: () => void) => new ResizeObserver(callback));
   const win: WindowLike = options.targetWindow ?? window;
+  const doc: DocumentLike = options.targetDocument ?? document;
   const requestFrame =
     options.requestFrame ??
     ((callback: (timestamp: number) => void) =>
@@ -111,6 +126,10 @@ export async function startApp(
   let game: GameController | null = null;
   let frameHandle: number | null = null;
   let previousTimestamp: number | null = null;
+  // Whether a loop was taken away by the tab going out of sight, and so is
+  // owed back when it returns. Nothing else may set it: a loop that ended
+  // because the cube stopped moving is not owed anything.
+  let pausedWhileHidden = false;
 
   const drawFrame = (timestamp: number): void => {
     frameHandle = null;
@@ -172,6 +191,34 @@ export async function startApp(
     }
   };
 
+  /**
+   * Stops the frame loop while the tab is out of sight, and gives it back.
+   *
+   * Here rather than in the engine or the controls, because the loop is this
+   * module's and nobody else's: the engine reads no clock, so a pause is
+   * nothing more than advance() not being called, and a watched pattern picks
+   * up mid-turn where it left off. The first frame back measures no elapsed
+   * time, since startFrameLoop empties the previous timestamp -- the hours a
+   * tab spent in the background never arrive as one enormous step.
+   */
+  const onVisibilityChange = (): void => {
+    if (!active) return;
+
+    if (doc.hidden) {
+      if (frameHandle === null) return;
+
+      cancelFrame(frameHandle);
+      frameHandle = null;
+      pausedWhileHidden = true;
+      return;
+    }
+
+    if (!pausedWhileHidden) return;
+
+    pausedWhileHidden = false;
+    startFrameLoop();
+  };
+
   const onPageHide = (event: Event): void => {
     // A BFCache entry keeps the page alive for restoration; dispose only
     // on real unloads.
@@ -211,6 +258,7 @@ export async function startApp(
     attempt(() => win.removeEventListener('resize', applySize));
     attempt(() => win.removeEventListener('pagehide', onPageHide));
     attempt(() => win.removeEventListener('pageshow', onPageShow));
+    attempt(() => doc.removeEventListener('visibilitychange', onVisibilityChange));
     attempt(() => engine.dispose());
 
     if (cleanupError !== null) {
@@ -245,6 +293,7 @@ export async function startApp(
     win.addEventListener('resize', applySize);
     win.addEventListener('pagehide', onPageHide);
     win.addEventListener('pageshow', onPageShow);
+    doc.addEventListener('visibilitychange', onVisibilityChange);
 
     setState('ready', 'Ready. Scramble the cube to begin.');
   } catch (error) {

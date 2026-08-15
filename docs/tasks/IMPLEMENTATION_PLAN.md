@@ -152,10 +152,10 @@ C ABI는 primitive type만 사용하므로 engine은 layer mask와 회전량을 
 3×3에서 만들어질 수 있는 mask는 단일 layer 세 개뿐이므로, 변환은 구간을 찾는 알고리즘이 아니라 `(axis, layer) → {문자, 부호}` 9칸 표입니다. 음의 face 부호 반전과 M/E/S 방향 규약이 전부 그 표의 부호 칸에 들어가므로 별도 분기가 없고, M/E/S는 N×N 이야기가 아니라 3×3에서도 가운데 줄을 drag하면 바로 나오므로 처음부터 필요합니다.
 표에 없는 mask는 예외 없이 실패 경로입니다. 구간 판정과 numbered 표기는 소비자가 Phase 15에서 처음 생기므로 그때 함께 만듭니다.
 
-## [ ] Phase 13: [Presentation options](./13-presentation-options.md)
+## [x] Phase 13: [Presentation options](./13-presentation-options.md)
 
 보이고 들리는 방식을 사용자가 고를 수 있게 합니다. 서로 독립적인 세 옵션이 하나의 옵션 면에 함께 놓입니다.
-적록색약에서 구분되는 대체 palette를 더하고 두 벌 중 하나를 고르게 합니다. 검증은 명도 대비가 아니라 deuteranopia 변환을 거친 뒤의 색 거리로 합니다. 명도만 보면 두 색이 색약에서 무너져도 test가 통과해, 목적 자체를 확인하지 못하기 때문입니다. Palette는 `to_color` 한 곳에 모여 있고 cube·interaction·history 어디에도 닿지 않아 나머지 둘과 달리 의존이 없습니다 — 한때 Phase 7.5로 앞당겨 두었으나, 그러면 toggle을 단독으로 붙였다가 이 phase의 옵션 면으로 옮기게 되므로 UI를 한 번만 만들도록 되돌렸습니다. 임의 색 지정은 기각했습니다: 색 거리 test가 성립하지 않게 되고, 저장 계층이 없어 매번 사라지며, 손으로 설정하는 접근성은 검증된 preset보다 나쁩니다.
+색각 이상에서 구분되는 대체 palette를 더하고 두 벌 중 하나를 고르게 합니다. 검증은 명도 대비가 아니라 색각 변환을 거친 뒤의 색 거리로 합니다. 명도만 보면 두 색이 색약에서 무너져도 test가 통과해, 목적 자체를 확인하지 못하기 때문입니다. 변환은 세 이색형 색각을 전부, 함께 봅니다 — 적록 결핍 둘은 청황 축이 남고 tritanopia는 정확히 그 축을 잃으므로, 하나만 보고 고른 palette는 다른 유형에게 표준 큐브보다 나쁜 판을 줍니다(1차 구현이 실제로 그랬습니다). 세 축을 모두 만족하는 차원은 명도뿐이라 결과는 명도의 사다리가 되고, 정상 시각에서의 화려함이 그 대가입니다. Palette는 `to_color` 한 곳에 모여 있고 cube·interaction·history 어디에도 닿지 않아 나머지 둘과 달리 의존이 없습니다 — 한때 Phase 7.5로 앞당겨 두었으나, 그러면 toggle을 단독으로 붙였다가 이 phase의 옵션 면으로 옮기게 되므로 UI를 한 번만 만들도록 되돌렸습니다. 임의 색 지정은 기각했습니다: 색 거리 test가 성립하지 않게 되고, 저장 계층이 없어 매번 사라지며, 손으로 설정하는 접근성은 검증된 preset보다 나쁩니다.
 회전이 commit되는 순간의 효과음을 더합니다. 모든 commit이 timeline cursor를 정확히 ±1 움직이므로, `GameSession`이 완료 판정에 쓰는 cursor 관찰이 그대로 소리를 낼 지점이고 별도의 commit counter도 새 기준값도 없습니다 — reset·scramble에서 소리가 새지 않는 것도 그 기준값 갱신이 이미 거기 있어서 공짜입니다. 소리는 cursor가 변한 frame에 한 번입니다. `AudioContext`는 첫 gesture의 콜스택 안에서 만들어야 하므로 one-shot 리스너로 세웁니다 — commit은 frame 안에서 관찰되어 gesture 밖이라, 첫 소리에서 lazy하게 만드는 방식은 autoplay 정책에 걸립니다.
 Animation 속도를 조절할 수 있게 합니다. Phase 9가 tempo를 `start_move`의 인자로 모아 두므로 그 인자에 배율을 곱하는 일이고, 사용자 snap과 scramble, Phase 11의 되감기 재생이 슬라이더 하나를 함께 씁니다.
 

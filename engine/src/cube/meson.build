@@ -7,6 +7,7 @@ cube_lib = static_library(
   files(
     'CubeMove.cpp',
     'CubeState.cpp',
+    'MoveTimeline.cpp',
     'Scramble.cpp',
     'Surface.cpp',
   ),

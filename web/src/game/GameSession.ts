@@ -19,15 +19,35 @@ export type GameState =
   | 'completed';
 
 /**
- * What a session has to ask the engine, and nothing more.
+ * What a session has to ask the engine outside of a frame, and nothing more.
  *
- * Whether anything is running is not here: the controller reads that once a
- * frame for the controls as well, and one reading shared between them cannot
- * disagree with itself halfway through a frame.
+ * What a frame says is not here: the controller takes that reading once for
+ * the controls as well and hands it in, and one reading shared between them
+ * cannot disagree with itself halfway through a frame.
  */
 export type SessionEngine = {
   isSolved(): boolean;
   committedMoveCount(): number;
+  timelineCursor(): number;
+};
+
+/**
+ * One reading of the engine, taken once a frame and shared by everything.
+ *
+ * A commit is `cursor` having changed: every move that lands moves it by
+ * exactly one, so there is no counter to keep beside it and no question of the
+ * two describing different frames. A watched pattern does not move it at all,
+ * which is what makes an interlude leave nothing behind without anyone asking
+ * whether one is running.
+ */
+export type EngineFrame = {
+  readonly busy: boolean;
+  readonly watching: boolean;
+  readonly cursor: number;
+  readonly length: number;
+  readonly scrambleEnd: number;
+  /** Moves of the user's own currently on the cube, as the engine derives it. */
+  readonly userMoves: number;
 };
 
 /** The elements a session writes to. */
@@ -62,7 +82,10 @@ export class GameSession {
   private readonly timer: SolveTimer;
 
   private currentState: GameState = 'idle';
-  private previousMoveCount: number;
+  // Replaced by the constructor's own baseline before a frame is ever read;
+  // written here as well because the reading is taken in a method.
+  private previousCursor = 0;
+  private previousUserMoves = 0;
 
   constructor(options: GameSessionOptions) {
     this.engine = options.engine;
@@ -74,7 +97,7 @@ export class GameSession {
       this.ui.timer.value = formatElapsed(elapsedMs);
     }, options.timerEnvironment);
 
-    this.previousMoveCount = this.engine.committedMoveCount();
+    this.takeBaseline();
     this.timer.reset();
     this.setState('idle');
   }
@@ -90,7 +113,7 @@ export class GameSession {
 
   /** A scramble has been accepted and is now being turned into the cube. */
   beginScramble(): void {
-    this.previousMoveCount = this.engine.committedMoveCount();
+    this.takeBaseline();
     this.timer.reset();
     this.setState('scrambling');
     this.announce('Scrambling the cube…');
@@ -98,46 +121,89 @@ export class GameSession {
 
   /** The cube has been restored, so there is nothing under way. */
   restart(): void {
-    this.previousMoveCount = this.engine.committedMoveCount();
+    this.takeBaseline();
     this.timer.reset();
     this.setState('idle');
     this.announce('Cube reset.');
   }
 
   /**
-   * Reads the engine once, after a frame of it has run.
+   * Reads one frame of the engine, after it has run.
    *
-   * `busy` is the frame's answer, handed in rather than asked for again.
+   * The reading is handed in rather than asked for again, so the session and
+   * the controls are always describing the same moment.
+   *
+   * Two things are watched, and they are watched for different reasons. A move
+   * committing is the cursor changing, whichever direction it went, because
+   * that is what finishing a solve has to be seen through -- undoing the last
+   * wrong move can be what solves the cube. The clock, though, starts on the
+   * user's own moves: a rewind commits moves too, and a solve pressed from a
+   * ready cube would otherwise start the clock it is about to stop.
    */
-  observe(busy: boolean): void {
-    const moveCount = this.engine.committedMoveCount();
-    const committed = moveCount > this.previousMoveCount;
-    this.previousMoveCount = moveCount;
+  observe(frame: EngineFrame): void {
+    const committed = frame.cursor !== this.previousCursor;
+    const played = frame.userMoves > this.previousUserMoves;
+    this.previousCursor = frame.cursor;
+    this.previousUserMoves = frame.userMoves;
 
     // Asked as a state rather than as a change, so a one-move scramble that
     // has already finished by the first observed frame is still seen to
     // finish. That the call was accepted is what says it began.
-    if (this.currentState === 'scrambling' && !busy) {
+    if (this.currentState === 'scrambling' && !frame.busy) {
       this.timer.arm();
       this.setState('ready');
       this.announce('Scramble ready. The timer starts after your first move.');
     }
 
-    if (committed && this.currentState === 'ready') {
+    if (played && this.currentState === 'ready') {
       this.timer.start();
       this.setState('running');
     }
 
-    if (committed && this.currentState === 'running' && this.engine.isSolved()) {
+    if (committed && this.isUnderWay() && this.engine.isSolved()) {
       const finalMs = this.timer.stop();
       this.setState('completed');
-      this.announce(`Solved in ${formatElapsed(finalMs)}.`);
+
+      // Nothing is kept to tell the two apart. A cube with none of its record
+      // applied, on a scramble that exists, can only have been rewound there:
+      // an undo stops at the end of the scramble, so a solve is the one thing
+      // that can take the cursor below it, and a cube the user finished
+      // themselves always has moves of their own still on it.
+      this.announce(
+        frame.cursor === 0 && frame.scrambleEnd > 0
+          ? `Rewound to solved in ${formatElapsed(finalMs)}. Not a solve of your own.`
+          : `Solved in ${formatElapsed(finalMs)}.`,
+      );
     }
   }
 
   /** Stops the clock's own frame loop; the DOM is the controller's to undo. */
   teardown(): void {
     this.timer.teardown();
+  }
+
+  /**
+   * A solve that can still be finished, whether or not the clock has started.
+   *
+   * `ready` is in here because Solve may be pressed on a cube nobody has
+   * touched yet: the cube ends up solved, and a session left waiting for a
+   * first move on a solved cube would arm a clock with nothing to time.
+   */
+  private isUnderWay(): boolean {
+    return this.currentState === 'ready' || this.currentState === 'running';
+  }
+
+  /**
+   * Takes the two readings a frame is measured against.
+   *
+   * The commands that replace the record whole -- a scramble, a reset -- call
+   * this themselves, because they know the record they left behind is not the
+   * one the last frame saw. Nothing else has to: every other change to it goes
+   * through a commit, which is exactly what observe() is watching for.
+   */
+  private takeBaseline(): void {
+    this.previousCursor = this.engine.timelineCursor();
+    this.previousUserMoves = this.engine.committedMoveCount();
   }
 
   private setState(state: GameState): void {

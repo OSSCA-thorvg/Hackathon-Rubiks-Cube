@@ -9,6 +9,7 @@ import {
 } from '../wasm/CubeEngine.ts';
 import {
   GameSession,
+  type EngineFrame,
   type GameState,
   type SessionEngine,
 } from './GameSession.ts';
@@ -24,6 +25,12 @@ export type GameEngine = SessionEngine & {
   ambientStart(choice: number): boolean;
   ambientStop(): void;
   isAmbient(): boolean;
+  undo(): boolean;
+  redo(): boolean;
+  solveRewind(): boolean;
+  stopPlayback(): void;
+  timelineLength(): number;
+  timelineScrambleEnd(): number;
   turnFace(face: CubeFace, faceTurns: FaceTurns): boolean;
   setViewMode(mode: CubeViewMode): void;
   viewMode(): CubeViewMode;
@@ -43,6 +50,13 @@ export type GameUi = {
   /** How many moves the next scramble is, as a plain integer. */
   readonly scrambleMovesInput: HTMLInputElement;
   readonly resetButton: HTMLButtonElement;
+  /** Takes back one move of the user's own, and puts it back again. */
+  readonly undoButton: HTMLButtonElement;
+  readonly redoButton: HTMLButtonElement;
+  /** Rewinds every applied move; the long form of Undo. */
+  readonly solveButton: HTMLButtonElement;
+  /** Breaks a rewind off, and is only on screen while one is playing. */
+  readonly stopButton: HTMLButtonElement;
   /** Starts and stops watching; pressed while a pattern is running. */
   readonly ambientButton: HTMLButtonElement;
   readonly homeViewButton: HTMLButtonElement;
@@ -272,12 +286,14 @@ export function attachGameController(
     'completed',
   ]);
 
-  /** What the engine says about itself, for the controls that follow it. */
-  type EngineNow = { readonly busy: boolean; readonly watching: boolean };
-
-  const engineNow = (): EngineNow => ({
+  /** What the engine says about itself, for everything that follows it. */
+  const engineNow = (): EngineFrame => ({
     busy: engine.isBusy(),
     watching: engine.isAmbient(),
+    cursor: engine.timelineCursor(),
+    length: engine.timelineLength(),
+    scrambleEnd: engine.timelineScrambleEnd(),
+    userMoves: engine.committedMoveCount(),
   });
 
   // What the move buttons were last set to. Written only on a change: this
@@ -285,6 +301,15 @@ export function attachGameController(
   // seconds at a time with the answer the same throughout.
   let movesDisabled: boolean | null = null;
 
+  /**
+   * Whether a rewind this controller asked for is still playing.
+   *
+   * Only what puts the Stop control on screen. Whether a press on it does
+   * anything is the engine's answer and not this one, so a press arriving in
+   * the frame between a rewind ending and this being cleared reaches a command
+   * that refuses it.
+   */
+  let rewinding = false;
 
   /**
    * Puts the controls that follow the engine into the state it is in.
@@ -303,6 +328,22 @@ export function attachGameController(
       movesDisabled = movesOff;
       for (const button of ui.moveButtons) button.disabled = movesOff;
     }
+
+    // The same three conditions the engine refuses on, so a button that can be
+    // pressed is one that will be answered. Undo stopping at the end of the
+    // scramble is the whole of "undo is for your own moves": on a cube that
+    // has only been scrambled there is nothing above that line.
+    ui.undoButton.disabled = movesOff || now.cursor <= now.scrambleEnd;
+    ui.redoButton.disabled = movesOff || now.cursor >= now.length;
+    ui.solveButton.disabled = movesOff || now.cursor === 0;
+
+    // Off the screen and out of reach together: it is not a control that is
+    // sometimes unavailable but one that only exists while there is a rewind
+    // to break off, and the two attributes are how that is said to a person
+    // looking and to a person tabbing.
+    if (!now.busy) rewinding = false;
+    ui.stopButton.hidden = !rewinding;
+    ui.stopButton.disabled = !rewinding;
 
     ui.ambientButton.setAttribute('aria-pressed', String(now.watching));
     ui.ambientButton.disabled =
@@ -429,6 +470,54 @@ export function attachGameController(
   };
 
   /**
+   * Runs one of the three rewinds, which differ only in what they ask for.
+   *
+   * Each is a cube command like any other -- watching gives way to it -- and
+   * each hands a sequence to the engine that the frame loop then plays, so
+   * what is left to do here is ask for the frames and show the way out.
+   */
+  const rewindCommand = (start: () => boolean, announcement?: string): void => {
+    cubeCommand((): void => {
+      if (!start()) return;
+
+      rewinding = true;
+      if (announcement !== undefined) session.announce(announcement);
+      startFrameLoop();
+    });
+  };
+
+  const onUndo = (): void => {
+    rewindCommand(() => engine.undo());
+  };
+
+  const onRedo = (): void => {
+    rewindCommand(() => engine.redo());
+  };
+
+  const onSolve = (): void => {
+    rewindCommand(
+      () => engine.solveRewind(),
+      'Rewinding to the solved cube. Press Stop to break off.',
+    );
+  };
+
+  /**
+   * Breaks off a rewind, which is the one command that does not leave first.
+   *
+   * Nothing is drawn here: the sequence being stopped is what was asking for
+   * frames, and the loop draws once more after the engine stops asking -- so
+   * the turn this confirms reaches the screen on that frame.
+   */
+  const onStop = (): void => {
+    run((): void => {
+      engine.stopPlayback();
+      rewinding = false;
+      session.announce('Stopped.');
+      updateEngineControls();
+    });
+  };
+
+  /**
    * The watch toggle, which is the one control that does not leave first.
    *
    * Pressing it while a pattern runs means stop, and stopping is the whole of
@@ -503,6 +592,10 @@ export function attachGameController(
   ui.scrambleMovesInput.addEventListener('animationend', onRefusalFlashEnd);
   ui.scrambleButton.addEventListener('click', onScramble);
   ui.resetButton.addEventListener('click', onReset);
+  ui.undoButton.addEventListener('click', onUndo);
+  ui.redoButton.addEventListener('click', onRedo);
+  ui.solveButton.addEventListener('click', onSolve);
+  ui.stopButton.addEventListener('click', onStop);
   ui.ambientButton.addEventListener('click', onAmbient);
   ui.homeViewButton.addEventListener('click', onHomeView);
   keyboardTarget.addEventListener('keydown', onKeyDown);
@@ -524,7 +617,7 @@ export function attachGameController(
         // session goes first: whether watching can be offered follows the
         // state this frame may just have moved it to.
         const now = engineNow();
-        session.observe(now.busy);
+        session.observe(now);
         updateEngineControls(now);
       });
     },
@@ -534,9 +627,16 @@ export function attachGameController(
       active = false;
       session.teardown();
       setCommandsDisabled(true);
-      // The one moment the move buttons and the watch toggle are not the
-      // engine's and the session's to decide.
-      for (const button of [...ui.moveButtons, ui.ambientButton]) {
+      // The one moment the move buttons, the rewinds and the watch toggle are
+      // not the engine's and the session's to decide.
+      for (const button of [
+        ...ui.moveButtons,
+        ui.undoButton,
+        ui.redoButton,
+        ui.solveButton,
+        ui.stopButton,
+        ui.ambientButton,
+      ]) {
         button.disabled = true;
       }
       ui.scrambleMovesInput.removeEventListener(
@@ -549,6 +649,10 @@ export function attachGameController(
       );
       ui.scrambleButton.removeEventListener('click', onScramble);
       ui.resetButton.removeEventListener('click', onReset);
+      ui.undoButton.removeEventListener('click', onUndo);
+      ui.redoButton.removeEventListener('click', onRedo);
+      ui.solveButton.removeEventListener('click', onSolve);
+      ui.stopButton.removeEventListener('click', onStop);
       ui.ambientButton.removeEventListener('click', onAmbient);
       ui.homeViewButton.removeEventListener('click', onHomeView);
       for (const [button, listener] of choiceListeners) {

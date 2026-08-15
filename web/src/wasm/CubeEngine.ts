@@ -385,14 +385,91 @@ export class CubeEngine {
     return this.module._thorvg_rubiks_is_solved() !== 0;
   }
 
-  /** Returns user moves committed since the latest scramble or reset. */
+  /**
+   * Returns user moves committed since the latest scramble or reset.
+   *
+   * Read off the engine's record rather than counted, so a rewind takes moves
+   * back out of it as surely as making them puts them in.
+   */
   committedMoveCount(): number {
     this.assertUsable();
-    const count = this.module._thorvg_rubiks_committed_move_count();
-    if (!Number.isSafeInteger(count) || count < 0) {
-      throw new Error(`Engine returned an invalid move count ${count}.`);
-    }
-    return count;
+    return this.countFrom(
+      this.module._thorvg_rubiks_committed_move_count(),
+      'move count',
+    );
+  }
+
+  /**
+   * Turns the user's last move back, playing it as a sequence of one.
+   *
+   * @returns false when there is nothing of the user's own on the cube, or
+   *          while anything else owns it.
+   */
+  undo(): boolean {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_undo() !== 0;
+  }
+
+  /** Replays the move a rewind took off. @returns false with nothing to. */
+  redo(): boolean {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_redo() !== 0;
+  }
+
+  /**
+   * Rewinds every applied move, leaving a solved cube.
+   *
+   * The same command undo is, with a further target: it plays back through the
+   * scramble as well, and the caller has to run frames for it to arrive.
+   *
+   * @returns false with nothing applied, or while anything else owns the cube.
+   */
+  solveRewind(): boolean {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_solve_rewind() !== 0;
+  }
+
+  /**
+   * Breaks off a rewind, keeping every move it has already turned back.
+   *
+   * A no-op for a scramble or a watched pattern -- which is what makes a press
+   * that arrives a frame after the control went away harmless.
+   */
+  stopPlayback(): void {
+    this.assertUsable();
+    this.module._thorvg_rubiks_stop_playback();
+  }
+
+  /** How many moves the record holds, scramble and user moves together. */
+  timelineLength(): number {
+    this.assertUsable();
+    return this.countFrom(
+      this.module._thorvg_rubiks_timeline_length(),
+      'timeline length',
+    );
+  }
+
+  /**
+   * How many of those moves are on the cube right now.
+   *
+   * Every commit moves this by exactly one, so watching it change is watching
+   * moves commit -- which is why there is no commit counter beside it.
+   */
+  timelineCursor(): number {
+    this.assertUsable();
+    return this.countFrom(
+      this.module._thorvg_rubiks_timeline_cursor(),
+      'timeline cursor',
+    );
+  }
+
+  /** Where the scramble stops and the user's own moves begin. */
+  timelineScrambleEnd(): number {
+    this.assertUsable();
+    return this.countFrom(
+      this.module._thorvg_rubiks_timeline_scramble_end(),
+      'timeline scramble end',
+    );
   }
 
   /** Starts one animated face turn, returning false while the engine is busy. */
@@ -478,6 +555,20 @@ export class CubeEngine {
     if (this.disposed) {
       throw new Error('CubeEngine has been disposed.');
     }
+  }
+
+  /**
+   * Checks one count coming back across the boundary, whichever count it is.
+   *
+   * Every one of them is a uint32 on the other side, so anything the i32
+   * boundary would have reinterpreted arrives negative or fractional and is
+   * refused here rather than becoming a nonsense length somewhere later.
+   */
+  private countFrom(value: number, name: string): number {
+    if (!Number.isSafeInteger(value) || value < 0) {
+      throw new Error(`Engine returned an invalid ${name} ${value}.`);
+    }
+    return value;
   }
 
   /**

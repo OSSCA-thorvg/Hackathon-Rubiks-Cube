@@ -49,8 +49,26 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_is_ambient(): number;
   /** Returns 1 when the committed logical cube is solved. */
   _thorvg_rubiks_is_solved(): number;
-  /** User moves committed since the latest scramble or reset. */
+  /**
+   * User moves committed since the latest scramble or reset.
+   *
+   * Derived from the record: a rewind takes moves back out of it.
+   */
   _thorvg_rubiks_committed_move_count(): number;
+  /** Returns 1 when a rewind of the user's last move began. */
+  _thorvg_rubiks_undo(): number;
+  /** Returns 1 when a replay of the last rewound move began. */
+  _thorvg_rubiks_redo(): number;
+  /** Returns 1 when a rewind of every applied move began. */
+  _thorvg_rubiks_solve_rewind(): number;
+  /** Breaks off a rewind; a no-op for a scramble or a watched pattern. */
+  _thorvg_rubiks_stop_playback(): void;
+  /** How many moves the record holds, scramble and user moves together. */
+  _thorvg_rubiks_timeline_length(): number;
+  /** How many of those moves are on the cube; every commit moves it by one. */
+  _thorvg_rubiks_timeline_cursor(): number;
+  /** Where the scramble stops and the user's own moves begin. */
+  _thorvg_rubiks_timeline_scramble_end(): number;
   /** Returns 1 when the turn started; face and turns follow cube::Face. */
   _thorvg_rubiks_turn_face(face: number, faceTurns: number): number;
   /** Returns 1 when the mode was accepted; invalid values are rejected. */

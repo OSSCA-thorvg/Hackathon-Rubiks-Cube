@@ -23,6 +23,10 @@ function createUi(): GameUi {
     <input id="scramble-moves" type="number" min="1" max="100" value="20">
     <button id="scramble" type="button">Scramble</button>
     <button id="reset" type="button">Reset</button>
+    <button id="undo" type="button">Undo</button>
+    <button id="redo" type="button">Redo</button>
+    <button id="solve" type="button">Solve</button>
+    <button id="stop" type="button" hidden>Stop</button>
     <button id="ambient" type="button" aria-pressed="false">Watch</button>
     <button id="home-view" type="button">Home</button>
     <button data-view="3d" type="button">3D</button>
@@ -44,6 +48,10 @@ function createUi(): GameUi {
     scrambleButton: root.querySelector<HTMLButtonElement>('#scramble')!,
     scrambleMovesInput: root.querySelector<HTMLInputElement>('#scramble-moves')!,
     resetButton: root.querySelector<HTMLButtonElement>('#reset')!,
+    undoButton: root.querySelector<HTMLButtonElement>('#undo')!,
+    redoButton: root.querySelector<HTMLButtonElement>('#redo')!,
+    solveButton: root.querySelector<HTMLButtonElement>('#solve')!,
+    stopButton: root.querySelector<HTMLButtonElement>('#stop')!,
     ambientButton: root.querySelector<HTMLButtonElement>('#ambient')!,
     homeViewButton: root.querySelector<HTMLButtonElement>('#home-view')!,
     viewButtons: [...root.querySelectorAll<HTMLButtonElement>('[data-view]')],
@@ -52,30 +60,82 @@ function createUi(): GameUi {
   };
 }
 
+/** How many moves the fake engine's scramble is. */
+const SCRAMBLE_MOVES = 3;
+
 /** Creates a fake engine and manually controlled timer/keyboard environment. */
 function createHarness() {
   const ui = createUi();
   let solved = true;
-  let moveCount = 0;
   let busy = false;
   let viewMode = CubeViewMode.Both;
   let flatStyle = CubeFlatStyle.Net;
   let watching = false;
 
+  // The record the real engine keeps, in the same shape: one length and two
+  // indices into it. The user's move count is derived from them here too,
+  // because a fake that counted separately could not show the difference the
+  // derivation was made for.
+  let length = 0;
+  let cursor = 0;
+  let scrambleEnd = 0;
+  // Where a rewind that is playing will end up, and whether Stop may reach it.
+  let rewindTo: number | null = null;
+  let stoppable = false;
+
+  const startRewind = (to: number): boolean => {
+    rewindTo = to;
+    busy = true;
+    stoppable = true;
+    return true;
+  };
+
   const engine = {
     scramble: vi.fn((): void => {
       // Accepted and busy, with the cube still solved: the moves are turned
-      // into it over the frames that follow.
-      moveCount = 0;
+      // into it over the frames that follow, and the record holds all of them
+      // from the moment it is accepted.
+      length = SCRAMBLE_MOVES;
+      cursor = 0;
+      scrambleEnd = SCRAMBLE_MOVES;
       busy = true;
       watching = false;
     }),
     resetCube: vi.fn((): void => {
       solved = true;
-      moveCount = 0;
+      length = 0;
+      cursor = 0;
+      scrambleEnd = 0;
       busy = false;
       watching = false;
     }),
+    undo: vi.fn((): boolean => {
+      if (busy || cursor <= scrambleEnd) return false;
+      return startRewind(cursor - 1);
+    }),
+    redo: vi.fn((): boolean => {
+      if (busy || cursor >= length) return false;
+      return startRewind(cursor + 1);
+    }),
+    solveRewind: vi.fn((): boolean => {
+      if (busy || cursor === 0) return false;
+      return startRewind(0);
+    }),
+    stopPlayback: vi.fn((): void => {
+      if (!stoppable) return;
+
+      // The turn already in flight is confirmed rather than dropped, so a
+      // rewind broken off has moved the cursor one step towards its target.
+      if (rewindTo !== null && rewindTo !== cursor) {
+        cursor += rewindTo > cursor ? 1 : -1;
+      }
+      rewindTo = null;
+      stoppable = false;
+      busy = false;
+    }),
+    timelineLength: vi.fn((): number => length),
+    timelineCursor: vi.fn((): number => cursor),
+    timelineScrambleEnd: vi.fn((): number => scrambleEnd),
     ambientStart: vi.fn((): boolean => {
       if (watching) return false;
       // A pattern that never runs out: busy, and staying so.
@@ -89,7 +149,9 @@ function createHarness() {
     }),
     isAmbient: vi.fn((): boolean => watching),
     isSolved: vi.fn((): boolean => solved),
-    committedMoveCount: vi.fn((): number => moveCount),
+    committedMoveCount: vi.fn((): number =>
+      cursor > scrambleEnd ? cursor - scrambleEnd : 0,
+    ),
     turnFace: vi.fn((): boolean => {
       if (busy) return false;
       busy = true;
@@ -153,12 +215,36 @@ function createHarness() {
     /** Plays an accepted scramble out and lets the controller see it end. */
     finishScramble: (): void => {
       solved = false;
+      cursor = SCRAMBLE_MOVES;
       busy = false;
       controller.afterEngineFrame();
     },
+    /**
+     * Commits one move of the user's own.
+     *
+     * Recorded at the cursor with everything past it discarded, which is the
+     * one rule the engine applies -- so a move made after an undo throws away
+     * what there was to redo here as well.
+     */
     commitMove: (): void => {
-      ++moveCount;
+      length = cursor;
+      scrambleEnd = Math.min(scrambleEnd, cursor);
+      length += 1;
+      cursor += 1;
       busy = false;
+    },
+    /** Plays a rewind through to the end of its plan. */
+    finishRewind: (): void => {
+      if (rewindTo !== null) cursor = rewindTo;
+      rewindTo = null;
+      stoppable = false;
+      busy = false;
+      if (cursor === 0 && scrambleEnd > 0) solved = true;
+      controller.afterEngineFrame();
+    },
+    /** Frames of a rewind still playing, which the controls have to survive. */
+    runRewindFrame: (): void => {
+      controller.afterEngineFrame();
     },
     dispatchKey: (
       init: KeyboardEventInit,
@@ -558,6 +644,166 @@ describe('attachGameController', () => {
     expect(harness.ui.ambientButton.disabled).toBe(true);
     harness.ui.ambientButton.click();
     expect(harness.engine.ambientStart).not.toHaveBeenCalled();
+  });
+
+  it('offers each rewind exactly where the record allows it', () => {
+    const harness = createHarness();
+    const { undoButton, redoButton, solveButton } = harness.ui;
+
+    // Nothing has happened, so there is nothing to walk back along.
+    expect(undoButton.disabled).toBe(true);
+    expect(redoButton.disabled).toBe(true);
+    expect(solveButton.disabled).toBe(true);
+
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+
+    // A scramble can be rewound but not undone: what is below the end of the
+    // scramble is not the user's to take back.
+    expect(undoButton.disabled).toBe(true);
+    expect(solveButton.disabled).toBe(false);
+    expect(redoButton.disabled).toBe(true);
+
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(undoButton.disabled).toBe(false);
+
+    harness.ui.undoButton.click();
+    expect(harness.engine.undo).toHaveBeenCalledTimes(1);
+    expect(harness.startFrameLoop).toHaveBeenCalled();
+
+    // While it plays, nothing else may be asked for.
+    harness.runRewindFrame();
+    expect(undoButton.disabled).toBe(true);
+    expect(solveButton.disabled).toBe(true);
+
+    harness.finishRewind();
+    expect(harness.engine.committedMoveCount()).toBe(0);
+    expect(undoButton.disabled).toBe(true);
+    expect(redoButton.disabled).toBe(false);
+
+    harness.ui.redoButton.click();
+    harness.finishRewind();
+    expect(harness.engine.committedMoveCount()).toBe(1);
+    expect(redoButton.disabled).toBe(true);
+    expect(undoButton.disabled).toBe(false);
+  });
+
+  it('shows Stop only while a rewind is playing, and breaks it off', () => {
+    const harness = createHarness();
+    const stop = harness.ui.stopButton;
+
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+    expect(stop.hidden).toBe(true);
+
+    // A scramble is playing here and Stop is still not on offer: what it can
+    // break off is a rewind, and the engine is what says so.
+    harness.ui.scrambleButton.click();
+    expect(stop.hidden).toBe(true);
+    harness.finishScramble();
+
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    harness.ui.solveButton.click();
+    expect(harness.ui.status.textContent).toContain('Press Stop');
+    expect(stop.hidden).toBe(false);
+
+    stop.click();
+    expect(harness.engine.stopPlayback).toHaveBeenCalledTimes(1);
+    expect(stop.hidden).toBe(true);
+    expect(harness.ui.status.textContent).toBe('Stopped.');
+
+    // Stopped where it was, so both directions are open again from there.
+    expect(harness.ui.solveButton.disabled).toBe(false);
+    expect(harness.ui.redoButton.disabled).toBe(false);
+  });
+
+  it('does not start the clock for a rewind, only for a move of your own', () => {
+    const harness = createHarness();
+
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+    expect(harness.controller.state).toBe('ready');
+
+    // Solve from a ready cube: the rewind commits moves all the way down, and
+    // not one of them is the user's, so the clock never starts.
+    harness.setNow(100);
+    harness.ui.solveButton.click();
+    harness.runRewindFrame();
+    expect(harness.controller.state).toBe('ready');
+
+    harness.setNow(5000);
+    harness.finishRewind();
+    expect(harness.controller.state).toBe('completed');
+    expect(harness.ui.timer.value).toBe('00:00.00');
+    expect(harness.ui.status.textContent).toContain('Not a solve of your own');
+  });
+
+  it('tells a cube it rewound apart from one you finished yourself', () => {
+    const harness = createHarness();
+
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+
+    harness.setNow(100);
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.controller.state).toBe('running');
+
+    // One move too many, then taken back: the cube is solved by an undo, and
+    // it is still the user's own solve because moves of theirs are on it.
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+
+    harness.setSolved(true);
+    harness.ui.undoButton.click();
+    harness.setNow(2445);
+    harness.finishRewind();
+
+    expect(harness.controller.state).toBe('completed');
+    expect(harness.ui.timer.value).toBe('00:02.34');
+    expect(harness.ui.status.textContent).toBe('Solved in 00:02.34.');
+  });
+
+  it('stops watching before a rewind, the way every cube command does', () => {
+    const harness = createHarness();
+
+    // A move made outside a solve session, so the cube can still be watched
+    // and there is something on the record to take back.
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.controller.state).toBe('idle');
+
+    harness.ui.ambientButton.click();
+    expect(harness.engine.isAmbient()).toBe(true);
+    expect(harness.ui.undoButton.disabled).toBe(false);
+
+    // Taking a move back is something done to the cube, so the interlude ends
+    // first and the undo lands on the cube it gave back.
+    harness.ui.undoButton.click();
+    expect(harness.engine.isAmbient()).toBe(false);
+    expect(harness.engine.undo).toHaveBeenCalledTimes(1);
+  });
+
+  it('teardown puts the rewinds out with the rest', () => {
+    const harness = createHarness();
+    harness.controller.teardown();
+
+    for (const button of [
+      harness.ui.undoButton,
+      harness.ui.redoButton,
+      harness.ui.solveButton,
+      harness.ui.stopButton,
+    ]) {
+      expect(button.disabled).toBe(true);
+      button.click();
+    }
+
+    expect(harness.engine.undo).not.toHaveBeenCalled();
+    expect(harness.engine.redo).not.toHaveBeenCalled();
+    expect(harness.engine.solveRewind).not.toHaveBeenCalled();
+    expect(harness.engine.stopPlayback).not.toHaveBeenCalled();
   });
 
   it('routes command failures to the lifecycle error handler', () => {

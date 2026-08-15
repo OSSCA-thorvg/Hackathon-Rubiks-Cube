@@ -71,6 +71,12 @@ export function bootstrap(
         </label>
         <button type="button" id="scramble">Scramble</button>
         <button type="button" id="reset">Reset</button>
+        <div class="game-actions__group" role="group" aria-label="Move history">
+          <button type="button" id="undo">Undo</button>
+          <button type="button" id="redo">Redo</button>
+          <button type="button" id="solve">Solve</button>
+        </div>
+        <button type="button" id="stop" hidden>Stop</button>
         <button type="button" id="ambient" aria-pressed="false">Watch</button>
         <button type="button" id="home-view">Home view</button>
       </div>
@@ -111,6 +117,10 @@ export function bootstrap(
     scrambleButton: app.querySelector<HTMLButtonElement>('#scramble')!,
     scrambleMovesInput: app.querySelector<HTMLInputElement>('#scramble-moves')!,
     resetButton: app.querySelector<HTMLButtonElement>('#reset')!,
+    undoButton: app.querySelector<HTMLButtonElement>('#undo')!,
+    redoButton: app.querySelector<HTMLButtonElement>('#redo')!,
+    solveButton: app.querySelector<HTMLButtonElement>('#solve')!,
+    stopButton: app.querySelector<HTMLButtonElement>('#stop')!,
     ambientButton: app.querySelector<HTMLButtonElement>('#ambient')!,
     homeViewButton: app.querySelector<HTMLButtonElement>('#home-view')!,
     viewButtons: [

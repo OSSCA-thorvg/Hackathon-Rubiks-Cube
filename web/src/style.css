@@ -204,6 +204,25 @@ button[aria-pressed="true"]:hover:not(:disabled) {
   border-left: 2px solid rgb(255 255 255 / 18%);
 }
 
+/* Undo, Redo and Solve are one idea -- walking back along what has been played
+   -- so they share a row instead of reading as three more commands under
+   Reset. Stop is not one of them: it is not a place on the record to go to but
+   a way out of going there, so it comes in below on a line of its own, and
+   only while there is something to come out of. */
+.game-actions__group {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 0.45rem;
+}
+
+/* Three to a row where the others have one, so the type comes down with the
+   width rather than the words being cut. */
+.game-actions__group button {
+  padding-inline: 0.25rem;
+  font-size: clamp(0.62rem, 1.15vw, 0.78rem);
+}
+
 .view-switch button,
 .game-actions button {
   width: 100%;
@@ -429,6 +448,18 @@ button[aria-pressed="true"]:hover:not(:disabled) {
   .view-switch__group {
     grid-auto-flow: column;
     grid-auto-columns: minmax(0, 1fr);
+  }
+
+  /* The row keeps its shape here, so it takes a line of its own rather than
+     being squeezed into one cell of the action grid. There is width to spare
+     on this layout, so the type goes back to the size of its neighbours. */
+  .game-actions__group {
+    grid-column: 1 / -1;
+  }
+
+  .game-actions__group button {
+    padding-inline: 0.4rem;
+    font-size: 0.84rem;
   }
 
   .view-switch__group--flat {

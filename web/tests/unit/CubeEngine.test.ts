@@ -40,6 +40,12 @@ function createFakeModule() {
     busyResult: 0,
     ambientStartResult: 1,
     ambientResult: 0,
+    undoResult: 1,
+    redoResult: 1,
+    solveRewindResult: 1,
+    timelineLength: 0,
+    timelineCursor: 0,
+    timelineScrambleEnd: 0,
     pixelBufferOverride: null as number | null,
     pixelByteLengthOverride: null as number | null,
   };
@@ -96,6 +102,21 @@ function createFakeModule() {
     _thorvg_rubiks_is_solved: vi.fn((): number => behavior.solvedResult),
     _thorvg_rubiks_committed_move_count: vi.fn(
       (): number => behavior.moveCount,
+    ),
+    _thorvg_rubiks_undo: vi.fn((): number => behavior.undoResult),
+    _thorvg_rubiks_redo: vi.fn((): number => behavior.redoResult),
+    _thorvg_rubiks_solve_rewind: vi.fn(
+      (): number => behavior.solveRewindResult,
+    ),
+    _thorvg_rubiks_stop_playback: vi.fn((): void => {}),
+    _thorvg_rubiks_timeline_length: vi.fn(
+      (): number => behavior.timelineLength,
+    ),
+    _thorvg_rubiks_timeline_cursor: vi.fn(
+      (): number => behavior.timelineCursor,
+    ),
+    _thorvg_rubiks_timeline_scramble_end: vi.fn(
+      (): number => behavior.timelineScrambleEnd,
     ),
     _thorvg_rubiks_turn_face: vi.fn((): number => behavior.turnFaceResult),
     _thorvg_rubiks_set_view_mode: vi.fn(
@@ -469,6 +490,55 @@ describe('CubeEngine gameplay and view controls', () => {
 
     behavior.moveCount = -1;
     expect(() => engine.committedMoveCount()).toThrow('invalid move count');
+
+    // Every count comes back as a uint32, so all of them are refused the same
+    // way: anything the i32 boundary would have reinterpreted arrives here as
+    // a negative or fractional number rather than as a length.
+    behavior.timelineLength = -1;
+    expect(() => engine.timelineLength()).toThrow('invalid timeline length');
+    behavior.timelineCursor = 1.5;
+    expect(() => engine.timelineCursor()).toThrow('invalid timeline cursor');
+    behavior.timelineScrambleEnd = Number.NaN;
+    expect(() => engine.timelineScrambleEnd()).toThrow(
+      'invalid timeline scramble end',
+    );
+  });
+
+  it('carries the rewinds across and reports each refusal', async () => {
+    const { engine, module, behavior } = await createEngine();
+
+    expect(engine.undo()).toBe(true);
+    expect(engine.redo()).toBe(true);
+    expect(engine.solveRewind()).toBe(true);
+    expect(module._thorvg_rubiks_undo).toHaveBeenCalledTimes(1);
+    expect(module._thorvg_rubiks_solve_rewind).toHaveBeenCalledTimes(1);
+
+    // Refused rather than thrown: having nothing to rewind, or something else
+    // owning the cube, is an answer rather than a failure.
+    behavior.undoResult = 0;
+    behavior.redoResult = 0;
+    behavior.solveRewindResult = 0;
+    expect(engine.undo()).toBe(false);
+    expect(engine.redo()).toBe(false);
+    expect(engine.solveRewind()).toBe(false);
+
+    engine.stopPlayback();
+    expect(module._thorvg_rubiks_stop_playback).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads the record as three counts', async () => {
+    const { engine, behavior } = await createEngine();
+
+    expect(engine.timelineLength()).toBe(0);
+    expect(engine.timelineCursor()).toBe(0);
+    expect(engine.timelineScrambleEnd()).toBe(0);
+
+    behavior.timelineLength = 22;
+    behavior.timelineCursor = 21;
+    behavior.timelineScrambleEnd = 20;
+    expect(engine.timelineLength()).toBe(22);
+    expect(engine.timelineCursor()).toBe(21);
+    expect(engine.timelineScrambleEnd()).toBe(20);
   });
 
   it('carries a watching choice across and reports a refused start', async () => {

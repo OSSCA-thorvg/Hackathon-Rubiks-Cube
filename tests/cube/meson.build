@@ -1,6 +1,7 @@
 cube_test = executable(
   'cube-test',
-  files('CubeStateTest.cpp', 'MoveTimelineTest.cpp', 'SurfaceTest.cpp'),
+  files('CubeStateTest.cpp', 'MoveTimelineTest.cpp', 'PackedMoveTest.cpp',
+        'SurfaceTest.cpp'),
   dependencies: [cube_dep, catch2_dep],
 )
 

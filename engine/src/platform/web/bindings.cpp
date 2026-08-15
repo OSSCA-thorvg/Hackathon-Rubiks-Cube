@@ -250,6 +250,22 @@ thorvg_rubiks_timeline_scramble_end() noexcept
 }
 
 /**
+ * Returns the recorded move at `index`, packed into a single word.
+ *
+ * Axis in bits 0-1, turns in bits 2-3 as 0 = -1, 1 = +1, 2 = +2, and the layer
+ * mask from bit 4 up. Notation is assembled from these on the other side, so
+ * no string crosses here and a change of notation never reaches the engine.
+ *
+ * @return zero for an index the record does not hold; a packed move is never
+ *         zero, because a move always turns at least one layer.
+ */
+EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_timeline_move(
+    std::uint32_t index) noexcept
+{
+    return rubiks::app::timeline_move(index);
+}
+
+/**
  * Starts an animated face-relative turn.
  *
  * Face follows cube::Face order and turns are -1, 1, or 2.

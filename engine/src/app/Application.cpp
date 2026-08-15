@@ -12,6 +12,7 @@
 
 #include "cube/CubeState.hpp"
 #include "cube/MoveTimeline.hpp"
+#include "cube/PackedMove.hpp"
 #include "cube/Scramble.hpp"
 #include "graphics/AxisGizmo.hpp"
 #include "graphics/Camera.hpp"
@@ -877,6 +878,15 @@ std::uint32_t timeline_scramble_end() noexcept
 {
     return state ? static_cast<std::uint32_t>(state->timeline.scramble_end())
                  : 0;
+}
+
+std::uint32_t timeline_move(std::uint32_t index) noexcept
+{
+    if (!state || index >= state->timeline.size()) return 0;
+
+    // The record hands over the move as it was played; normalizing the turns
+    // happens in the packing, which is on nobody's replay path.
+    return cube::pack(state->timeline.at(index));
 }
 
 bool turn_face(cube::Face face, int face_turns) noexcept

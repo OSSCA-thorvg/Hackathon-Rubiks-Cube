@@ -551,3 +551,54 @@ TEST_CASE("a command that makes a new cube throws the rewind away with it")
     REQUIRE(rubiks::app::timeline_cursor() == 0);
     REQUIRE(rubiks::app::committed_move_count() == 0);
 }
+
+TEST_CASE("the record is read back one packed move at a time")
+{
+    // Nothing has been initialized here, so there is no record: the same word
+    // an index past the end gives, because there is one answer for "no move at
+    // that index" and no engine at all is a case of it.
+    REQUIRE(rubiks::app::timeline_move(0) == 0);
+
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+    REQUIRE(rubiks::app::timeline_move(0) == 0);
+
+    turn(rubiks::cube::Face::Right, 1);
+
+    // Axis X, one clockwise quarter, the outer layer -- the same word the
+    // reader on the other side is fixed to.
+    REQUIRE(rubiks::app::timeline_move(0) == 0x44);
+    REQUIRE(rubiks::app::timeline_move(1) == 0);
+    REQUIRE(rubiks::app::timeline_move(0xffffffffU) == 0);
+
+    // A double on a negative face is made by turning the negative way round,
+    // and comes back written as a half turn with no direction to it. What the
+    // record kept is the move as it was played; that is the timeline's own
+    // contract, and it is checked where the timeline is.
+    turn(rubiks::cube::Face::Left, 2);
+    REQUIRE(rubiks::app::timeline_move(1) == 0x18);
+}
+
+TEST_CASE("a scramble is readable from the record the moment it is accepted")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    constexpr std::uint32_t kMoves = 6;
+    REQUIRE(rubiks::app::scramble(31U, kMoves));
+
+    // Every move of it is there before any of it has been turned: the record
+    // holds the whole sequence and the cursor is what has arrived.
+    REQUIRE(rubiks::app::timeline_cursor() == 0);
+    for (std::uint32_t index = 0; index < kMoves; ++index) {
+        REQUIRE(rubiks::app::timeline_move(index) != 0);
+    }
+    REQUIRE(rubiks::app::timeline_move(kMoves) == 0);
+
+    settle();
+
+    // A user move goes on the end and is read through the same query; which
+    // stretch an index belongs to is the scramble boundary's to say.
+    turn(rubiks::cube::Face::Up, 1);
+    REQUIRE(rubiks::app::timeline_scramble_end() == kMoves);
+    REQUIRE(rubiks::app::timeline_move(kMoves) == 0x45);
+    REQUIRE(rubiks::app::timeline_move(kMoves + 1) == 0);
+}

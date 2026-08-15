@@ -251,6 +251,18 @@ void stop_playback() noexcept;
 [[nodiscard]] std::uint32_t timeline_scramble_end() noexcept;
 
 /**
+ * The recorded move at an index, packed as cube::pack writes it.
+ *
+ * The record is one list, so reading it is one query: the scramble and the
+ * user's own moves come back through the same index and are told apart by
+ * timeline_scramble_end() rather than by asking twice.
+ *
+ * @return zero for an index the record does not hold, which is the same value
+ *         a packed move can never take.
+ */
+[[nodiscard]] std::uint32_t timeline_move(std::uint32_t index) noexcept;
+
+/**
  * Starts one animated face-relative turn.
  *
  * `face_turns` is 1 clockwise, -1 counter-clockwise, or 2 for a half turn as

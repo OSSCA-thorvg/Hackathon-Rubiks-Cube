@@ -25,6 +25,11 @@ export const RECENT_LIMIT = 5;
  * Owns its two elements the way the move log owns its list, because the
  * records have nowhere else to live: the engine keeps a cube and a record of
  * moves, and a finished solve is neither.
+ *
+ * The panel is the whole of what it says. There is no accessor for the best
+ * or for the recent list, because nothing but the drawing reads them -- the
+ * one answer a caller wants back is whether the solve it just handed over is
+ * the fastest, and that comes back from add().
  */
 export class SessionRecords {
   private readonly bestLine: HTMLElement;
@@ -36,16 +41,6 @@ export class SessionRecords {
     this.bestLine = bestLine;
     this.list = list;
     this.draw();
-  }
-
-  /** The fastest solve so far, or null before there is one. */
-  get best(): SolveRecord | null {
-    return this.bestRecord;
-  }
-
-  /** The latest solves, newest first, at most RECENT_LIMIT of them. */
-  get recent(): readonly SolveRecord[] {
-    return this.entries;
   }
 
   /**

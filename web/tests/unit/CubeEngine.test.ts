@@ -715,15 +715,29 @@ describe('CubeEngine.restoreSession', () => {
     expect(module._thorvg_rubiks_restore_buffer).not.toHaveBeenCalled();
   });
 
-  it('will not write through an address it cannot verify', async () => {
+  it('reads a zero address as the engine refusing the record', async () => {
+    const { engine, module, behavior } = await createEngine();
+    behavior.restoreBufferOverride = 0;
+
+    // The one refusal the engine expresses through the address, and it is
+    // about the record: too many moves, or none.
+    expect(engine.restoreSession([0x44], [])).toBe(false);
+    expect(module._thorvg_rubiks_restore_apply).not.toHaveBeenCalled();
+  });
+
+  it('raises an address it cannot verify rather than blaming the record', async () => {
     // The pixel buffer's contract, applied to the other direction: a view
     // built over an address that is not really there would write the record
-    // into whatever else lives at it.
-    for (const pointer of [0, 5, 4096.5, 2 ** 53, 1 << 30]) {
+    // into whatever else lives at it. And it takes the pixel buffer's route
+    // out, because an engine wrong about its own memory is not a bad link --
+    // reporting it as one would send someone to fix the wrong thing.
+    for (const pointer of [5, 4096.5, 2 ** 53, -4, 1 << 30]) {
       const { engine, module, behavior } = await createEngine();
       behavior.restoreBufferOverride = pointer;
 
-      expect(engine.restoreSession([0x44], [])).toBe(false);
+      expect(() => engine.restoreSession([0x44], [])).toThrow(
+        'invalid restore buffer',
+      );
       expect(module._thorvg_rubiks_restore_apply).not.toHaveBeenCalled();
     }
   });

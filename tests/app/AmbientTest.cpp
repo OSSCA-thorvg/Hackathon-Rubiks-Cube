@@ -12,6 +12,7 @@
 
 namespace {
 
+using rubiks::test::drawn_frame;
 using rubiks::test::kFrameMs;
 using rubiks::test::settle;
 
@@ -21,20 +22,6 @@ void run_frames(int count)
     for (int frame = 0; frame < count; ++frame) {
         static_cast<void>(rubiks::app::advance(kFrameMs));
     }
-}
-
-/** A copy of the frame just drawn, so two of them can be compared. */
-[[nodiscard]] std::vector<std::uint8_t> drawn_frame()
-{
-    REQUIRE(rubiks::app::render());
-
-    const auto* pixels =
-        reinterpret_cast<const std::uint8_t*>(rubiks::app::pixel_buffer());
-    const std::uint32_t length = rubiks::app::pixel_byte_length();
-    REQUIRE(pixels != nullptr);
-    REQUIRE(length > 0);
-
-    return std::vector<std::uint8_t>(pixels, pixels + length);
 }
 
 /**

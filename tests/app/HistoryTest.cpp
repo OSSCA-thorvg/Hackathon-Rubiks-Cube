@@ -18,25 +18,14 @@
 
 namespace {
 
+using rubiks::test::arrive;
+using rubiks::test::drawn_frame;
 using rubiks::test::kFrameMs;
 using rubiks::test::settle;
+using rubiks::test::turn;
 
 constexpr std::uint32_t kCanvas = 512;
 constexpr int kCubeSize = 3;
-
-/** A copy of the frame just drawn, so two of them can be compared. */
-[[nodiscard]] std::vector<std::uint8_t> drawn_frame()
-{
-    REQUIRE(rubiks::app::render());
-
-    const auto* pixels =
-        reinterpret_cast<const std::uint8_t*>(rubiks::app::pixel_buffer());
-    const std::uint32_t length = rubiks::app::pixel_byte_length();
-    REQUIRE(pixels != nullptr);
-    REQUIRE(length > 0);
-
-    return std::vector<std::uint8_t>(pixels, pixels + length);
-}
 
 /** Center of one net cell, which is the shortest way to hold a layer. */
 [[nodiscard]] rubiks::math::Vec2 net_cell_point(rubiks::cube::Face face,
@@ -53,21 +42,6 @@ constexpr int kCubeSize = 3;
             (static_cast<float>(column) + 0.5f) * cell,
         net.y + static_cast<float>(block.row) * face_side +
             (static_cast<float>(row) + 0.5f) * cell};
-}
-
-/** Scrambles and waits for the whole sequence to arrive on the cube. */
-void arrive(std::uint32_t seed, std::uint32_t moves)
-{
-    REQUIRE(rubiks::app::scramble(seed, moves));
-    settle();
-    REQUIRE(rubiks::app::timeline_cursor() == moves);
-}
-
-/** Turns one face and waits for it to settle, the way a user's move does. */
-void turn(rubiks::cube::Face face, int face_turns)
-{
-    REQUIRE(rubiks::app::turn_face(face, face_turns));
-    settle();
 }
 
 /**

@@ -102,11 +102,6 @@ function isSharableMove(packed: number): boolean {
   return index !== null && index < CUBE_SIZE;
 }
 
-/** How many bytes a session of this shape occupies. */
-function payloadBytes(moveCount: number): number {
-  return MIN_PAYLOAD_BYTES + MOVE_BYTES * moveCount;
-}
-
 /**
  * Writes one session as a base64url string, or returns null.
  *
@@ -120,7 +115,7 @@ export function encodeSession(session: SharedSession): string | null {
   if (moves.length === 0 || moves.length > MAX_SHARED_MOVES) return null;
   if (!moves.every(isSharableMove)) return null;
 
-  const bytes = new Uint8Array(payloadBytes(moves.length));
+  const bytes = new Uint8Array(MIN_PAYLOAD_BYTES + MOVE_BYTES * moves.length);
   const view = new DataView(bytes.buffer);
 
   view.setUint8(0, SHARE_VERSION);
@@ -159,9 +154,11 @@ export function decodeSession(encoded: string): SharedSession | null {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (view.getUint8(0) !== SHARE_VERSION) return null;
 
+  // Walked by the reader rather than handed to it, so the two stretches are
+  // read by one function called twice instead of by a loop whose result has to
+  // be taken apart again -- which is what needed a type assertion to do.
   let offset = VERSION_BYTES;
-  const sections: number[][] = [];
-  for (let section = 0; section < 2; section += 1) {
+  const readSection = (): number[] | null => {
     // Checked before it is used as a length: a count read out of a truncated
     // payload can be any number at all, and multiplying it out first is how a
     // reader ends up asking for bytes that are not there.
@@ -179,16 +176,21 @@ export function decodeSession(encoded: string): SharedSession | null {
       if (!isSharableMove(packed)) return null;
       moves.push(packed);
     }
-    sections.push(moves);
-  }
+    return moves;
+  };
 
-  const [scramble, user] = sections as [number[], number[]];
+  const scramble = readSection();
+  if (scramble === null) return null;
+  const user = readSection();
+  if (user === null) return null;
 
   // A session of nothing is not a state anybody shared, and it is also the
   // count the engine's buffer refuses -- so keeping it out here is what makes
-  // "was a buffer asked for at all" an unambiguous question over there.
+  // "was a buffer asked for at all" an unambiguous question over there. The
+  // other end of that range needs nothing here: the text was measured before
+  // it was decoded, and a payload that fits under MAX_ENCODED_LENGTH cannot
+  // describe more than MAX_SHARED_MOVES moves between its two counts.
   if (scramble.length + user.length === 0) return null;
-  if (scramble.length + user.length > MAX_SHARED_MOVES) return null;
 
   // Nothing may follow the second stretch.
   if (offset !== bytes.length) return null;

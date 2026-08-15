@@ -79,7 +79,7 @@ export type GameSessionOptions = {
    * @returns whether this is the fastest so far, which is said as part of the
    *          completion message rather than announced over the top of it.
    */
-  readonly onSolve?: (record: SolveRecord) => boolean;
+  readonly recordSolve?: (record: SolveRecord) => boolean;
 };
 
 /**
@@ -99,7 +99,7 @@ export class GameSession {
   private readonly ui: SessionUi;
   private readonly timer: SolveTimer;
   private readonly sound: CommitSound | null;
-  private readonly onSolve: ((record: SolveRecord) => boolean) | null;
+  private readonly recordSolve: ((record: SolveRecord) => boolean) | null;
 
   private currentState: GameState = 'idle';
   // Replaced by the constructor's own baseline before a frame is ever read;
@@ -111,7 +111,7 @@ export class GameSession {
     this.engine = options.engine;
     this.ui = options.ui;
     this.sound = options.sound ?? null;
-    this.onSolve = options.onSolve ?? null;
+    this.recordSolve = options.recordSolve ?? null;
 
     // Assigning value on an <output> publishes the text too, so the DOM only
     // has to be written once per tick.
@@ -212,7 +212,7 @@ export class GameSession {
       // Kept, and told whether it is the best of the sitting. The answer joins
       // the message rather than following it, because a second announcement
       // would replace this one on the very line it was written to.
-      const isBest = this.onSolve?.({
+      const isBest = this.recordSolve?.({
         elapsedMs: finalMs,
         scrambleLength: frame.scrambleEnd,
         userMoveCount: frame.userMoves,

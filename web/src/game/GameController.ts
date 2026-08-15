@@ -326,7 +326,7 @@ export function attachGameController(
         ui,
         timerEnvironment: options.timerEnvironment,
         sound,
-        onSolve: (record: SolveRecord): boolean => records.add(record),
+        recordSolve: (record: SolveRecord): boolean => records.add(record),
       }),
   );
 
@@ -485,35 +485,49 @@ export function attachGameController(
   let rewinding = false;
 
   /**
-   * The session a link would carry right now, or null when there is none.
+   * Whether there is a state to send, from the numbers a frame already has.
    *
-   * Read off the record rather than remembered: the scramble is everything
-   * below the boundary and the user's own moves are what sits between the
-   * boundary and the cursor, so a tail the sender has rewound behind is left
-   * out by where the reading stops rather than by a rule against it. What the
-   * far side gets is the cube as it stands, and undo and solve work through
-   * everything it was given -- but the moves their sender took back are not
-   * theirs to put back, because they are not part of a cube.
+   * A predicate rather than the session itself, because this is asked once a
+   * frame and the answer is four numbers wide. Reading the record to answer it
+   * would cross the boundary once per recorded move, every frame, for a
+   * boolean -- and the frames keep coming through an orbit sweep, which is not
+   * busy, and through a watched pattern, which is.
+   *
+   * Watching is not in the way, for the same reason it is not in the way of a
+   * move button: it leaves the record untouched, and a press ends it first.
+   * Anything else being played is, because the middle of a sequence is a cube
+   * nobody has been handed yet. A cursor of nothing is a cube a link would
+   * have opened anyway, and a cursor below the scramble boundary is a solve
+   * stopped inside the scramble -- a state the payload has no shape for.
    */
-  const sharableNow = (now: EngineFrame): SharedSession | null => {
-    // Watching is not in the way, for the same reason it is not in the way of
-    // a move button: it leaves the record untouched, and a press ends it
-    // first. Anything else being played is, because the middle of a sequence
-    // is a cube nobody has been handed yet.
-    if (now.busy && !now.watching) return null;
-    if (now.cursor === 0 || now.cursor < now.scrambleEnd) return null;
+  const canShare = (now: EngineFrame): boolean =>
+    (!now.busy || now.watching) &&
+    now.cursor > 0 &&
+    now.cursor >= now.scrambleEnd;
 
-    const scramble: number[] = [];
-    for (let index = 0; index < now.scrambleEnd; index += 1) {
-      scramble.push(engine.timelineMove(index));
+  /**
+   * The session a link carries, read off the record when one is asked for.
+   *
+   * Read rather than remembered: the scramble is everything below the boundary
+   * and the user's own moves are what sits between the boundary and the
+   * cursor, so a tail the sender has rewound behind is left out by where the
+   * reading stops rather than by a rule against it. What the far side gets is
+   * the cube as it stands, and undo and solve work through everything it was
+   * given -- but the moves their sender took back are not theirs to put back,
+   * because they are not part of a cube.
+   */
+  const sharableNow = (now: EngineFrame): SharedSession => ({
+    scramble: recordedBetween(0, now.scrambleEnd),
+    user: recordedBetween(now.scrambleEnd, now.cursor),
+  });
+
+  /** The recorded moves in a half-open stretch, packed as the engine has them. */
+  const recordedBetween = (from: number, to: number): number[] => {
+    const moves: number[] = [];
+    for (let index = from; index < to; index += 1) {
+      moves.push(engine.timelineMove(index));
     }
-
-    const user: number[] = [];
-    for (let index = now.scrambleEnd; index < now.cursor; index += 1) {
-      user.push(engine.timelineMove(index));
-    }
-
-    return { scramble, user };
+    return moves;
   };
 
   /**
@@ -542,11 +556,7 @@ export function attachGameController(
     ui.redoButton.disabled = movesOff || now.cursor >= now.length;
     ui.solveButton.disabled = movesOff || now.cursor === 0;
 
-    // Live exactly when there is a state to send: something on the cube,
-    // because an untouched one is what a link would open anyway, and the
-    // cursor at or above the scramble boundary, because a solve stopped
-    // inside the scramble is a state the payload has no shape for.
-    ui.shareButton.disabled = sharableNow(now) === null;
+    ui.shareButton.disabled = !canShare(now);
 
     // Off the screen and out of reach together: it is not a control that is
     // sometimes unavailable but one that only exists while there is a rewind
@@ -768,10 +778,12 @@ export function attachGameController(
    */
   const onShare = (): void => {
     cubeCommand((): void => {
-      const shared = sharableNow(engineNow());
-      if (shared === null) return;
+      // Read after the watching has been left, so the numbers this asks about
+      // are the ones the record is about to be read at.
+      const now = engineNow();
+      if (!canShare(now)) return;
 
-      const encoded = encodeSession(shared);
+      const encoded = encodeSession(sharableNow(now));
       if (encoded === null) {
         session.announce('This cube cannot be written into a link.');
         return;

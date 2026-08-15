@@ -51,6 +51,15 @@ function base64url(bytes: Uint8Array): string {
     .replace(/=+$/, '');
 }
 
+/** Its inverse, for the tests that take a payload apart again. */
+function bytesOf(encoded: string): Uint8Array {
+  const padded = encoded
+    .replace(/-/g, '+')
+    .replace(/_/g, '/')
+    .padEnd(Math.ceil(encoded.length / 4) * 4, '=');
+  return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+}
+
 describe('encodeSession and decodeSession', () => {
   it('carries a session there and back', () => {
     const session: SharedSession = { scramble: [R, U, F], user: [U, R] };
@@ -77,13 +86,8 @@ describe('encodeSession and decodeSession', () => {
     const encoded = encodeSession({ scramble: [R], user: [U] })!;
     expect(encoded).toBe('AQEAAABEAAAAAQAAAEUAAAA');
 
-    const binary = atob(encoded.replace(/-/g, '+').replace(/_/g, '/') + '=');
-    const bytes = Uint8Array.from(binary, (character) =>
-      character.charCodeAt(0),
-    );
-
     // version | scramble_count | R | user_count | U, every number little-endian.
-    expect([...bytes]).toEqual([
+    expect([...bytesOf(encoded)]).toEqual([
       SHARE_VERSION,
       1, 0, 0, 0,
       0x44, 0, 0, 0,
@@ -133,14 +137,7 @@ describe('decodeSession refusals', () => {
   });
 
   it('refuses a payload cut short of what its counts promise', () => {
-    const whole = payload(SHARE_VERSION, [R, U, F], [R]);
-    const bytes = Uint8Array.from(
-      atob(whole.replace(/-/g, '+').replace(/_/g, '/').padEnd(
-        Math.ceil(whole.length / 4) * 4,
-        '=',
-      )),
-      (character) => character.charCodeAt(0),
-    );
+    const bytes = bytesOf(payload(SHARE_VERSION, [R, U, F], [R]));
 
     for (let cut = 1; cut < bytes.length; cut += 1) {
       expect(decodeSession(base64url(bytes.subarray(0, cut)))).toBeNull();

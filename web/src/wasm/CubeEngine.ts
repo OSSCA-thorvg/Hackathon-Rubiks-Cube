@@ -403,6 +403,9 @@ export class CubeEngine {
    *
    * @returns false when the engine would not take the record, which is an
    *          answer about the record rather than a failure of the engine.
+   * @throws Error when disposed, or when the engine hands back a buffer that
+   *         is not there -- which is not an answer about the record at all,
+   *         and takes the same route out as a bad pixel buffer.
    */
   restoreSession(
     scramble: readonly number[],
@@ -415,16 +418,20 @@ export class CubeEngine {
 
     const pointer = this.module._thorvg_rubiks_restore_buffer(total);
 
-    // The same metadata contract the pixel buffer is held to, for the same
-    // reason: a view built over a pointer that is not really there would write
-    // the record into whatever else lives at that address.
+    // Zero is the engine's own refusal, and it is about the record. Anything
+    // else that fails the heap contract is the engine being wrong about its
+    // own memory, so it is raised rather than reported as a damaged link --
+    // telling someone their link is bad when it was not would send them off to
+    // fix the one thing that is not broken.
+    if (pointer === 0) return false;
+
     const byteLength = total * 4;
-    const usable =
-      Number.isSafeInteger(pointer) &&
-      pointer > 0 &&
-      pointer % 4 === 0 &&
-      pointer + byteLength <= this.module.HEAPU8.byteLength;
-    if (!usable) return false;
+    if (!this.heapRegionUsable(pointer, byteLength)) {
+      throw new Error(
+        `Engine returned an invalid restore buffer for ${total} moves: ` +
+          `pointer ${pointer}, byte length ${byteLength}.`,
+      );
+    }
 
     const words = new Uint32Array(this.module.HEAPU8.buffer, pointer, total);
     words.set(scramble, 0);
@@ -742,26 +749,39 @@ export class CubeEngine {
   }
 
   /**
+   * Whether an engine-owned region may have a typed view built over it.
+   *
+   * The one rule standing between an address the engine claims to own and a
+   * read or write into arbitrary WASM memory: a safe integer, non-zero,
+   * four-byte aligned, and ending inside the current heap. Both directions
+   * ask it -- the pixels come out through one and a restored record goes in
+   * through another -- so it is written once, and tightening it later
+   * tightens both.
+   */
+  private heapRegionUsable(pointer: number, byteLength: number): boolean {
+    return (
+      Number.isSafeInteger(pointer) &&
+      Number.isSafeInteger(byteLength) &&
+      pointer > 0 &&
+      pointer % 4 === 0 &&
+      pointer + byteLength <= this.module.HEAPU8.byteLength
+    );
+  }
+
+  /**
    * Re-queries and validates the pixel source after initialize or resize.
    *
-   * State is committed only when the full metadata contract holds: safe
-   * integers, the exact width * height * 4 byte length, 4-byte pixel
-   * alignment, and pointer plus length inside the current heap.
+   * State is committed only when the full metadata contract holds: a usable
+   * heap region, and the exact width * height * 4 byte length on top of it.
    */
   private refreshPixelSource(): void {
     const pointer = this.module._thorvg_rubiks_pixel_buffer();
     const length = this.module._thorvg_rubiks_pixel_byte_length();
     const expectedLength = this.width * this.height * 4;
 
-    const valid =
-      Number.isSafeInteger(pointer) &&
-      Number.isSafeInteger(length) &&
-      pointer > 0 &&
-      pointer % 4 === 0 &&
-      length === expectedLength &&
-      pointer + length <= this.module.HEAPU8.byteLength;
-
-    if (!valid) {
+    // The length is the pixel buffer's own extra condition: a region can be
+    // perfectly usable and still be the wrong size for this canvas.
+    if (length !== expectedLength || !this.heapRegionUsable(pointer, length)) {
       throw new Error(
         `Engine returned an invalid pixel buffer for ` +
           `${this.width}x${this.height}: pointer ${pointer}, ` +

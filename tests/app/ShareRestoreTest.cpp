@@ -16,7 +16,10 @@
 
 namespace {
 
+using rubiks::test::arrive;
+using rubiks::test::drawn_frame;
 using rubiks::test::settle;
+using rubiks::test::turn;
 
 constexpr std::uint32_t kCanvas = 256;
 
@@ -25,20 +28,6 @@ struct Session {
     std::vector<std::uint32_t> scramble;
     std::vector<std::uint32_t> user;
 };
-
-/** A copy of the frame just drawn, so two cubes can be compared. */
-[[nodiscard]] std::vector<std::uint8_t> drawn_frame()
-{
-    REQUIRE(rubiks::app::render());
-
-    const auto* pixels =
-        reinterpret_cast<const std::uint8_t*>(rubiks::app::pixel_buffer());
-    const std::uint32_t length = rubiks::app::pixel_byte_length();
-    REQUIRE(pixels != nullptr);
-    REQUIRE(length > 0);
-
-    return std::vector<std::uint8_t>(pixels, pixels + length);
-}
 
 /**
  * The session a link would be built from right now.
@@ -88,21 +77,6 @@ struct Session {
 
     return restore(words, static_cast<std::uint32_t>(session.scramble.size()),
                    static_cast<std::uint32_t>(session.user.size()));
-}
-
-/** Scrambles and waits for the whole sequence to arrive on the cube. */
-void arrive(std::uint32_t seed, std::uint32_t moves)
-{
-    REQUIRE(rubiks::app::scramble(seed, moves));
-    settle();
-    REQUIRE(rubiks::app::timeline_cursor() == moves);
-}
-
-/** Turns one face and waits for it to settle, the way a user's move does. */
-void turn(rubiks::cube::Face face, int face_turns)
-{
-    REQUIRE(rubiks::app::turn_face(face, face_turns));
-    settle();
 }
 
 /** R packed, which is a word every payload here can carry. */

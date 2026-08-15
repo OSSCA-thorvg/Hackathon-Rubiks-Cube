@@ -29,8 +29,6 @@ describe('SessionRecords', () => {
   });
 
   it('says so before there is anything to say', () => {
-    expect(board.records.best).toBeNull();
-    expect(board.records.recent).toHaveLength(0);
     expect(board.best.textContent).toBe('No solves yet.');
     expect(board.list.children).toHaveLength(0);
   });
@@ -38,7 +36,6 @@ describe('SessionRecords', () => {
   it('keeps the first solve and calls it the best', () => {
     expect(board.records.add(solve(12_340))).toBe(true);
 
-    expect(board.records.best?.elapsedMs).toBe(12_340);
     expect(board.best.textContent).toBe('Best 00:12.34');
     expect(board.list.children).toHaveLength(1);
     expect(board.list.children[0]?.textContent).toBe(
@@ -49,7 +46,7 @@ describe('SessionRecords', () => {
   it('only calls a solve the best when it is faster than the last one', () => {
     expect(board.records.add(solve(12_340))).toBe(true);
     expect(board.records.add(solve(20_000))).toBe(false);
-    expect(board.records.best?.elapsedMs).toBe(12_340);
+    expect(board.best.textContent).toBe('Best 00:12.34');
 
     // Equal is not faster: whoever got there first keeps it.
     expect(board.records.add(solve(12_340))).toBe(false);
@@ -62,15 +59,15 @@ describe('SessionRecords', () => {
       board.records.add(solve(10_000 + index * 1000, index));
     }
 
-    expect(board.records.recent).toHaveLength(RECENT_LIMIT);
-    expect(board.list.children).toHaveLength(RECENT_LIMIT);
+    const written = [...board.list.children].map((item) => item.textContent);
+    expect(written).toHaveLength(RECENT_LIMIT);
 
     // The newest is at the top, and the two oldest have fallen off the end.
-    expect(board.records.recent[0]?.userMoveCount).toBe(RECENT_LIMIT + 1);
-    expect(board.records.recent.at(-1)?.userMoveCount).toBe(2);
+    expect(written[0]).toContain(`${RECENT_LIMIT + 1} moves`);
+    expect(written.at(-1)).toContain('2 moves');
 
     // The best is still the first one, which is no longer on the list: the
     // fastest of the sitting is not the same question as the latest few.
-    expect(board.records.best?.elapsedMs).toBe(10_000);
+    expect(board.best.textContent).toBe('Best 00:10.00');
   });
 });

@@ -15,6 +15,7 @@ using rubiks::cube::Axis;
 using rubiks::cube::CubeMove;
 using rubiks::cube::layer;
 using rubiks::cube::pack;
+using rubiks::cube::unpack;
 
 /** The word the reader on the other side has to arrive at for `R`. */
 constexpr std::uint32_t kPackedR = 0x44;
@@ -105,6 +106,47 @@ TEST_CASE("normalizing a move to write it down does not reach the record")
     REQUIRE(redo_plan(timeline, 1)[0] == played);
     timeline.step(TimelineEffect::Advance);
     REQUIRE(rewind_plan(timeline, 0)[0] == inverse(played));
+}
+
+TEST_CASE("a word read back is the move it was written from")
+{
+    using namespace rubiks::cube::moves;
+
+    // Every move a session can hold survives the round trip, direction and
+    // all -- which is what makes a shared record the same cube on both sides.
+    for (const CubeMove& move :
+         {R(kSize), L(kSize), U(kSize), D(kSize), F(kSize), B(kSize),
+          CubeMove{Axis::X, layer(1), -1}, CubeMove{Axis::Z, layer(1), 1}}) {
+        REQUIRE(unpack(pack(move)) == move);
+    }
+
+    // Up to the normalizing the writing does, which is the one thing that does
+    // not come back: a half turn has no direction on the page, so the word for
+    // the two ways round is one word and reads back as the positive one.
+    REQUIRE(unpack(pack(CubeMove{Axis::X, layer(0), -2})) ==
+            CubeMove{Axis::X, layer(0), 2});
+}
+
+TEST_CASE("a word that is not a move reads back as nothing")
+{
+    // Zero, which is the engine's own answer for "no move at that index", so
+    // it arrives here as a matter of course rather than as corruption.
+    REQUIRE_FALSE(unpack(0).has_value());
+
+    // Two bits for three axes and two bits for three turn counts leave one
+    // invalid value in each field. Nothing pack() writes can take either, so
+    // these are the words a stranger's link brings and nothing else does.
+    REQUIRE_FALSE(unpack(kPackedR | 0x3).has_value());
+    REQUIRE_FALSE(unpack(0x4C).has_value());
+
+    // A turns code with no layers behind it is not a move either: the layer
+    // set is what a move turns, and an empty one turns nothing.
+    REQUIRE_FALSE(unpack(0x4).has_value());
+
+    // A mask of several layers is a move, and a perfectly readable one. What
+    // may be done with it is the caller's to decide, not this function's.
+    REQUIRE(unpack(0x74) ==
+            CubeMove{Axis::X, rubiks::cube::layers_through(0, 2), 1});
 }
 
 TEST_CASE("a move that cannot be written comes back as nothing")

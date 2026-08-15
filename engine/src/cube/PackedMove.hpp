@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 #include "cube/CubeMove.hpp"
 
@@ -73,6 +74,48 @@ inline constexpr std::uint32_t kPackedTurnsHalf = 2;
             << kPackedAxisShift) |
            ((code & kPackedTurnsMask) << kPackedTurnsShift) |
            (move.layers << kPackedLayerShift);
+}
+
+/**
+ * Reads a word back as a move, or as nothing when it is not one.
+ *
+ * The inverse of pack() only up to the normalizing it does: what comes back
+ * turns by -1, +1 or +2, so a move recorded as `-2` reads back as `+2`. That
+ * is exactly right for the one direction this is needed in -- a word arriving
+ * from outside is a move to be made rather than a move to be replayed, and the
+ * two halves of a turn nobody has watched are the same cube.
+ *
+ * Two of the three fields have a value they cannot take: the axis is two bits
+ * for three axes, and the turns are two bits for three counts. Both are
+ * refused here rather than cast, because a word that reaches this function may
+ * have come from a stranger rather than from pack().
+ */
+[[nodiscard]] constexpr std::optional<CubeMove> unpack(
+    std::uint32_t packed) noexcept
+{
+    const std::uint32_t axis = (packed >> kPackedAxisShift) & kPackedAxisMask;
+    const std::uint32_t code = (packed >> kPackedTurnsShift) & kPackedTurnsMask;
+    const LayerMask layers = packed >> kPackedLayerShift;
+
+    if (axis > static_cast<std::uint32_t>(Axis::Z)) return std::nullopt;
+    if (layers == 0) return std::nullopt;
+
+    int quarter_turns = 0;
+    switch (code) {
+        case kPackedTurnsCounterClockwise:
+            quarter_turns = -1;
+            break;
+        case kPackedTurnsClockwise:
+            quarter_turns = 1;
+            break;
+        case kPackedTurnsHalf:
+            quarter_turns = 2;
+            break;
+        default:
+            return std::nullopt;
+    }
+
+    return CubeMove{static_cast<Axis>(axis), layers, quarter_turns};
 }
 
 }  // namespace rubiks::cube

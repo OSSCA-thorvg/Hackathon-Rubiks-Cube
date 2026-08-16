@@ -186,7 +186,7 @@ Sticker 배열을 직접 싣는 편이 짧지만 그렇게 하지 않습니다. 
 여기부터는 앞의 phase가 모두 끝난 뒤에 진행합니다.
 ThorVG를 보여 주는 데 필요하지 않거나, 들어가는 코드의 양에 비해 rendering과의 관련이 옅은 항목들입니다. 특히 solver는 이 저장소에서 가장 큰 단일 코드 덩어리가 되면서 rendering과 무관하므로, 도메인의 읽기 좋음을 해치지 않도록 `cube` 안에서도 별도의 하위 target으로 격리합니다.
 
-## [ ] Phase 15: N×N cube support
+## [ ] Phase 15: [N×N cube support](./15-nxn-cube-support.md)
 
 3×3×3에 고정된 cube 크기를 런타임에 선택할 수 있게 합니다.
 Geometry, picking, net 렌더링은 이미 CubeState의 size로 파라미터화되어 있고 고정된 크기는 application lifecycle 한 곳에만 남아 있으므로, 실제 작업은 크기 변경 시의 상태 재구성과 그 주변부입니다.

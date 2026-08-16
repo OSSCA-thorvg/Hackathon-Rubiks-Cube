@@ -70,6 +70,54 @@ constexpr std::array<Axis, 3> kAxes{Axis::X, Axis::Y, Axis::Z};
                 kRingCenterDistance * kUp[index]};
 }
 
+[[nodiscard]] std::optional<Vec2> slot_in_diagram(const SurfaceSticker& sticker,
+                                                  int size) noexcept;
+
+/**
+ * How close the two nearest slots come on a cube of `size`, in diagram units.
+ *
+ * The one measure everything in the diagram is sized against -- sticker,
+ * stroke and the reach of a press all follow it -- and it is a property of the
+ * layout rather than a setting. It was a constant while there was one size to
+ * be laid out; with more, a written number would be right for one cube and
+ * would have the others drawing over themselves or rattling around.
+ *
+ * Worked out by placing every slot and finding the closest pair, because the
+ * slots are the crossings of circles and are nowhere near evenly spaced: which
+ * pair turns out to be the closest is not something a formula would carry
+ * across sizes. Once per size, into a table, so the frames only ever read it.
+ */
+[[nodiscard]] float slot_spacing(int size)
+{
+    // A cube whose layers no longer fit in a mask cannot be drawn either, so
+    // the table covers every size that could reach here.
+    constexpr int kSizes = 32;
+    static std::array<float, kSizes> spacing{};
+
+    if (size < 2 || size >= kSizes) return 1.0f;
+    if (spacing[static_cast<std::size_t>(size)] > 0.0f) {
+        return spacing[static_cast<std::size_t>(size)];
+    }
+
+    std::vector<Vec2> places;
+    for (const auto& sticker : cube::surface_stickers(size)) {
+        if (const auto at = slot_in_diagram(sticker, size)) {
+            places.push_back(*at);
+        }
+    }
+
+    float closest = 1.0f;
+    for (std::size_t i = 0; i < places.size(); ++i) {
+        for (std::size_t j = i + 1; j < places.size(); ++j) {
+            closest = std::fmin(closest,
+                                length_of(subtracted(places[i], places[j])));
+        }
+    }
+
+    spacing[static_cast<std::size_t>(size)] = closest;
+    return closest;
+}
+
 /** How far the whole drawing reaches, in its own units, with y running up. */
 struct RingsBounds {
     float left;
@@ -87,11 +135,11 @@ struct RingsBounds {
  * way than the other. Fitting a rectangle to the wrong box leaves the drawing
  * sitting off to one side of it.
  */
-[[nodiscard]] RingsBounds rings_bounds() noexcept
+[[nodiscard]] RingsBounds rings_bounds(int size)
 {
     const float reach = 1.0f + kRingRadiusOffset +
                         0.5f * kRingsStrokeScale * kRingsActiveStrokeScale *
-                            kRingsSlotSpacing;
+                            slot_spacing(size);
 
     RingsBounds bounds{0.0f, 0.0f, 0.0f, 0.0f};
     bool started = false;
@@ -122,9 +170,10 @@ struct RingsMetrics {
     float stroke;
 };
 
-[[nodiscard]] RingsMetrics rings_metrics(const Rect& rect) noexcept
+[[nodiscard]] RingsMetrics rings_metrics(const Rect& rect, int size)
 {
-    const RingsBounds bounds = rings_bounds();
+    const RingsBounds bounds = rings_bounds(size);
+    const float spacing = slot_spacing(size);
     const float wide = bounds.right - bounds.left;
     const float tall = bounds.top - bounds.bottom;
     const float scale = std::fmin(rect.width / wide, rect.height / tall);
@@ -137,8 +186,8 @@ struct RingsMetrics {
     return RingsMetrics{
         Vec2{rect.x + 0.5f * rect.width - middle.x * scale,
              rect.y + 0.5f * rect.height + middle.y * scale},
-        scale, kRingsSlotSpacing * kRingsStickerScale * scale,
-        kRingsSlotSpacing * kRingsStrokeScale * scale};
+        scale, spacing * kRingsStickerScale * scale,
+        spacing * kRingsStrokeScale * scale};
 }
 
 /**
@@ -312,7 +361,7 @@ struct ScreenRing {
     ring.slots = cube::ring_slots(axis, layer, size);
     if (ring.slots.size() < 3) return std::nullopt;
 
-    const RingsMetrics metrics = rings_metrics(rect);
+    const RingsMetrics metrics = rings_metrics(rect, size);
     ring.center = to_screen(axis_center(axis), metrics);
 
     ring.points.reserve(ring.slots.size());
@@ -361,17 +410,17 @@ std::optional<math::Vec2> rings_slot_position(const SurfaceSticker& sticker,
 {
     const auto placed = slot_in_diagram(sticker, size);
     if (!placed) return std::nullopt;
-    return to_screen(*placed, rings_metrics(rect));
+    return to_screen(*placed, rings_metrics(rect, size));
 }
 
-math::Vec2 rings_axis_center(Axis axis, const Rect& rect)
+math::Vec2 rings_axis_center(Axis axis, const Rect& rect, int size)
 {
-    return to_screen(axis_center(axis), rings_metrics(rect));
+    return to_screen(axis_center(axis), rings_metrics(rect, size));
 }
 
-float rings_slot_spacing(const Rect& rect)
+float rings_slot_spacing(const Rect& rect, int size)
 {
-    return kRingsSlotSpacing * rings_metrics(rect).scale;
+    return slot_spacing(size) * rings_metrics(rect, size).scale;
 }
 
 std::optional<math::Vec2> rings_slot_tangent(Axis axis, int layer,
@@ -492,7 +541,7 @@ RenderScene build_rings_scene(const cube::CubeState& state, const Rect& rect,
                               Palette palette)
 {
     const int size = state.size();
-    const RingsMetrics metrics = rings_metrics(rect);
+    const RingsMetrics metrics = rings_metrics(rect, size);
     const auto stickers = cube::surface_stickers(size);
 
     RenderScene scene;

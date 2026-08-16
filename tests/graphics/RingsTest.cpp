@@ -48,7 +48,7 @@ constexpr std::array<Axis, 3> kAxes{Axis::X, Axis::Y, Axis::Z};
 [[nodiscard]] float ring_radius(Axis axis, int layer)
 {
     const auto ring = rings_ring(axis, layer, kRect, kSize);
-    return distance(ring.at(0.0f).position, rings_axis_center(axis, kRect));
+    return distance(ring.at(0.0f).position, rings_axis_center(axis, kRect, kSize));
 }
 
 /** The middle of a quad, which is where its sticker sits. */
@@ -177,7 +177,7 @@ TEST_CASE("each ring's slots come round its own centre in the domain's order")
             const auto ring = rings_ring(axis, layer, kRect, kSize);
             REQUIRE_FALSE(ring.empty());
 
-            const Vec2 middle = rings_axis_center(axis, kRect);
+            const Vec2 middle = rings_axis_center(axis, kRect, kSize);
 
             // Every step round the loop turns the same way about the centre,
             // and the whole way round is exactly one revolution.
@@ -210,7 +210,7 @@ TEST_CASE("a ring's loop is the circle its slots lie on")
             const auto ring = rings_ring(axis, layer, kRect, kSize);
             REQUIRE_FALSE(ring.empty());
 
-            const Vec2 middle = rings_axis_center(axis, kRect);
+            const Vec2 middle = rings_axis_center(axis, kRect, kSize);
 
             const float radius = distance(ring.at(0.0f).position, middle);
 
@@ -329,7 +329,7 @@ TEST_CASE("a band part way through a turn is on the ring it is riding")
         for (int layer = 0; layer < kSize; ++layer) {
             const auto ring = rings_ring(axis, layer, kRect, kSize);
 
-            const Vec2 middle = rings_axis_center(axis, kRect);
+            const Vec2 middle = rings_axis_center(axis, kRect, kSize);
             const float radius = ring_radius(axis, layer);
 
             const auto scene = build_rings_scene(
@@ -436,5 +436,52 @@ TEST_CASE("a stack of flat views keeps them apart and inside the canvas")
 
         // The 3D region stays square, which is what pins the camera aspect.
         REQUIRE(all.cube.width == Approx(all.cube.height));
+    }
+}
+
+TEST_CASE("the slot spacing is worked out from the layout, at every size")
+{
+    // The value this used to be written down as, worked out by hand when the
+    // diagram had one size to be laid out for. Computing it agrees, which is
+    // both a check on the computation and the statement that a 3x3 diagram is
+    // the same picture it was before there were others.
+    constexpr float kSpacingAtThree = 0.248f;
+
+    // Read back in the diagram's own units: two axis centres are one unit
+    // apart by construction, which is the only ruler the drawing carries.
+    const float unit = distance(rings_axis_center(Axis::X, kRect, kSize),
+                                rings_axis_center(Axis::Y, kRect, kSize));
+    REQUIRE(rings_slot_spacing(kRect, kSize) / unit ==
+            Approx(kSpacingAtThree).epsilon(0.01f));
+
+    float previous = 0.0f;
+    for (int size = 2; size <= 9; ++size) {
+        const float spacing = rings_slot_spacing(kRect, size);
+        REQUIRE(spacing > 0.0f);
+
+        // More layers share the same band of radii, so the crossings crowd
+        // together rather than the figure growing.
+        if (previous > 0.0f) REQUIRE(spacing < previous);
+        previous = spacing;
+
+        // And the stickers drawn at that spacing keep off one another: the
+        // closest pair of the 6N^2 is further apart than a sticker is wide.
+        const rubiks::cube::CubeState cube(size);
+        const auto scene = build_rings_scene(cube, kRect);
+
+        std::vector<Vec2> middles;
+        for (const auto& face : scene.faces) {
+            if (face.points.size() == 4) middles.push_back(middle_of(face));
+        }
+        REQUIRE(middles.size() >=
+                static_cast<std::size_t>(6 * size * size));
+
+        float closest = kRect.width;
+        for (std::size_t i = 0; i < middles.size(); ++i) {
+            for (std::size_t j = i + 1; j < middles.size(); ++j) {
+                closest = std::fmin(closest, distance(middles[i], middles[j]));
+            }
+        }
+        REQUIRE(closest >= spacing * kRingsStickerScale);
     }
 }

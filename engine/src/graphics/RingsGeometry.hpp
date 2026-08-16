@@ -16,14 +16,14 @@
 namespace rubiks::graphics {
 
 /**
- * The cube as the nine rings a turn can cycle, rather than as six faces.
+ * The cube as the rings a turn can cycle, rather than as six faces.
  *
  * Each axis becomes one centre and each of its layers one circle about that
- * centre, so nine circles in all. Every sticker belongs to exactly two of them
+ * centre, so 3N circles in all. Every sticker belongs to exactly two of them
  * -- one for each axis that is not its face's own -- and is drawn where those
- * two circles cross. Nine rings of twelve slots is a hundred and eight
- * memberships, two apiece over fifty-four stickers, and the equality closing is
- * the whole reason the picture exists.
+ * two circles cross. On a 3x3 that is nine rings of twelve slots: a hundred
+ * and eight memberships, two apiece over fifty-four stickers, and the equality
+ * closing is the whole reason the picture exists.
  *
  * A turn is then what it actually is: three slots along one circle. A sticker
  * carried round arrives at a crossing where its *other* membership has changed
@@ -51,15 +51,6 @@ inline constexpr float kRingCenterDistance = 0.5773502692f;
  * four slots are furthest apart inside it.
  */
 inline constexpr float kRingRadiusOffset = 0.24f;
-
-/**
- * How close the two nearest of the fifty-four slots come, in the same units.
- *
- * A property of the layout above rather than a setting: it is what a sticker
- * and a ring have to be measured against to keep their proportions when the
- * diagram is scaled to a rectangle.
- */
-inline constexpr float kRingsSlotSpacing = 0.248f;
 
 /** How much of that gap a sticker fills; the rest reads as background. */
 inline constexpr float kRingsStickerScale = 0.62f;
@@ -100,12 +91,17 @@ struct RingsGuide {
     const cube::SurfaceSticker& sticker, const Rect& rect, int size);
 
 /**
- * Where an axis's three loops are centred, in the diagram drawn in `rect`.
+ * Where an axis's loops are centred, in the diagram drawn in `rect`.
  *
  * The slots on one loop are nowhere near evenly spaced, so their middle is not
  * this point and nothing can recover it from the loop alone.
+ *
+ * The size is asked for because the whole figure is fitted to the rectangle
+ * around the widest stroke it will draw, and how thick that is follows from
+ * how close the slots of that cube come.
  */
-[[nodiscard]] math::Vec2 rings_axis_center(cube::Axis axis, const Rect& rect);
+[[nodiscard]] math::Vec2 rings_axis_center(cube::Axis axis, const Rect& rect,
+                                           int size);
 
 /**
  * One of the nine loops, laid over the diagram drawn in `rect`.
@@ -124,8 +120,13 @@ struct RingsGuide {
  * The one measure everything in the diagram is sized against, and the only way
  * to ask what the layout scaled to without measuring two centres apart and
  * dividing -- which is what a caller was reduced to.
+ *
+ * It shrinks as a cube grows: the loops of one axis share the same band of
+ * radii however many of them there are, so more layers means more crossings in
+ * the same figure. Everything drawn and everything picked follows it, which is
+ * what keeps a 9x9 diagram from drawing its stickers over one another.
  */
-[[nodiscard]] float rings_slot_spacing(const Rect& rect);
+[[nodiscard]] float rings_slot_spacing(const Rect& rect, int size);
 
 /**
  * Which way a positive turn carries the sticker resting in one of a ring's

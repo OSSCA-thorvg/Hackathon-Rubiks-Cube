@@ -15,7 +15,7 @@ std::optional<RingsPick> pick_rings(float x, float y,
     }
 
     const float reach =
-        graphics::kRingsPickReach * graphics::rings_slot_spacing(rect);
+        graphics::kRingsPickReach * graphics::rings_slot_spacing(rect, size);
 
     std::optional<RingsPick> nearest;
     float closest = reach;

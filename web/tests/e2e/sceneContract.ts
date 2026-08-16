@@ -100,8 +100,17 @@ export type CanvasProbe = {
   readonly cubeGrid: number[][];
 };
 
-/** Reads the drawing buffer size and the contract pixels from the page. */
-export async function probeCanvas(page: Page): Promise<CanvasProbe> {
+/**
+ * Reads the drawing buffer size and the contract pixels from the page.
+ *
+ * `size` is how many cells one net face is read as, which is the cube on the
+ * table rather than a setting: everything else in the contract is a layout
+ * fraction and does not move when the cube is replaced.
+ */
+export async function probeCanvas(
+  page: Page,
+  size: number = CUBE_SIZE,
+): Promise<CanvasProbe> {
   return page.evaluate(
     (config) => {
       const canvas = document.querySelector('canvas');
@@ -188,7 +197,7 @@ export async function probeCanvas(page: Page): Promise<CanvasProbe> {
       rightSample: RIGHT_SAMPLE,
       seamSamples: SEAM_SAMPLES,
       netBlocks: NET_BLOCKS,
-      cubeSize: CUBE_SIZE,
+      cubeSize: size,
       cubeRegionSide: CUBE_REGION_SIDE,
       cubeRegionTop: CUBE_REGION_TOP,
       netFaceSide: NET_FACE_SIDE,
@@ -198,11 +207,11 @@ export async function probeCanvas(page: Page): Promise<CanvasProbe> {
   );
 }
 
-/** The 54 net cells of a solved cube, in probe order. */
-export function expectedNet(): number[][] {
+/** The 6N^2 net cells of a solved cube, in probe order. */
+export function expectedNet(size: number = CUBE_SIZE): number[][] {
   const cells: number[][] = [];
   for (const block of NET_BLOCKS) {
-    for (let i = 0; i < CUBE_SIZE * CUBE_SIZE; i += 1) {
+    for (let i = 0; i < size * size; i += 1) {
       cells.push([...block.color]);
     }
   }
@@ -261,9 +270,10 @@ export function pagePointInNet(
   block: { readonly column: number; readonly row: number },
   col: number,
   row: number,
+  size: number = CUBE_SIZE,
 ): { x: number; y: number } {
   const net = netLayout(probe, view);
-  const cell = net.faceSide / CUBE_SIZE;
+  const cell = net.faceSide / size;
   const bufferX = net.x + block.column * net.faceSide + (col + 0.5) * cell;
   const bufferY = net.y + block.row * net.faceSide + (row + 0.5) * cell;
 

@@ -160,15 +160,24 @@ void reset_cube() noexcept;
 inline constexpr std::uint32_t kAmbientPatternCount = 4;
 
 /**
- * How many times a pattern may repeat before the cube is back where it began.
+ * How many times a written pattern may repeat before the cube is back where
+ * it began.
  *
  * A bound rather than the exact orders, which are worked out in the phase
  * document and live nowhere else. Nothing in the engine reads an order -- the
  * repeat just keeps taking the next move -- so writing them down here would be
  * a set of numbers that only the tests guarding them ever looked at. What the
- * watching actually promises is that it comes back round within a while, and
- * that is a bound; it goes on holding when the table is edited, which is when
- * the promise is easiest to break.
+ * watching of those cubes promises is that it comes back round within a
+ * while, and that is a bound; it goes on holding when the table is edited,
+ * which is when the promise is easiest to break.
+ *
+ * It is about the written patterns, which is to say about cubes with no
+ * layers inside. A bigger cube is walked over instead, and a walk that mixes
+ * the whole of it does not come back round in any number of rounds anyone
+ * would sit through -- staying near the solved cube and leaving most of the
+ * cube alone are the same thing, and the second of those is what made a big
+ * cube not worth watching. Nothing rests on the return: what puts the cube
+ * back is the snapshot the watching took.
  */
 inline constexpr int kAmbientMaxPeriod = 200;
 
@@ -181,11 +190,18 @@ inline constexpr int kAmbientMaxPeriod = 200;
  * round within kAmbientMaxPeriod -- is arithmetic, and checking arithmetic
  * needs the numbers rather than an application to play them into.
  *
- * The patterns are written as face turns and built for the cube in hand, so
- * the same four are watchable at every size. That is also what retired the
- * slice one: a middle layer is not something every cube has, and the same
- * letters do not come back round in the same number of rounds once a cube has
- * layers inside.
+ * The patterns are written as a face and a share of the cube, and built for
+ * the cube in hand, so the same four are watchable at every size. A share
+ * rather than a depth is what lets one table suit them all: on a big cube the
+ * moves reach half way in, which is the only way the layers under the surface
+ * are ever seen to move, and on a 2x2 or a 3x3 that half is one layer and the
+ * patterns are the face turns they have always been.
+ *
+ * A cube with layers inside is walked over rather than played a pattern into,
+ * because four moves of a 9x9 leave most of it standing still: the walk steps
+ * round the six faces, counts its depth up through the halves, and alternates
+ * a slice with a half, so every band of the cube is turned on the way past.
+ * What that costs is the return above.
  *
  * Empty for a size this application does not build.
  */

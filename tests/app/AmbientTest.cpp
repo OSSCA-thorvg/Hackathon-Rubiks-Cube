@@ -2,6 +2,8 @@
 
 #include <cstdint>
 #include <limits>
+#include <set>
+#include <utility>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
@@ -46,12 +48,11 @@ TEST_CASE("every watching pattern brings the cube back round within the bound")
     // answer. The orders themselves stay in the phase document -- this holds
     // whatever they are, which is what makes it a guard on the next edit.
     //
-    // Every size, because the bound is a fact about the table on each of the
-    // cubes it can be watched on: the same four letters come back round in a
-    // different number of rounds once a cube has layers inside, and a pattern
-    // that outstays the bound on a 5x5 is one nobody would see return.
-    for (int size = rubiks::app::kMinCubeSize;
-         size <= rubiks::app::kMaxCubeSize; ++size) {
+    // The two sizes the written patterns are played into. A bigger cube is
+    // walked over instead, and a walk that mixes the whole of it comes back
+    // round in a number of rounds nobody would sit through -- which is the
+    // price of it not leaving most of the cube alone.
+    for (int size = rubiks::app::kMinCubeSize; size <= 3; ++size) {
         for (std::uint32_t choice = 0; choice < kAmbientPatternCount;
              ++choice) {
             const auto pattern = ambient_pattern(choice, size);
@@ -75,6 +76,101 @@ TEST_CASE("every watching pattern brings the cube back round within the bound")
 
     // A size no cube is built at has no pattern to watch on it.
     REQUIRE(ambient_pattern(0, rubiks::app::kMinCubeSize - 1).empty());
+}
+
+TEST_CASE("a pattern is as long as the cube has layers")
+{
+    using rubiks::app::ambient_pattern;
+    using rubiks::app::kAmbientPatternCount;
+
+    for (int size = rubiks::app::kMinCubeSize;
+         size <= rubiks::app::kMaxCubeSize; ++size) {
+        // The written pattern, or six faces by however deep the walk reaches
+        // once the cube has depths to grip.
+        const auto expected = static_cast<std::size_t>(
+            size < 4 ? 4 : 6 * ((size + 1) / 2));
+
+        for (std::uint32_t choice = 0; choice < kAmbientPatternCount;
+             ++choice) {
+            const auto pattern = ambient_pattern(choice, size);
+            REQUIRE(pattern.size() == expected);
+
+            // Never shorter than the cube below it: an odd size shares its
+            // half with the even one under it and matches, and every other
+            // step down is a shorter walk.
+            if (size > 4) {
+                REQUIRE(pattern.size() >=
+                        ambient_pattern(choice, size - 1).size());
+            }
+        }
+    }
+}
+
+TEST_CASE("a watched pattern reaches under the surface of a bigger cube")
+{
+    using rubiks::app::ambient_pattern;
+    using rubiks::app::kAmbientPatternCount;
+
+    for (int size = 4; size <= rubiks::app::kMaxCubeSize; ++size) {
+        for (std::uint32_t choice = 0; choice < kAmbientPatternCount;
+             ++choice) {
+            const auto pattern = ambient_pattern(choice, size);
+            REQUIRE_FALSE(pattern.empty());
+
+            // A move that turns nothing but an outer layer leaves everything
+            // under the surface where it was, so a pattern made only of them
+            // is a shell rotating around a cube that is not moving. Every
+            // pattern here has at least one move that goes deeper than that.
+            bool reaches_inside = false;
+            for (const auto& move : pattern) {
+                const auto layers = move.layers;
+                if (layers != rubiks::cube::layer(0) &&
+                    layers != rubiks::cube::layer(size - 1)) {
+                    reaches_inside = true;
+                }
+            }
+            REQUIRE(reaches_inside);
+        }
+    }
+
+    // And a cube with nothing under its surface is untouched by the rule:
+    // half of it is one layer, so its patterns are the face turns they were.
+    for (const int small : {2, 3}) {
+        for (std::uint32_t choice = 0; choice < kAmbientPatternCount;
+             ++choice) {
+            for (const auto& move : ambient_pattern(choice, small)) {
+                REQUIRE((move.layers == rubiks::cube::layer(0) ||
+                         move.layers == rubiks::cube::layer(small - 1)));
+            }
+        }
+    }
+}
+
+TEST_CASE("one round of a watched pattern moves most of a big cube")
+{
+    using rubiks::app::ambient_pattern;
+    using rubiks::app::kAmbientPatternCount;
+
+    for (int size = 4; size <= rubiks::app::kMaxCubeSize; ++size) {
+        for (std::uint32_t choice = 0; choice < kAmbientPatternCount;
+             ++choice) {
+            // Which bands of the cube the round turns: an axis and a layer,
+            // counted once however many moves reach it.
+            std::set<std::pair<int, int>> bands;
+            for (const auto& move : ambient_pattern(choice, size)) {
+                for (int layer = 0; layer < size; ++layer) {
+                    if ((move.layers & rubiks::cube::layer(layer)) != 0) {
+                        bands.insert({static_cast<int>(move.axis), layer});
+                    }
+                }
+            }
+
+            // Every one of the 3N of them. The written pattern reached a
+            // fifth of a 9x9, which is what left most of the cube sitting
+            // still while the same few bands churned in place.
+            REQUIRE(bands.size() == static_cast<std::size_t>(3 * size));
+        }
+    }
 }
 
 TEST_CASE("a choice picks a pattern by remainder, so every value is one")

@@ -377,7 +377,7 @@ TEST_CASE("a sliding turn half way through rasterizes in both views")
     constexpr std::uint32_t kSize = 1024;
     const rubiks::test::EngineLifecycle engine(kSize, kSize);
 
-    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Up, 1));
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Up, 1, 1, 1));
     REQUIRE(rubiks::app::advance(kHalfTurnMs));
     REQUIRE(rubiks::app::render());
 
@@ -410,7 +410,7 @@ TEST_CASE("a sliding turn half way through rasterizes in both views")
     REQUIRE(rubiks::app::render());
     REQUIRE_FALSE(cube_region_shows(kBody, kSize, kSize));
 
-    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Up, -1));
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Up, 1, 1, -1));
     while (rubiks::app::advance(16.0)) {
     }
     require_scene(kSize, kSize);
@@ -421,7 +421,7 @@ TEST_CASE("a turn across a cut band half way through rasterizes in both views")
     constexpr std::uint32_t kSize = 1024;
     const rubiks::test::EngineLifecycle engine(kSize, kSize);
 
-    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1));
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1, 1, 1));
     REQUIRE(rubiks::app::advance(kHalfTurnMs));
     REQUIRE(rubiks::app::render());
 

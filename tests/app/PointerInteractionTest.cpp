@@ -410,7 +410,7 @@ TEST_CASE("a press during a button turn confirms that too")
     // Keyboard and DOM turns animate through the same snap, so the rule
     // reaches them without knowing about them: a press ends whatever turn is
     // running, whoever asked for it.
-    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1));
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1, 1, 1));
     REQUIRE(rubiks::app::advance(kFrameMs));
 
     drag_upward(kQuarterTurnDrag);
@@ -571,7 +571,7 @@ TEST_CASE("a net drag commits the same move a button would")
 
     // Undoing it by name leaves a solved cube, so the drag committed exactly
     // U and nothing near it. Past the release the two paths are one move.
-    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Up, -1));
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Up, 1, 1, -1));
     settle();
 
     REQUIRE(rubiks::app::is_solved());
@@ -1008,7 +1008,7 @@ TEST_CASE("dragging a sticker round its ring turns that layer")
 
     // Exactly one positive quarter turn of the layer that ring belongs to,
     // which is R -- so R' puts the cube back and nothing else would.
-    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, -1));
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1, 1, -1));
     settle();
     REQUIRE(rubiks::app::is_solved());
 }
@@ -1028,7 +1028,7 @@ TEST_CASE("a ring drag the other way turns the same layer back")
     settle();
 
     REQUIRE(rubiks::app::committed_move_count() == 1);
-    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1));
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1, 1, 1));
     settle();
     REQUIRE(rubiks::app::is_solved());
 }

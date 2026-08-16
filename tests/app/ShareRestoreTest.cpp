@@ -52,10 +52,16 @@ struct Session {
     return session;
 }
 
-/** Writes a list of words into the engine's buffer and asks for them back. */
+/**
+ * Writes a list of words into the engine's buffer and asks for them back.
+ *
+ * The size defaults to the one every test that is not about sizes means: a
+ * record and the cube it belongs to arrive together, so it has to be said,
+ * but saying it in each of thirty tests would be noise.
+ */
 [[nodiscard]] bool restore(const std::vector<std::uint32_t>& words,
                            std::uint32_t scramble_count,
-                           std::uint32_t user_count)
+                           std::uint32_t user_count, int size = 3)
 {
     const auto address =
         rubiks::app::restore_buffer(static_cast<std::uint32_t>(words.size()));
@@ -66,17 +72,17 @@ struct Session {
         buffer[index] = words[index];
     }
 
-    return rubiks::app::restore_apply(scramble_count, user_count);
+    return rubiks::app::restore_apply(size, scramble_count, user_count);
 }
 
 /** The same, for a session that is already split into its two stretches. */
-[[nodiscard]] bool restore(const Session& session)
+[[nodiscard]] bool restore(const Session& session, int size = 3)
 {
     std::vector<std::uint32_t> words = session.scramble;
     words.insert(words.end(), session.user.begin(), session.user.end());
 
     return restore(words, static_cast<std::uint32_t>(session.scramble.size()),
-                   static_cast<std::uint32_t>(session.user.size()));
+                   static_cast<std::uint32_t>(session.user.size()), size);
 }
 
 /** R packed, which is a word every payload here can carry. */
@@ -299,25 +305,89 @@ TEST_CASE("a restore is refused whole or not at all")
         REQUIRE(rubiks::app::timeline_length() == 0);
     }
 
-    SECTION("a mask that turns more than one layer")
+    SECTION("a mask that is not a run of this cube's layers")
     {
         const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
-        // A wide move: two layers at once, which the packing is happy to
-        // carry and this cube has no way of making. Letting it in would put a
-        // move on the record with no notation to write it in.
+        // A wide move is a run, and a run is a move this application makes
+        // and writes down, so it comes in.
         const auto wide = rubiks::cube::pack(rubiks::cube::CubeMove{
             rubiks::cube::Axis::X, rubiks::cube::layers_through(1, 2), 1});
         REQUIRE(wide != 0);
-        REQUIRE_FALSE(restore({wide}, 0, 1));
+        REQUIRE(restore({wide}, 0, 1));
+        REQUIRE(rubiks::app::timeline_length() == 1);
+    }
+
+    SECTION("a mask with a gap, off the edge, or all of the cube")
+    {
+        const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+        // Two layers with a still one between them: no gesture and no command
+        // makes it, and there is no notation to write it in.
+        const auto gapped = rubiks::cube::pack(rubiks::cube::CubeMove{
+            rubiks::cube::Axis::X,
+            rubiks::cube::layer(0) | rubiks::cube::layer(2), 1});
+        REQUIRE(gapped != 0);
+        REQUIRE_FALSE(restore({gapped}, 0, 1));
         REQUIRE(rubiks::app::timeline_length() == 0);
 
-        // And a single layer past the edge of a cube this size.
+        // A single layer past the edge of a cube this size.
         const auto beyond = rubiks::cube::pack(rubiks::cube::CubeMove{
             rubiks::cube::Axis::X, rubiks::cube::layer(3), 1});
         REQUIRE_FALSE(restore({beyond}, 0, 1));
         REQUIRE(rubiks::app::timeline_length() == 0);
+
+        // And the whole cube at once, which is a rotation rather than a move.
+        const auto rotation = rubiks::cube::pack(rubiks::cube::CubeMove{
+            rubiks::cube::Axis::X, rubiks::cube::layers_through(0, 2), 1});
+        REQUIRE_FALSE(restore({rotation}, 0, 1));
+        REQUIRE(rubiks::app::timeline_length() == 0);
     }
+}
+
+TEST_CASE("a restored record brings the cube it was made on")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    // A 5x5 session: a wide scramble move and a slice of the user's own.
+    const auto wide = rubiks::cube::pack(rubiks::cube::CubeMove{
+        rubiks::cube::Axis::X, rubiks::cube::layers_through(3, 4), 1});
+    const auto slice = rubiks::cube::pack(rubiks::cube::CubeMove{
+        rubiks::cube::Axis::Y, rubiks::cube::layer(3), -1});
+
+    REQUIRE(restore({wide, slice}, 1, 1, 5));
+    REQUIRE(rubiks::app::cube_size() == 5);
+    REQUIRE(rubiks::app::timeline_length() == 2);
+    REQUIRE(rubiks::app::timeline_scramble_end() == 1);
+    REQUIRE(rubiks::app::committed_move_count() == 1);
+    REQUIRE_FALSE(rubiks::app::is_solved());
+
+    // The record is playable on the cube it arrived with: rewinding it leaves
+    // a solved 5x5 rather than reaching for a layer that is not there.
+    REQUIRE(rubiks::app::solve_rewind());
+    for (int frame = 0; frame < 400; ++frame) {
+        static_cast<void>(rubiks::app::advance(16.0));
+    }
+    REQUIRE(rubiks::app::is_solved());
+    REQUIRE(rubiks::app::cube_size() == 5);
+}
+
+TEST_CASE("a record for a cube nobody builds is refused whole")
+{
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
+
+    // The move is a perfectly good one; the cube it names is not offered.
+    REQUIRE_FALSE(restore({kPackedR}, 0, 1, rubiks::app::kMaxCubeSize + 1));
+    REQUIRE(rubiks::app::cube_size() == 3);
+    REQUIRE(rubiks::app::timeline_length() == 0);
+
+    // A layer this cube would have at another size, at a size where it does
+    // not: the size and the mask are checked against each other.
+    const auto deep = rubiks::cube::pack(rubiks::cube::CubeMove{
+        rubiks::cube::Axis::X, rubiks::cube::layer(4), 1});
+    REQUIRE_FALSE(restore({deep}, 0, 1, 3));
+    REQUIRE(rubiks::app::cube_size() == 3);
+    REQUIRE(rubiks::app::timeline_length() == 0);
 }
 
 TEST_CASE("the restore buffer is asked for before it is read")
@@ -326,7 +396,7 @@ TEST_CASE("the restore buffer is asked for before it is read")
     {
         REQUIRE_FALSE(rubiks::app::is_initialized());
         REQUIRE(rubiks::app::restore_buffer(4) == 0);
-        REQUIRE_FALSE(rubiks::app::restore_apply(2, 2));
+        REQUIRE_FALSE(rubiks::app::restore_apply(3, 2, 2));
     }
 
     SECTION("counts the buffer will not take")
@@ -343,14 +413,14 @@ TEST_CASE("the restore buffer is asked for before it is read")
     {
         const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
-        REQUIRE_FALSE(rubiks::app::restore_apply(0, 0));
+        REQUIRE_FALSE(rubiks::app::restore_apply(3, 0, 0));
 
         REQUIRE(restore({kPackedR}, 0, 1));
         REQUIRE(rubiks::app::timeline_length() == 1);
 
         // The buffer belongs to one restore, so the second call has nothing to
         // read and says so rather than applying the same record again.
-        REQUIRE_FALSE(rubiks::app::restore_apply(0, 1));
+        REQUIRE_FALSE(rubiks::app::restore_apply(3, 0, 1));
         REQUIRE(rubiks::app::timeline_length() == 1);
     }
 }

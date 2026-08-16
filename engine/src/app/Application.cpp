@@ -15,6 +15,7 @@
 #include "cube/MoveTimeline.hpp"
 #include "cube/PackedMove.hpp"
 #include "cube/Scramble.hpp"
+#include "cube/Surface.hpp"
 #include "graphics/AxisGizmo.hpp"
 #include "graphics/Camera.hpp"
 #include "graphics/CubeGeometry.hpp"
@@ -34,7 +35,8 @@
 namespace rubiks::app {
 namespace {
 
-constexpr int kCubeSize = 3;
+/** The size a lifecycle opens with, and the one every phase before this had. */
+constexpr int kDefaultCubeSize = 3;
 
 /** How fast a user's own release settles, in milliseconds per quarter turn. */
 constexpr double kUserTempoMs = interaction::kSnapMsPerQuarterTurn;
@@ -169,8 +171,14 @@ struct ApplicationState {
     // The logical cube, only ever holding quarter turns. A drag in progress
     // lives in the controller instead, and reaches this through a committed
     // move.
-    cube::CubeState cube_state{kCubeSize};
-    interaction::InteractionController interaction{kCubeSize};
+    //
+    // How many layers the cube has is read off this and stored nowhere else.
+    // The controller holds a size of its own because it is the rule it
+    // refuses moves by and it has no cube to ask -- so a change of size
+    // replaces it rather than telling it, which is what makes "a gesture from
+    // the cube before" a state that cannot be written down.
+    cube::CubeState cube_state{kDefaultCubeSize};
+    interaction::InteractionController interaction{kDefaultCubeSize};
     graphics::ViewMode view_mode = graphics::ViewMode::Both;
     graphics::FlatStyle flat_style = graphics::FlatStyle::Net;
 
@@ -196,6 +204,18 @@ struct ApplicationState {
 
 std::unique_ptr<ApplicationState> state;
 
+/** How many layers the cube in hand has, which nothing else stores. */
+[[nodiscard]] int size_of_cube() noexcept
+{
+    return state->cube_state.size();
+}
+
+/** Whether a size is one this application builds. */
+[[nodiscard]] bool valid_cube_size(int size) noexcept
+{
+    return size >= kMinCubeSize && size <= kMaxCubeSize;
+}
+
 void adopt_surface(std::uint32_t width, std::uint32_t height) noexcept
 {
     state->surface_width = width;
@@ -215,72 +235,74 @@ void adopt_surface(std::uint32_t width, std::uint32_t height) noexcept
     return state->orbit.to_camera(aspect);
 }
 
-/** Returns the named clockwise move for one external face. */
-[[nodiscard]] cube::CubeMove clockwise_move(cube::Face face) noexcept
+/**
+ * The move a face names, taken as deep as a range of depths says.
+ *
+ * The one place a depth becomes a layer mask, so which end of an axis a face
+ * sits at and which way it turns from outside are each written once. Depth 1
+ * is the face; `(Right, 1, 1)` is R and `(Right, 1, 2)` is Rw.
+ *
+ * Nothing for a range no move corresponds to: empty, reversed, off the far
+ * side of the cube, or the whole of it -- the last being a rotation, which
+ * this application neither makes nor writes down.
+ */
+[[nodiscard]] std::optional<cube::CubeMove> depth_move(cube::Face face,
+                                                       int first_depth,
+                                                       int last_depth,
+                                                       int size) noexcept
 {
-    switch (face) {
-        case cube::Face::Right:
-            return cube::moves::R(kCubeSize);
-        case cube::Face::Left:
-            return cube::moves::L(kCubeSize);
-        case cube::Face::Up:
-            return cube::moves::U(kCubeSize);
-        case cube::Face::Down:
-            return cube::moves::D(kCubeSize);
-        case cube::Face::Front:
-            return cube::moves::F(kCubeSize);
-        case cube::Face::Back:
-            break;
-    }
-    return cube::moves::B(kCubeSize);
+    const cube::LayerMask layers =
+        cube::depth_layers(face, first_depth, last_depth, size);
+    if (layers == 0) return std::nullopt;
+    if (last_depth - first_depth + 1 >= size) return std::nullopt;
+
+    // Clockwise from outside is a positive turn about the axis only for the
+    // face at its positive end; the face opposite reads the axis backwards.
+    const int direction = cube::outer_layer(face, size) == size - 1 ? 1 : -1;
+    return cube::CubeMove{cube::axis_of(face), layers, direction};
 }
 
-/**
- * The middle slice between L and R, turning the way L does.
- *
- * Not one of `cube::moves`, which are the six outer faces of a cube of any
- * size. A slice of an N x N x N cube would have to say which of its N - 2
- * inner layers was meant, and at the one size this application builds there is
- * nothing to say.
- */
-[[nodiscard]] cube::CubeMove middle_slice() noexcept
-{
-    return cube::CubeMove{cube::Axis::X, cube::layer(kCubeSize / 2), -1};
-}
+/** One move of a watched pattern, before it is given a cube to turn. */
+struct AmbientStep {
+    cube::Face face;
+    int face_turns;
+};
 
 /**
  * The patterns the watching mode repeats, one of which a choice picks out.
  *
- * Moves only. Which of them comes back round soonest is worked out in the
+ * Faces rather than moves, because the cube they will turn is not known here:
+ * the same four are offered at every size, and what a face is depends on the
+ * cube in hand. Which of them comes back round soonest is worked out in the
  * phase document and is what put these four here rather than four others;
  * carrying those numbers in the code would be carrying values nothing reads.
  *
- * Built from the named moves rather than written out as axes and layers, so
- * which layer a face is and which way it turns stay facts of the domain with
- * one copy. Built once, on first use, because those names are functions.
+ * Outer faces only. A pattern with a slice in it is not watchable on a cube
+ * with no middle layer, and it is a different pattern on cubes that have one.
  */
-[[nodiscard]] const std::array<std::vector<cube::CubeMove>,
-                               kAmbientPatternCount>&
-ambient_patterns()
-{
-    using namespace cube::moves;
-
-    static const std::array<std::vector<cube::CubeMove>, kAmbientPatternCount>
-        patterns{{
-            // R U M' F
-            {R(kCubeSize), U(kCubeSize), inverse(middle_slice()),
-             F(kCubeSize)},
-            // R U' D' F
-            {R(kCubeSize), inverse(U(kCubeSize)), inverse(D(kCubeSize)),
-             F(kCubeSize)},
-            // R U F' D
-            {R(kCubeSize), U(kCubeSize), inverse(F(kCubeSize)), D(kCubeSize)},
-            // R U F D
-            {R(kCubeSize), U(kCubeSize), F(kCubeSize), D(kCubeSize)},
-        }};
-
-    return patterns;
-}
+constexpr std::array<std::array<AmbientStep, 4>, kAmbientPatternCount>
+    kAmbientPatterns{{
+        // R U' D' F
+        {{{cube::Face::Right, 1},
+          {cube::Face::Up, -1},
+          {cube::Face::Down, -1},
+          {cube::Face::Front, 1}}},
+        // R U F D
+        {{{cube::Face::Right, 1},
+          {cube::Face::Up, 1},
+          {cube::Face::Front, 1},
+          {cube::Face::Down, 1}}},
+        // R B D' L2
+        {{{cube::Face::Right, 1},
+          {cube::Face::Back, 1},
+          {cube::Face::Down, -1},
+          {cube::Face::Left, 2}}},
+        // R L' U F2
+        {{{cube::Face::Right, 1},
+          {cube::Face::Left, -1},
+          {cube::Face::Up, 1},
+          {cube::Face::Front, 2}}},
+    }};
 
 /** Reports whether a face value is one of the six external cube faces. */
 [[nodiscard]] bool valid_face(cube::Face face) noexcept
@@ -530,20 +552,20 @@ void advance_playback() noexcept
 }
 
 /**
- * Whether a layer set is one a shared record may carry.
+ * Whether a layer set is one a shared record may carry, for a cube of `size`.
  *
- * One layer of this cube and no other. The mask field is wide enough for wide
- * moves and slices of a much larger cube, and a word arriving from a link is
- * free to name any of them -- but nothing in this application can make one, so
- * letting one in would put a move on the record that has no notation to be
- * written in and no gesture that could have produced it.
+ * One unbroken run of that cube's layers, short of all of them: exactly the
+ * moves this application can make and can write down. The mask field is wide
+ * enough for the slices of a much larger cube and for sets with gaps in them,
+ * and a word arriving from a link is free to name any of those -- but nothing
+ * here can make one, so letting one in would put a move on the record that has
+ * no notation to be written in and no command that could have produced it.
  */
-[[nodiscard]] bool restorable_layers(cube::LayerMask layers) noexcept
+[[nodiscard]] bool restorable_layers(cube::LayerMask layers,
+                                     int size) noexcept
 {
-    for (int index = 0; index < kCubeSize; ++index) {
-        if (layers == cube::layer(index)) return true;
-    }
-    return false;
+    return cube::is_layer_run(layers, size) &&
+           layers != cube::layers_through(0, size - 1);
 }
 
 }  // namespace
@@ -631,11 +653,12 @@ bool pointer_down(float x, float y) noexcept
     std::optional<interaction::NetPick> net_pick;
     std::optional<interaction::RingsPick> rings_pick;
     if (flat.net) {
-        net_pick = interaction::pick_net(x, y, state->placement.net, kCubeSize);
+        net_pick =
+            interaction::pick_net(x, y, state->placement.net, size_of_cube());
     }
     if (!net_pick && flat.rings) {
-        rings_pick =
-            interaction::pick_rings(x, y, state->placement.rings, kCubeSize);
+        rings_pick = interaction::pick_rings(x, y, state->placement.rings,
+                                             size_of_cube());
     }
 
     // Nothing to start: the flat view is the only one showing and the press
@@ -757,7 +780,7 @@ bool render() noexcept
         graphics::append_scene(
             scene, graphics::build_net_guides(state->interaction.net_guides(),
                                               state->placement.net,
-                                              kCubeSize));
+                                              size_of_cube()));
     }
 
     if (flat.rings) {
@@ -784,14 +807,14 @@ bool scramble(std::uint32_t seed, std::uint32_t move_count) noexcept
     // against a number typed into the box that would never finish playing.
     if (move_count == 0 || move_count > kMaxScrambleMoves) return false;
 
-    auto plan = cube::make_scramble(kCubeSize, seed, move_count);
+    auto plan = cube::make_scramble(size_of_cube(), seed, move_count);
     if (plan.empty()) return false;
 
     // The cube restarts but the viewpoint does not, so a sweep the controller
     // has not published yet still counts. Everything else goes, including a
     // snap that would otherwise commit onto the new cube.
     discard_playback();
-    state->cube_state = cube::CubeState(kCubeSize);
+    state->cube_state = cube::CubeState(size_of_cube());
 
     // The whole sequence is recorded before any of it has happened, and the
     // cursor walks up it as the moves land -- so a scramble interrupted half
@@ -820,8 +843,31 @@ void reset_cube() noexcept
 
     // Same split as scramble(): the cube is the only thing this command owns.
     discard_playback();
-    state->cube_state = cube::CubeState(kCubeSize);
+    state->cube_state = cube::CubeState(size_of_cube());
     state->timeline.clear();
+}
+
+bool set_cube_size(int size) noexcept
+{
+    if (!state || !valid_cube_size(size)) return false;
+
+    // Already this size, so nothing to do and nothing to throw away. The same
+    // answer the view commands give, and for the same reason: asking for what
+    // is there is not a command.
+    if (size == size_of_cube()) return true;
+
+    // A reset with one thing added. The controller is replaced rather than
+    // told, because the size is the rule it turns moves down by and a gesture
+    // half-made on the cube before is not something to carry across.
+    reset_cube();
+    state->cube_state = cube::CubeState(size);
+    state->interaction = interaction::InteractionController(size);
+    return true;
+}
+
+int cube_size() noexcept
+{
+    return state ? size_of_cube() : 0;
 }
 
 std::uintptr_t restore_buffer(std::uint32_t total_count) noexcept
@@ -838,10 +884,11 @@ std::uintptr_t restore_buffer(std::uint32_t total_count) noexcept
     return reinterpret_cast<std::uintptr_t>(state->restore.data());
 }
 
-bool restore_apply(std::uint32_t scramble_count,
+bool restore_apply(int size, std::uint32_t scramble_count,
                    std::uint32_t user_count) noexcept
 {
     if (!state) return false;
+    if (!valid_cube_size(size)) return false;
 
     // Taken out before it is read, whichever way this goes: the buffer belongs
     // to one restore, so a second call with nothing written into it is refused
@@ -861,13 +908,16 @@ bool restore_apply(std::uint32_t scramble_count,
     moves.reserve(words.size());
     for (const std::uint32_t word : words) {
         const auto move = cube::unpack(word);
-        if (!move || !restorable_layers(move->layers)) return false;
+        if (!move || !restorable_layers(move->layers, size)) return false;
         moves.push_back(*move);
     }
 
-    // Past every refusal, so what follows cannot leave the cube half restored.
+    // Past every refusal, so what follows cannot leave the cube half restored
+    // -- the size included, which is why it arrives with the record rather
+    // than through a call of its own before it.
     discard_playback();
-    state->cube_state = cube::CubeState(kCubeSize);
+    state->cube_state = cube::CubeState(size);
+    state->interaction = interaction::InteractionController(size);
 
     // Built through the ordinary operations rather than through a way in of
     // its own: the scramble is begun and then walked up, and the user's moves
@@ -889,10 +939,23 @@ bool restore_apply(std::uint32_t scramble_count,
     return true;
 }
 
-const std::vector<cube::CubeMove>& ambient_pattern(
-    std::uint32_t choice) noexcept
+std::vector<cube::CubeMove> ambient_pattern(std::uint32_t choice, int size)
 {
-    return ambient_patterns()[choice % kAmbientPatternCount];
+    std::vector<cube::CubeMove> pattern;
+    if (!valid_cube_size(size)) return pattern;
+
+    const auto& steps = kAmbientPatterns[choice % kAmbientPatternCount];
+    pattern.reserve(steps.size());
+    for (const AmbientStep& step : steps) {
+        // Depth one of an outer face, which every cube has: the table is
+        // faces, and this is where they meet the cube being watched.
+        auto move = depth_move(step.face, 1, 1, size);
+        if (!move) return {};
+
+        move->quarter_turns *= step.face_turns;
+        pattern.push_back(*move);
+    }
+    return pattern;
 }
 
 bool ambient_start(std::uint32_t choice) noexcept
@@ -908,7 +971,7 @@ bool ambient_start(std::uint32_t choice) noexcept
     // Nothing of a watched pattern is written down: it is an interlude, and
     // the cube it borrowed is put back at the end of it. Told to advance, its
     // very first turn would carry the cursor past the end of the record.
-    state->playback = Player{ambient_pattern(choice),
+    state->playback = Player{ambient_pattern(choice, size_of_cube()),
                              0,
                              kAmbientTempoMs,
                              cube::TimelineEffect::None,
@@ -1024,7 +1087,8 @@ std::uint32_t timeline_move(std::uint32_t index) noexcept
     return cube::pack(state->timeline.at(index));
 }
 
-bool turn_face(cube::Face face, int face_turns) noexcept
+bool turn_face(cube::Face face, int first_depth, int last_depth,
+               int face_turns) noexcept
 {
     if (!state) return false;
     if (!valid_face(face)) return false;
@@ -1035,9 +1099,13 @@ bool turn_face(cube::Face face, int face_turns) noexcept
     // very next keypress would land in the middle of the sequence.
     if (busy()) return false;
 
-    cube::CubeMove move = clockwise_move(face);
-    move.quarter_turns *= face_turns;
-    return state->interaction.start_move(move);
+    // Every refusal a range can earn is in here: off the cube, inside out, or
+    // all of it at once.
+    auto move = depth_move(face, first_depth, last_depth, size_of_cube());
+    if (!move) return false;
+
+    move->quarter_turns *= face_turns;
+    return state->interaction.start_move(*move);
 }
 
 bool set_view_mode(graphics::ViewMode mode) noexcept

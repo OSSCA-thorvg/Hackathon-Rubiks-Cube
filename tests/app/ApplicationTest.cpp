@@ -72,7 +72,7 @@ void undo_through_faces(const std::vector<rubiks::cube::CubeMove>& plan)
                               ? 2
                               : -move->quarter_turns * named.sign;
 
-        REQUIRE(rubiks::app::turn_face(named.face, turns));
+        REQUIRE(rubiks::app::turn_face(named.face, 1, 1, turns));
         settle();
     }
 }
@@ -166,7 +166,7 @@ TEST_CASE("played moves are nobody's, and the cube is busy until the last one")
     // Busy from the moment it is accepted, before a single frame has run --
     // which is the window a keyboard turn would otherwise slip through.
     REQUIRE(rubiks::app::is_busy());
-    REQUIRE_FALSE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1));
+    REQUIRE_FALSE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1, 1, 1));
 
     // Busy without a break from there to the end, and every frame it is busy
     // it asks for another -- between two of its moves nothing is animating,
@@ -183,7 +183,7 @@ TEST_CASE("played moves are nobody's, and the cube is busy until the last one")
     REQUIRE(rubiks::app::committed_move_count() == 0);
 
     // A move of the user's own counts again straight away.
-    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1));
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1, 1, 1));
     settle();
     REQUIRE(rubiks::app::committed_move_count() == 1);
 }
@@ -257,24 +257,126 @@ TEST_CASE("programmatic face turns commit and count like pointer moves")
 {
     const rubiks::test::EngineLifecycle engine(256, 256);
 
-    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1));
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1, 1, 1));
     REQUIRE(rubiks::app::is_busy());
     REQUIRE_FALSE(
-        rubiks::app::turn_face(rubiks::cube::Face::Up, 1));
+        rubiks::app::turn_face(rubiks::cube::Face::Up, 1, 1, 1));
     settle();
     REQUIRE_FALSE(rubiks::app::is_busy());
     REQUIRE_FALSE(rubiks::app::is_solved());
     REQUIRE(rubiks::app::committed_move_count() == 1);
 
-    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, -1));
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1, 1, -1));
     settle();
     REQUIRE(rubiks::app::is_solved());
     REQUIRE(rubiks::app::committed_move_count() == 2);
 
-    REQUIRE_FALSE(rubiks::app::turn_face(rubiks::cube::Face::Right, 0));
-    REQUIRE_FALSE(rubiks::app::turn_face(rubiks::cube::Face::Right, 3));
+    REQUIRE_FALSE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1, 1, 0));
+    REQUIRE_FALSE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1, 1, 3));
     REQUIRE_FALSE(rubiks::app::turn_face(
-        static_cast<rubiks::cube::Face>(99), 1));
+        static_cast<rubiks::cube::Face>(99), 1, 1, 1));
+}
+
+TEST_CASE("a depth range turns the layers behind a face")
+{
+    using rubiks::cube::Face;
+
+    const rubiks::test::EngineLifecycle engine(256, 256);
+    REQUIRE(rubiks::app::set_cube_size(5));
+
+    // Rw and the slice behind R are the same command with a different range,
+    // and both leave the cube unsolved and a move on the record.
+    REQUIRE(rubiks::app::turn_face(Face::Right, 1, 2, 1));
+    settle();
+    REQUIRE_FALSE(rubiks::app::is_solved());
+    REQUIRE(rubiks::app::committed_move_count() == 1);
+
+    REQUIRE(rubiks::app::turn_face(Face::Right, 2, 2, -1));
+    settle();
+    REQUIRE(rubiks::app::committed_move_count() == 2);
+
+    // Rw' takes back the two turns above between them: Rw then 2R' leaves R,
+    // and R' undoes it.
+    REQUIRE(rubiks::app::turn_face(Face::Right, 1, 1, -1));
+    settle();
+    REQUIRE(rubiks::app::is_solved());
+
+    // A range that is empty, inside out, off the far side -- or the whole
+    // cube, which is a rotation and has no notation here.
+    REQUIRE_FALSE(rubiks::app::turn_face(Face::Right, 0, 1, 1));
+    REQUIRE_FALSE(rubiks::app::turn_face(Face::Right, 3, 2, 1));
+    REQUIRE_FALSE(rubiks::app::turn_face(Face::Right, 1, 6, 1));
+    REQUIRE_FALSE(rubiks::app::turn_face(Face::Right, 1, 5, 1));
+    REQUIRE(rubiks::app::is_solved());
+    REQUIRE(rubiks::app::committed_move_count() == 3);
+}
+
+TEST_CASE("the cube is built at any offered size and starts over with it")
+{
+    using rubiks::app::cube_size;
+    using rubiks::app::kMaxCubeSize;
+    using rubiks::app::kMinCubeSize;
+    using rubiks::app::set_cube_size;
+
+    const rubiks::test::EngineLifecycle engine(256, 256);
+    REQUIRE(cube_size() == 3);
+
+    for (int size = kMinCubeSize; size <= kMaxCubeSize; ++size) {
+        REQUIRE(set_cube_size(size));
+        REQUIRE(cube_size() == size);
+        REQUIRE(rubiks::app::is_solved());
+
+        // The layers this size has can all be turned, and the one past its
+        // edge cannot -- which is the controller having been rebuilt with it.
+        REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, size, size,
+                                       1));
+        settle();
+        REQUIRE_FALSE(rubiks::app::is_solved());
+        REQUIRE_FALSE(rubiks::app::turn_face(rubiks::cube::Face::Right,
+                                             size + 1, size + 1, 1));
+    }
+
+    // Sizes this application does not build change nothing at all.
+    REQUIRE(set_cube_size(4));
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Up, 1, 1, 1));
+    settle();
+    REQUIRE_FALSE(set_cube_size(kMinCubeSize - 1));
+    REQUIRE_FALSE(set_cube_size(kMaxCubeSize + 1));
+    REQUIRE(cube_size() == 4);
+    REQUIRE(rubiks::app::committed_move_count() == 1);
+
+    // Asking for the size already in hand is a confirmation, not a command:
+    // the session it would have thrown away is still here.
+    REQUIRE(set_cube_size(4));
+    REQUIRE(rubiks::app::committed_move_count() == 1);
+    REQUIRE_FALSE(rubiks::app::is_solved());
+
+    // A different size is a fresh cube and an empty record.
+    REQUIRE(set_cube_size(6));
+    REQUIRE(rubiks::app::is_solved());
+    REQUIRE(rubiks::app::committed_move_count() == 0);
+    REQUIRE(rubiks::app::timeline_length() == 0);
+}
+
+TEST_CASE("a change of size keeps how the cube is being looked at")
+{
+    using rubiks::graphics::FlatStyle;
+    using rubiks::graphics::Palette;
+    using rubiks::graphics::ViewMode;
+
+    const rubiks::test::EngineLifecycle engine(256, 256);
+
+    REQUIRE(rubiks::app::set_view_mode(ViewMode::Flat));
+    REQUIRE(rubiks::app::set_flat_style(FlatStyle::Rings));
+    REQUIRE(rubiks::app::set_palette(Palette::HighContrast));
+    REQUIRE(rubiks::app::set_speed_scale(2.0f));
+
+    REQUIRE(rubiks::app::set_cube_size(7));
+
+    REQUIRE(rubiks::app::view_mode() == ViewMode::Flat);
+    REQUIRE(rubiks::app::flat_style() == FlatStyle::Rings);
+    REQUIRE(rubiks::app::palette() == Palette::HighContrast);
+    REQUIRE(rubiks::app::speed_scale() == 2.0f);
 }
 
 TEST_CASE("view modes preserve state and net mode takes pointer gestures")

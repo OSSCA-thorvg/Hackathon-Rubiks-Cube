@@ -85,7 +85,7 @@ inline void arrive(std::uint32_t seed, std::uint32_t moves)
 /** Turns one face and waits for it to settle, the way a user's move does. */
 inline void turn(cube::Face face, int face_turns)
 {
-    REQUIRE(rubiks::app::turn_face(face, face_turns));
+    REQUIRE(rubiks::app::turn_face(face, 1, 1, face_turns));
     settle();
 }
 

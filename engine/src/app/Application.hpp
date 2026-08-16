@@ -101,6 +101,42 @@ void pointer_cancel() noexcept;
  */
 [[nodiscard]] bool advance(double elapsed_ms) noexcept;
 
+/**
+ * The sizes of cube this application will build.
+ *
+ * Two is the smallest cube there is. Nine is where the drawing stops being
+ * worth looking at rather than where it stops working: the ring diagram packs
+ * 6N^2 slots into one figure, and a frame draws that many stickers three times
+ * over. Both ends are read in one place, so moving either is one number.
+ */
+inline constexpr int kMinCubeSize = 2;
+inline constexpr int kMaxCubeSize = 9;
+
+/**
+ * Builds a cube of a different size, and starts the session over.
+ *
+ * Everything the cube is made of goes: the record, whatever was playing, and
+ * any turn in flight. There is no carrying a record across, because a move of
+ * the old cube may name a layer the new one does not have.
+ *
+ * What does not go is how the cube is being looked at -- the viewpoint, the
+ * views on screen, the flat drawing, the shades, the speed. The size is a
+ * property of the cube; those are the user's, at this moment as at every
+ * other.
+ *
+ * The size already in use is accepted and changes nothing: asking for what is
+ * already there is a confirmation rather than a command, and a session thrown
+ * away by one would be a surprise.
+ *
+ * @return true when the size is one this application builds; false for
+ *         anything outside kMinCubeSize..kMaxCubeSize, which leaves the cube
+ *         exactly as it was.
+ */
+[[nodiscard]] bool set_cube_size(int size) noexcept;
+
+/** How many layers the cube has along an axis; 0 outside a lifecycle. */
+[[nodiscard]] int cube_size() noexcept;
+
 /** The largest scramble that can be asked for. */
 inline constexpr std::uint32_t kMaxScrambleMoves = 100;
 
@@ -144,9 +180,17 @@ inline constexpr int kAmbientMaxPeriod = 200;
  * that matters about it -- that each of its patterns brings the cube back
  * round within kAmbientMaxPeriod -- is arithmetic, and checking arithmetic
  * needs the numbers rather than an application to play them into.
+ *
+ * The patterns are written as face turns and built for the cube in hand, so
+ * the same four are watchable at every size. That is also what retired the
+ * slice one: a middle layer is not something every cube has, and the same
+ * letters do not come back round in the same number of rounds once a cube has
+ * layers inside.
+ *
+ * Empty for a size this application does not build.
  */
-[[nodiscard]] const std::vector<cube::CubeMove>& ambient_pattern(
-    std::uint32_t choice) noexcept;
+[[nodiscard]] std::vector<cube::CubeMove> ambient_pattern(std::uint32_t choice,
+                                                          int size);
 
 /**
  * Begins watching: the cube is put away and a pattern repeats until stopped.
@@ -301,31 +345,48 @@ inline constexpr std::uint32_t kMaxRestoreMoves = 4096;
  * leaves the cube exactly as it was and the caller starts a fresh session
  * rather than retrying.
  *
+ * The size comes in here rather than through set_cube_size() beforehand, so
+ * that a record and the cube it belongs to arrive together: a size set first
+ * and a record refused after it would leave a cube nobody asked for.
+ *
  * What is checked is what would otherwise be read out of range or turned into
- * a move that cannot exist: the two counts summing to what restore_buffer was
- * told, and each word's axis, turns and layer mask. The mask is held to a
- * single layer of this cube, which is what keeps a hand-written link from
- * bringing in a wide move that has no notation to be written in.
+ * a move that cannot exist: the size, the two counts summing to what
+ * restore_buffer was told, and each word's axis, turns and layer mask. The
+ * mask is held to one unbroken run of layers short of the whole cube -- the
+ * same set of moves this application can make and can write down -- which is
+ * what keeps a hand-written link from bringing in a move with no notation.
  *
  * The record is built through the ordinary timeline operations, so the cursor
  * lands at the end of it and the user's move count follows from the record the
  * way it always does. The cube arrives at once, without animation.
  *
- * @return false without a buffer to read, for counts that do not match it, and
- *         for any word the payload cannot carry.
+ * @return false without a buffer to read, for a size this application does not
+ *         build, for counts that do not match the buffer, and for any word the
+ *         payload cannot carry.
  */
-[[nodiscard]] bool restore_apply(std::uint32_t scramble_count,
+[[nodiscard]] bool restore_apply(int size, std::uint32_t scramble_count,
                                  std::uint32_t user_count) noexcept;
 
 /**
- * Starts one animated face-relative turn.
+ * Starts one animated turn of the layers a face names.
+ *
+ * Depth 1 is the face itself and depths count inwards, so `(Right, 1, 1)` is
+ * R, `(Right, 1, 2)` is Rw, and `(Right, 2, 2)` is the slice behind it. That
+ * is the whole of how a wide move and a slice differ, which is why they are
+ * one command with a range rather than a command each.
  *
  * `face_turns` is 1 clockwise, -1 counter-clockwise, or 2 for a half turn as
  * seen from outside `face`.
  *
+ * A range covering every layer is refused. That is a whole-cube rotation: it
+ * leaves the cube as solved or unsolved as it found it, it has no notation in
+ * the letters this application writes, and refusing it here is what keeps
+ * "every move that can be made can be written down" true.
+ *
  * @return true when the command was accepted.
  */
-[[nodiscard]] bool turn_face(cube::Face face, int face_turns) noexcept;
+[[nodiscard]] bool turn_face(cube::Face face, int first_depth, int last_depth,
+                             int face_turns) noexcept;
 
 /** Changes the rendered views while preserving cube, camera, and game state. */
 [[nodiscard]] bool set_view_mode(graphics::ViewMode mode) noexcept;

@@ -45,24 +45,36 @@ TEST_CASE("every watching pattern brings the cube back round within the bound")
     // out would only add a few thousand frames between the question and the
     // answer. The orders themselves stay in the phase document -- this holds
     // whatever they are, which is what makes it a guard on the next edit.
-    for (std::uint32_t choice = 0; choice < kAmbientPatternCount; ++choice) {
-        const auto& pattern = ambient_pattern(choice);
-        REQUIRE_FALSE(pattern.empty());
+    //
+    // Every size, because the bound is a fact about the table on each of the
+    // cubes it can be watched on: the same four letters come back round in a
+    // different number of rounds once a cube has layers inside, and a pattern
+    // that outstays the bound on a 5x5 is one nobody would see return.
+    for (int size = rubiks::app::kMinCubeSize;
+         size <= rubiks::app::kMaxCubeSize; ++size) {
+        for (std::uint32_t choice = 0; choice < kAmbientPatternCount;
+             ++choice) {
+            const auto pattern = ambient_pattern(choice, size);
+            REQUIRE_FALSE(pattern.empty());
 
-        rubiks::cube::CubeState cube(3);
-        int rounds = 0;
-        while (rounds < kAmbientMaxPeriod) {
-            cube.apply(pattern);
-            ++rounds;
-            if (cube.is_solved()) break;
+            rubiks::cube::CubeState cube(size);
+            int rounds = 0;
+            while (rounds < kAmbientMaxPeriod) {
+                cube.apply(pattern);
+                ++rounds;
+                if (cube.is_solved()) break;
+            }
+
+            REQUIRE(cube.is_solved());
+
+            // And it is a pattern rather than a shuffle of nothing: one round
+            // of it leaves the cube somewhere else.
+            REQUIRE(rounds > 1);
         }
-
-        REQUIRE(cube.is_solved());
-
-        // And it is a pattern rather than a shuffle of nothing: one round of
-        // it leaves the cube somewhere else.
-        REQUIRE(rounds > 1);
     }
+
+    // A size no cube is built at has no pattern to watch on it.
+    REQUIRE(ambient_pattern(0, rubiks::app::kMinCubeSize - 1).empty());
 }
 
 TEST_CASE("a choice picks a pattern by remainder, so every value is one")
@@ -72,9 +84,10 @@ TEST_CASE("a choice picks a pattern by remainder, so every value is one")
 
     // No rejection path and no size to ask for first: the largest value the
     // boundary can carry names a pattern just as the smallest does.
-    REQUIRE(ambient_pattern(kAmbientPatternCount) == ambient_pattern(0));
-    REQUIRE(ambient_pattern(0xffffffffU) ==
-            ambient_pattern(0xffffffffU % kAmbientPatternCount));
+    REQUIRE(ambient_pattern(kAmbientPatternCount, 3) ==
+            ambient_pattern(0, 3));
+    REQUIRE(ambient_pattern(0xffffffffU, 3) ==
+            ambient_pattern(0xffffffffU % kAmbientPatternCount, 3));
 }
 
 TEST_CASE("watching repeats without end and stays nobody's")
@@ -124,7 +137,7 @@ TEST_CASE("stopping puts back the cube and the count from before watching")
     settle();
     const auto scrambled = drawn_frame();
 
-    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1));
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1, 1, 1));
     settle();
     REQUIRE(rubiks::app::committed_move_count() == 1);
     const auto before = drawn_frame();
@@ -148,7 +161,7 @@ TEST_CASE("stopping puts back the cube and the count from before watching")
 
     // A cube the user can go on turning, from exactly where they left it:
     // taking that one turn back lands on the scramble it was made from.
-    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, -1));
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1, 1, -1));
     settle();
     REQUIRE(drawn_frame() == scrambled);
     REQUIRE(rubiks::app::committed_move_count() == 2);

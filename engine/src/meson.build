@@ -56,6 +56,8 @@ if host_machine.system() == 'emscripten'
     '_thorvg_rubiks_timeline_scramble_end',
     '_thorvg_rubiks_timeline_move',
     '_thorvg_rubiks_turn_face',
+    '_thorvg_rubiks_set_cube_size',
+    '_thorvg_rubiks_cube_size',
     '_thorvg_rubiks_set_view_mode',
     '_thorvg_rubiks_view_mode',
     '_thorvg_rubiks_set_flat_style',

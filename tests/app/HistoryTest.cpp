@@ -357,7 +357,7 @@ TEST_CASE("a rewind is refused while anything else owns the cube")
         arrive(13U, 4U);
         turn(rubiks::cube::Face::Right, 1);
 
-        REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Up, 1));
+        REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Up, 1, 1, 1));
         REQUIRE_FALSE(rubiks::app::undo());
         REQUIRE_FALSE(rubiks::app::solve_rewind());
         settle();
@@ -432,7 +432,7 @@ TEST_CASE("a turn confirmed by the next press still reaches the record")
 {
     const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
-    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1));
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1, 1, 1));
 
     // One frame, so the turn is genuinely still settling when the press lands.
     REQUIRE(rubiks::app::advance(kFrameMs));

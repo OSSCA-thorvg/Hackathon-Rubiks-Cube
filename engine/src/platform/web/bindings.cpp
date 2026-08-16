@@ -158,15 +158,16 @@ EMSCRIPTEN_KEEPALIVE std::uintptr_t thorvg_rubiks_restore_buffer(
 /**
  * Puts the written record on the cube, after checking all of it at once.
  *
- * Applied without animation. A refusal leaves the cube untouched, so the
+ * Applied without animation, onto a cube of `size` -- the record and the cube
+ * it belongs to arrive together, so a refusal leaves both untouched and the
  * caller starts a fresh session rather than retrying.
  *
  * @return one when the whole record was accepted and applied; otherwise zero.
  */
 EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_restore_apply(
-    std::uint32_t scramble_count, std::uint32_t user_count) noexcept
+    int size, std::uint32_t scramble_count, std::uint32_t user_count) noexcept
 {
-    return rubiks::app::restore_apply(scramble_count, user_count) ? 1 : 0;
+    return rubiks::app::restore_apply(size, scramble_count, user_count) ? 1 : 0;
 }
 
 /**
@@ -299,21 +300,44 @@ EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_timeline_move(
 }
 
 /**
- * Starts an animated face-relative turn.
+ * Starts an animated turn of the layers a face names.
  *
- * Face follows cube::Face order and turns are -1, 1, or 2.
+ * Face follows cube::Face order and turns are -1, 1, or 2. Depth 1 is the
+ * face itself and depths count inwards, so `(face, 1, 1)` is the face turn,
+ * `(face, 1, 2)` is the wide move, and `(face, 2, 2)` is the slice behind it.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_turn_face(int face,
-                                                int face_turns) noexcept
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_turn_face(int face, int first_depth,
+                                                 int last_depth,
+                                                 int face_turns) noexcept
 {
     constexpr int kFirstFace = static_cast<int>(rubiks::cube::Face::Right);
     constexpr int kLastFace = static_cast<int>(rubiks::cube::Face::Back);
     if (face < kFirstFace || face > kLastFace) return 0;
 
     return rubiks::app::turn_face(static_cast<rubiks::cube::Face>(face),
-                                  face_turns)
+                                  first_depth, last_depth, face_turns)
                ? 1
                : 0;
+}
+
+/**
+ * Builds a cube of a different size, starting the session over.
+ *
+ * How the cube is being looked at survives; the record and anything playing
+ * do not.
+ *
+ * @return one when the size is one the engine builds; otherwise zero, and
+ *         nothing has changed.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_cube_size(int size) noexcept
+{
+    return rubiks::app::set_cube_size(size) ? 1 : 0;
+}
+
+/** How many layers the cube has along an axis; zero before initialization. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_cube_size() noexcept
+{
+    return rubiks::app::cube_size();
 }
 
 /** Changes the visible render regions; invalid integer values are rejected. */

@@ -55,6 +55,25 @@ struct SurfaceSticker {
 /** The layer along a face's own axis where that face is the outer surface. */
 [[nodiscard]] int outer_layer(Face face, int size) noexcept;
 
+/**
+ * The layers a run of depths measured from `face` selects.
+ *
+ * Depth 1 is the face itself and depths grow inwards, which is how every
+ * notation of a slice or a wide move reads: `R` is depth 1, `Rw` is 1 through
+ * 2, `2R` is 2 through 2. Written here rather than at either caller because
+ * the two callers are inverses of each other -- a command turns a depth range
+ * into layers and a move log turns layers back into one -- and a convention
+ * with two implementations is a convention with two chances to differ.
+ *
+ * Which end of the axis a face sits at is the whole of the difference between
+ * the two directions, and `outer_layer()` above already answers it.
+ *
+ * @return zero for a run that is empty, reversed, or reaches past the far
+ *         side, which is the mask no move can have.
+ */
+[[nodiscard]] LayerMask depth_layers(Face face, int first_depth, int last_depth,
+                                     int size) noexcept;
+
 [[nodiscard]] int coordinate_on(Axis axis, const CubiePosition& p) noexcept;
 [[nodiscard]] int coordinate_on(Axis axis, const SurfaceSticker& s) noexcept;
 

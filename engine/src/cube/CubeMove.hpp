@@ -27,6 +27,31 @@ using LayerMask = std::uint32_t;
 }
 
 /**
+ * Whether a mask is one unbroken run of layers, all of them inside the cube.
+ *
+ * The shape of every move this application can make and every move it can be
+ * handed: a single layer, a wide move from a face, or a block of slices
+ * between two of them. A mask with a gap in it is not one of those -- nothing
+ * turns two layers with a still one between them -- and it has no notation to
+ * be written in either, so the same answer serves both questions.
+ *
+ * A size wide enough to shift a mask off the end is refused rather than
+ * wrapped: `layer()` is a shift, and this is the function that would have to
+ * have thought about it.
+ */
+[[nodiscard]] constexpr bool is_layer_run(LayerMask layers, int size) noexcept
+{
+    if (layers == 0 || size <= 0 || size >= 32) return false;
+    if ((layers >> size) != 0) return false;
+
+    // Slid down until the run starts at the bottom, a run and only a run is
+    // all ones -- and a value of all ones is the one that carries on adding.
+    LayerMask run = layers;
+    while ((run & 1U) == 0) run >>= 1U;
+    return (run & (run + 1U)) == 0;
+}
+
+/**
  * A rotation of one or more layers about an axis, in quarter turns.
  *
  * This struct is the general form, which is why there is no string notation

@@ -125,6 +125,22 @@ int outer_layer(Face face, int size) noexcept
     return is_positive_face(face) ? size - 1 : 0;
 }
 
+LayerMask depth_layers(Face face, int first_depth, int last_depth,
+                       int size) noexcept
+{
+    if (size <= 0 || size >= 32) return 0;
+    if (first_depth < 1 || last_depth < first_depth || last_depth > size) {
+        return 0;
+    }
+
+    // Counting inwards from a face at the far end of its axis is counting
+    // down through the indices, so the run's two ends swap over with it.
+    if (outer_layer(face, size) == size - 1) {
+        return layers_through(size - last_depth, size - first_depth);
+    }
+    return layers_through(first_depth - 1, last_depth - 1);
+}
+
 int coordinate_on(Axis axis, const CubiePosition& p) noexcept
 {
     switch (axis) {

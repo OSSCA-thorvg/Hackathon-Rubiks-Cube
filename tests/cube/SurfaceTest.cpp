@@ -260,3 +260,47 @@ TEST_CASE("the surface is six faces of N by N stickers, each named once")
 
     REQUIRE(rubiks::cube::surface_stickers(0).empty());
 }
+
+TEST_CASE("depths are counted inwards from the face they are named after")
+{
+    using rubiks::cube::depth_layers;
+    using rubiks::cube::layers_through;
+
+    constexpr int kBig = 5;
+
+    // The named face turn, at every size, is depth one of that face.
+    for (const int size : {2, 3, 5}) {
+        REQUIRE(depth_layers(Face::Right, 1, 1, size) ==
+                rubiks::cube::moves::R(size).layers);
+        REQUIRE(depth_layers(Face::Left, 1, 1, size) ==
+                rubiks::cube::moves::L(size).layers);
+        REQUIRE(depth_layers(Face::Up, 1, 1, size) ==
+                rubiks::cube::moves::U(size).layers);
+        REQUIRE(depth_layers(Face::Down, 1, 1, size) ==
+                rubiks::cube::moves::D(size).layers);
+        REQUIRE(depth_layers(Face::Front, 1, 1, size) ==
+                rubiks::cube::moves::F(size).layers);
+        REQUIRE(depth_layers(Face::Back, 1, 1, size) ==
+                rubiks::cube::moves::B(size).layers);
+    }
+
+    // Rw, 3Rw and 2R on a 5x5, whose indices count the other way from R.
+    REQUIRE(depth_layers(Face::Right, 1, 2, kBig) == layers_through(3, 4));
+    REQUIRE(depth_layers(Face::Right, 1, 3, kBig) == layers_through(2, 4));
+    REQUIRE(depth_layers(Face::Right, 2, 2, kBig) == layer(3));
+    REQUIRE(depth_layers(Face::Right, 2, 3, kBig) == layers_through(2, 3));
+
+    // The same runs from the face at the other end of the same axis.
+    REQUIRE(depth_layers(Face::Left, 1, 2, kBig) == layers_through(0, 1));
+    REQUIRE(depth_layers(Face::Left, 2, 2, kBig) == layer(1));
+
+    // The middle slice is depth three from either side of a 5x5.
+    REQUIRE(depth_layers(Face::Right, 3, 3, kBig) == layer(2));
+    REQUIRE(depth_layers(Face::Left, 3, 3, kBig) == layer(2));
+
+    // Empty, reversed, off the far side, and an unusable size.
+    REQUIRE(depth_layers(Face::Right, 0, 2, kBig) == 0);
+    REQUIRE(depth_layers(Face::Right, 3, 2, kBig) == 0);
+    REQUIRE(depth_layers(Face::Right, 1, kBig + 1, kBig) == 0);
+    REQUIRE(depth_layers(Face::Right, 1, 1, 0) == 0);
+}

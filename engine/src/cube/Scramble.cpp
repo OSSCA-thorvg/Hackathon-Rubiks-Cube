@@ -64,7 +64,12 @@ std::vector<CubeMove> make_scramble(int size, std::uint32_t seed,
                                     std::size_t move_count)
 {
     std::vector<CubeMove> sequence;
-    if (size <= 0 || move_count == 0) return sequence;
+    if (size < 2 || move_count == 0) return sequence;
+
+    // Half the cube, rounded down: a wide move deeper than that is the same
+    // layers turned from the other side, and on an odd cube the middle slice
+    // is reached from either end. So this is every distinct move there is.
+    const int deepest = size / 2;
 
     sequence.reserve(move_count);
     XorShift32 random(seed);
@@ -72,11 +77,24 @@ std::vector<CubeMove> make_scramble(int size, std::uint32_t seed,
 
     for (std::size_t index = 0; index < move_count; ++index) {
         const Axis axis = next_axis(random, previous);
-        const int layer_index = random.below(2) == 0 ? 0 : size - 1;
+        const bool from_far_end = random.below(2) != 0;
+
+        // Not drawn at all when there is nothing to choose between. A 3x3 has
+        // one depth, so its sequences stay exactly the ones this generator has
+        // always produced for a seed -- the draw that never had an answer is
+        // the draw that must not consume one.
+        const int depth = deepest == 1
+                              ? 1
+                              : 1 + static_cast<int>(random.below(
+                                        static_cast<std::uint32_t>(deepest)));
+
         const int quarter_turns = turn_from(random.below(3));
 
-        sequence.push_back(
-            CubeMove{axis, layer(layer_index), quarter_turns});
+        const LayerMask layers =
+            from_far_end ? layers_through(size - depth, size - 1)
+                         : layers_through(0, depth - 1);
+
+        sequence.push_back(CubeMove{axis, layers, quarter_turns});
         previous = axis;
     }
 

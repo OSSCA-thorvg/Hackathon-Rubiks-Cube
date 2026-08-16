@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
@@ -35,6 +36,47 @@ CubeState after(const CubeMove& move, int count, int size = kSize)
         state.apply(move);
     }
     return state;
+}
+
+/** How many layers a mask holds. */
+int width_of(rubiks::cube::LayerMask layers)
+{
+    int count = 0;
+    for (rubiks::cube::LayerMask bit = layers; bit != 0; bit >>= 1U) {
+        count += static_cast<int>(bit & 1U);
+    }
+    return count;
+}
+
+/**
+ * Stickers away from any face's border that are not the color they began.
+ *
+ * The pieces an outer-face turn can never reach: a face's border belongs to
+ * the four layers around it, and everything inside it moves only when a move
+ * reaches past the surface. Zero on a cube with no inside to speak of.
+ */
+int disturbed_inner_stickers(const CubeState& state)
+{
+    const int size = state.size();
+    const int last = size - 1;
+    int disturbed = 0;
+
+    for (int a = 1; a < last; ++a) {
+        for (int b = 1; b < last; ++b) {
+            const std::pair<Face, FaceColor> checks[] = {
+                {Face::Right, state.at(last, a, b).sticker(Face::Right)},
+                {Face::Left, state.at(0, a, b).sticker(Face::Left)},
+                {Face::Up, state.at(a, last, b).sticker(Face::Up)},
+                {Face::Down, state.at(a, 0, b).sticker(Face::Down)},
+                {Face::Front, state.at(a, b, last).sticker(Face::Front)},
+                {Face::Back, state.at(a, b, 0).sticker(Face::Back)},
+            };
+            for (const auto& [face, color] : checks) {
+                if (color != solved_color(face)) ++disturbed;
+            }
+        }
+    }
+    return disturbed;
 }
 
 /** The whole cube turning about an axis: every layer at once. */
@@ -253,6 +295,64 @@ TEST_CASE("seeded scrambles are reproducible and structurally valid")
     }
 }
 
+TEST_CASE("a scramble reaches the layers inside a larger cube")
+{
+    using rubiks::cube::is_layer_run;
+
+    for (int size = 2; size <= 9; ++size) {
+        const auto scramble = rubiks::cube::make_scramble(size, 0xabcdef01U, 60);
+        REQUIRE(scramble.size() == 60);
+
+        // Every move is a face turn or a wide move from one of the two faces
+        // of its axis, which is one unbroken run of layers reaching an edge
+        // and never reaching past the middle.
+        for (std::size_t index = 0; index < scramble.size(); ++index) {
+            const CubeMove& move = scramble[index];
+            REQUIRE(is_layer_run(move.layers, size));
+            REQUIRE(((move.layers & layer(0)) != 0 ||
+                     (move.layers & layer(size - 1)) != 0));
+            REQUIRE(width_of(move.layers) <= size / 2);
+            REQUIRE((move.quarter_turns == -1 || move.quarter_turns == 1 ||
+                     move.quarter_turns == 2));
+            if (index > 0) REQUIRE(move.axis != scramble[index - 1].axis);
+        }
+
+        CubeState state(size);
+        state.apply(scramble);
+        REQUIRE_FALSE(state.is_solved());
+
+        // The point of the depths, read off the cube rather than off the
+        // moves: the pieces away from a face's border are the ones only a
+        // move reaching inside can disturb, and on a cube that has any they
+        // have been disturbed. A scramble of outer faces alone would leave
+        // every one of them where it started however long it ran.
+        if (size >= 4) REQUIRE(disturbed_inner_stickers(state) > 0);
+
+        state.apply(inverse(scramble));
+        REQUIRE(state.is_solved());
+    }
+}
+
+TEST_CASE("a run of layers is told apart from a set with a gap in it")
+{
+    using rubiks::cube::is_layer_run;
+
+    REQUIRE(is_layer_run(layer(0), 3));
+    REQUIRE(is_layer_run(layer(2), 3));
+    REQUIRE(is_layer_run(layers_through(0, 2), 3));
+    REQUIRE(is_layer_run(layers_through(1, 2), 3));
+
+    // A gap, an empty set, and layers the cube does not have.
+    REQUIRE_FALSE(is_layer_run(layer(0) | layer(2), 3));
+    REQUIRE_FALSE(is_layer_run(0, 3));
+    REQUIRE_FALSE(is_layer_run(layer(3), 3));
+    REQUIRE_FALSE(is_layer_run(layers_through(0, 3), 3));
+
+    // A size that would shift the mask off the end answers rather than wraps.
+    REQUIRE_FALSE(is_layer_run(layer(0), 32));
+    REQUIRE_FALSE(is_layer_run(layer(0), 0));
+}
+
 TEST_CASE("a generated scramble is restored by its inverse")
 {
     const auto scramble = rubiks::cube::make_scramble(kSize, 42U);
@@ -277,7 +377,7 @@ TEST_CASE("zero seed is deterministic and invalid scramble sizes are empty")
 TEST_CASE("the move engine holds for an even cube size")
 {
     // N = 2 is the size where signed {-1, 0, +1} coordinates would have gone
-    // half-integer. It is a smoke test, not a supported product size.
+    // half-integer, and it is the smallest size the application offers.
     constexpr int kSmall = 2;
     const CubeState solved(kSmall);
     REQUIRE(solved.size() == kSmall);

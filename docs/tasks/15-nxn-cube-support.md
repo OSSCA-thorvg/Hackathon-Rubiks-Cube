@@ -2,7 +2,7 @@
 
 ## Status
 
-`In progress`
+`Completed`
 
 ## Objective
 
@@ -125,24 +125,28 @@ payload = version(1) ‖ size(1) ‖ scramble_count(4) ‖ packed(4) × scramble
 - 복원 ABI는 크기를 함께 받습니다: `restore_apply(size, scramble_count, user_count)`. 크기를 따로 `set_cube_size`로 먼저 세우면 "크기는 바뀌었는데 기록은 거절된" 중간 상태가 생기는데, 한 호출로 받으면 Phase 14의 "전부 검증한 뒤에 전부 적용" 성질이 크기까지 덮습니다. 거절되면 크기도 그대로입니다.
 - 왕복 test는 Phase 14의 범위 그대로이되 크기가 추가됩니다: cube 상태 동치 + 적용 구간 동치 + **크기 동치**.
 
-### 관람 패턴은 크기를 타지 않는 표로 바꾼다
+### 관람: 작은 큐브는 표, 큰 큐브는 걸음
 
-Phase 10의 표에는 `R U M' F`가 있습니다. `M'`은 `⌊N/2⌋` 번째 layer라 **짝수 크기에는 존재하지 않고**, 홀수 크기에서도 3×3의 `M`과 같은 것이 아닙니다. 그리고 나머지 세 패턴도 크기가 커지면 위수가 달라집니다 — 바깥 면만 도는 수순이라도 큰 cube에서는 wing과 center piece가 더 긴 궤도를 만들기 때문입니다.
+Phase 10의 표에는 `R U M' F`가 있습니다. `M'`은 `⌊N/2⌋` 번째 layer라 **짝수 크기에는 존재하지 않고**, 홀수 크기에서도 3×3의 `M`과 같은 것이 아닙니다. 그리고 나머지 세 패턴도 크기가 커지면 위수가 달라집니다.
 
-표를 **바깥 면 네 수**로만 이루어진 것으로 갈고, 모든 지원 크기에서 위수를 계산해 골랐습니다.
+그래서 표를 **면 + 큐브의 몫**(`Face` = `[1,1]`, `Wide` = `[1,⌊N/2⌋]`, `Slice` = `[⌊N/2⌋,⌊N/2⌋]`)으로 다시 쓰고 슬라이스 패턴을 뺐습니다. 2×2와 3×3에서는 그 절반이 한 겹이라 세 몫이 전부 같은 면 회전이 되어, **두 크기의 관람은 이 phase 이전과 글자 그대로 같습니다.**
 
-| 패턴 | 2×2 | 3×3 | 4×4 이상 |
+| 패턴 | 2×2 | 3×3 | 복귀 위수 |
 | --- | --- | --- | --- |
-| `R U' D' F` | 18 | 72 | 72 |
-| `R U F D` | 45 | 90 | 180 |
-| `R B D' L2` | 30 | 60 | 60 |
-| `R L' U F2` | 36 | 180 | 180 |
+| `R U' D' F` | 18 | 72 | ≤ `kAmbientMaxPeriod` |
+| `R U F D` | 45 | 90 | ≤ `kAmbientMaxPeriod` |
+| `R B D' L2` | 30 | 60 | ≤ `kAmbientMaxPeriod` |
+| `R L' U F2` | 36 | 180 | ≤ `kAmbientMaxPeriod` |
 
-(4×4 이상에서 값이 일정한 것은 궤도가 그때 이미 포화되기 때문입니다. 9×9도 같습니다.)
+**4×4부터는 표가 아니라 걸음입니다.** 네 수짜리 수순은 큰 큐브에서 같은 띠 몇 개만 계속 돌립니다 — 27개 띠 중 다섯을 만지고 나머지는 처음 자리에 그대로 앉아 있어, 아무리 오래 봐도 큐브의 대부분이 정지 화면입니다(사용자 확인). 걸음은 그 반대로, **덮는 것 자체가 목적**인 규칙입니다.
 
-기존 표의 `R U F' D`는 3×3에서 77이지만 4×4 이상에서 308이라 탈락했습니다 — `kAmbientMaxPeriod = 200`을 넘고, 300ms/수로 6분이 넘어 "관람 한 번 안에 처음 상태를 지나간다"는 Phase 10의 약속을 지키지 못합니다.
+- 면은 매 수마다 여섯을 한 칸씩 돌고, 깊이는 여섯 면이 한 바퀴를 돈 뒤에야 다음으로 넘어갑니다. 두 counter가 발을 맞추지 않으므로 **(면 × 깊이) 조합을 정확히 한 번씩** 지나갑니다. 한 바퀴는 `6 × ⌈N/2⌉` 수입니다 (4×4는 12수, 9×9는 30수).
+- 깊이는 `⌈N/2⌉`까지 갑니다 — 반올림이라 홀수 큐브의 가운데 layer도 포함되고, 어느 면에서 세도 같은 layer라 **모든 띠가 빠짐없이** 돌아갑니다(9×9에서 27/27).
+- 한 수 걸러 하나는 그 깊이 위의 layer를 함께 데려가고(`Wide`), 세 수마다 하나는 반대로 돕니다. 슬라이스가 미끄러지다가 블록이 흔들리는 그림이 되도록 한 것입니다.
 
-`kAmbientMaxPeriod = 200`은 그대로 두되, 그 성질을 **모든 지원 크기 × 모든 패턴**에서 검사합니다. 상한이 3×3만의 사실이었던 것이 이 phase에서 여덟 크기의 사실이 됩니다. `ambient_pattern`은 크기를 인자로 받아 값으로 돌려줍니다 — 크기마다 다른 표를 static으로 들고 있을 이유가 없고, 관람 시작은 frame 경로가 아닙니다.
+**대가는 복귀입니다.** 큰 큐브 전체를 섞는 수순은 아주 큰 군의 원소라, 반복해서 solved로 돌아오기까지의 바퀴 수가 천문학적입니다(9×9에서 8백만 바퀴 규모). 이건 조율로 줄일 수 있는 값이 아니라 **양립 불가능한 두 요구**입니다: solved 근처에 머무는 것과 큐브의 대부분을 건드리지 않는 것이 같은 말이기 때문입니다. 실제로 되감기 구조(`A·B·A⁻¹`, 위수가 정확히 `B`의 것)를 먼저 구현해 봤는데, 움직임은 넓어져도 **매 바퀴 감은 것을 도로 풀어** 30초를 봐도 큐브가 거의 solved로 남았습니다.
+
+관람에 걸린 것이 없으므로 이 대가는 치를 만합니다 — 관람을 끝낼 때 큐브를 되돌리는 것은 Phase 10의 snapshot이지 수순의 복귀가 아닙니다. 그래서 `kAmbientMaxPeriod`는 **표를 쓰는 두 크기의 약속**으로 남고, test도 그 두 크기에서 검사합니다. 4×4 이상에서는 다른 두 성질을 test가 지킵니다: **한 바퀴가 3N개 띠를 전부 돈다**는 것과, 실제 브라우저에서 **관람 몇 초 만에 화면의 절반 이상이 바뀐다**는 것(9×9에서 6초에 394/486칸)입니다.
 
 ### 고리 다이어그램의 간격은 배치에서 계산한다
 
@@ -182,33 +186,33 @@ thorvg_rubiks_restore_apply(size: int, scramble_count: uint32, user_count: uint3
 
 ### 1. 크기를 런타임 값으로
 
-- [ ] `cube` 도메인: `make_scramble`이 깊이와 wide를 뽑도록 확장 (3×3 결과 불변)
-- [ ] `Application`: `kCubeSize` 제거, 크기를 `cube_state.size()`에서 파생, `set_cube_size`/`cube_size` 추가
-- [ ] `turn_face`를 layer 구간 형태로 확장하고 거절 규칙(범위·역순·전폭)을 붙임
-- [ ] 관람 패턴 표 교체와 `ambient_pattern(choice, size)`
-- [ ] Native test: 크기 변경이 cube·기록·playback을 재구성하고 시점·view·palette·속도를 보존하는지, 범위 밖 거절이 상태를 바꾸지 않는지, 같은 크기가 no-op인지
-- [ ] Native test: scramble이 모든 지원 크기에서 안쪽 slice를 섞고 3×3에서는 예전과 같은 수순인지, 역수순으로 복원되는지
-- [ ] Native test: 모든 패턴 × 모든 지원 크기에서 `kAmbientMaxPeriod` 안에 복귀
-- [ ] Native test: 크기 2와 9에서 drag·snap·commit이 3×3과 같은 계약을 지키는지 (picking, net, rings 각각 한 번씩)
+- [x] `cube` 도메인: `make_scramble`이 깊이와 wide를 뽑도록 확장 (3×3 결과 불변)
+- [x] `Application`: `kCubeSize` 제거, 크기를 `cube_state.size()`에서 파생, `set_cube_size`/`cube_size` 추가
+- [x] `turn_face`를 layer 구간 형태로 확장하고 거절 규칙(범위·역순·전폭)을 붙임
+- [x] 관람 패턴 표 교체와 `ambient_pattern(choice, size)`
+- [x] Native test: 크기 변경이 cube·기록·playback을 재구성하고 시점·view·palette·속도를 보존하는지, 범위 밖 거절이 상태를 바꾸지 않는지, 같은 크기가 no-op인지
+- [x] Native test: scramble이 모든 지원 크기에서 안쪽 slice를 섞고 3×3에서는 예전과 같은 수순인지, 역수순으로 복원되는지
+- [x] Native test: 모든 패턴 × 모든 지원 크기에서 `kAmbientMaxPeriod` 안에 복귀
+- [x] Native test: 크기 2와 9에서 drag·snap·commit이 3×3과 같은 계약을 지키는지 (picking, net, rings 각각 한 번씩)
 
 ### 2. 표기와 그림
 
-- [ ] 고리 간격을 배치에서 계산하고 캐시, `kRingsSlotSpacing` 제거
-- [ ] Native test: 계산된 3×3 간격이 예전 상수와 일치, 각 크기에서 sticker가 서로 겹치지 않음
-- [ ] TS `moveNotation`: 구간 판정 + numbered 조립, 3×3 단일 layer는 기존 표
-- [ ] TS unit test: 표기 표 전체(`R`/`2R`/`Rw`/`3Rw`/`2-3Rw`/`M`·`E`·`S`), 부호 규약, 비연속·전폭·범위 밖 mask가 null
+- [x] 고리 간격을 배치에서 계산하고 캐시, `kRingsSlotSpacing` 제거
+- [x] Native test: 계산된 3×3 간격이 예전 상수와 일치, 각 크기에서 sticker가 서로 겹치지 않음
+- [x] TS `moveNotation`: 구간 판정 + numbered 조립, 3×3 단일 layer는 기존 표
+- [x] TS unit test: 표기 표 전체(`R`/`2R`/`Rw`/`3Rw`/`2-3Rw`/`M`·`E`·`S`), 부호 규약, 비연속·전폭·범위 밖 mask가 null
 
 ### 3. 공유와 UI
 
-- [ ] Payload v2(크기 필드)와 mask 규칙 확장, `restore_apply(size, ...)`
-- [ ] TS/Native test: 크기를 포함한 왕복, v1 payload 거절, 크기 밖 mask 거절, 비연속·전폭 mask 거절, v2 known-answer fixture
-- [ ] Web: 크기 입력, depth 입력, wide 토글, 크기 변경 시 depth clamp와 session restart
-- [ ] Web: `CUBE_SIZE` 상수 제거하고 `engine.cubeSize()` 사용 (move log, 공유 검증)
-- [ ] 기록에 크기 추가와 크기별 최고 기록
-- [ ] TS unit test: 크기 변경 명령의 경로(관람 종료 → 크기 → 렌더 → restart), 거절된 입력의 되돌림, 기록의 크기별 비교
-- [ ] e2e: 크기를 바꿔 섞고 돌리고 되감기, 큰 cube의 공유 왕복, scene contract의 크기 파라미터화
-- [ ] 9×9 frame 시간 측정과 문서화
-- [ ] Native, WASM, TypeScript unit, e2e, production build 전체 실행
+- [x] Payload v2(크기 필드)와 mask 규칙 확장, `restore_apply(size, ...)`
+- [x] TS/Native test: 크기를 포함한 왕복, v1 payload 거절, 크기 밖 mask 거절, 비연속·전폭 mask 거절, v2 known-answer fixture
+- [x] Web: 크기 입력, depth 입력, wide 토글, 크기 변경 시 depth clamp와 session restart
+- [x] Web: `CUBE_SIZE` 상수 제거하고 `engine.cubeSize()` 사용 (move log, 공유 검증)
+- [x] 기록에 크기 추가와 크기별 최고 기록
+- [x] TS unit test: 크기 변경 명령의 경로(관람 종료 → 크기 → 렌더 → restart), 거절된 입력의 되돌림, 기록의 크기별 비교
+- [x] e2e: 크기를 바꿔 섞고 돌리고 되감기, 큰 cube의 공유 왕복, scene contract의 크기 파라미터화
+- [x] 9×9 frame 시간 측정과 문서화
+- [x] Native, WASM, TypeScript unit, e2e, production build 전체 실행
 
 ## Acceptance criteria
 
@@ -234,3 +238,36 @@ npm --prefix web run test:unit
 npm --prefix web run test:e2e
 npm --prefix web run build
 ```
+
+## Completion
+
+모든 acceptance criteria와 verification command를 통과했습니다.
+
+### 성능 측정
+
+9×9에서 세 view(3D cube + 전개도 + 고리)를 모두 켜고 관람을 돌리며 frame callback 하나의 시간(`advance` + `render` + 화면 갱신 전부)을 120 frame 측정했습니다. Apple Silicon, Chromium, drawing buffer 1118×1118 기준입니다.
+
+| 크기 | median | p95 | max |
+| --- | --- | --- | --- |
+| 3×3 | 2.8 ms | 5.5 ms | 7.3 ms |
+| 5×5 | 3.6 ms | 4.1 ms | 4.6 ms |
+| 7×7 | 4.8 ms | 5.2 ms | 5.2 ms |
+| 9×9 | 5.7 ms | 6.1 ms | 8.5 ms |
+
+Sticker 수는 3×3의 54개에서 9×9의 486개로 아홉 배가 되는데 frame 시간은 두 배가 되고, 60Hz 예산 16.7ms 안에 여유 있게 들어옵니다. 도형 수보다 채워지는 pixel 총량이 지배적이기 때문입니다 — cube가 차지하는 화면 넓이는 크기와 무관하고, 커지는 것은 그 넓이를 나누는 조각의 수입니다. 그래서 상한을 낮출 이유가 없었고 9를 그대로 두었습니다.
+
+### 구현에서 결정되거나 달라진 것
+
+- **`is_layer_run`과 `depth_layers`를 cube 도메인에 두었습니다.** 문서는 "구간 판정"과 "깊이 → mask"를 규칙으로만 적었는데, 둘 다 소비자가 셋(scramble, turn ABI, payload 검증)이라 도메인의 함수가 되는 편이 맞았습니다. 특히 `depth_layers`는 표기가 읽는 방향의 정확한 역이라, 한 곳에 있어야 두 방향이 어긋날 수 없습니다.
+- **`make_scramble`이 크기 1 이하를 빈 수순으로 돌려줍니다.** 이전에는 `size <= 0`만 걸렀는데, 1×1은 어떤 move도 큐브를 바꾸지 못하므로 "섞는다"는 말이 성립하지 않습니다. 지원 범위 밖이라 앱에는 닿지 않지만, 도메인 함수의 계약으로는 이쪽이 맞습니다.
+- **관람 패턴 표를 새로 골랐습니다.** 문서가 예고한 대로 `M'` 패턴은 빠졌고, `R U F' D`도 4×4 이상에서 위수 308이라 빠졌습니다. 남은 자리는 모든 지원 크기에서 200 안에 복귀하는 `R B D' L2`(60)와 `R L' U F2`(180)로 채웠습니다. 위수는 sticker 순열의 order를 직접 계산해 골랐고, test가 모든 크기 × 모든 패턴에서 상한을 지킵니다.
+- **큰 큐브의 관람은 세 번 고쳐 걸음이 됐습니다.** 처음에는 네 패턴 모두 바깥 면 4수였고(겉껍질만 도는 그림), 다음으로 깊이를 크기에서 파생시켰으며(도는 띠가 여전히 고정), 그 다음 크기마다 한 수씩 길이를 늘렸습니다(같은 띠가 더 오래 돌 뿐). 세 번 모두 사용자가 "대부분이 그대로 있다"고 확인해 주었고, 원인은 매번 같았습니다 — **복귀 위수를 상한 안에 두려면 만지는 띠를 좁게 유지할 수밖에 없다**는 것입니다. 되감기 구조(`A·B·A⁻¹`)로 위수를 고정한 채 움직임만 넓히는 방법도 구현해 봤지만, 감은 것을 매 바퀴 도로 풀기 때문에 **쌓이는 섞임**은 그대로 좁았습니다. 결국 4×4 이상에서 복귀 약속을 놓고 덮는 걸음으로 갔습니다.
+- **브라우저 캐시 때문에 두 번 헛짚었습니다.** Vite dev server가 `.wasm`을 재검증 없이 캐시에서 내주어, 다시 빌드한 뒤에도 화면은 이전 binary를 돌리고 있었습니다. 그래서 "고쳤는데 화면은 그대로"가 두 번 반복됐습니다. 확인은 캐시가 없는 Playwright로 옮겼고, 그 측정이 `ambient-mix` e2e로 남았습니다 — 이제 그림이 좁아지면 test가 잡습니다.
+- **고리 간격은 크기당 한 번 계산해 표에 담습니다.** 486개 slot의 최근접 쌍을 찾는 계산이라 frame 경로에 둘 수 없고, 지원 크기가 여덟 개뿐이라 캐시는 배열 하나입니다. 3×3의 계산 결과가 손으로 유도했던 `0.248`과 1% 안에서 일치하는 것을 test로 고정했습니다.
+- **`rings_axis_center`와 `rings_slot_spacing`이 크기를 받게 됐습니다.** 그림 전체가 "가장 두꺼운 선까지 포함한 상자"를 rectangle에 맞추는데, 그 두께가 slot 간격에서 나오므로 크기가 배치에 들어옵니다. 호출부는 engine 안에 하나, test에 네 개뿐이었습니다.
+- **기록의 최고 기록이 크기별 map이 됐습니다.** 문서는 "크기별로 비교"만 적었는데, 화면에 쓰는 방법까지 정해야 했습니다. 크기를 오간 세션에서 각 크기의 최고를 한 줄에 나란히 적습니다 — 한 세션이 방문하는 크기는 보통 한둘이고, 그때 줄은 지금과 같은 모양입니다.
+- **Refusal flash를 세 입력이 공유합니다.** Scramble 길이 상자에만 있던 것을 크기·깊이 상자가 같이 쓰므로, CSS class를 `.scramble-length`에서 `.number-field`로 옮기고 handler가 이벤트의 대상에서 상자를 읽게 했습니다.
+- **깊이 상자는 크기가 줄면 조용히 clamp합니다.** 다른 두 상자는 거절하고 되돌리며 안내하는데, 이것은 사용자가 이 큐브에 대해 그 값을 입력한 적이 없으므로 알릴 일이 없습니다. 사용자가 직접 범위 밖을 입력한 경우에만 되돌리고 안내합니다.
+- **2×2에서는 깊이와 wide가 비활성입니다.** 두 layer가 모두 바깥 면이라 고를 깊이가 없고, 전폭은 회전이라 만들 수 없습니다.
+- **e2e의 scene contract가 크기를 선택 인자로 받습니다.** 나머지 계약(cube 영역, 전개도 배치, sample 위치)은 전부 layout 비율이라 크기와 무관하고, 크기를 타는 것은 "한 면을 몇 칸으로 읽는가" 하나뿐이었습니다.
+- **키보드 문자는 입력 상자 안에서 동작하지 않습니다.** 원래 있던 규칙(`isEditableTarget`)인데, 깊이 상자를 고친 직후 키를 누르는 흐름에서 처음으로 눈에 띄었습니다. e2e에서 blur를 명시적으로 하고 그 이유를 주석에 남겼습니다.

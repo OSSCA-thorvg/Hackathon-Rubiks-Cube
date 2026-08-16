@@ -186,13 +186,13 @@ Sticker 배열을 직접 싣는 편이 짧지만 그렇게 하지 않습니다. 
 여기부터는 앞의 phase가 모두 끝난 뒤에 진행합니다.
 ThorVG를 보여 주는 데 필요하지 않거나, 들어가는 코드의 양에 비해 rendering과의 관련이 옅은 항목들입니다. 특히 solver는 이 저장소에서 가장 큰 단일 코드 덩어리가 되면서 rendering과 무관하므로, 도메인의 읽기 좋음을 해치지 않도록 `cube` 안에서도 별도의 하위 target으로 격리합니다.
 
-## [ ] Phase 15: [N×N cube support](./15-nxn-cube-support.md)
+## [x] Phase 15: [N×N cube support](./15-nxn-cube-support.md)
 
-3×3×3에 고정된 cube 크기를 런타임에 선택할 수 있게 합니다.
+3×3×3에 고정된 cube 크기를 런타임에 선택할 수 있게 합니다. 지원 범위는 2×2×2부터 9×9×9입니다.
 Geometry, picking, net 렌더링은 이미 CubeState의 size로 파라미터화되어 있고 고정된 크기는 application lifecycle 한 곳에만 남아 있으므로, 실제 작업은 크기 변경 시의 상태 재구성과 그 주변부입니다.
 안쪽 slice를 포함하는 scramble 생성, 바깥 면 외의 layer를 돌릴 UI, 그리고 cubie 수가 세제곱으로 늘어날 때의 software rendering 성능을 함께 확인합니다. 부하가 크기로 조절되므로 renderer의 한계를 보여 주는 자리이기도 합니다.
 Phase 12가 실패 경로로 남겨 둔 numbered 표기(`Rw`, `3Rw`, `2R`, `2-3Rw`)를 여기서 채웁니다. Mask에서 구간을 찾는 판정과 조립 규칙을 함께 만들고 — 소비자가 여기서 처음 생기므로 Phase 12는 9칸 표에서 멈춰 있습니다 — M/E/S는 3×3에서만 쓰는 표시 방식으로 남깁니다. 5×5의 가운데 layer를 M으로 쓰는 관행은 없으므로 하나의 규칙으로 통합하지 않습니다.
-Phase 16의 solver interface는 지원 크기를 스스로 밝히므로 다른 크기에서는 지원하는 구현이 없다는 사실이 그대로 드러납니다. 그때 solve를 Phase 11의 되감기로 되돌릴지 N×N solver를 더할지 이 phase에서 정합니다.
+Phase 16의 solver interface는 지원 크기를 스스로 밝히므로 다른 크기에서는 지원하는 구현이 없다는 사실이 그대로 드러납니다. Solve는 모든 크기에서 Phase 11의 되감기 그대로 두기로 정했습니다 — 되감기는 timeline만 보고 cube를 들여다보지 않으므로 크기를 모르고, solver는 그 대체가 아니라 기록이 없는 cube를 위한 두 번째 생산자입니다.
 
 ## [ ] Phase 16: Cube solver
 

@@ -36,6 +36,12 @@ void arrive(MoveTimeline& timeline, const std::vector<CubeMove>& scramble)
     }
 }
 
+/** A move told apart from the others only by which layer it names. */
+[[nodiscard]] CubeMove numbered(int layer)
+{
+    return CubeMove{rubiks::cube::Axis::X, rubiks::cube::layer(layer), 1};
+}
+
 }  // namespace
 
 // A two-record model would need a test here that the two cursors only ever
@@ -255,4 +261,54 @@ TEST_CASE("a scramble on its own rewinds without running off the start")
     // unsigned index off zero.
     const std::vector<CubeMove> expected{inverse(U(kSize)), inverse(R(kSize))};
     REQUIRE(rewind_plan(timeline, 0) == expected);
+}
+
+TEST_CASE("a plan written in above the cursor waits there")
+{
+    MoveTimeline timeline;
+    timeline.begin_scramble({numbered(0), numbered(1), numbered(2)});
+    timeline.step(TimelineEffect::Advance);
+    timeline.step(TimelineEffect::Advance);
+    timeline.step(TimelineEffect::Advance);
+
+    timeline.record_ahead({numbered(3), numbered(4)});
+
+    // Written down, not applied: the cursor is where it was, and the two new
+    // moves are the stretch a playback is about to walk up.
+    CHECK(timeline.size() == 5);
+    CHECK(timeline.cursor() == 3);
+    CHECK(timeline.scramble_end() == 3);
+    CHECK(timeline.at(3) == numbered(3));
+    CHECK(timeline.at(4) == numbered(4));
+}
+
+TEST_CASE("a plan cuts whatever was above the cursor first")
+{
+    MoveTimeline timeline;
+    timeline.begin_scramble({numbered(0), numbered(1), numbered(2)});
+    timeline.step(TimelineEffect::Advance);
+
+    // One move on the cube and two of the scramble still waiting. The plan
+    // replaces them, and the scramble ends where the cursor is -- the same
+    // cut record() makes, because it is the same stretch nobody went through.
+    timeline.record_ahead({numbered(3)});
+
+    CHECK(timeline.size() == 2);
+    CHECK(timeline.cursor() == 1);
+    CHECK(timeline.scramble_end() == 1);
+    CHECK(timeline.at(1) == numbered(3));
+}
+
+TEST_CASE("an empty plan is a plan that changes nothing")
+{
+    MoveTimeline timeline;
+    timeline.begin_scramble({numbered(0), numbered(1)});
+    timeline.step(TimelineEffect::Advance);
+    timeline.step(TimelineEffect::Advance);
+
+    timeline.record_ahead({});
+
+    CHECK(timeline.size() == 2);
+    CHECK(timeline.cursor() == 2);
+    CHECK(timeline.scramble_end() == 2);
 }

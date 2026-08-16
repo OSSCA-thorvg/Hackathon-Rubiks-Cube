@@ -194,7 +194,7 @@ Geometry, picking, net 렌더링은 이미 CubeState의 size로 파라미터화�
 Phase 12가 실패 경로로 남겨 둔 numbered 표기(`Rw`, `3Rw`, `2R`, `2-3Rw`)를 여기서 채웁니다. Mask에서 구간을 찾는 판정과 조립 규칙을 함께 만들고 — 소비자가 여기서 처음 생기므로 Phase 12는 9칸 표에서 멈춰 있습니다 — M/E/S는 3×3에서만 쓰는 표시 방식으로 남깁니다. 5×5의 가운데 layer를 M으로 쓰는 관행은 없으므로 하나의 규칙으로 통합하지 않습니다.
 Phase 16의 solver interface는 지원 크기를 스스로 밝히므로 다른 크기에서는 지원하는 구현이 없다는 사실이 그대로 드러납니다. Solve는 모든 크기에서 Phase 11의 되감기 그대로 두기로 정했습니다 — 되감기는 timeline만 보고 cube를 들여다보지 않으므로 크기를 모르고, solver는 그 대체가 아니라 기록이 없는 cube를 위한 두 번째 생산자입니다.
 
-## [ ] Phase 16: [Cube solver](./16-cube-solver.md)
+## [x] Phase 16: [Cube solver](./16-cube-solver.md)
 
 Timeline과 무관하게 현재 CubeState만으로 해법을 계산하는 solver를 추가하되, 구현을 교체할 수 있는 형태로 둡니다.
 Solver는 아무 dependency도 갖지 않는 cube target 아래 별도 하위 target으로 두어 rendering과 interaction은 물론 cube 도메인 자체와도 섞이지 않게 합니다. Phase 11이 solve를 "수순 벡터를 만들어 Player에 넘기기"로 구현해 두므로 재생 경로와 UI는 그대로 재사용합니다. 다만 solver의 수는 timeline에 없는 새 수라 `TimelineEffect`의 세 값 중 어느 것도 맞지 않습니다 — 기록 여부와 완주 판정에서 갖는 의미는 소비자가 처음 생기는 이 phase에서 정합니다.

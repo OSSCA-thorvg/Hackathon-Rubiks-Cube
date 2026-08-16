@@ -16,6 +16,8 @@
 #include "cube/PackedMove.hpp"
 #include "cube/Scramble.hpp"
 #include "cube/Surface.hpp"
+#include "cube/solver/LayerByLayer.hpp"
+#include "cube/solver/Solver.hpp"
 #include "graphics/AxisGizmo.hpp"
 #include "graphics/Camera.hpp"
 #include "graphics/CubeGeometry.hpp"
@@ -190,6 +192,14 @@ struct ApplicationState {
     // moves are the user's own is read off it rather than counted alongside
     // it, so there is no second number to keep in step.
     cube::MoveTimeline timeline;
+
+    // The one solver this application has. Held by the interface rather than
+    // by its type, so that adding a second implementation is a change to this
+    // line and to nothing that reads it -- and held at all, rather than made
+    // per call, because a solver is allowed to have built something in its
+    // constructor that it would be a waste to build twice.
+    std::unique_ptr<cube::solver::Solver> solver =
+        std::make_unique<cube::solver::LayerByLayer>();
 
     // The whole of the playback state. Its presence is what "a sequence is
     // playing" means, so there is no second flag to fall out of step with it.
@@ -1186,6 +1196,28 @@ bool solve_rewind() noexcept
     // the length of it is the whole difference between the two commands.
     return play_rewind(cube::rewind_plan(state->timeline, 0),
                        cube::TimelineEffect::Rewind);
+}
+
+bool can_solve() noexcept
+{
+    return state && state->solver->supports(size_of_cube());
+}
+
+bool solve() noexcept
+{
+    if (!can_rewind() || !can_solve()) return false;
+
+    // Worked out before anything is written, so that a cube already solved --
+    // the one case with nothing to play -- refuses here with the record and
+    // the cube untouched, the way every other empty command does.
+    auto plan = state->solver->solve(state->cube_state);
+    if (plan.empty()) return false;
+
+    // Written down and then played forward, which is what a scramble does. So
+    // there is no third way of getting moves into the cube, and a solve broken
+    // off part way leaves the rest of it above the cursor for a redo.
+    state->timeline.record_ahead(plan);
+    return play_rewind(std::move(plan), cube::TimelineEffect::Advance);
 }
 
 void stop_playback() noexcept

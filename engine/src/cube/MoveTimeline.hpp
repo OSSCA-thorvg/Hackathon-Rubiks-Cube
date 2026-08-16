@@ -64,6 +64,26 @@ public:
     void record(const CubeMove& move);
 
     /**
+     * Writes a sequence in above the cursor, leaving the cursor where it is.
+     *
+     * What `record()` does for one move that has already happened, for a
+     * stretch of moves that has not: the redo tail and any scramble left above
+     * the cursor are cut in exactly the same way, and then the whole plan goes
+     * on the end.
+     *
+     * This is how a solution reaches the cube. A solver's moves are new -- no
+     * part of the record is waiting to be replayed into them -- so they are
+     * written down first and then played with `Advance`, which is the path a
+     * scramble already takes. The alternative was a fourth `TimelineEffect`
+     * that recorded as it went, and it would have cost this class its one
+     * plain sentence: what is being played is already written down.
+     *
+     * Stopping part way therefore leaves the rest of the solution above the
+     * cursor, where a redo can take it up again a move at a time.
+     */
+    void record_ahead(const std::vector<CubeMove>& moves);
+
+    /**
      * The recorded move at an index, as it was played.
      *
      * The only accessor, and it does not invert. A "the move at the cursor"

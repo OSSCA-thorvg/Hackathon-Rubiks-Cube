@@ -250,6 +250,30 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_solve_rewind() noexcept
 }
 
 /**
+ * Whether a solver here handles the size of cube in hand.
+ *
+ * The size alone; whether a solve may begin right now is is_busy(), the same
+ * as for every other command.
+ *
+ * @return one when this cube can be solved.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_can_solve() noexcept
+{
+    return rubiks::app::can_solve() ? 1 : 0;
+}
+
+/**
+ * Solves the cube as it stands, forwards, and plays the solution.
+ *
+ * @return one when a solve began; zero for a cube already solved, a size with
+ *         no solver, and while something else owns the cube.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_solve() noexcept
+{
+    return rubiks::app::solve() ? 1 : 0;
+}
+
+/**
  * Breaks off a rewind, keeping everything it has already turned.
  *
  * A no-op for a scramble or a watched pattern, which have to reach their end.

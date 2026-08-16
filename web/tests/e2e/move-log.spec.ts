@@ -96,7 +96,7 @@ test('your own moves are written out in notation as you make them', async ({
 
   // Rewound through the scramble as well, which leaves all three waiting and
   // none of them marked -- and puts nothing of the scramble on the list.
-  await page.locator('#solve').click();
+  await page.locator('#rewind').click();
   await expect(shell).toHaveAttribute('data-game-state', 'completed');
   await expect(entries).toHaveCount(3);
   await expect(page.locator('#move-log li[data-state="current"]')).toHaveCount(

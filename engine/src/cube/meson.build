@@ -18,3 +18,5 @@ cube_dep = declare_dependency(
   include_directories: engine_inc,
   link_with: cube_lib,
 )
+
+subdir('solver')

@@ -49,6 +49,8 @@ function createFakeModule() {
     undoResult: 1,
     redoResult: 1,
     solveRewindResult: 1,
+    canSolveResult: 1,
+    solveResult: 1,
     timelineLength: 0,
     timelineCursor: 0,
     timelineScrambleEnd: 0,
@@ -140,6 +142,8 @@ function createFakeModule() {
     _thorvg_rubiks_solve_rewind: vi.fn(
       (): number => behavior.solveRewindResult,
     ),
+    _thorvg_rubiks_can_solve: vi.fn((): number => behavior.canSolveResult),
+    _thorvg_rubiks_solve: vi.fn((): number => behavior.solveResult),
     _thorvg_rubiks_stop_playback: vi.fn((): void => {}),
     _thorvg_rubiks_timeline_length: vi.fn(
       (): number => behavior.timelineLength,
@@ -618,6 +622,22 @@ describe('CubeEngine gameplay and view controls', () => {
 
     engine.stopPlayback();
     expect(module._thorvg_rubiks_stop_playback).toHaveBeenCalledTimes(1);
+  });
+
+  it('carries the two solver questions across separately', async () => {
+    const { engine, module, behavior } = await createEngine();
+
+    expect(engine.canSolve()).toBe(true);
+    expect(engine.solve()).toBe(true);
+    expect(module._thorvg_rubiks_can_solve).toHaveBeenCalledTimes(1);
+    expect(module._thorvg_rubiks_solve).toHaveBeenCalledTimes(1);
+
+    // Two questions rather than one: whether there is a solver for this cube
+    // at all, and whether one can be started right now.
+    behavior.canSolveResult = 0;
+    behavior.solveResult = 0;
+    expect(engine.canSolve()).toBe(false);
+    expect(engine.solve()).toBe(false);
   });
 
   it('reads the record as three counts', async () => {

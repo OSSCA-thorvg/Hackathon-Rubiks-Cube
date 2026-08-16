@@ -538,6 +538,32 @@ export class CubeEngine {
   }
 
   /**
+   * Whether the engine holds a solver for the size of cube in hand.
+   *
+   * The size alone. Whether a solve may begin at this moment is `isBusy()`,
+   * the same question every other command is gated on.
+   */
+  canSolve(): boolean {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_can_solve() !== 0;
+  }
+
+  /**
+   * Works out how to solve the cube as it stands, and plays that.
+   *
+   * Forwards, unlike the rewind above: it reads the cube rather than the
+   * record, so it finishes a cube that arrived through a shared link instead
+   * of replaying the sender's session backwards.
+   *
+   * @returns false for a cube already solved, a size with no solver, and
+   *          while anything else owns the cube.
+   */
+  solve(): boolean {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_solve() !== 0;
+  }
+
+  /**
    * Breaks off a rewind, keeping every move it has already turned back.
    *
    * A no-op for a scramble or a watched pattern -- which is what makes a press

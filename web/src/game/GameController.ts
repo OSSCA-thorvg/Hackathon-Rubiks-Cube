@@ -36,6 +36,8 @@ export type GameEngine = SessionEngine & {
   undo(): boolean;
   redo(): boolean;
   solveRewind(): boolean;
+  canSolve(): boolean;
+  solve(): boolean;
   stopPlayback(): void;
   timelineLength(): number;
   timelineScrambleEnd(): number;
@@ -80,7 +82,11 @@ export type GameUi = {
   readonly undoButton: HTMLButtonElement;
   readonly redoButton: HTMLButtonElement;
   /** Rewinds every applied move; the long form of Undo. */
+  readonly rewindButton: HTMLButtonElement;
+  /** Works the cube out from where it stands and plays the answer. */
   readonly solveButton: HTMLButtonElement;
+  /** Says why Solve is out of reach, when it is out of reach for good. */
+  readonly solverNote: HTMLElement;
   /** Breaks a rewind off, and is only on screen while one is playing. */
   readonly stopButton: HTMLButtonElement;
   /** Copies a link that opens this cube; out of reach when there is none. */
@@ -571,7 +577,15 @@ export function attachGameController(
     // has only been scrambled there is nothing above that line.
     ui.undoButton.disabled = movesOff || now.cursor <= now.scrambleEnd;
     ui.redoButton.disabled = movesOff || now.cursor >= now.length;
-    ui.solveButton.disabled = movesOff || now.cursor === 0;
+    ui.rewindButton.disabled = movesOff || now.cursor === 0;
+
+    // Two different reasons, and only one of them ever goes away: a cube
+    // already solved has nothing to solve, and a cube of a size no solver
+    // here handles never will have. The second is written out, because a
+    // control that is out of reach for good should say so.
+    const solvable = engine.canSolve();
+    ui.solveButton.disabled = movesOff || !solvable || engine.isSolved();
+    ui.solverNote.hidden = solvable;
 
     ui.shareButton.disabled = !canShare(now);
 
@@ -840,11 +854,26 @@ export function attachGameController(
     rewindCommand(() => engine.redo());
   };
 
-  const onSolve = (): void => {
+  const onRewind = (): void => {
     rewindCommand(
       () => engine.solveRewind(),
       'Rewinding to the solved cube. Press Stop to break off.',
     );
+  };
+
+  /**
+   * Hands the cube to the solver and plays what it works out.
+   *
+   * The sitting is marked before the frames start rather than when the cube
+   * comes out solved: the help was asked for here, and stopping the solve part
+   * way through does not unask it.
+   */
+  const onSolve = (): void => {
+    rewindCommand((): boolean => {
+      if (!engine.solve()) return false;
+      session.beginSolve();
+      return true;
+    }, 'Solving the cube. Press Stop to break off.');
   };
 
   /**
@@ -994,6 +1023,7 @@ export function attachGameController(
   ui.resetButton.addEventListener('click', onReset);
   ui.undoButton.addEventListener('click', onUndo);
   ui.redoButton.addEventListener('click', onRedo);
+  ui.rewindButton.addEventListener('click', onRewind);
   ui.solveButton.addEventListener('click', onSolve);
   ui.stopButton.addEventListener('click', onStop);
   ui.shareButton.addEventListener('click', onShare);
@@ -1048,6 +1078,7 @@ export function attachGameController(
         ui.turnWideButton,
         ui.undoButton,
         ui.redoButton,
+        ui.rewindButton,
         ui.solveButton,
         ui.stopButton,
         ui.shareButton,
@@ -1072,6 +1103,7 @@ export function attachGameController(
       ui.resetButton.removeEventListener('click', onReset);
       ui.undoButton.removeEventListener('click', onUndo);
       ui.redoButton.removeEventListener('click', onRedo);
+      ui.rewindButton.removeEventListener('click', onRewind);
       ui.solveButton.removeEventListener('click', onSolve);
       ui.stopButton.removeEventListener('click', onStop);
       ui.shareButton.removeEventListener('click', onShare);

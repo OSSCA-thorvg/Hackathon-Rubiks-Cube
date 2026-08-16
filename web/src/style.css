@@ -261,23 +261,32 @@ button[aria-pressed="true"]:hover:not(:disabled) {
   font-variant-numeric: tabular-nums;
 }
 
-/* Undo, Redo and Solve are one idea -- walking back along what has been played
-   -- so they share a row instead of reading as three more commands under
-   Reset. Stop is not one of them: it is not a place on the record to go to but
-   a way out of going there, so it comes in below on a line of its own, and
-   only while there is something to come out of. */
+/* Undo, Redo, Rewind and Solve are one idea -- getting to a place on the
+   record without turning the cube by hand -- so they share a block instead of
+   reading as four more commands under Reset. Stop is not one of them: it is
+   not a place to go to but a way out of going there, so it comes in below on a
+   line of its own, and only while there is something to come out of. */
 .game-actions__group {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.45rem;
 }
 
-/* Three to a row where the others have one, so the type comes down with the
-   width rather than the words being cut. */
+/* Two by two rather than four in a line: the panel is one narrow column, and
+   four of these words side by side are four words nobody can read. */
 .game-actions__group button {
   padding-inline: 0.25rem;
-  font-size: clamp(0.62rem, 1.15vw, 0.78rem);
+  font-size: clamp(0.66rem, 1.25vw, 0.82rem);
+}
+
+/* Why Solve is out of reach, for the one reason that does not go away. Under
+   the row it belongs to and quieter than it, because it is an explanation of
+   a control rather than a control. */
+.solver-note {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: rgb(255 255 255 / 72%);
 }
 
 .view-switch button,
@@ -650,9 +659,11 @@ button[aria-pressed="true"]:hover:not(:disabled) {
 
   /* The row keeps its shape here, so it takes a line of its own rather than
      being squeezed into one cell of the action grid. There is width to spare
-     on this layout, so the type goes back to the size of its neighbours. */
+     on this layout, so the four go back into one line at the size of their
+     neighbours. */
   .game-actions__group {
     grid-column: 1 / -1;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .game-actions__group button {

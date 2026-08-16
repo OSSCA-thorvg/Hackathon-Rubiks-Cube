@@ -104,6 +104,20 @@ export class GameSession {
   private readonly recordSolve: ((record: SolveRecord) => boolean) | null;
 
   private currentState: GameState = 'idle';
+  /**
+   * Whether the solver has been asked for the answer during this sitting.
+   *
+   * Kept here rather than derived from the record, because the record cannot
+   * hold it: a solve writes ordinary moves and the cube it leaves looks
+   * exactly like one somebody finished themselves. A rewind is told apart by
+   * the cursor being at nothing, and this one has no such tell.
+   *
+   * It stays set even when the solve is broken off and the cube is finished
+   * by hand. A rewind stopped part way leaves nothing behind -- those were the
+   * person's own moves coming back off -- but half a solution is still a
+   * solution somebody was shown.
+   */
+  private assisted = false;
   // Replaced by the constructor's own baseline before a frame is ever read;
   // written here as well because the reading is taken in a method.
   private previousCursor = 0;
@@ -139,6 +153,7 @@ export class GameSession {
   beginScramble(): void {
     this.takeBaseline();
     this.timer.reset();
+    this.assisted = false;
     this.setState('scrambling');
     this.announce('Scrambling the cube…');
   }
@@ -147,8 +162,23 @@ export class GameSession {
   restart(): void {
     this.takeBaseline();
     this.timer.reset();
+    this.assisted = false;
     this.setState('idle');
     this.announce('Cube reset.');
+  }
+
+  /**
+   * The solver has been asked to finish this cube.
+   *
+   * The clock stops here and is not started again for this sitting: a time
+   * that ran while the answer was on screen is not a time, and stopping it at
+   * the moment the help was asked for is the honest place. What the cube does
+   * next is watched exactly as before -- the solve still finishes, and the
+   * finish is still announced, in its own words.
+   */
+  beginSolve(): void {
+    this.assisted = true;
+    this.timer.stop();
   }
 
   /**
@@ -190,7 +220,10 @@ export class GameSession {
       this.announce('Scramble ready. The timer starts after your first move.');
     }
 
-    if (played && this.currentState === 'ready') {
+    // Not for a sitting the solver has been let into: its moves are the
+    // user's own in the record, so they would otherwise start a clock that
+    // has already been stopped for good.
+    if (played && this.currentState === 'ready' && !this.assisted) {
       this.timer.start();
       this.setState('running');
     }
@@ -208,6 +241,14 @@ export class GameSession {
         this.announce(
           `Rewound to solved in ${formatElapsed(finalMs)}. Not a solve of your own.`,
         );
+        return;
+      }
+
+      // The one thing the record cannot say. No time is given, because the
+      // clock stopped when the solver was asked and what it holds is the
+      // length of the part before that -- a number about nothing.
+      if (this.assisted) {
+        this.announce('Solved by the solver. Not a solve of your own.');
         return;
       }
 

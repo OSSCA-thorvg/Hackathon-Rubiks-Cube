@@ -21,6 +21,15 @@ void MoveTimeline::record(const CubeMove& move)
     ++cursor_;
 }
 
+void MoveTimeline::record_ahead(const std::vector<CubeMove>& moves)
+{
+    // The same two lines record() begins with, and for the same reason: what
+    // sat above the cursor is a stretch nobody is going back to now.
+    moves_.resize(cursor_);
+    scramble_end_ = std::min(scramble_end_, cursor_);
+    moves_.insert(moves_.end(), moves.begin(), moves.end());
+}
+
 const CubeMove& MoveTimeline::at(std::size_t index) const noexcept
 {
     assert(index < moves_.size());

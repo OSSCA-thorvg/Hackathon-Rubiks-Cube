@@ -30,7 +30,9 @@ function createUi(): GameUi {
     <button id="reset" type="button">Reset</button>
     <button id="undo" type="button">Undo</button>
     <button id="redo" type="button">Redo</button>
+    <button id="rewind" type="button">Rewind</button>
     <button id="solve" type="button">Solve</button>
+    <p id="solver-note" hidden>No solver</p>
     <button id="stop" type="button" hidden>Stop</button>
     <button id="share" type="button">Share</button>
     <button id="ambient" type="button" aria-pressed="false">Watch</button>
@@ -67,7 +69,9 @@ function createUi(): GameUi {
     turnWideButton: root.querySelector<HTMLButtonElement>('#turn-wide')!,
     undoButton: root.querySelector<HTMLButtonElement>('#undo')!,
     redoButton: root.querySelector<HTMLButtonElement>('#redo')!,
+    rewindButton: root.querySelector<HTMLButtonElement>('#rewind')!,
     solveButton: root.querySelector<HTMLButtonElement>('#solve')!,
+    solverNote: root.querySelector<HTMLParagraphElement>('#solver-note')!,
     stopButton: root.querySelector<HTMLButtonElement>('#stop')!,
     shareButton: root.querySelector<HTMLButtonElement>('#share')!,
     recordBest: root.querySelector<HTMLParagraphElement>('#record-best')!,
@@ -130,6 +134,9 @@ function createHarness(
   // Where a rewind that is playing will end up, and whether Stop may reach it.
   let rewindTo: number | null = null;
   let stoppable = false;
+  // Whether the sequence being played is a solution rather than a rewind,
+  // which is what decides whether the cube comes out solved at its end.
+  let solving = false;
 
   if (overrides.opened !== undefined) {
     moves = [...overrides.opened.moves];
@@ -178,6 +185,19 @@ function createHarness(
     solveRewind: vi.fn((): boolean => {
       if (busy || cursor === 0) return false;
       return startRewind(0);
+    }),
+    canSolve: vi.fn((): boolean => cubeSize === 3),
+    solve: vi.fn((): boolean => {
+      if (busy || solved || cubeSize !== 3) return false;
+
+      // A solution is written in above the cursor and then played forward,
+      // so the record grows at once and the cursor walks up to its end.
+      const solution = [0x47, 0x48, 0x49];
+      moves = [...moves.slice(0, cursor), ...solution];
+      length = moves.length;
+      scrambleEnd = Math.min(scrambleEnd, cursor);
+      solving = true;
+      return startRewind(length);
     }),
     stopPlayback: vi.fn((): void => {
       if (!stoppable) return;
@@ -361,7 +381,11 @@ function createHarness(
       rewindTo = null;
       stoppable = false;
       busy = false;
+      // Two ways to arrive at a solved cube: every move taken back off, or a
+      // solution played all the way through.
       if (cursor === 0 && scrambleEnd > 0) solved = true;
+      if (solving && cursor === length) solved = true;
+      solving = false;
       controller.afterEngineFrame();
     },
     /** Frames of a rewind still playing, which the controls have to survive. */
@@ -1157,12 +1181,12 @@ describe('attachGameController', () => {
 
   it('offers each rewind exactly where the record allows it', () => {
     const harness = createHarness();
-    const { undoButton, redoButton, solveButton } = harness.ui;
+    const { undoButton, redoButton, rewindButton } = harness.ui;
 
     // Nothing has happened, so there is nothing to walk back along.
     expect(undoButton.disabled).toBe(true);
     expect(redoButton.disabled).toBe(true);
-    expect(solveButton.disabled).toBe(true);
+    expect(rewindButton.disabled).toBe(true);
 
     harness.ui.scrambleButton.click();
     harness.finishScramble();
@@ -1170,7 +1194,7 @@ describe('attachGameController', () => {
     // A scramble can be rewound but not undone: what is below the end of the
     // scramble is not the user's to take back.
     expect(undoButton.disabled).toBe(true);
-    expect(solveButton.disabled).toBe(false);
+    expect(rewindButton.disabled).toBe(false);
     expect(redoButton.disabled).toBe(true);
 
     harness.commitMove();
@@ -1184,7 +1208,7 @@ describe('attachGameController', () => {
     // While it plays, nothing else may be asked for.
     harness.runRewindFrame();
     expect(undoButton.disabled).toBe(true);
-    expect(solveButton.disabled).toBe(true);
+    expect(rewindButton.disabled).toBe(true);
 
     harness.finishRewind();
     expect(harness.engine.committedMoveCount()).toBe(0);
@@ -1214,7 +1238,7 @@ describe('attachGameController', () => {
 
     harness.commitMove();
     harness.controller.afterEngineFrame();
-    harness.ui.solveButton.click();
+    harness.ui.rewindButton.click();
     expect(harness.ui.status.textContent).toContain('Press Stop');
     expect(stop.hidden).toBe(false);
 
@@ -1224,7 +1248,7 @@ describe('attachGameController', () => {
     expect(harness.ui.status.textContent).toBe('Stopped.');
 
     // Stopped where it was, so both directions are open again from there.
-    expect(harness.ui.solveButton.disabled).toBe(false);
+    expect(harness.ui.rewindButton.disabled).toBe(false);
     expect(harness.ui.redoButton.disabled).toBe(false);
   });
 
@@ -1238,7 +1262,7 @@ describe('attachGameController', () => {
     // Solve from a ready cube: the rewind commits moves all the way down, and
     // not one of them is the user's, so the clock never starts.
     harness.setNow(100);
-    harness.ui.solveButton.click();
+    harness.ui.rewindButton.click();
     harness.runRewindFrame();
     expect(harness.controller.state).toBe('ready');
 
@@ -1277,6 +1301,125 @@ describe('attachGameController', () => {
     );
   });
 
+  it('offers Solve only for a cube a solver here can take on', () => {
+    const harness = createHarness();
+    const { solveButton, solverNote } = harness.ui;
+
+    // Nothing to solve on a cube already solved, and the note stays away:
+    // this is a wait rather than a refusal.
+    expect(solveButton.disabled).toBe(true);
+    expect(solverNote.hidden).toBe(true);
+
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+    expect(solveButton.disabled).toBe(false);
+
+    // A size with no solver, which is the one reason that does not go away --
+    // so it is written out, and Rewind is still there.
+    harness.ui.cubeSizeInput.value = '5';
+    harness.ui.cubeSizeInput.dispatchEvent(new Event('change'));
+    harness.controller.afterEngineFrame();
+    expect(harness.engine.canSolve()).toBe(false);
+    expect(solveButton.disabled).toBe(true);
+    expect(solverNote.hidden).toBe(false);
+
+    harness.ui.cubeSizeInput.value = '3';
+    harness.ui.cubeSizeInput.dispatchEvent(new Event('change'));
+    harness.controller.afterEngineFrame();
+    expect(solverNote.hidden).toBe(true);
+  });
+
+  it('plays a solution and says the cube was not solved by you', () => {
+    const harness = createHarness();
+
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+
+    harness.setNow(100);
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.controller.state).toBe('running');
+
+    harness.setNow(3000);
+    harness.ui.solveButton.click();
+    expect(harness.engine.solve).toHaveBeenCalledTimes(1);
+    expect(harness.ui.status.textContent).toContain('Press Stop');
+    expect(harness.ui.stopButton.hidden).toBe(false);
+
+    // The clock stops the moment the help is asked for, not when the cube
+    // comes out solved.
+    expect(harness.ui.timer.value).toBe('00:02.90');
+
+    harness.setNow(9000);
+    harness.finishRewind();
+
+    expect(harness.controller.state).toBe('completed');
+    expect(harness.ui.timer.value).toBe('00:02.90');
+    expect(harness.ui.status.textContent).toBe(
+      'Solved by the solver. Not a solve of your own.',
+    );
+    expect(harness.ui.recordList.children).toHaveLength(0);
+  });
+
+  it('keeps a sitting the solver was let into out of the records for good', () => {
+    const harness = createHarness();
+
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+    expect(harness.controller.state).toBe('ready');
+
+    // Asked for from a ready cube, so the clock was never started -- and the
+    // solver's own moves are the user's in the record, which is exactly what
+    // would otherwise start it.
+    harness.setNow(100);
+    harness.ui.solveButton.click();
+    harness.runRewindFrame();
+    expect(harness.controller.state).toBe('ready');
+    expect(harness.ui.timer.value).toBe('00:00.00');
+
+    // Broken off part way and finished by hand. Half a solution is still a
+    // solution somebody was shown, so the sitting does not come back.
+    harness.ui.stopButton.click();
+    harness.setNow(4000);
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.controller.state).toBe('ready');
+    expect(harness.ui.timer.value).toBe('00:00.00');
+
+    harness.setSolved(true);
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.controller.state).toBe('completed');
+    expect(harness.ui.status.textContent).toContain('Not a solve of your own');
+    expect(harness.ui.recordList.children).toHaveLength(0);
+  });
+
+  it('a scramble gives the sitting back to whoever is playing it', () => {
+    const harness = createHarness();
+
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+    harness.ui.solveButton.click();
+    harness.finishRewind();
+    expect(harness.ui.status.textContent).toContain('Not a solve of your own');
+
+    // A new scramble is a new sitting, and this one is the person's own.
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+
+    harness.setNow(100);
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.controller.state).toBe('running');
+
+    harness.setSolved(true);
+    harness.setNow(1600);
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.ui.status.textContent).toContain('Solved in');
+    expect(harness.ui.recordList.children).toHaveLength(1);
+  });
+
   it('stops watching before a rewind, the way every cube command does', () => {
     const harness = createHarness();
 
@@ -1304,7 +1447,7 @@ describe('attachGameController', () => {
     for (const button of [
       harness.ui.undoButton,
       harness.ui.redoButton,
-      harness.ui.solveButton,
+      harness.ui.rewindButton,
       harness.ui.stopButton,
     ]) {
       expect(button.disabled).toBe(true);
@@ -1360,7 +1503,7 @@ describe('attachGameController', () => {
     // A solve walks the cursor down past the end of the scramble. Both moves
     // are waiting to be put back and neither is on the cube, so nothing is
     // marked -- and the scramble it rewound through is still not on the list.
-    harness.ui.solveButton.click();
+    harness.ui.rewindButton.click();
     harness.finishRewind();
     expect(entries()).toEqual(["R' pending", "R' pending"]);
 
@@ -1474,7 +1617,7 @@ describe('sharing the cube', () => {
     harness.ui.scrambleButton.click();
     harness.finishScramble();
 
-    harness.ui.solveButton.click();
+    harness.ui.rewindButton.click();
     harness.ui.stopButton.click();
 
     // Below the boundary the payload has no shape for: the two counts say
@@ -1546,7 +1689,7 @@ describe('the records of a sitting', () => {
     harness.commitMove();
     harness.controller.afterEngineFrame();
 
-    harness.ui.solveButton.click();
+    harness.ui.rewindButton.click();
     harness.setNow(5000);
     harness.finishRewind();
 

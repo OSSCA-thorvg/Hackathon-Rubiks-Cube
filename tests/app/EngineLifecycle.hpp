@@ -42,6 +42,10 @@ inline constexpr double kFrameMs = 16.0;
  * rather than hanging it: an application that never settles is a bug in the
  * engine, and a test suite that hangs says so far less clearly.
  *
+ * The guard is well past the longest sequence the application can play, which
+ * is a solve: a hundred and something moves, each of them several frames of
+ * animation.
+ *
  * @return how many frames it took, for the tests that assert motion happened.
  */
 inline int settle()
@@ -49,7 +53,7 @@ inline int settle()
     int frames = 0;
     while (rubiks::app::advance(kFrameMs)) {
         ++frames;
-        REQUIRE(frames < 1000);
+        REQUIRE(frames < 4000);
     }
     return frames;
 }

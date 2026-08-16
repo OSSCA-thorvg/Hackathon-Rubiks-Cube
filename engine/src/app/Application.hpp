@@ -283,6 +283,40 @@ void ambient_stop() noexcept;
 [[nodiscard]] bool solve_rewind() noexcept;
 
 /**
+ * Whether the solver this application holds solves the cube in hand.
+ *
+ * The size and nothing else. Whether a solve may be started *now* is the same
+ * question every other command answers with is_busy(), and the screen reads
+ * both to decide whether the control is live -- so this one does not have to
+ * know about gestures or sequences to be the honest answer to "is there a
+ * solver for this cube".
+ */
+[[nodiscard]] bool can_solve() noexcept;
+
+/**
+ * Works out how to solve the cube in front of it, and plays that.
+ *
+ * Not the rewind above. A rewind goes backwards through the record and ends at
+ * the cube the session began with, whoever made the moves it is taking off; a
+ * solve reads the cube as it stands and goes forwards. On a cube brought in
+ * from a shared link the difference is the whole point: rewinding replays
+ * somebody else's session in reverse, and this finishes it.
+ *
+ * The moves are written into the record before they are played, so they count
+ * as the user's own from that moment -- who chose them is not something a
+ * record of what happened to a cube can hold. Whether a solve was somebody's
+ * own work is a fact about the sitting, and the screen keeps it.
+ *
+ * Broken off with stop_playback(), like a rewind. What is left of the solution
+ * stays above the cursor, so redo() takes it up again a move at a time.
+ *
+ * @return true when a solve began; false before initialization, while
+ *         something else owns the cube, for a size no solver here handles, and
+ *         for a cube that is already solved.
+ */
+[[nodiscard]] bool solve() noexcept;
+
+/**
  * Breaks off a rewind, keeping everything it has already turned.
  *
  * The turn in flight is confirmed rather than dropped -- winding a rotation

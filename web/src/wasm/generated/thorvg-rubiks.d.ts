@@ -83,6 +83,10 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_redo(): number;
   /** Returns 1 when a rewind of every applied move began. */
   _thorvg_rubiks_solve_rewind(): number;
+  /** Returns 1 when a solver here handles the size of cube in hand. */
+  _thorvg_rubiks_can_solve(): number;
+  /** Returns 1 when a solve of the cube as it stands began. */
+  _thorvg_rubiks_solve(): number;
   /** Breaks off a rewind; a no-op for a scramble or a watched pattern. */
   _thorvg_rubiks_stop_playback(): void;
   /** How many moves the record holds, scramble and user moves together. */

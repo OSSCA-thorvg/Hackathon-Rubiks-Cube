@@ -78,14 +78,14 @@ test('a link opens the same cube somewhere else', async ({ page, context }) => {
   await expect(other.locator('#move-log li')).toHaveCount(2);
   await expect(other.locator('#undo')).toBeEnabled();
   await other.locator('#undo').click();
-  await expect(other.locator('#solve')).toBeEnabled();
+  await expect(other.locator('#rewind')).toBeEnabled();
   await expect(
     other.locator('#move-log li[data-state="pending"]'),
   ).toHaveCount(1);
 
   // And the scramble came across too, so a solve reaches all the way down and
   // a redo puts it back.
-  await other.locator('#solve').click();
+  await other.locator('#rewind').click();
   await expect(other.locator('#stop')).toBeHidden();
   await expect(other.locator('.game-shell')).toHaveAttribute(
     'data-game-state',
@@ -160,7 +160,7 @@ test('a session keeps its own solves and nothing else', async ({ page }) => {
   await page.locator('#scramble').click();
   await expect(shell).toHaveAttribute('data-game-state', 'ready');
   await turn(page, 'r');
-  await page.locator('#solve').click();
+  await page.locator('#rewind').click();
   await expect(shell).toHaveAttribute('data-game-state', 'completed');
   await expect(page.locator('#status')).toContainText('Not a solve of your own');
   await expect(page.locator('#record-best')).toHaveText('No solves yet.');

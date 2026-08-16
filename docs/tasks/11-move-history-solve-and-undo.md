@@ -165,6 +165,8 @@ for (std::size_t i = timeline_.cursor(); i < to; ++i) {
 
 ### 세션 의미
 
+> **개정 (Phase 16).** 이 절의 "Solve"는 전부 **되감기**를 가리킵니다. Phase 16이 현재 상태에서 앞으로 푸는 진짜 solver를 더하면서, 화면의 버튼 이름을 **Rewind**(이 phase의 명령)와 **Solve**(solver)로 나눴습니다. ABI 이름 `thorvg_rubiks_solve_rewind`는 처음부터 정확했으므로 그대로입니다. 아래의 파생 판별(`cursor() == 0 && scramble_end() > 0`)도 되감기에 대해서는 그대로 유효하며, solver가 푼 판은 그 모양이 아니라서 세션이 따로 기록합니다. [Phase 16 문서](./16-cube-solver.md) 참조.
+
 - Solve로 끝난 판은 기록으로 남는 완주가 아닙니다. Timer는 정지하되 completion 안내를 구분하고, Phase 14의 세션 기록은 이 판을 제외합니다.
 - **판별은 보관하는 상태가 아니라 파생 값입니다.** 완주를 관찰한 순간 `cursor() == 0`이면서 `scramble_end() > 0`이면 그 판은 solve가 푼 것입니다. Cursor를 scramble 구간 아래로 내릴 수 있는 명령은 solve뿐이고(undo의 하한이 `scramble_end()`), 사용자가 직접 완성한 판은 반드시 `cursor() > scramble_end() > 0`이기 때문입니다. 이미 노출된 query만으로 완주 시점에 계산되므로, 수락 시 세우고 stop·reset·scramble에서 지우는 pending flag도 그 전이 규칙도 존재하지 않습니다.
 - 이 판별은 경계 케이스를 규칙 없이 맞게 처리합니다. **Solve를 중단한 뒤 사용자가 직접 완성한 판**은 `cursor() > 0`이라 정상 기록이고, **마지막 수가 도는 중의 stop**으로 `finish_snap()`이 solved를 만든 판은 `cursor() == 0`이라 solve가 푼 판입니다 — 되감기를 전부 수행한 것이 실제로 solve이므로 분류가 사실과 일치합니다.

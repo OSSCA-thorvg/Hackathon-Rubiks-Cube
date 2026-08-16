@@ -16,11 +16,11 @@ application_lib = static_library(
     'app/Application.cpp',
     'render/ThorVGSoftwareRenderer.cpp',
   ),
-  dependencies: [interaction_dep, thorvg_dep],
+  dependencies: [interaction_dep, cube_solver_dep, thorvg_dep],
 )
 
 application_dep = declare_dependency(
-  dependencies: [interaction_dep, thorvg_dep],
+  dependencies: [interaction_dep, cube_solver_dep, thorvg_dep],
   link_with: application_lib,
 )
 
@@ -50,6 +50,8 @@ if host_machine.system() == 'emscripten'
     '_thorvg_rubiks_undo',
     '_thorvg_rubiks_redo',
     '_thorvg_rubiks_solve_rewind',
+    '_thorvg_rubiks_can_solve',
+    '_thorvg_rubiks_solve',
     '_thorvg_rubiks_stop_playback',
     '_thorvg_rubiks_timeline_length',
     '_thorvg_rubiks_timeline_cursor',

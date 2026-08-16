@@ -93,8 +93,10 @@ export function bootstrap(
         <div class="game-actions__group" role="group" aria-label="Move history">
           <button type="button" id="undo">Undo</button>
           <button type="button" id="redo">Redo</button>
+          <button type="button" id="rewind">Rewind</button>
           <button type="button" id="solve">Solve</button>
         </div>
+        <p class="solver-note" id="solver-note" hidden>No solver for this cube size yet — Rewind still works.</p>
         <button type="button" id="stop" hidden>Stop</button>
         <button type="button" id="share">Share</button>
         <button type="button" id="ambient" aria-pressed="false">Watch</button>
@@ -160,7 +162,9 @@ export function bootstrap(
     turnWideButton: app.querySelector<HTMLButtonElement>('#turn-wide')!,
     undoButton: app.querySelector<HTMLButtonElement>('#undo')!,
     redoButton: app.querySelector<HTMLButtonElement>('#redo')!,
+    rewindButton: app.querySelector<HTMLButtonElement>('#rewind')!,
     solveButton: app.querySelector<HTMLButtonElement>('#solve')!,
+    solverNote: app.querySelector<HTMLParagraphElement>('#solver-note')!,
     stopButton: app.querySelector<HTMLButtonElement>('#stop')!,
     shareButton: app.querySelector<HTMLButtonElement>('#share')!,
     recordBest: app.querySelector<HTMLParagraphElement>('#record-best')!,

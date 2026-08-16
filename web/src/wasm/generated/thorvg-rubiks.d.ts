@@ -49,9 +49,12 @@ export type ThorvgRubiksModule = {
   /**
    * Reads the whole buffer back onto the cube, without animation.
    *
-   * Returns 1 when every word was accepted; 0 leaves the cube untouched.
+   * The size arrives with the record, because a mask means nothing without the
+   * cube it was taken from. Returns 1 when every word was accepted; 0 leaves
+   * the cube untouched.
    */
   _thorvg_rubiks_restore_apply(
+    size: number,
     scrambleCount: number,
     userCount: number,
   ): number;
@@ -95,8 +98,22 @@ export type ThorvgRubiksModule = {
    * Zero for an index the record does not hold; a move is never zero.
    */
   _thorvg_rubiks_timeline_move(index: number): number;
-  /** Returns 1 when the turn started; face and turns follow cube::Face. */
-  _thorvg_rubiks_turn_face(face: number, faceTurns: number): number;
+  /**
+   * Returns 1 when the turn started; face and turns follow cube::Face.
+   *
+   * Depth 1 is the face itself and depths count inwards, so (face, 1, 1) is
+   * the face turn and (face, 1, 2) is the wide move.
+   */
+  _thorvg_rubiks_turn_face(
+    face: number,
+    firstDepth: number,
+    lastDepth: number,
+    faceTurns: number,
+  ): number;
+  /** Returns 1 when the engine built a cube of that size; 0 changes nothing. */
+  _thorvg_rubiks_set_cube_size(size: number): number;
+  /** How many layers the cube has along an axis. */
+  _thorvg_rubiks_cube_size(): number;
   /** Returns 1 when the mode was accepted; invalid values are rejected. */
   _thorvg_rubiks_set_view_mode(mode: number): number;
   /** The current graphics::ViewMode as an integer. */

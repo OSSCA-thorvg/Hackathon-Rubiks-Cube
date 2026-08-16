@@ -693,7 +693,7 @@ describe('startApp', () => {
 
 describe('startApp and a shared link', () => {
   /** One session encoded the way a share button would write it. */
-  const SHARED = encodeSession({ scramble: [0x44], user: [0x45] })!;
+  const SHARED = encodeSession({ size: 3, scramble: [0x44], user: [0x45] })!;
 
   it('starts fresh when the address carries nothing', async () => {
     const harness = createHarness();
@@ -724,6 +724,7 @@ describe('startApp and a shared link', () => {
     await harness.start();
 
     expect(harness.engine.restoreSession).toHaveBeenCalledWith(
+      3,
       [0x44],
       [0x45],
     );

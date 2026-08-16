@@ -58,7 +58,7 @@ summary:focus-visible {
 }
 
 button:disabled,
-.scramble-length input:disabled {
+.number-field input:disabled {
   cursor: not-allowed;
   opacity: 0.46;
 }
@@ -289,7 +289,7 @@ button[aria-pressed="true"]:hover:not(:disabled) {
 
 /* The length belongs to Scramble, so it sits with it rather than reading as
    a fourth command. */
-.scramble-length {
+.number-field {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -299,7 +299,7 @@ button[aria-pressed="true"]:hover:not(:disabled) {
   font-size: clamp(0.68rem, 1.4vw, 0.85rem);
 }
 
-.scramble-length input {
+.number-field input {
   width: 3.6rem;
   padding: 0.3rem 0.4rem;
   border: 1px solid rgb(255 255 255 / 18%);
@@ -321,11 +321,11 @@ button[aria-pressed="true"]:hover:not(:disabled) {
  * An animation always runs -- the reduced-motion one fades where this one also
  * moves -- because its end is what takes the mark away again.
  */
-.scramble-length input[data-refused] {
-  animation: scramble-length-refused 1.4s ease-out;
+.number-field input[data-refused] {
+  animation: field-refused 1.4s ease-out;
 }
 
-@keyframes scramble-length-refused {
+@keyframes field-refused {
   0% {
     border-color: rgb(230 57 70 / 90%);
     color: #ff9ca5;
@@ -358,12 +358,12 @@ button[aria-pressed="true"]:hover:not(:disabled) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .scramble-length input[data-refused] {
-    animation-name: scramble-length-refused-still;
+  .number-field input[data-refused] {
+    animation-name: field-refused-still;
   }
 }
 
-@keyframes scramble-length-refused-still {
+@keyframes field-refused-still {
   from {
     border-color: rgb(230 57 70 / 90%);
     color: #ff9ca5;
@@ -538,6 +538,17 @@ button[aria-pressed="true"]:hover:not(:disabled) {
   display: grid;
   grid-template-columns: repeat(6, minmax(44px, 1fr));
   gap: 0.5rem;
+}
+
+/*
+ * How deep the buttons below it reach, sitting above them because it is read
+ * before they are pressed rather than after.
+ */
+.turn-depth {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0 0 0.75rem;
 }
 
 #status {

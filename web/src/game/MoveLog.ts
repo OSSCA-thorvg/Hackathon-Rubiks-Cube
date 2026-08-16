@@ -1,9 +1,10 @@
-import { CUBE_SIZE } from '../wasm/CubeEngine.ts';
 import { moveNotation } from './notation.ts';
 
-/** What the log asks the engine, which is one question by index. */
+/** What the log asks the engine: one question by index, and which cube. */
 export type MoveLogEngine = {
   timelineMove(index: number): number;
+  /** Read at every entry rather than remembered: the cube can be replaced. */
+  cubeSize(): number;
 };
 
 /**
@@ -101,12 +102,14 @@ export class MoveLog {
           ? 'current'
           : 'pending';
 
-    // Assigned rather than tested. A move a 3x3 cannot be written down has no
-    // way of getting into the record -- every path that makes one turns a
-    // single layer -- so a branch here would be for a case the cube cannot
-    // reach, and the type is where that possibility is kept until a cube with
-    // more layers gives it a notation of its own.
-    item.textContent = moveNotation(this.engine.timelineMove(index), CUBE_SIZE);
+    // Assigned rather than tested. A move with no notation has no way of
+    // getting into the record: turning, the commands and a shared link are all
+    // held to the masks this writes, so a branch here would be for a case the
+    // cube cannot reach, and the type is where that possibility is kept.
+    item.textContent = moveNotation(
+      this.engine.timelineMove(index),
+      this.engine.cubeSize(),
+    );
     return item;
   }
 

@@ -107,6 +107,109 @@ const NOTATION_3: Readonly<Record<MoveAxis, readonly NotationCell[]>> = {
 const TABLE_SIZE = 3;
 
 /**
+ * The letters a numbered move is written with, by axis.
+ *
+ * The face at each end of the axis, and whether counting from it reads the
+ * turns backwards -- the same `inverted` convention as the table above, and
+ * for the same reason: a face at the negative end turns clockwise by going
+ * counter-clockwise about its axis.
+ */
+const FACES_BY_AXIS: Readonly<Record<MoveAxis, readonly [NotationCell, NotationCell]>> = {
+  // The negative end first, so the pair is in index order like the layers.
+  [MoveAxis.X]: [
+    { letter: 'L', inverted: true },
+    { letter: 'R', inverted: false },
+  ],
+  [MoveAxis.Y]: [
+    { letter: 'D', inverted: true },
+    { letter: 'U', inverted: false },
+  ],
+  [MoveAxis.Z]: [
+    { letter: 'B', inverted: true },
+    { letter: 'F', inverted: false },
+  ],
+};
+
+/** The layers a mask holds as a run, or null when it is not one. */
+export type LayerRun = {
+  /** Lowest layer index in the run. */
+  readonly from: number;
+  /** Highest, which equals `from` for a single layer. */
+  readonly to: number;
+};
+
+/**
+ * Reads a mask as one unbroken run of a cube's layers, or returns null.
+ *
+ * Everything the notation cannot write comes back as null here rather than in
+ * a case of its own downstream: a set with a gap in it, layers past the edge
+ * of the cube, and the whole cube at once -- which is a rotation, and rotations
+ * are not written in these letters.
+ *
+ * Exported because the same question is asked twice for different reasons:
+ * here it decides how a move is written, and a shared payload asks it to
+ * refuse the masks this cube has no way of making. One rule with one
+ * implementation, so a link can never carry a move the log cannot write.
+ */
+export function layerRun(layers: number, size: number): LayerRun | null {
+  if (layers === 0 || size < 2 || size > 28) return null;
+  if (layers >>> size !== 0) return null;
+
+  let from = 0;
+  while ((layers >>> from & 1) === 0) from += 1;
+
+  let to = from;
+  while ((layers >>> (to + 1) & 1) === 1) to += 1;
+
+  // Anything left above the run is a second run with a gap before it.
+  if (layers >>> (to + 1) !== 0) return null;
+  if (to - from + 1 === size) return null;
+  return { from, to };
+}
+
+/**
+ * Writes a run of layers the way big cubes are written: numbered from a face.
+ *
+ * Depths are counted from whichever of the axis's two faces the run is nearer,
+ * so the numbers stay small and a move keeps the letter of the face it looks
+ * like it belongs to. A run sitting exactly in the middle is counted from the
+ * positive face, which is a convention and nothing more -- both readings name
+ * the same layers, and one of them has to be chosen.
+ */
+function numberedNotation(move: DecodedMove, run: LayerRun, size: number): string {
+  const fromPositive = size - run.to;
+  const fromNegative = run.from + 1;
+  const positive = fromPositive <= fromNegative;
+
+  const cell = FACES_BY_AXIS[move.axis][positive ? 1 : 0];
+  const first = positive ? fromPositive : fromNegative;
+  const last = positive ? size - run.from : run.to + 1;
+
+  // Five shapes, and the first three are what makes `R` and `Rw` read as
+  // themselves rather than as `1R` and `1-2Rw`.
+  const body =
+    first === 1 && last === 1
+      ? cell.letter
+      : first === 1 && last === 2
+        ? `${cell.letter}w`
+        : first === 1
+          ? `${last}${cell.letter}w`
+          : first === last
+            ? `${first}${cell.letter}`
+            : `${first}-${last}${cell.letter}w`;
+
+  return `${body}${turnSuffix(move.quarterTurns, cell.inverted)}`;
+}
+
+/** How a move's turns are written once the letter has decided the direction. */
+function turnSuffix(quarterTurns: QuarterTurns, inverted: boolean): string {
+  const turns = inverted ? -quarterTurns : quarterTurns;
+  // A half turn is a half turn whichever way it was made, so it is the one
+  // suffix the sign never reaches.
+  return Math.abs(turns) === 2 ? '2' : turns > 0 ? '' : "'";
+}
+
+/**
  * Reads a packed move, or returns null for a word that is not one.
  *
  * Zero is the engine's answer for an index its record does not hold, so it
@@ -133,47 +236,17 @@ export function unpackMove(packed: number): DecodedMove | null {
   return { axis, layers, quarterTurns };
 }
 
-/**
- * The index of the single layer a mask selects, or null for anything else.
- *
- * Exported because the same question is asked twice for different reasons:
- * here it picks the row of the notation table, and a shared payload asks it to
- * refuse the wide moves this cube has no way of making.
- */
-export function singleLayerIndex(layers: number): number | null {
-  if ((layers & (layers - 1)) !== 0) return null;
-  return 31 - Math.clz32(layers);
-}
-
-/**
- * Writes a packed move in standard notation, or returns null.
- *
- * Null covers every mask the table has no entry for -- several layers at once,
- * a layer past the edge of the cube, a word that is not a move -- with no case
- * of its own for any of them. On a 3x3 nothing can produce one: a drag turns a
- * single layer and so does every command, which is why nothing draws this null
- * and it exists only in the return type. A cube with more layers is what would
- * bring the first one about, and the numbered notation it needs comes with it.
- *
- * `size` is taken rather than assumed so that the caller who has a bigger cube
- * is the one who has to say so, instead of quietly getting `R` for a move that
- * is not R.
- */
 export function moveNotation(packed: number, size: number): string | null {
-  if (size !== TABLE_SIZE) return null;
-
   const move = unpackMove(packed);
   if (move === null) return null;
 
-  const index = singleLayerIndex(move.layers);
-  if (index === null || index >= size) return null;
+  const run = layerRun(move.layers, size);
+  if (run === null) return null;
 
-  // In range of a table with a row for every axis, so there is a cell here
-  // and no failure left: the two ways of missing were the mask and the size.
-  const cell = NOTATION_3[move.axis][index];
-  const turns = cell.inverted ? -move.quarterTurns : move.quarterTurns;
-  // A half turn is a half turn whichever way it was made, so it is the one
-  // suffix the sign never reaches.
-  const suffix = Math.abs(turns) === 2 ? '2' : turns > 0 ? '' : "'";
-  return `${cell.letter}${suffix}`;
+  if (size === TABLE_SIZE && run.from === run.to) {
+    const cell = NOTATION_3[move.axis][run.from];
+    return `${cell.letter}${turnSuffix(move.quarterTurns, cell.inverted)}`;
+  }
+
+  return numberedNotation(move, run, size);
 }

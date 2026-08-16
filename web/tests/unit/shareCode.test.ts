@@ -20,14 +20,16 @@ function payload(
   scramble: readonly number[],
   user: readonly number[],
   trailing: readonly number[] = [],
+  size = 3,
 ): string {
   const bytes = new Uint8Array(
-    1 + 4 + scramble.length * 4 + 4 + user.length * 4 + trailing.length,
+    2 + 4 + scramble.length * 4 + 4 + user.length * 4 + trailing.length,
   );
   const view = new DataView(bytes.buffer);
 
   view.setUint8(0, version);
-  let offset = 1;
+  view.setUint8(1, size);
+  let offset = 2;
   for (const section of [scramble, user]) {
     view.setUint32(offset, section.length, true);
     offset += 4;
@@ -62,7 +64,7 @@ function bytesOf(encoded: string): Uint8Array {
 
 describe('encodeSession and decodeSession', () => {
   it('carries a session there and back', () => {
-    const session: SharedSession = { scramble: [R, U, F], user: [U, R] };
+    const session: SharedSession = { size: 3, scramble: [R, U, F], user: [U, R] };
     const encoded = encodeSession(session);
 
     expect(encoded).not.toBeNull();
@@ -72,7 +74,7 @@ describe('encodeSession and decodeSession', () => {
   it('carries a session that never had a scramble', () => {
     // Turned straight from a solved cube. Both counts are in the payload, so
     // an empty stretch needs no case of its own on either side.
-    const session: SharedSession = { scramble: [], user: [R] };
+    const session: SharedSession = { size: 3, scramble: [], user: [R] };
     const encoded = encodeSession(session);
 
     expect(decodeSession(encoded!)).toEqual(session);
@@ -83,12 +85,14 @@ describe('encodeSession and decodeSession', () => {
     // it is guarding is that the payload holds the actual scramble moves: a
     // version that went back to carrying a seed would still produce some
     // string, and only the layout says which.
-    const encoded = encodeSession({ scramble: [R], user: [U] })!;
-    expect(encoded).toBe('AQEAAABEAAAAAQAAAEUAAAA');
+    const encoded = encodeSession({ size: 3, scramble: [R], user: [U] })!;
+    expect(encoded).toBe('AgMBAAAARAAAAAEAAABFAAAA');
 
-    // version | scramble_count | R | user_count | U, every number little-endian.
+    // version | size | scramble_count | R | user_count | U, every multi-byte
+    // number little-endian.
     expect([...bytesOf(encoded)]).toEqual([
       SHARE_VERSION,
+      3,
       1, 0, 0, 0,
       0x44, 0, 0, 0,
       1, 0, 0, 0,
@@ -97,17 +101,17 @@ describe('encodeSession and decodeSession', () => {
   });
 
   it('has no session to write for a cube nothing has happened to', () => {
-    expect(encodeSession({ scramble: [], user: [] })).toBeNull();
+    expect(encodeSession({ size: 3, scramble: [], user: [] })).toBeNull();
   });
 
   it('refuses a record longer than the far side would take back', () => {
     const tooMany = new Array<number>(MAX_SHARED_MOVES + 1).fill(R);
-    expect(encodeSession({ scramble: tooMany, user: [] })).toBeNull();
+    expect(encodeSession({ size: 3, scramble: tooMany, user: [] })).toBeNull();
 
     // And the bound itself is reachable, so it is an edge rather than an
     // off-by-one that refuses everything near it.
     const exactly = new Array<number>(MAX_SHARED_MOVES).fill(R);
-    const encoded = encodeSession({ scramble: exactly, user: [] });
+    const encoded = encodeSession({ size: 3, scramble: exactly, user: [] });
     expect(encoded).not.toBeNull();
     expect(encoded!.length).toBeLessThanOrEqual(MAX_ENCODED_LENGTH);
     expect(decodeSession(encoded!)?.scramble).toHaveLength(MAX_SHARED_MOVES);
@@ -167,16 +171,55 @@ describe('decodeSession refusals', () => {
     expect(decodeSession(payload(SHARE_VERSION, [], [0x4c]))).toBeNull();
   });
 
-  it('refuses a move that turns more than one layer', () => {
-    // A wide move: the packing carries it happily and this cube has no way of
-    // making one, so the move log has no notation for it. Refusing it at the
-    // entrance is what keeps "a null notation is unreachable" true.
+  it('refuses a mask that is not a run of the cube it names', () => {
+    // A wide move is a run, and a run is a move this application makes and
+    // writes down, so it is carried rather than refused.
     const wide = 0x64; // axis X, one clockwise quarter, layers 1 and 2.
-    expect(decodeSession(payload(SHARE_VERSION, [], [wide]))).toBeNull();
+    expect(decodeSession(payload(SHARE_VERSION, [], [wide]))).not.toBeNull();
+
+    // Two layers with a still one between them: no gesture and no command
+    // makes it, and the move log has no notation for it. Refusing it at the
+    // entrance is what keeps "a null notation is unreachable" true.
+    const gapped = 0x54; // axis X, one clockwise quarter, layers 0 and 2.
+    expect(decodeSession(payload(SHARE_VERSION, [], [gapped]))).toBeNull();
+
+    // The whole cube at once, which is a rotation rather than a move.
+    const rotation = 0x74;
+    expect(decodeSession(payload(SHARE_VERSION, [], [rotation]))).toBeNull();
 
     // And a single layer past the edge of a three-layer cube.
     const beyond = 0x84;
     expect(decodeSession(payload(SHARE_VERSION, [], [beyond]))).toBeNull();
+
+    // The same word on the cube that does have that layer: which masks may
+    // travel is a question about the size, and the size is in the payload.
+    expect(decodeSession(payload(SHARE_VERSION, [], [beyond], [], 5)))
+      .not.toBeNull();
+  });
+
+  it('refuses a size no cube is built at', () => {
+    expect(decodeSession(payload(SHARE_VERSION, [], [R], [], 1))).toBeNull();
+    expect(decodeSession(payload(SHARE_VERSION, [], [R], [], 10))).toBeNull();
+    expect(decodeSession(payload(SHARE_VERSION, [], [R], [], 0))).toBeNull();
+  });
+
+  it('carries a bigger cube there and back', () => {
+    // Rw and the slice behind it on a 5x5: axis X, one clockwise quarter, and
+    // the layers written where the mask lives.
+    const packed = (layers: number): number => 0x4 | (layers << 4);
+    const session: SharedSession = {
+      size: 5,
+      scramble: [packed(0b11000)],
+      user: [packed(0b01000)],
+    };
+
+    const encoded = encodeSession(session);
+    expect(encoded).not.toBeNull();
+    expect(decodeSession(encoded!)).toEqual(session);
+
+    // The same record on a cube that has no such layers is refused, which is
+    // the size and the masks being checked against each other.
+    expect(encodeSession({ ...session, size: 3 })).toBeNull();
   });
 
   it('refuses a word that is no move', () => {
@@ -187,10 +230,11 @@ describe('decodeSession refusals', () => {
     // A count read out of a damaged payload can be any number at all, and it
     // is checked against the bytes actually present rather than multiplied out
     // into a request for bytes that are not there.
-    const bytes = new Uint8Array(1 + 4 + 4);
+    const bytes = new Uint8Array(2 + 4 + 4);
     const view = new DataView(bytes.buffer);
     view.setUint8(0, SHARE_VERSION);
-    view.setUint32(1, 0xffff_ffff, true);
+    view.setUint8(1, 3);
+    view.setUint32(2, 0xffff_ffff, true);
     expect(decodeSession(base64url(bytes))).toBeNull();
   });
 });

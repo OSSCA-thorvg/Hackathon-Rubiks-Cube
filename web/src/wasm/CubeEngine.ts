@@ -107,13 +107,18 @@ async function loadGeneratedModule(): Promise<ThorvgRubiksModule> {
 export const MAX_DIMENSION = 8192;
 
 /**
- * How many layers the cube has along an axis; mirrors the engine's own.
+ * The sizes of cube the engine builds; mirrors its own bounds.
  *
- * Mirrored rather than asked for, because the engine builds one size and the
- * number is a fact about the build. A cube whose size is a choice would carry
- * it across the boundary instead, and everything reading this would read that.
+ * The size in use is not mirrored, because it is a choice rather than a fact
+ * about the build: everything that needs it asks `cubeSize()`. What is
+ * mirrored is the range, so a control can offer it and a shared payload can
+ * refuse a size before anything crosses the boundary.
  */
-export const CUBE_SIZE = 3;
+export const MIN_CUBE_SIZE = 2;
+export const MAX_CUBE_SIZE = 9;
+
+/** The size the engine opens with, before anyone chooses one. */
+export const DEFAULT_CUBE_SIZE = 3;
 
 /** Longest scramble the engine will play; mirrors its limit too. */
 export const MAX_SCRAMBLE_MOVES = 100;
@@ -399,7 +404,9 @@ export class CubeEngine {
    *
    * Not a transaction on either side. A refusal leaves the cube exactly as it
    * was, which at the only moment this is called is a cube that has just been
-   * made, so there is nothing to roll back and nothing to retry.
+   * made, so there is nothing to roll back and nothing to retry. The size
+   * travels with the record for that reason: setting it first would leave a
+   * cube nobody asked for behind a record that was then turned down.
    *
    * @returns false when the engine would not take the record, which is an
    *          answer about the record rather than a failure of the engine.
@@ -408,6 +415,7 @@ export class CubeEngine {
    *         and takes the same route out as a bad pixel buffer.
    */
   restoreSession(
+    size: number,
     scramble: readonly number[],
     user: readonly number[],
   ): boolean {
@@ -439,6 +447,7 @@ export class CubeEngine {
 
     return (
       this.module._thorvg_rubiks_restore_apply(
+        size,
         scramble.length,
         user.length,
       ) !== 0
@@ -598,9 +607,42 @@ export class CubeEngine {
   }
 
   /** Starts one animated face turn, returning false while the engine is busy. */
-  turnFace(face: CubeFace, faceTurns: FaceTurns): boolean {
+  turnFace(
+    face: CubeFace,
+    firstDepth: number,
+    lastDepth: number,
+    faceTurns: FaceTurns,
+  ): boolean {
     this.assertUsable();
-    return this.module._thorvg_rubiks_turn_face(face, faceTurns) !== 0;
+    return (
+      this.module._thorvg_rubiks_turn_face(
+        face,
+        firstDepth,
+        lastDepth,
+        faceTurns,
+      ) !== 0
+    );
+  }
+
+  /**
+   * Builds a cube of a different size, starting the session over.
+   *
+   * How the cube is being looked at survives; the record and anything playing
+   * do not. A size the engine does not build is refused rather than clamped,
+   * the way a scramble length is: a five is not what someone asking for a
+   * fifty meant.
+   *
+   * @returns false when the engine would not build that size.
+   */
+  setCubeSize(size: number): boolean {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_set_cube_size(size) !== 0;
+  }
+
+  /** How many layers the cube has along an axis. */
+  cubeSize(): number {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_cube_size();
   }
 
   /** Changes which cube views are rendered. */

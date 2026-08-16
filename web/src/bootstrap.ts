@@ -1,8 +1,11 @@
 import { startApp, type AppState, type StartAppOptions } from './AppLifecycle.ts';
 import type { GameUi } from './game/GameController.ts';
 import {
+  DEFAULT_CUBE_SIZE,
   DEFAULT_SCRAMBLE_MOVES,
+  MAX_CUBE_SIZE,
   MAX_SCRAMBLE_MOVES,
+  MIN_CUBE_SIZE,
 } from './wasm/CubeEngine.ts';
 
 /** Lifecycle entry point, injectable so tests can observe the wiring. */
@@ -77,7 +80,11 @@ export function bootstrap(
       </div>
 
       <div class="game-actions" aria-label="Game actions">
-        <label class="scramble-length" for="scramble-moves">
+        <label class="number-field" for="cube-size">
+          <span>Cube</span>
+          <input type="number" id="cube-size" inputmode="numeric" step="1" min="${MIN_CUBE_SIZE}" max="${MAX_CUBE_SIZE}" value="${DEFAULT_CUBE_SIZE}">
+        </label>
+        <label class="number-field" for="scramble-moves">
           <span>Moves</span>
           <input type="number" id="scramble-moves" inputmode="numeric" step="1" min="1" max="${MAX_SCRAMBLE_MOVES}" value="${DEFAULT_SCRAMBLE_MOVES}">
         </label>
@@ -110,6 +117,13 @@ export function bootstrap(
   <details class="move-controls">
     <summary>Keyboard and move controls</summary>
     <p>Use R, L, U, D, F, or B. Hold Shift for a counter-clockwise turn.</p>
+    <div class="turn-depth" role="group" aria-label="Which layers a face turn takes">
+      <label class="number-field" for="turn-depth">
+        <span>Depth</span>
+        <input type="number" id="turn-depth" inputmode="numeric" step="1" min="1" max="${DEFAULT_CUBE_SIZE - 1}" value="1">
+      </label>
+      <button type="button" id="turn-wide" aria-pressed="false">Wide</button>
+    </div>
     <div class="move-grid" aria-label="Face turns">
       <button type="button" data-face="r" data-turn="1" aria-label="Turn right face clockwise">R</button>
       <button type="button" data-face="r" data-turn="-1" aria-label="Turn right face counter-clockwise">R′</button>
@@ -141,6 +155,9 @@ export function bootstrap(
     scrambleButton: app.querySelector<HTMLButtonElement>('#scramble')!,
     scrambleMovesInput: app.querySelector<HTMLInputElement>('#scramble-moves')!,
     resetButton: app.querySelector<HTMLButtonElement>('#reset')!,
+    cubeSizeInput: app.querySelector<HTMLInputElement>('#cube-size')!,
+    turnDepthInput: app.querySelector<HTMLInputElement>('#turn-depth')!,
+    turnWideButton: app.querySelector<HTMLButtonElement>('#turn-wide')!,
     undoButton: app.querySelector<HTMLButtonElement>('#undo')!,
     redoButton: app.querySelector<HTMLButtonElement>('#redo')!,
     solveButton: app.querySelector<HTMLButtonElement>('#solve')!,

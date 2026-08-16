@@ -3,6 +3,8 @@ import { formatElapsed } from './SolveTimer.ts';
 /** One finished solve, as it is worth remembering. */
 export type SolveRecord = {
   readonly elapsedMs: number;
+  /** Which cube it was, because a time means nothing without one. */
+  readonly cubeSize: number;
   /** How many moves the cube was handed, which is what was solved. */
   readonly scrambleLength: number;
   /** How many of the solver's own moves were on it at the end. */
@@ -35,7 +37,12 @@ export class SessionRecords {
   private readonly bestLine: HTMLElement;
   private readonly list: HTMLElement;
   private readonly entries: SolveRecord[] = [];
-  private bestRecord: SolveRecord | null = null;
+  /**
+   * The fastest solve of each cube, kept apart because they cannot be
+   * compared: a 2x2 in twelve seconds is not better than a 5x5 in five
+   * minutes, and one board holding both would say it was.
+   */
+  private readonly bestBySize = new Map<number, SolveRecord>();
 
   constructor(bestLine: HTMLElement, list: HTMLElement) {
     this.bestLine = bestLine;
@@ -56,20 +63,33 @@ export class SessionRecords {
     }
 
     // Strictly faster, so an equal time leaves the earlier one standing: the
-    // first to get there keeps it.
+    // first to get there keeps it. Against the best of this cube, because
+    // that is the only record this one is in the running for.
+    const standing = this.bestBySize.get(record.cubeSize);
     const isBest =
-      this.bestRecord === null || record.elapsedMs < this.bestRecord.elapsedMs;
-    if (isBest) this.bestRecord = record;
+      standing === undefined || record.elapsedMs < standing.elapsedMs;
+    if (isBest) this.bestBySize.set(record.cubeSize, record);
 
     this.draw();
     return isBest;
   }
 
   private draw(): void {
+    // The best of each cube, smallest first, on one line: there is one of
+    // these for every size that has been solved, and a session rarely visits
+    // more than a couple.
+    const bests = [...this.bestBySize.entries()].sort(
+      ([left], [right]) => left - right,
+    );
     this.bestLine.textContent =
-      this.bestRecord === null
+      bests.length === 0
         ? 'No solves yet.'
-        : `Best ${formatElapsed(this.bestRecord.elapsedMs)}`;
+        : bests
+            .map(
+              ([size, record]) =>
+                `Best ${size}×${size} ${formatElapsed(record.elapsedMs)}`,
+            )
+            .join(' · ');
 
     this.list.replaceChildren(
       ...this.entries.map((record) => {
@@ -77,6 +97,7 @@ export class SessionRecords {
         item.className = 'records__item';
         item.textContent =
           `${formatElapsed(record.elapsedMs)} · ` +
+          `${record.cubeSize}×${record.cubeSize} · ` +
           `${record.userMoveCount} moves · ` +
           `${record.scrambleLength}-move scramble`;
         return item;

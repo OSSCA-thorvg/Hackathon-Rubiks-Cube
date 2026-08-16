@@ -36,6 +36,7 @@ export type EngineLike = PointerTarget &
     advance(elapsedMs: number): boolean;
     /** @returns false when the engine would not take the shared record. */
     restoreSession(
+      size: number,
       scramble: readonly number[],
       user: readonly number[],
     ): boolean;
@@ -136,7 +137,7 @@ function openSharedState(
   const shared = decodeSession(encoded);
   if (shared === null) return 'unreadable';
 
-  if (!engine.restoreSession(shared.scramble, shared.user)) {
+  if (!engine.restoreSession(shared.size, shared.scramble, shared.user)) {
     engine.resetCube();
     return 'unreadable';
   }

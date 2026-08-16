@@ -17,8 +17,12 @@ function createBoard(): {
   return { records: new SessionRecords(best, list), best, list };
 }
 
-function solve(elapsedMs: number, userMoveCount = 12): SolveRecord {
-  return { elapsedMs, scrambleLength: 20, userMoveCount };
+function solve(
+  elapsedMs: number,
+  userMoveCount = 12,
+  cubeSize = 3,
+): SolveRecord {
+  return { elapsedMs, cubeSize, scrambleLength: 20, userMoveCount };
 }
 
 describe('SessionRecords', () => {
@@ -36,22 +40,41 @@ describe('SessionRecords', () => {
   it('keeps the first solve and calls it the best', () => {
     expect(board.records.add(solve(12_340))).toBe(true);
 
-    expect(board.best.textContent).toBe('Best 00:12.34');
+    expect(board.best.textContent).toBe('Best 3×3 00:12.34');
     expect(board.list.children).toHaveLength(1);
     expect(board.list.children[0]?.textContent).toBe(
-      '00:12.34 · 12 moves · 20-move scramble',
+      '00:12.34 · 3×3 · 12 moves · 20-move scramble',
     );
   });
 
   it('only calls a solve the best when it is faster than the last one', () => {
     expect(board.records.add(solve(12_340))).toBe(true);
     expect(board.records.add(solve(20_000))).toBe(false);
-    expect(board.best.textContent).toBe('Best 00:12.34');
+    expect(board.best.textContent).toBe('Best 3×3 00:12.34');
 
     // Equal is not faster: whoever got there first keeps it.
     expect(board.records.add(solve(12_340))).toBe(false);
     expect(board.records.add(solve(9_990))).toBe(true);
-    expect(board.best.textContent).toBe('Best 00:09.99');
+    expect(board.best.textContent).toBe('Best 3×3 00:09.99');
+  });
+
+  it('keeps a best for each cube, because the times are not comparable', () => {
+    expect(board.records.add(solve(12_340, 12, 3))).toBe(true);
+
+    // Slower than the 3x3 above and still a best: it is the first 5x5 there
+    // has been, and a 5x5 in five minutes is not worse than a 3x3 in twelve
+    // seconds -- it is a different question.
+    expect(board.records.add(solve(300_000, 220, 5))).toBe(true);
+    expect(board.best.textContent).toBe(
+      'Best 3×3 00:12.34 · Best 5×5 05:00.00',
+    );
+
+    // And the smaller cube's best is untouched by the larger one's.
+    expect(board.records.add(solve(20_000, 14, 3))).toBe(false);
+    expect(board.records.add(solve(250_000, 200, 5))).toBe(true);
+    expect(board.best.textContent).toBe(
+      'Best 3×3 00:12.34 · Best 5×5 04:10.00',
+    );
   });
 
   it('shows the latest few, newest first', () => {
@@ -68,6 +91,6 @@ describe('SessionRecords', () => {
 
     // The best is still the first one, which is no longer on the list: the
     // fastest of the sitting is not the same question as the latest few.
-    expect(board.best.textContent).toBe('Best 00:10.00');
+    expect(board.best.textContent).toBe('Best 3×3 00:10.00');
   });
 });

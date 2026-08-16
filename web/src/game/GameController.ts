@@ -5,7 +5,9 @@ import {
   CubeViewMode,
   DEFAULT_SCRAMBLE_MOVES,
   isValidScrambleMoves,
+  MAX_CUBE_SIZE,
   MAX_SCRAMBLE_MOVES,
+  MIN_CUBE_SIZE,
   type FaceTurns,
 } from '../wasm/CubeEngine.ts';
 import { createClickSound, type ClickSound } from './ClickSound.ts';
@@ -38,7 +40,14 @@ export type GameEngine = SessionEngine & {
   timelineLength(): number;
   timelineScrambleEnd(): number;
   timelineMove(index: number): number;
-  turnFace(face: CubeFace, faceTurns: FaceTurns): boolean;
+  turnFace(
+    face: CubeFace,
+    firstDepth: number,
+    lastDepth: number,
+    faceTurns: FaceTurns,
+  ): boolean;
+  setCubeSize(size: number): boolean;
+  cubeSize(): number;
   setViewMode(mode: CubeViewMode): void;
   viewMode(): CubeViewMode;
   setFlatStyle(style: CubeFlatStyle): void;
@@ -61,6 +70,12 @@ export type GameUi = {
   /** How many moves the next scramble is, as a plain integer. */
   readonly scrambleMovesInput: HTMLInputElement;
   readonly resetButton: HTMLButtonElement;
+  /** Which cube is on the table, as a plain integer of layers. */
+  readonly cubeSizeInput: HTMLInputElement;
+  /** How deep the face buttons and the keyboard letters reach. */
+  readonly turnDepthInput: HTMLInputElement;
+  /** Whether they take everything above that depth with them. */
+  readonly turnWideButton: HTMLButtonElement;
   /** Takes back one move of the user's own, and puts it back again. */
   readonly undoButton: HTMLButtonElement;
   readonly redoButton: HTMLButtonElement;
@@ -343,6 +358,7 @@ export function attachGameController(
     ui.scrambleMovesInput,
     ui.scrambleButton,
     ui.resetButton,
+    ui.cubeSizeInput,
     ui.homeViewButton,
     ...ui.viewButtons,
     ...ui.flatButtons,
@@ -517,6 +533,7 @@ export function attachGameController(
    * because they are not part of a cube.
    */
   const sharableNow = (now: EngineFrame): SharedSession => ({
+    size: engine.cubeSize(),
     scramble: recordedBetween(0, now.scrambleEnd),
     user: recordedBetween(now.scrambleEnd, now.cursor),
   });
@@ -619,19 +636,40 @@ export function attachGameController(
     });
   };
 
+  /**
+   * The layers a face button or a keyboard letter turns, as depths.
+   *
+   * Wide takes everything above the depth with it, which is the whole of the
+   * difference between `Rw` and the slice behind `R`. A drag needs none of
+   * this: a finger lands on one layer and turns that one.
+   */
+  const turnRange = (): { readonly first: number; readonly last: number } => ({
+    first: turnWide ? 1 : turnDepth,
+    last: turnDepth,
+  });
+
   const startFaceTurn = (face: CubeFace, turns: FaceTurns): void => {
     cubeCommand((): void => {
-      if (engine.turnFace(face, turns)) startFrameLoop();
+      const range = turnRange();
+      if (engine.turnFace(face, range.first, range.last, turns)) {
+        startFrameLoop();
+      }
     });
   };
 
-  // The last value the box held that the engine would accept. Kept here so a
+  // The last value each box held that the engine would accept. Kept here so a
   // refused edit has something to go back to.
   let scrambleMoves = DEFAULT_SCRAMBLE_MOVES;
   ui.scrambleMovesInput.value = String(scrambleMoves);
 
+  // How deep the face controls reach, and whether they bring the layers above
+  // that depth with them. Held here rather than read off the boxes, so a
+  // half-typed number never reaches the cube.
+  let turnDepth = 1;
+  let turnWide = false;
+
   /**
-   * Marks the box as having just refused an edit.
+   * Marks a box as having just refused an edit.
    *
    * Not `aria-invalid`: the value put back is a valid one, so the field is not
    * in an invalid state -- what happened is an event, and this is how long it
@@ -642,8 +680,7 @@ export function attachGameController(
    * Cleared out and re-set so that refusing twice running shows twice; setting
    * an attribute that is already there restarts no animation.
    */
-  const flashRefusal = (): void => {
-    const box = ui.scrambleMovesInput;
+  const flashRefusal = (box: HTMLInputElement): void => {
     delete box.dataset.refused;
     void box.offsetWidth;
     box.dataset.refused = '';
@@ -652,8 +689,9 @@ export function attachGameController(
   // The mark lasts as long as its animation, which is why one always runs --
   // the reduced-motion variant fades instead of moving rather than not being
   // there, so this always arrives and the mark can never stick.
-  const onRefusalFlashEnd = (): void => {
-    delete ui.scrambleMovesInput.dataset.refused;
+  const onRefusalFlashEnd = (event: Event): void => {
+    const box = event.currentTarget;
+    if (box instanceof HTMLInputElement) delete box.dataset.refused;
   };
 
   const onScrambleMovesChange = (): void => {
@@ -669,10 +707,91 @@ export function attachGameController(
     // Put back rather than clamped: a hundred is not what someone typing a
     // thousand meant, and quietly substituting it hides the mistake.
     ui.scrambleMovesInput.value = String(scrambleMoves);
-    flashRefusal();
+    flashRefusal(ui.scrambleMovesInput);
     session.announce(
       `A scramble is 1 to ${MAX_SCRAMBLE_MOVES} moves. Kept ${scrambleMoves}.`,
     );
+  };
+
+  /**
+   * Writes the depth control out for the cube in hand.
+   *
+   * The deepest a range may reach is one short of the cube, because the whole
+   * of it at once is a rotation and no command makes one. A depth left over
+   * from a larger cube is brought back inside rather than refused: nobody
+   * typed it at this cube, so there is nothing to tell them about.
+   */
+  const updateTurnDepthControl = (): void => {
+    const deepest = Math.max(1, engine.cubeSize() - 1);
+    turnDepth = Math.min(turnDepth, deepest);
+    ui.turnDepthInput.max = String(deepest);
+    ui.turnDepthInput.value = String(turnDepth);
+
+    // A cube with one layer to choose from has nothing to say about depth,
+    // and a 2x2 is that cube: both of its layers are outer faces.
+    ui.turnDepthInput.disabled = deepest === 1;
+    ui.turnWideButton.disabled = deepest === 1;
+    ui.turnWideButton.setAttribute('aria-pressed', String(turnWide));
+  };
+
+  const onTurnDepthChange = (): void => {
+    const typed = Number(ui.turnDepthInput.value);
+    const deepest = Math.max(1, engine.cubeSize() - 1);
+    if (Number.isInteger(typed) && typed >= 1 && typed <= deepest) {
+      turnDepth = typed;
+      delete ui.turnDepthInput.dataset.refused;
+      return;
+    }
+
+    ui.turnDepthInput.value = String(turnDepth);
+    flashRefusal(ui.turnDepthInput);
+    session.announce(
+      `A turn on this cube reaches 1 to ${deepest} layers deep. ` +
+        `Kept ${turnDepth}.`,
+    );
+  };
+
+  const onTurnWide = (): void => {
+    turnWide = !turnWide;
+    ui.turnWideButton.setAttribute('aria-pressed', String(turnWide));
+  };
+
+  const updateCubeSizeControl = (): void => {
+    ui.cubeSizeInput.value = String(engine.cubeSize());
+  };
+
+  /**
+   * Puts a different cube on the table, which starts the session over.
+   *
+   * A cube command like Reset, and the same shape: watching gives way to it,
+   * the engine builds the new cube, one frame draws it -- nothing is animating
+   * afterwards, so there is no loop to leave it to -- and the session restarts.
+   */
+  const onCubeSizeChange = (): void => {
+    const typed = Number(ui.cubeSizeInput.value);
+    if (
+      !Number.isInteger(typed) ||
+      typed < MIN_CUBE_SIZE ||
+      typed > MAX_CUBE_SIZE
+    ) {
+      ui.cubeSizeInput.value = String(engine.cubeSize());
+      flashRefusal(ui.cubeSizeInput);
+      session.announce(
+        `Cubes here are ${MIN_CUBE_SIZE} to ${MAX_CUBE_SIZE} layers. ` +
+          `Kept ${engine.cubeSize()}×${engine.cubeSize()}.`,
+      );
+      return;
+    }
+
+    delete ui.cubeSizeInput.dataset.refused;
+    cubeCommand((): void => {
+      if (!engine.setCubeSize(typed)) return;
+
+      engine.render();
+      session.restart();
+      updateCubeSizeControl();
+      updateTurnDepthControl();
+    });
   };
 
   const onScramble = (): void => {
@@ -866,6 +985,11 @@ export function attachGameController(
 
   ui.scrambleMovesInput.addEventListener('change', onScrambleMovesChange);
   ui.scrambleMovesInput.addEventListener('animationend', onRefusalFlashEnd);
+  ui.cubeSizeInput.addEventListener('change', onCubeSizeChange);
+  ui.cubeSizeInput.addEventListener('animationend', onRefusalFlashEnd);
+  ui.turnDepthInput.addEventListener('change', onTurnDepthChange);
+  ui.turnDepthInput.addEventListener('animationend', onRefusalFlashEnd);
+  ui.turnWideButton.addEventListener('click', onTurnWide);
   ui.scrambleButton.addEventListener('click', onScramble);
   ui.resetButton.addEventListener('click', onReset);
   ui.undoButton.addEventListener('click', onUndo);
@@ -883,6 +1007,8 @@ export function attachGameController(
 
   setup((): void => {
     setCommandsDisabled(false);
+    updateCubeSizeControl();
+    updateTurnDepthControl();
     updateViewControls();
     updatePaletteControls();
     updateMuteControl();
@@ -918,6 +1044,8 @@ export function attachGameController(
       // not the engine's and the session's to decide.
       for (const button of [
         ...ui.moveButtons,
+        ui.turnDepthInput,
+        ui.turnWideButton,
         ui.undoButton,
         ui.redoButton,
         ui.solveButton,
@@ -935,6 +1063,11 @@ export function attachGameController(
         'animationend',
         onRefusalFlashEnd,
       );
+      ui.cubeSizeInput.removeEventListener('change', onCubeSizeChange);
+      ui.cubeSizeInput.removeEventListener('animationend', onRefusalFlashEnd);
+      ui.turnDepthInput.removeEventListener('change', onTurnDepthChange);
+      ui.turnDepthInput.removeEventListener('animationend', onRefusalFlashEnd);
+      ui.turnWideButton.removeEventListener('click', onTurnWide);
       ui.scrambleButton.removeEventListener('click', onScramble);
       ui.resetButton.removeEventListener('click', onReset);
       ui.undoButton.removeEventListener('click', onUndo);

@@ -31,6 +31,8 @@ export type SessionEngine = {
   isSolved(): boolean;
   committedMoveCount(): number;
   timelineCursor(): number;
+  /** Which cube was solved, which a record is meaningless without. */
+  cubeSize(): number;
 };
 
 /**
@@ -214,6 +216,7 @@ export class GameSession {
       // would replace this one on the very line it was written to.
       const isBest = this.recordSolve?.({
         elapsedMs: finalMs,
+        cubeSize: this.engine.cubeSize(),
         scrambleLength: frame.scrambleEnd,
         userMoveCount: frame.userMoves,
       });

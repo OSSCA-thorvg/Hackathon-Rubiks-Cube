@@ -499,14 +499,26 @@ describe('CubeEngine gameplay and view controls', () => {
   it('starts face turns and reports busy rejection', async () => {
     const { engine, module, behavior } = await createEngine();
 
-    expect(engine.turnFace(CubeFace.Right, 1)).toBe(true);
+    expect(engine.turnFace(CubeFace.Right, 1, 1, 1)).toBe(true);
     expect(module._thorvg_rubiks_turn_face).toHaveBeenCalledWith(
       CubeFace.Right,
       1,
+      1,
+      1,
+    );
+
+    // A wide move is the same command with a deeper range, so the depths
+    // cross as they were given rather than being turned into a mask here.
+    expect(engine.turnFace(CubeFace.Right, 1, 3, 2)).toBe(true);
+    expect(module._thorvg_rubiks_turn_face).toHaveBeenLastCalledWith(
+      CubeFace.Right,
+      1,
+      3,
+      2,
     );
 
     behavior.turnFaceResult = 0;
-    expect(engine.turnFace(CubeFace.Up, -1)).toBe(false);
+    expect(engine.turnFace(CubeFace.Up, 1, 1, -1)).toBe(false);
   });
 
   it('sets and validates the current view mode', async () => {
@@ -686,28 +698,29 @@ describe('CubeEngine.restoreSession', () => {
   it('writes both stretches into the engine buffer and applies them', async () => {
     const { engine, module, restoreWords } = await createEngine();
 
-    expect(engine.restoreSession([0x44, 0x45], [0x46])).toBe(true);
+    expect(engine.restoreSession(3, [0x44, 0x45], [0x46])).toBe(true);
 
     expect(module._thorvg_rubiks_restore_buffer).toHaveBeenCalledWith(3);
     // The scramble first and the user's own moves after it, which is the
     // order the two counts describe on the other side.
     expect(restoreWords()).toEqual([0x44, 0x45, 0x46]);
-    expect(module._thorvg_rubiks_restore_apply).toHaveBeenCalledWith(2, 1);
+    expect(module._thorvg_rubiks_restore_apply).toHaveBeenCalledWith(3, 2, 1);
   });
 
   it('reports a refused record rather than throwing', async () => {
     const { engine, behavior } = await createEngine();
 
     behavior.restoreApplyResult = 0;
-    expect(engine.restoreSession([0x44], [])).toBe(false);
+    expect(engine.restoreSession(3, [0x44], [])).toBe(false);
   });
 
   it('refuses a record the engine could not have taken', async () => {
     const { engine, module } = await createEngine();
 
-    expect(engine.restoreSession([], [])).toBe(false);
+    expect(engine.restoreSession(3, [], [])).toBe(false);
     expect(
       engine.restoreSession(
+        3,
         new Array<number>(MAX_SHARED_MOVES + 1).fill(0x44),
         [],
       ),
@@ -721,7 +734,7 @@ describe('CubeEngine.restoreSession', () => {
 
     // The one refusal the engine expresses through the address, and it is
     // about the record: too many moves, or none.
-    expect(engine.restoreSession([0x44], [])).toBe(false);
+    expect(engine.restoreSession(3, [0x44], [])).toBe(false);
     expect(module._thorvg_rubiks_restore_apply).not.toHaveBeenCalled();
   });
 
@@ -735,7 +748,7 @@ describe('CubeEngine.restoreSession', () => {
       const { engine, module, behavior } = await createEngine();
       behavior.restoreBufferOverride = pointer;
 
-      expect(() => engine.restoreSession([0x44], [])).toThrow(
+      expect(() => engine.restoreSession(3, [0x44], [])).toThrow(
         'invalid restore buffer',
       );
       expect(module._thorvg_rubiks_restore_apply).not.toHaveBeenCalled();

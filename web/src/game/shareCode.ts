@@ -1,5 +1,9 @@
-import { CUBE_SIZE, MAX_SHARED_MOVES } from '../wasm/CubeEngine.ts';
-import { singleLayerIndex, unpackMove } from './notation.ts';
+import {
+  MAX_CUBE_SIZE,
+  MAX_SHARED_MOVES,
+  MIN_CUBE_SIZE,
+} from '../wasm/CubeEngine.ts';
+import { layerRun, unpackMove } from './notation.ts';
 
 /**
  * How one cube state travels as text, and how it is read back.
@@ -23,10 +27,12 @@ import { singleLayerIndex, unpackMove } from './notation.ts';
  * Which layout the bytes are in.
  *
  * Bumped rather than migrated: a payload whose version this build does not
- * know is dropped and the page opens fresh. What would follow the bump is a
- * cube of a size other than three, whose masks this layout will not carry.
+ * know is dropped and the page opens fresh. Version one carried no size,
+ * because there was one size; a mask means nothing without the cube it was
+ * taken from, so the size arriving is what made this version two, and links
+ * written before it open a fresh cube.
  */
-export const SHARE_VERSION = 1;
+export const SHARE_VERSION = 2;
 
 /**
  * The two stretches one shared state is made of, as packed words.
@@ -36,6 +42,8 @@ export const SHARE_VERSION = 1;
  * takes them back, and the encoding writes them down.
  */
 export type SharedSession = {
+  /** How many layers the cube these moves were made on has. */
+  readonly size: number;
   /** Everything the cube was handed, which may be empty. */
   readonly scramble: readonly number[];
   /** The user's own moves that are on the cube, without a rewound tail. */
@@ -46,9 +54,13 @@ export type SharedSession = {
  * The byte layout, written out because it is a permanent contract.
  *
  * ```text
- * version(1) | scramble_count(4) | packed(4) x scramble_count
- *            | user_count(4)     | packed(4) x user_count
+ * version(1) | size(1) | scramble_count(4) | packed(4) x scramble_count
+ *                      | user_count(4)     | packed(4) x user_count
  * ```
+ *
+ * The size is one byte and will never need another: a packed move carries
+ * twenty-eight layers at the outside, and no cube anyone would look at comes
+ * anywhere near that.
  *
  * Every multi-byte field is little-endian, and the reader says so explicitly
  * through DataView rather than laying a Uint32Array over the bytes -- a typed
@@ -62,11 +74,12 @@ export type SharedSession = {
  * remove the case instead of handling it.
  */
 const VERSION_BYTES = 1;
+const SIZE_BYTES = 1;
 const COUNT_BYTES = 4;
 const MOVE_BYTES = 4;
 
 /** The smallest payload that could still be a session: both counts, no moves. */
-const MIN_PAYLOAD_BYTES = VERSION_BYTES + COUNT_BYTES * 2;
+const MIN_PAYLOAD_BYTES = VERSION_BYTES + SIZE_BYTES + COUNT_BYTES * 2;
 
 /** The largest, at the bound the engine's restore buffer takes. */
 const MAX_PAYLOAD_BYTES = MIN_PAYLOAD_BYTES + MOVE_BYTES * MAX_SHARED_MOVES;
@@ -85,21 +98,28 @@ export const MAX_ENCODED_LENGTH = Math.ceil((MAX_PAYLOAD_BYTES * 4) / 3);
 const ENCODED_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 /**
- * Whether a word is a move this version of the payload may carry.
+ * Whether a word is a move a cube of `size` may be handed.
  *
- * Stricter than "a move": the mask is held to a single layer of this cube.
- * `CubeMove` itself is happy to hold several at once, and nothing in this
- * application can make such a move -- so the move log treats a notation of
- * null as unreachable rather than drawing it. A link is the one way a word
- * could arrive from outside, so the restriction goes on the way in and the
- * engine checks the same rule again on its own side.
+ * Stricter than "a move": the mask is held to one unbroken run of that cube's
+ * layers, short of all of them. `CubeMove` is happy to hold any set at all,
+ * and nothing in this application can make one with a gap in it or one that
+ * turns the whole cube -- so the move log treats a notation of null as
+ * unreachable rather than drawing it. A link is the one way a word could
+ * arrive from outside, so the same rule the notation reads by goes on the way
+ * in, and the engine checks it again on its own side.
  */
-function isSharableMove(packed: number): boolean {
+function isSharableMove(packed: number, size: number): boolean {
   const move = unpackMove(packed);
   if (move === null) return false;
 
-  const index = singleLayerIndex(move.layers);
-  return index !== null && index < CUBE_SIZE;
+  return layerRun(move.layers, size) !== null;
+}
+
+/** Whether a size is one this application builds a cube at. */
+function isSharableSize(size: number): boolean {
+  return (
+    Number.isInteger(size) && size >= MIN_CUBE_SIZE && size <= MAX_CUBE_SIZE
+  );
 }
 
 /**
@@ -112,14 +132,18 @@ function isSharableMove(packed: number): boolean {
  */
 export function encodeSession(session: SharedSession): string | null {
   const moves = [...session.scramble, ...session.user];
+  if (!isSharableSize(session.size)) return null;
   if (moves.length === 0 || moves.length > MAX_SHARED_MOVES) return null;
-  if (!moves.every(isSharableMove)) return null;
+  if (!moves.every((packed) => isSharableMove(packed, session.size))) {
+    return null;
+  }
 
   const bytes = new Uint8Array(MIN_PAYLOAD_BYTES + MOVE_BYTES * moves.length);
   const view = new DataView(bytes.buffer);
 
   view.setUint8(0, SHARE_VERSION);
-  let offset = VERSION_BYTES;
+  view.setUint8(VERSION_BYTES, session.size);
+  let offset = VERSION_BYTES + SIZE_BYTES;
   for (const section of [session.scramble, session.user]) {
     view.setUint32(offset, section.length, true);
     offset += COUNT_BYTES;
@@ -154,10 +178,15 @@ export function decodeSession(encoded: string): SharedSession | null {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (view.getUint8(0) !== SHARE_VERSION) return null;
 
+  // Read before any move is, because a mask means nothing without it: which
+  // layers a word may name is a question about this cube.
+  const size = view.getUint8(VERSION_BYTES);
+  if (!isSharableSize(size)) return null;
+
   // Walked by the reader rather than handed to it, so the two stretches are
   // read by one function called twice instead of by a loop whose result has to
   // be taken apart again -- which is what needed a type assertion to do.
-  let offset = VERSION_BYTES;
+  let offset = VERSION_BYTES + SIZE_BYTES;
   const readSection = (): number[] | null => {
     // Checked before it is used as a length: a count read out of a truncated
     // payload can be any number at all, and multiplying it out first is how a
@@ -173,7 +202,7 @@ export function decodeSession(encoded: string): SharedSession | null {
     for (let index = 0; index < count; index += 1) {
       const packed = view.getUint32(offset, true);
       offset += MOVE_BYTES;
-      if (!isSharableMove(packed)) return null;
+      if (!isSharableMove(packed, size)) return null;
       moves.push(packed);
     }
     return moves;
@@ -195,7 +224,7 @@ export function decodeSession(encoded: string): SharedSession | null {
   // Nothing may follow the second stretch.
   if (offset !== bytes.length) return null;
 
-  return { scramble, user };
+  return { size, scramble, user };
 }
 
 /** How many characters of the input one chunk of the conversion takes. */

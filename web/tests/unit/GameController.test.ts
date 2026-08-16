@@ -23,6 +23,9 @@ function createUi(): GameUi {
     <output id="timer"></output>
     <p id="status"></p>
     <input id="scramble-moves" type="number" min="1" max="100" value="20">
+    <input id="cube-size" type="number" min="2" max="9" value="3">
+    <input id="turn-depth" type="number" min="1" max="2" value="1">
+    <button id="turn-wide" type="button" aria-pressed="false">Wide</button>
     <button id="scramble" type="button">Scramble</button>
     <button id="reset" type="button">Reset</button>
     <button id="undo" type="button">Undo</button>
@@ -59,6 +62,9 @@ function createUi(): GameUi {
     scrambleButton: root.querySelector<HTMLButtonElement>('#scramble')!,
     scrambleMovesInput: root.querySelector<HTMLInputElement>('#scramble-moves')!,
     resetButton: root.querySelector<HTMLButtonElement>('#reset')!,
+    cubeSizeInput: root.querySelector<HTMLInputElement>('#cube-size')!,
+    turnDepthInput: root.querySelector<HTMLInputElement>('#turn-depth')!,
+    turnWideButton: root.querySelector<HTMLButtonElement>('#turn-wide')!,
     undoButton: root.querySelector<HTMLButtonElement>('#undo')!,
     redoButton: root.querySelector<HTMLButtonElement>('#redo')!,
     solveButton: root.querySelector<HTMLButtonElement>('#solve')!,
@@ -107,6 +113,7 @@ function createHarness(
   // answer it will actually be given rather than the one it asked for.
   let speedScale = 1;
   let watching = false;
+  let cubeSize = 3;
 
   // The record the real engine keeps, in the same shape: one length and two
   // indices into it. The user's move count is derived from them here too,
@@ -204,11 +211,30 @@ function createHarness(
     committedMoveCount: vi.fn((): number =>
       cursor > scrambleEnd ? cursor - scrambleEnd : 0,
     ),
-    turnFace: vi.fn((): boolean => {
-      if (busy) return false;
-      busy = true;
+    turnFace: vi.fn(
+      (
+        _face: CubeFace,
+        firstDepth: number,
+        lastDepth: number,
+        _turns: number,
+      ): boolean => {
+        if (busy) return false;
+        if (firstDepth < 1 || lastDepth < firstDepth) return false;
+        if (lastDepth - firstDepth + 1 >= cubeSize) return false;
+
+        busy = true;
+        return true;
+      },
+    ),
+    setCubeSize: vi.fn((size: number): boolean => {
+      if (size < 2 || size > 9) return false;
+      if (size !== cubeSize) {
+        cubeSize = size;
+        engine.resetCube();
+      }
       return true;
     }),
+    cubeSize: vi.fn((): number => cubeSize),
     setViewMode: vi.fn((mode: CubeViewMode): void => {
       viewMode = mode;
     }),
@@ -422,6 +448,144 @@ describe('attachGameController', () => {
     expect(harness.engine.scramble).toHaveBeenLastCalledWith(1234, 7);
   });
 
+  it('puts a different cube on the table and starts the session over', () => {
+    const harness = createHarness();
+
+    // A session under way, so there is something for the new cube to clear.
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.controller.state).toBe('running');
+
+    const size = harness.ui.cubeSizeInput;
+    size.value = '5';
+    size.dispatchEvent(new Event('change'));
+
+    expect(harness.engine.setCubeSize).toHaveBeenCalledWith(5);
+    expect(harness.engine.cubeSize()).toBe(5);
+    // Drawn here rather than left to a loop: nothing is animating after this,
+    // so there would be no next frame to draw the new cube.
+    expect(harness.engine.render).toHaveBeenCalled();
+    expect(harness.controller.state).toBe('idle');
+    expect(harness.ui.moveLogList.children).toHaveLength(0);
+
+    // And the depth control now reaches as far as the new cube allows.
+    expect(harness.ui.turnDepthInput.max).toBe('4');
+  });
+
+  it('ends watching before it changes the cube, the way Reset does', () => {
+    const harness = createHarness();
+
+    harness.ui.ambientButton.click();
+    expect(harness.engine.isAmbient()).toBe(true);
+
+    harness.ui.cubeSizeInput.value = '4';
+    harness.ui.cubeSizeInput.dispatchEvent(new Event('change'));
+
+    expect(harness.engine.ambientStop).toHaveBeenCalled();
+    expect(harness.engine.isAmbient()).toBe(false);
+    expect(harness.engine.cubeSize()).toBe(4);
+  });
+
+  it('puts back a size no cube is built at, and says so', () => {
+    const harness = createHarness();
+    const size = harness.ui.cubeSizeInput;
+
+    for (const refused of ['1', '10', '-3', '2.5', 'four']) {
+      size.value = refused;
+      size.dispatchEvent(new Event('change'));
+      expect(size.value).toBe('3');
+      expect(size.dataset.refused).toBeDefined();
+    }
+
+    expect(harness.engine.setCubeSize).not.toHaveBeenCalled();
+    expect(harness.ui.status.textContent).toContain('Kept 3×3');
+  });
+
+  it('turns as deep as the depth box says, wide or on its own', () => {
+    const harness = createHarness();
+
+    harness.ui.cubeSizeInput.value = '5';
+    harness.ui.cubeSizeInput.dispatchEvent(new Event('change'));
+
+    harness.ui.turnDepthInput.value = '2';
+    harness.ui.turnDepthInput.dispatchEvent(new Event('change'));
+
+    // Depth alone is the slice behind the face.
+    harness.ui.moveButtons[0]!.click();
+    expect(harness.engine.turnFace).toHaveBeenLastCalledWith(
+      CubeFace.Right,
+      2,
+      2,
+      1,
+    );
+
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+
+    // Wide brings everything above that depth with it, and the keyboard uses
+    // the same setting the buttons do.
+    harness.ui.turnWideButton.click();
+    expect(harness.ui.turnWideButton.getAttribute('aria-pressed')).toBe('true');
+    harness.dispatchKey({ key: 'r' });
+    expect(harness.engine.turnFace).toHaveBeenLastCalledWith(
+      CubeFace.Right,
+      1,
+      2,
+      1,
+    );
+  });
+
+  it('brings a depth left over from a larger cube back inside', () => {
+    const harness = createHarness();
+
+    harness.ui.cubeSizeInput.value = '7';
+    harness.ui.cubeSizeInput.dispatchEvent(new Event('change'));
+    harness.ui.turnDepthInput.value = '5';
+    harness.ui.turnDepthInput.dispatchEvent(new Event('change'));
+
+    harness.ui.cubeSizeInput.value = '3';
+    harness.ui.cubeSizeInput.dispatchEvent(new Event('change'));
+
+    // Nobody typed a five at a 3x3, so there is nothing to tell them about:
+    // the depth is simply what this cube can do.
+    expect(harness.ui.turnDepthInput.value).toBe('2');
+    expect(harness.ui.turnDepthInput.dataset.refused).toBeUndefined();
+
+    harness.ui.moveButtons[0]!.click();
+    expect(harness.engine.turnFace).toHaveBeenLastCalledWith(
+      CubeFace.Right,
+      2,
+      2,
+      1,
+    );
+  });
+
+  it('has nothing to ask about depth on a cube with two layers', () => {
+    const harness = createHarness();
+
+    harness.ui.cubeSizeInput.value = '2';
+    harness.ui.cubeSizeInput.dispatchEvent(new Event('change'));
+
+    // Both layers of a 2x2 are outer faces, so there is no depth to choose.
+    expect(harness.ui.turnDepthInput.disabled).toBe(true);
+    expect(harness.ui.turnWideButton.disabled).toBe(true);
+    expect(harness.ui.turnDepthInput.value).toBe('1');
+  });
+
+  it('puts back a depth the cube in hand cannot reach', () => {
+    const harness = createHarness();
+    const depth = harness.ui.turnDepthInput;
+
+    for (const refused of ['0', '3', '-1', '1.5', 'two']) {
+      depth.value = refused;
+      depth.dispatchEvent(new Event('change'));
+      expect(depth.value).toBe('1');
+    }
+    expect(harness.ui.status.textContent).toContain('Kept 1');
+  });
+
   it('leaves a refusal on the box, where scrambling cannot overwrite it', () => {
     const harness = createHarness();
     const input = harness.ui.scrambleMovesInput;
@@ -511,7 +675,12 @@ describe('attachGameController', () => {
     const harness = createHarness();
     harness.ui.moveButtons[0]!.click();
 
-    expect(harness.engine.turnFace).toHaveBeenCalledWith(CubeFace.Right, 1);
+    expect(harness.engine.turnFace).toHaveBeenCalledWith(
+      CubeFace.Right,
+      1,
+      1,
+      1,
+    );
     expect(harness.startFrameLoop).toHaveBeenCalledTimes(1);
     expect(harness.ui.moveButtons[0]!.disabled).toBe(true);
 
@@ -521,6 +690,8 @@ describe('attachGameController', () => {
     expect(event.defaultPrevented).toBe(true);
     expect(harness.engine.turnFace).toHaveBeenLastCalledWith(
       CubeFace.Right,
+      1,
+      1,
       -1,
     );
     expect(harness.startFrameLoop).toHaveBeenCalledTimes(2);
@@ -1239,7 +1410,11 @@ describe('sharing the cube', () => {
     // The scramble the cube was handed and the one move made on top of it,
     // which is exactly what the record holds.
     const shared = decodeSession(url.hash.replace('#s=', ''));
-    expect(shared).toEqual({ scramble: [0x44, 0x45, 0x46], user: [0x40] });
+    expect(shared).toEqual({
+      size: 3,
+      scramble: [0x44, 0x45, 0x46],
+      user: [0x40],
+    });
     expect(harness.ui.status.textContent).toBe('Link copied. It opens this cube.');
   });
 
@@ -1342,7 +1517,7 @@ describe('the records of a sitting', () => {
     harness.controller.afterEngineFrame();
 
     expect(harness.ui.status.textContent).toBe('Solved in 00:20.00. A new best.');
-    expect(harness.ui.recordBest.textContent).toBe('Best 00:20.00');
+    expect(harness.ui.recordBest.textContent).toBe('Best 3×3 00:20.00');
     expect(harness.ui.recordList.children).toHaveLength(1);
 
     // A slower second solve joins the list without taking the best.
@@ -1358,7 +1533,7 @@ describe('the records of a sitting', () => {
     harness.controller.afterEngineFrame();
 
     expect(harness.ui.status.textContent).toBe('Solved in 00:30.00.');
-    expect(harness.ui.recordBest.textContent).toBe('Best 00:20.00');
+    expect(harness.ui.recordBest.textContent).toBe('Best 3×3 00:20.00');
     expect(harness.ui.recordList.children).toHaveLength(2);
   });
 

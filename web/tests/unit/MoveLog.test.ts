@@ -14,7 +14,11 @@ function createLog(moves: readonly number[]) {
   document.body.replaceChildren(list);
 
   const timelineMove = vi.fn((index: number): number => moves[index] ?? 0);
-  return { list, timelineMove, log: new MoveLog(list, { timelineMove }) };
+  return {
+    list,
+    timelineMove,
+    log: new MoveLog(list, { timelineMove, cubeSize: () => 3 }),
+  };
 }
 
 /** What each entry says, and where it stands, as one readable row. */
@@ -100,6 +104,7 @@ describe('MoveLog', () => {
     const moves = [R, U, F];
     const list = document.createElement('ol');
     const log = new MoveLog(list, {
+      cubeSize: (): number => 3,
       timelineMove: (index: number): number => moves[index] ?? 0,
     });
 

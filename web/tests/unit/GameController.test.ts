@@ -186,9 +186,9 @@ function createHarness(
       if (busy || cursor === 0) return false;
       return startRewind(0);
     }),
-    canSolve: vi.fn((): boolean => cubeSize === 3),
+    canSolve: vi.fn((): boolean => cubeSize <= 3),
     solve: vi.fn((): boolean => {
-      if (busy || solved || cubeSize !== 3) return false;
+      if (busy || solved || cubeSize > 3) return false;
 
       // A solution is written in above the cursor and then played forward,
       // so the record grows at once and the cursor walks up to its end.

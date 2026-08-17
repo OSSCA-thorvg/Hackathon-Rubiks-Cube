@@ -12,9 +12,6 @@
 namespace rubiks::cube::solver {
 namespace {
 
-constexpr int kSize = 3;
-constexpr int kLast = kSize - 1;
-
 /**
  * The four faces around the up-down axis, in the order a U turn carries them.
  *
@@ -31,7 +28,7 @@ constexpr std::array<Face, 4> kSides{Face::Front, Face::Left, Face::Back,
  * The form the written sequences are in. A `CubeMove` is the general thing --
  * any run of layers about any axis -- and a solver that writes in the general
  * form would be writing a layer mask where it means "R". The narrowing is also
- * the promise this solver makes to the rest of the application: what comes out
+ * the promise this file makes to the rest of the application: what comes out
  * is outer faces and nothing else, which is what a shared link can carry and a
  * move log can write down.
  */
@@ -46,9 +43,9 @@ struct FaceTurn {
 }
 
 /** Whether a face is the one at the far end of its axis. */
-[[nodiscard]] bool positive_face(Face face) noexcept
+[[nodiscard]] bool positive_face(Face face, int size) noexcept
 {
-    return outer_layer(face, kSize) == kLast;
+    return outer_layer(face, size) == size - 1;
 }
 
 /**
@@ -58,10 +55,10 @@ struct FaceTurn {
  * counter-clockwise about that axis, which is the whole of the conversion --
  * the same one `moves::L`, `D` and `B` make.
  */
-[[nodiscard]] CubeMove to_move(const FaceTurn& turn) noexcept
+[[nodiscard]] CubeMove to_move(const FaceTurn& turn, int size) noexcept
 {
-    return CubeMove{axis_of(turn.face), depth_layers(turn.face, 1, 1, kSize),
-                    positive_face(turn.face) ? turn.turns : -turn.turns};
+    return CubeMove{axis_of(turn.face), depth_layers(turn.face, 1, 1, size),
+                    positive_face(turn.face, size) ? turn.turns : -turn.turns};
 }
 
 /** A face carried round by `quarters` turns of the up face. */
@@ -74,14 +71,24 @@ struct FaceTurn {
     return carried;
 }
 
-/** Where a cubie lands after one face turn. */
-[[nodiscard]] CubiePosition moved(const CubiePosition& position,
-                                  const FaceTurn& turn) noexcept
+/**
+ * Which face a piece shows on after one face is turned.
+ *
+ * The two faces on the turning axis keep their stickers, so they answer with
+ * themselves. Everything the stages ask about where a piece will end up is
+ * this question rather than a coordinate, which is what lets one body of code
+ * serve every size: a cube of any size has the same six faces.
+ */
+[[nodiscard]] Face carried_by(Face turning, int turns, Face showing,
+                              int size) noexcept
 {
-    const auto move = to_move(turn);
-    CubiePosition landed = position;
-    for (int i = 0, n = normalized_turns(move.quarter_turns); i < n; ++i) {
-        landed = turned_position(move.axis, landed, kSize);
+    if (axis_of(showing) == axis_of(turning)) return showing;
+
+    const int quarters =
+        normalized_turns(positive_face(turning, size) ? turns : -turns);
+    Face landed = showing;
+    for (int i = 0; i < quarters; ++i) {
+        landed = turned_face(axis_of(turning), landed);
     }
     return landed;
 }
@@ -101,23 +108,40 @@ void set_axis(CubiePosition& position, Axis axis, int value) noexcept
     position.z = value;
 }
 
-/** The slot at which every one of `on` is the outer surface. */
-[[nodiscard]] CubiePosition slot_of(std::initializer_list<Face> on) noexcept
+/** The one cubie that shows all three of these faces. */
+[[nodiscard]] CubiePosition corner_slot(Face a, Face b, Face c,
+                                        int size) noexcept
 {
-    CubiePosition position{1, 1, 1};
-    for (const Face face : on) {
-        set_axis(position, axis_of(face), outer_layer(face, kSize));
+    CubiePosition position{0, 0, 0};
+    for (const Face face : {a, b, c}) {
+        set_axis(position, axis_of(face), outer_layer(face, size));
     }
     return position;
 }
 
+/**
+ * One cubie of the run that shows both of these faces.
+ *
+ * A three by three has exactly one; a bigger cube has a row of them along the
+ * edge, all of the same two colours once the cube has been reduced. Any of
+ * them answers for the row, so the first is taken and the choice is written
+ * down here rather than at each caller.
+ */
+[[nodiscard]] CubiePosition edge_slot(Face a, Face b, int size) noexcept
+{
+    CubiePosition position{1, 1, 1};
+    set_axis(position, axis_of(a), outer_layer(a, size));
+    set_axis(position, axis_of(b), outer_layer(b, size));
+    return position;
+}
+
 /** The faces a slot shows: three for a corner, two for an edge, one centre. */
-[[nodiscard]] std::vector<Face> exposed_faces(const CubiePosition& position)
+[[nodiscard]] std::vector<Face> exposed_faces(const CubiePosition& position,
+                                              int size)
 {
     std::vector<Face> showing;
     for (const Face face : faces()) {
-        if (coordinate_on(axis_of(face), position) ==
-            outer_layer(face, kSize)) {
+        if (coordinate_on(axis_of(face), position) == outer_layer(face, size)) {
             showing.push_back(face);
         }
     }
@@ -132,54 +156,108 @@ void set_axis(CubiePosition& position, Axis axis, int value) noexcept
 }
 
 /**
- * The colour a face wears on this cube, read off its centre.
+ * The colour a face wears on a solved cube.
  *
- * Not `solved_color()`, which says what the colour is in the enum's own order.
- * A solver has no business knowing that order: what it needs is which face a
- * colour belongs to, and the centre of a 3x3 is the cube's own answer to that.
+ * `solved_color()` rather than the centre this used to read. The domain says
+ * what solved means -- `is_solved()` holds every sticker against this same
+ * function -- so this is the cube's own answer rather than a guess about the
+ * order an enum happens to be written in. It is also the only answer that
+ * exists at every size: a two by two has no centres, and the centres of a
+ * bigger one are not yet one colour while it is being reduced.
  */
-[[nodiscard]] FaceColor centre_colour(const CubeState& cube, Face face) noexcept
+[[nodiscard]] FaceColor home_colour(Face face) noexcept
 {
-    const auto centre = slot_of({face});
-    return sticker_at(cube, centre, face);
+    return solved_color(face);
 }
 
-[[nodiscard]] Face face_of_colour(const CubeState& cube,
-                                  FaceColor colour) noexcept
+[[nodiscard]] Face face_wearing(FaceColor colour) noexcept
 {
     for (const Face face : faces()) {
-        if (centre_colour(cube, face) == colour) return face;
+        if (home_colour(face) == colour) return face;
     }
     assert(false);
     return Face::Up;
 }
 
-/** Every slot of the cube, once each. */
-[[nodiscard]] std::vector<CubiePosition> all_slots()
+/**
+ * Where a piece is, said in faces rather than in coordinates.
+ *
+ * The stages never ask "which cubie is this" -- they ask which faces a piece
+ * shows and what colour is on each, and those two answers are the same shape
+ * on a two by two and on a nine by nine.
+ */
+struct Placement {
+    std::vector<Face> faces;
+    std::vector<FaceColor> colours;
+    CubiePosition at{};
+};
+
+[[nodiscard]] bool shows(const Placement& piece, Face face) noexcept
 {
-    std::vector<CubiePosition> slots;
-    slots.reserve(static_cast<std::size_t>(kSize) * kSize * kSize);
-    for (int x = 0; x < kSize; ++x) {
-        for (int y = 0; y < kSize; ++y) {
-            for (int z = 0; z < kSize; ++z) {
-                slots.push_back(CubiePosition{x, y, z});
-            }
-        }
+    for (const Face on : piece.faces) {
+        if (on == face) return true;
     }
-    return slots;
+    return false;
 }
 
-/** Whether a slot's showing colours are exactly `wanted`, in any order. */
-[[nodiscard]] bool shows_colours(const CubeState& cube,
-                                 const CubiePosition& position,
-                                 const std::vector<FaceColor>& wanted)
+[[nodiscard]] FaceColor colour_on(const Placement& piece, Face face) noexcept
 {
-    const auto showing = exposed_faces(position);
-    if (showing.size() != wanted.size()) return false;
+    for (std::size_t i = 0; i < piece.faces.size(); ++i) {
+        if (piece.faces[i] == face) return piece.colours[i];
+    }
+    assert(false);
+    return FaceColor::Red;
+}
+
+/** The face this piece wears `colour` on. */
+[[nodiscard]] Face wearing(const Placement& piece, FaceColor colour) noexcept
+{
+    for (std::size_t i = 0; i < piece.faces.size(); ++i) {
+        if (piece.colours[i] == colour) return piece.faces[i];
+    }
+    assert(false);
+    return Face::Up;
+}
+
+/** The faces of a piece other than `apart`. */
+[[nodiscard]] std::vector<Face> besides(const Placement& piece, Face apart)
+{
+    std::vector<Face> rest;
+    for (const Face face : piece.faces) {
+        if (face != apart) rest.push_back(face);
+    }
+    return rest;
+}
+
+/** Whether every showing sticker of a piece is the colour of its own face. */
+[[nodiscard]] bool at_home(const Placement& piece) noexcept
+{
+    for (std::size_t i = 0; i < piece.faces.size(); ++i) {
+        if (piece.colours[i] != home_colour(piece.faces[i])) return false;
+    }
+    return true;
+}
+
+[[nodiscard]] Placement read(const CubeState& cube,
+                             const CubiePosition& position)
+{
+    Placement piece;
+    piece.at = position;
+    piece.faces = exposed_faces(position, cube.size());
+    for (const Face face : piece.faces) {
+        piece.colours.push_back(sticker_at(cube, position, face));
+    }
+    return piece;
+}
+
+/** Whether a piece's colours are exactly `wanted`, in any order. */
+[[nodiscard]] bool wears(const Placement& piece,
+                         const std::vector<FaceColor>& wanted)
+{
+    if (piece.colours.size() != wanted.size()) return false;
 
     std::vector<bool> taken(wanted.size(), false);
-    for (const Face face : showing) {
-        const auto colour = sticker_at(cube, position, face);
+    for (const auto colour : piece.colours) {
         bool matched = false;
         for (std::size_t i = 0; i < wanted.size(); ++i) {
             if (taken[i] || wanted[i] != colour) continue;
@@ -195,67 +273,42 @@ void set_axis(CubiePosition& position, Axis axis, int value) noexcept
 /**
  * Where the piece wearing exactly these colours is.
  *
- * The only place a colour is used for anything but naming a face: on a 3x3 a
- * set of two or three colours picks out one piece and no other. Only the
- * showing faces are read -- a cubie carries a colour on the faces it hides as
- * well, and those turn with it, so looking at all six would find the same
- * colours on several pieces at once.
+ * The only place a colour is used for anything but naming a face: a set of two
+ * or three colours picks out one piece of a three by three and no other. On a
+ * bigger cube a pair of colours picks out a whole row along one edge, and any
+ * one of that row answers for it -- which is true once the cube is reduced,
+ * and this is only ever asked after it has been.
+ *
+ * Only the showing faces are read. A cubie carries a colour on the faces it
+ * hides as well, and those turn with it, so looking at all six would find the
+ * same colours on several pieces at once.
  */
-[[nodiscard]] CubiePosition find_piece(const CubeState& cube,
-                                       const std::vector<FaceColor>& colours)
+[[nodiscard]] Placement find_piece(const CubeState& cube,
+                                   const std::vector<FaceColor>& colours)
 {
-    for (const auto& slot : all_slots()) {
-        if (shows_colours(cube, slot, colours)) return slot;
-    }
-    assert(false);
-    return CubiePosition{1, 1, 1};
-}
-
-/** Which of a piece's showing faces wears `colour`. */
-[[nodiscard]] Face face_showing(const CubeState& cube,
-                                const CubiePosition& position,
-                                FaceColor colour)
-{
-    for (const Face face : exposed_faces(position)) {
-        if (sticker_at(cube, position, face) == colour) return face;
-    }
-    assert(false);
-    return Face::Up;
-}
-
-/** Whether every showing sticker of a slot is the colour of its own face. */
-[[nodiscard]] bool piece_home(const CubeState& cube,
-                              const CubiePosition& position)
-{
-    for (const Face face : exposed_faces(position)) {
-        if (sticker_at(cube, position, face) != centre_colour(cube, face)) {
-            return false;
+    const int size = cube.size();
+    for (int x = 0; x < size; ++x) {
+        for (int y = 0; y < size; ++y) {
+            for (int z = 0; z < size; ++z) {
+                const auto piece = read(cube, CubiePosition{x, y, z});
+                if (piece.faces.size() != colours.size()) continue;
+                if (wears(piece, colours)) return piece;
+            }
         }
     }
-    return true;
+    assert(false);
+    return Placement{};
 }
 
-/** Whether a slot holds its own piece, however that piece is turned. */
-[[nodiscard]] bool piece_in_place(const CubeState& cube,
-                                  const CubiePosition& position)
+/** The frame whose front and right faces are these two, in either order. */
+[[nodiscard]] int frame_of(Face a, Face b) noexcept
 {
-    std::vector<FaceColor> wanted;
-    for (const Face face : exposed_faces(position)) {
-        wanted.push_back(centre_colour(cube, face));
-    }
-    return shows_colours(cube, position, wanted);
-}
-
-/** How many turns of the up face carry `from` to `to`; 0 when they are one. */
-[[nodiscard]] int up_turns_between(const CubiePosition& from,
-                                   const CubiePosition& to) noexcept
-{
-    CubiePosition carried = from;
-    for (int turns = 0; turns < 4; ++turns) {
-        if (carried.x == to.x && carried.y == to.y && carried.z == to.z) {
-            return turns;
+    for (int frame = 0; frame < 4; ++frame) {
+        const Face front = about_up(Face::Front, frame);
+        const Face right = about_up(Face::Right, frame);
+        if ((front == a && right == b) || (front == b && right == a)) {
+            return frame;
         }
-        carried = moved(carried, FaceTurn{Face::Up, 1});
     }
     assert(false);
     return 0;
@@ -266,6 +319,23 @@ void set_axis(CubiePosition& position, Axis axis, int value) noexcept
 {
     for (int turns = 0; turns < 4; ++turns) {
         if (about_up(from, turns) == to) return turns;
+    }
+    assert(false);
+    return 0;
+}
+
+/** How many turns of the up face carry one pair of side faces onto another. */
+[[nodiscard]] int up_turns_between(const std::vector<Face>& from, Face to_first,
+                                   Face to_second) noexcept
+{
+    assert(from.size() == 2);
+    for (int turns = 0; turns < 4; ++turns) {
+        const Face first = about_up(from[0], turns);
+        const Face second = about_up(from[1], turns);
+        if ((first == to_first && second == to_second) ||
+            (first == to_second && second == to_first)) {
+            return turns;
+        }
     }
     assert(false);
     return 0;
@@ -284,6 +354,8 @@ public:
 
     [[nodiscard]] const CubeState& cube() const noexcept { return cube_; }
 
+    [[nodiscard]] int size() const noexcept { return cube_.size(); }
+
     [[nodiscard]] std::vector<CubeMove> take() noexcept
     {
         return std::move(moves_);
@@ -292,7 +364,7 @@ public:
     void turn(Face face, int turns)
     {
         if (normalized_turns(turns) == 0) return;
-        const auto move = to_move(FaceTurn{face, turns});
+        const auto move = to_move(FaceTurn{face, turns}, cube_.size());
         cube_.apply(move);
         moves_.push_back(move);
     }
@@ -310,7 +382,7 @@ private:
     std::vector<CubeMove> moves_;
 };
 
-// The written sequences. Six of them, and everything else in this file is
+// The written sequences. Nine of them, and everything else in this file is
 // working out where to stand before using one.
 
 /**
@@ -348,8 +420,8 @@ const std::vector<FaceTurn> kCornerFromTop{{Face::Right, 1},
 
 /** Drops a top edge into the middle slot on the right of the front face. */
 const std::vector<FaceTurn> kInsertRight{
-    {Face::Up, 1},    {Face::Right, 1}, {Face::Up, -1},   {Face::Right, -1},
-    {Face::Up, -1},   {Face::Front, -1}, {Face::Up, 1},   {Face::Front, 1}};
+    {Face::Up, 1},    {Face::Right, 1},  {Face::Up, -1},   {Face::Right, -1},
+    {Face::Up, -1},   {Face::Front, -1}, {Face::Up, 1},    {Face::Front, 1}};
 
 /** The mirror of it, for the slot on the left. */
 const std::vector<FaceTurn> kInsertLeft{
@@ -384,31 +456,12 @@ const std::vector<FaceTurn> kEdgeCycle{
     {Face::Right, 1},  {Face::Up, 1},  {Face::Right, 1},  {Face::Up, -1},
     {Face::Right, -1}, {Face::Up, -1}, {Face::Right, 2}};
 
-/** The four top edge slots. */
-[[nodiscard]] std::vector<CubiePosition> top_edges()
-{
-    std::vector<CubiePosition> slots;
-    for (const Face side : kSides) slots.push_back(slot_of({Face::Up, side}));
-    return slots;
-}
-
-/** The four top corner slots. */
-[[nodiscard]] std::vector<CubiePosition> top_corners()
-{
-    std::vector<CubiePosition> slots;
-    for (int frame = 0; frame < 4; ++frame) {
-        slots.push_back(slot_of({Face::Up, about_up(Face::Front, frame),
-                                 about_up(Face::Right, frame)}));
-    }
-    return slots;
-}
-
 [[nodiscard]] int top_edges_turned_up(const CubeState& cube)
 {
-    const auto up = centre_colour(cube, Face::Up);
     int count = 0;
-    for (const auto& slot : top_edges()) {
-        if (sticker_at(cube, slot, Face::Up) == up) ++count;
+    for (const Face side : kSides) {
+        const auto slot = edge_slot(Face::Up, side, cube.size());
+        if (sticker_at(cube, slot, Face::Up) == home_colour(Face::Up)) ++count;
     }
     return count;
 }
@@ -416,8 +469,15 @@ const std::vector<FaceTurn> kEdgeCycle{
 [[nodiscard]] int top_corners_in_place(const CubeState& cube)
 {
     int count = 0;
-    for (const auto& slot : top_corners()) {
-        if (piece_in_place(cube, slot)) ++count;
+    for (int frame = 0; frame < 4; ++frame) {
+        const auto front = about_up(Face::Front, frame);
+        const auto right = about_up(Face::Right, frame);
+        const auto piece =
+            read(cube, corner_slot(Face::Up, front, right, cube.size()));
+        if (wears(piece, {home_colour(Face::Up), home_colour(front),
+                          home_colour(right)})) {
+            ++count;
+        }
     }
     return count;
 }
@@ -425,8 +485,9 @@ const std::vector<FaceTurn> kEdgeCycle{
 [[nodiscard]] int top_edges_in_place(const CubeState& cube)
 {
     int count = 0;
-    for (const auto& slot : top_edges()) {
-        if (piece_in_place(cube, slot)) ++count;
+    for (const Face side : kSides) {
+        const auto piece = read(cube, edge_slot(Face::Up, side, cube.size()));
+        if (wears(piece, {home_colour(Face::Up), home_colour(side)})) ++count;
     }
     return count;
 }
@@ -444,7 +505,8 @@ const std::vector<FaceTurn> kEdgeCycle{
 }
 
 /** The sequence that takes another one back. */
-[[nodiscard]] std::vector<FaceTurn> reversed(const std::vector<FaceTurn>& sequence)
+[[nodiscard]] std::vector<FaceTurn> reversed(
+    const std::vector<FaceTurn>& sequence)
 {
     std::vector<FaceTurn> back;
     back.reserve(sequence.size());
@@ -508,213 +570,6 @@ bool apply_best(Work& work, const std::vector<FaceTurn>& sequence,
 }
 
 /**
- * Turns the top so the slot above `face` holds nothing already finished.
- *
- * The bottom cross is built in the top layer first, and every way of bringing
- * the next edge up turns one side face, which sends whatever is above that
- * face down with it. There is always a slot to spare: the piece being fetched
- * is not up there yet, so at most three of the four are.
- */
-void free_slot_above(Work& work, Face face, FaceColor bottom)
-{
-    for (int align = 0; align < 4; ++align) {
-        const auto slot = slot_of({Face::Up, face});
-        if (sticker_at(work.cube(), slot, Face::Up) != bottom) return;
-        work.turn(Face::Up, 1);
-    }
-    assert(false);
-}
-
-/**
- * Every bottom-colour edge into the top layer, bottom colour facing up.
- *
- * The flower a beginner is shown, and the reason for it is that the bottom is
- * empty while it is being built: nothing down there can be broken by a side
- * face turning, so each piece is fetched in one move and no piece has to be
- * put back afterwards.
- */
-void build_flower(Work& work)
-{
-    const auto bottom = centre_colour(work.cube(), Face::Down);
-
-    for (const Face side : kSides) {
-        const auto side_colour = centre_colour(work.cube(), side);
-
-        for (int guard = 0;; ++guard) {
-            assert(guard < 8);
-            const auto at = find_piece(work.cube(), {bottom, side_colour});
-
-            if (at.y == kLast) {
-                if (sticker_at(work.cube(), at, Face::Up) == bottom) break;
-
-                // Turned the wrong way up there. One turn of the face it
-                // leans against drops it into the middle, which is the case
-                // below and the only one that knows how to turn it over.
-                for (const Face face : exposed_faces(at)) {
-                    if (face == Face::Up) continue;
-                    work.turn(face, 1);
-                    break;
-                }
-                continue;
-            }
-
-            if (at.y == 0) {
-                Face side_face = Face::Down;
-                for (const Face face : exposed_faces(at)) {
-                    if (face != Face::Down) side_face = face;
-                }
-                free_slot_above(work, side_face, bottom);
-                work.turn(side_face,
-                          sticker_at(work.cube(), at, Face::Down) == bottom
-                              ? 2
-                              : 1);
-                continue;
-            }
-
-            // In the middle. Lifting it with the face its bottom colour is
-            // *not* on is what brings that colour out facing up: a quarter
-            // turn carries the sticker from the side face to the top one.
-            const auto carrying = face_showing(work.cube(), at, bottom);
-            Face lift = Face::Up;
-            for (const Face face : exposed_faces(at)) {
-                if (face != carrying) lift = face;
-            }
-            free_slot_above(work, lift, bottom);
-            work.turn(lift, moved(at, FaceTurn{lift, 1}).y == kLast ? 1 : -1);
-        }
-    }
-}
-
-/** The flower folded down into the bottom cross, one half turn each. */
-void fold_flower(Work& work)
-{
-    const auto bottom = centre_colour(work.cube(), Face::Down);
-
-    for (const Face side : kSides) {
-        const auto side_colour = centre_colour(work.cube(), side);
-        const auto at = find_piece(work.cube(), {bottom, side_colour});
-        work.turn(Face::Up,
-                  up_turns_between(at, slot_of({Face::Up, side})));
-        work.turn(side, 2);
-    }
-}
-
-void place_bottom_corners(Work& work)
-{
-    const auto bottom = centre_colour(work.cube(), Face::Down);
-
-    for (int frame = 0; frame < 4; ++frame) {
-        const auto front = about_up(Face::Front, frame);
-        const auto right = about_up(Face::Right, frame);
-        const auto home = slot_of({Face::Down, front, right});
-        const std::vector<FaceColor> colours{
-            bottom, centre_colour(work.cube(), front),
-            centre_colour(work.cube(), right)};
-
-        for (int guard = 0;; ++guard) {
-            assert(guard < 32);
-            const auto at = find_piece(work.cube(), colours);
-            if (piece_home(work.cube(), at) &&
-                at.x == home.x && at.y == home.y && at.z == home.z) {
-                break;
-            }
-
-            if (at.y == 0) {
-                // Down there but not right. Lifting it out from where it sits
-                // leaves the rest of the bottom layer alone, so the corners
-                // already finished stay finished.
-                for (int other = 0; other < 4; ++other) {
-                    const auto slot =
-                        slot_of({Face::Down, about_up(Face::Front, other),
-                                 about_up(Face::Right, other)});
-                    if (slot.x != at.x || slot.y != at.y || slot.z != at.z) {
-                        continue;
-                    }
-                    work.run(kCornerLift, other);
-                    break;
-                }
-                continue;
-            }
-
-            // Above its slot, the bottom colour points one of three ways, and
-            // each has its own way down.
-            work.turn(Face::Up,
-                      up_turns_between(
-                          at, slot_of({Face::Up, front, right})));
-
-            const auto waiting = slot_of({Face::Up, front, right});
-            const auto leaning = face_showing(work.cube(), waiting, bottom);
-            if (leaning == right) {
-                work.run(kCornerFromRight, frame);
-            } else if (leaning == front) {
-                work.run(kCornerFromFront, frame);
-            } else {
-                work.run(kCornerFromTop, frame);
-            }
-        }
-    }
-}
-
-void place_middle_edges(Work& work)
-{
-    for (int frame = 0; frame < 4; ++frame) {
-        const auto front = about_up(Face::Front, frame);
-        const auto right = about_up(Face::Right, frame);
-        const auto home = slot_of({front, right});
-        const std::vector<FaceColor> colours{centre_colour(work.cube(), front),
-                                             centre_colour(work.cube(), right)};
-
-        for (int guard = 0;; ++guard) {
-            assert(guard < 8);
-            const auto at = find_piece(work.cube(), colours);
-            if (piece_home(work.cube(), at) &&
-                at.x == home.x && at.y == home.y && at.z == home.z) {
-                break;
-            }
-
-            if (at.y != kLast) {
-                // Stuck in a middle slot, its own or another's. The insertion
-                // for that slot, used on an occupied one, puts the occupant
-                // back on top -- so there is no second sequence for getting
-                // one out.
-                for (int other = 0; other < 4; ++other) {
-                    const auto slot = slot_of({about_up(Face::Front, other),
-                                               about_up(Face::Right, other)});
-                    if (slot.x != at.x || slot.y != at.y || slot.z != at.z) {
-                        continue;
-                    }
-                    work.run(kInsertRight, other);
-                    break;
-                }
-                continue;
-            }
-
-            // On top. Line its side colour up with that colour's own face;
-            // then the colour facing up names the slot it belongs in, and
-            // which side of the front face that is chooses the sequence.
-            Face leaning = Face::Up;
-            for (const Face face : exposed_faces(at)) {
-                if (face != Face::Up) leaning = face;
-            }
-            const auto side_colour = sticker_at(work.cube(), at, leaning);
-            const auto matching = face_of_colour(work.cube(), side_colour);
-            work.turn(Face::Up, up_turns_between(leaning, matching));
-
-            const auto now = slot_of({Face::Up, matching});
-            const auto up_colour = sticker_at(work.cube(), now, Face::Up);
-            const auto belongs = face_of_colour(work.cube(), up_colour);
-            const int here = up_turns_between(Face::Front, matching);
-
-            if (about_up(Face::Right, here) == belongs) {
-                work.run(kInsertRight, here);
-            } else {
-                work.run(kInsertLeft, here);
-            }
-        }
-    }
-}
-
-/**
  * Uses one sequence over and over until a stage's count is full.
  *
  * The whole of the last four stages, which differ only in the sequence they
@@ -735,6 +590,178 @@ void repeat_until(Work& work, const std::vector<FaceTurn>& sequence,
     }
 }
 
+/**
+ * Turns the top so the slot above `face` holds nothing already finished.
+ *
+ * The bottom cross is built in the top layer first, and every way of bringing
+ * the next edge up turns one side face, which sends whatever is above that
+ * face down with it. There is always a slot to spare: the piece being fetched
+ * is not up there yet, so at most three of the four are.
+ */
+void free_slot_above(Work& work, Face face)
+{
+    for (int align = 0; align < 4; ++align) {
+        const auto slot = edge_slot(Face::Up, face, work.size());
+        if (sticker_at(work.cube(), slot, Face::Up) !=
+            home_colour(Face::Down)) {
+            return;
+        }
+        work.turn(Face::Up, 1);
+    }
+    assert(false);
+}
+
+/**
+ * Every bottom-colour edge into the top layer, bottom colour facing up.
+ *
+ * The flower a beginner is shown, and the reason for it is that the bottom is
+ * empty while it is being built: nothing down there can be broken by a side
+ * face turning, so each piece is fetched in one move and no piece has to be
+ * put back afterwards.
+ */
+void build_flower(Work& work)
+{
+    const auto bottom = home_colour(Face::Down);
+
+    for (const Face side : kSides) {
+        for (int guard = 0;; ++guard) {
+            assert(guard < 8);
+            const auto piece =
+                find_piece(work.cube(), {bottom, home_colour(side)});
+
+            if (shows(piece, Face::Up)) {
+                if (colour_on(piece, Face::Up) == bottom) break;
+
+                // Turned the wrong way up there. One turn of the face it
+                // leans against drops it into the middle, which is the case
+                // below and the only one that knows how to turn it over.
+                work.turn(besides(piece, Face::Up).front(), 1);
+                continue;
+            }
+
+            if (shows(piece, Face::Down)) {
+                const Face against = besides(piece, Face::Down).front();
+                free_slot_above(work, against);
+                work.turn(against,
+                          colour_on(piece, Face::Down) == bottom ? 2 : 1);
+                continue;
+            }
+
+            // In the middle. Lifting it with the face its bottom colour is
+            // *not* on is what brings that colour out facing up: a quarter
+            // turn carries the sticker from the side face to the top one.
+            const Face carrying = wearing(piece, bottom);
+            const Face lift = besides(piece, carrying).front();
+            free_slot_above(work, lift);
+            work.turn(lift, carried_by(lift, 1, carrying, work.size()) ==
+                                    Face::Up
+                                ? 1
+                                : -1);
+        }
+    }
+}
+
+/** The flower folded down into the bottom cross, one half turn each. */
+void fold_flower(Work& work)
+{
+    const auto bottom = home_colour(Face::Down);
+
+    for (const Face side : kSides) {
+        const auto piece = find_piece(work.cube(), {bottom, home_colour(side)});
+        work.turn(Face::Up,
+                  up_turns_between(besides(piece, Face::Up).front(), side));
+        work.turn(side, 2);
+    }
+}
+
+void place_bottom_corners(Work& work)
+{
+    const auto bottom = home_colour(Face::Down);
+
+    for (int frame = 0; frame < 4; ++frame) {
+        const auto front = about_up(Face::Front, frame);
+        const auto right = about_up(Face::Right, frame);
+        const std::vector<FaceColor> colours{bottom, home_colour(front),
+                                             home_colour(right)};
+
+        for (int guard = 0;; ++guard) {
+            assert(guard < 32);
+            const auto piece = find_piece(work.cube(), colours);
+            if (at_home(piece)) break;
+
+            if (shows(piece, Face::Down)) {
+                // Down there but not right. Lifting it out from where it sits
+                // leaves the rest of the bottom layer alone, so the corners
+                // already finished stay finished.
+                const auto sides = besides(piece, Face::Down);
+                work.run(kCornerLift, frame_of(sides.front(), sides.back()));
+                continue;
+            }
+
+            // Above its slot, the bottom colour points one of three ways, and
+            // each has its own way down.
+            work.turn(Face::Up,
+                      up_turns_between(besides(piece, Face::Up), front, right));
+
+            const auto waiting =
+                read(work.cube(), corner_slot(Face::Up, front, right,
+                                              work.size()));
+            const Face leaning = wearing(waiting, bottom);
+            if (leaning == right) {
+                work.run(kCornerFromRight, frame);
+            } else if (leaning == front) {
+                work.run(kCornerFromFront, frame);
+            } else {
+                work.run(kCornerFromTop, frame);
+            }
+        }
+    }
+}
+
+void place_middle_edges(Work& work)
+{
+    for (int frame = 0; frame < 4; ++frame) {
+        const auto front = about_up(Face::Front, frame);
+        const auto right = about_up(Face::Right, frame);
+        const std::vector<FaceColor> colours{home_colour(front),
+                                             home_colour(right)};
+
+        for (int guard = 0;; ++guard) {
+            assert(guard < 8);
+            const auto piece = find_piece(work.cube(), colours);
+            if (at_home(piece)) break;
+
+            if (!shows(piece, Face::Up)) {
+                // Stuck in a middle slot, its own or another's. The insertion
+                // for that slot, used on an occupied one, puts the occupant
+                // back on top -- so there is no second sequence for getting
+                // one out.
+                work.run(kInsertRight,
+                         frame_of(piece.faces.front(), piece.faces.back()));
+                continue;
+            }
+
+            // On top. Line its side colour up with that colour's own face;
+            // then the colour facing up names the slot it belongs in, and
+            // which side of the front face that is chooses the sequence.
+            const Face leaning = besides(piece, Face::Up).front();
+            const Face matching = face_wearing(colour_on(piece, leaning));
+            work.turn(Face::Up, up_turns_between(leaning, matching));
+
+            const auto now =
+                read(work.cube(), edge_slot(Face::Up, matching, work.size()));
+            const Face belongs = face_wearing(colour_on(now, Face::Up));
+            const int here = up_turns_between(Face::Front, matching);
+
+            if (about_up(Face::Right, here) == belongs) {
+                work.run(kInsertRight, here);
+            } else {
+                work.run(kInsertLeft, here);
+            }
+        }
+    }
+}
+
 void turn_top_edges_up(Work& work)
 {
     repeat_until(work, kTopCross, top_edges_turned_up, 4);
@@ -747,16 +774,18 @@ void place_top_corners(Work& work)
 
 void turn_top_corners_up(Work& work)
 {
-    const auto up = centre_colour(work.cube(), Face::Up);
-    const auto corner = slot_of({Face::Up, Face::Front, Face::Right});
-
     // One trip round the top, a corner at a time, and four single turns of the
     // top add up to none -- so the layer is where it started when this ends,
     // and so is the bottom, which each pair of rounds puts back.
     for (int visited = 0; visited < 4; ++visited) {
-        for (int pairs = 0;
-             sticker_at(work.cube(), corner, Face::Up) != up; ++pairs) {
+        for (int pairs = 0;; ++pairs) {
             assert(pairs < 3);
+            const auto corner = corner_slot(Face::Up, Face::Front, Face::Right,
+                                            work.size());
+            if (sticker_at(work.cube(), corner, Face::Up) ==
+                home_colour(Face::Up)) {
+                break;
+            }
             work.run(kCornerTwist, 0);
             work.run(kCornerTwist, 0);
         }
@@ -779,11 +808,11 @@ void place_top_edges(Work& work)
  */
 [[nodiscard]] bool flower_built(const CubeState& cube)
 {
-    const auto bottom = centre_colour(cube, Face::Down);
+    const auto bottom = home_colour(Face::Down);
     for (const Face side : kSides) {
-        const auto at = find_piece(cube, {bottom, centre_colour(cube, side)});
-        if (at.y != kLast) return false;
-        if (sticker_at(cube, at, Face::Up) != bottom) return false;
+        const auto piece = find_piece(cube, {bottom, home_colour(side)});
+        if (!shows(piece, Face::Up)) return false;
+        if (colour_on(piece, Face::Up) != bottom) return false;
     }
     return true;
 }
@@ -791,87 +820,101 @@ void place_top_edges(Work& work)
 [[nodiscard]] bool bottom_cross_built(const CubeState& cube)
 {
     for (const Face side : kSides) {
-        if (!piece_home(cube, slot_of({Face::Down, side}))) return false;
+        if (!at_home(read(cube, edge_slot(Face::Down, side, cube.size())))) {
+            return false;
+        }
     }
     return true;
 }
 
-[[nodiscard]] bool bottom_layer_built(const CubeState& cube)
+[[nodiscard]] bool bottom_corners_built(const CubeState& cube)
 {
-    if (!bottom_cross_built(cube)) return false;
     for (int frame = 0; frame < 4; ++frame) {
-        if (!piece_home(cube, slot_of({Face::Down, about_up(Face::Front, frame),
-                                       about_up(Face::Right, frame)}))) {
-            return false;
-        }
+        const auto slot =
+            corner_slot(Face::Down, about_up(Face::Front, frame),
+                        about_up(Face::Right, frame), cube.size());
+        if (!at_home(read(cube, slot))) return false;
     }
     return true;
 }
 
 [[nodiscard]] bool middle_layer_built(const CubeState& cube)
 {
-    if (!bottom_layer_built(cube)) return false;
     for (int frame = 0; frame < 4; ++frame) {
-        if (!piece_home(cube, slot_of({about_up(Face::Front, frame),
-                                       about_up(Face::Right, frame)}))) {
-            return false;
-        }
+        const auto slot = edge_slot(about_up(Face::Front, frame),
+                                    about_up(Face::Right, frame), cube.size());
+        if (!at_home(read(cube, slot))) return false;
     }
     return true;
 }
 
 [[nodiscard]] bool top_corners_turned_up(const CubeState& cube)
 {
-    const auto up = centre_colour(cube, Face::Up);
-    for (const auto& slot : top_corners()) {
-        if (sticker_at(cube, slot, Face::Up) != up) return false;
+    for (int frame = 0; frame < 4; ++frame) {
+        const auto slot =
+            corner_slot(Face::Up, about_up(Face::Front, frame),
+                        about_up(Face::Right, frame), cube.size());
+        if (sticker_at(cube, slot, Face::Up) != home_colour(Face::Up)) {
+            return false;
+        }
     }
     return true;
 }
 
 }  // namespace
 
-bool LayerByLayer::supports(int size) const noexcept { return size == kSize; }
+bool LayerByLayer::supports(int size) const noexcept
+{
+    return size == 2 || size == 3;
+}
 
 std::vector<CubeMove> LayerByLayer::solve(const CubeState& state) const
 {
     assert(supports(state.size()));
+    return compress(solve_as_three_layers(state));
+}
+
+std::vector<CubeMove> solve_as_three_layers(const CubeState& state)
+{
     if (state.is_solved()) return {};
 
     Work work{state};
 
-    build_flower(work);
-    assert(flower_built(work.cube()));
+    // A two by two is corners and nothing else: no cross to build, no middle
+    // layer between the two it has, and no edges on top to finish with. So the
+    // stages that deal with edges are not skipped by a flag here -- there is
+    // simply nothing for them to find.
+    if (state.size() > 2) {
+        build_flower(work);
+        assert(flower_built(work.cube()));
 
-    fold_flower(work);
-    assert(bottom_cross_built(work.cube()));
+        fold_flower(work);
+        assert(bottom_cross_built(work.cube()));
+    }
 
     place_bottom_corners(work);
-    assert(bottom_layer_built(work.cube()));
+    assert(bottom_corners_built(work.cube()));
 
-    place_middle_edges(work);
-    assert(middle_layer_built(work.cube()));
+    if (state.size() > 2) {
+        place_middle_edges(work);
+        assert(middle_layer_built(work.cube()));
 
-    turn_top_edges_up(work);
-    assert(middle_layer_built(work.cube()));
-    assert(top_edges_turned_up(work.cube()) == 4);
+        turn_top_edges_up(work);
+        assert(top_edges_turned_up(work.cube()) == 4);
+    }
 
     place_top_corners(work);
     assert(top_corners_in_place(work.cube()) == 4);
 
     turn_top_corners_up(work);
     assert(top_corners_turned_up(work.cube()));
-    assert(middle_layer_built(work.cube()));
-    assert(top_corners_in_place(work.cube()) == 4);
-    assert(top_edges_turned_up(work.cube()) == 4);
 
-    place_top_edges(work);
-    assert(middle_layer_built(work.cube()));
-    assert(top_corners_in_place(work.cube()) == 4);
-    assert(top_corners_turned_up(work.cube()));
-    assert(top_edges_turned_up(work.cube()) == 4);
+    if (state.size() > 2) {
+        place_top_edges(work);
+    }
+
     assert(work.cube().is_solved());
-    return compress(work.take());
+    return work.take();
 }
 
 std::vector<CubeMove> compress(const std::vector<CubeMove>& moves)
@@ -893,7 +936,9 @@ std::vector<CubeMove> compress(const std::vector<CubeMove>& moves)
         // Three quarters one way is one the other, which is how a reader would
         // write it and one fewer quarter for the cube to turn through.
         if (turns == 3) turns = -1;
-        if (turns != 0) joined.push_back(CubeMove{move.axis, move.layers, turns});
+        if (turns != 0) {
+            joined.push_back(CubeMove{move.axis, move.layers, turns});
+        }
     }
 
     return joined;

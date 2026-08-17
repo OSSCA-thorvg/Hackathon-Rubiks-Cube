@@ -52,7 +52,10 @@ TEST_CASE("a solver is there for the cube it was built for")
 
     CHECK(rubiks::app::can_solve());
 
-    for (const int size : {2, 4, 5, 9}) {
+    REQUIRE(rubiks::app::set_cube_size(2));
+    CHECK(rubiks::app::can_solve());
+
+    for (const int size : {4, 5, 9}) {
         REQUIRE(rubiks::app::set_cube_size(size));
         INFO("size " << size);
         CHECK_FALSE(rubiks::app::can_solve());

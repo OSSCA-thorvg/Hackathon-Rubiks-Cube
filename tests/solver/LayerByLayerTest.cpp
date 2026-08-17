@@ -23,14 +23,38 @@ using rubiks::cube::layer;
 using rubiks::cube::make_scramble;
 using rubiks::cube::solver::compress;
 using rubiks::cube::solver::LayerByLayer;
+using rubiks::cube::solver::solve_as_three_layers;
 
 constexpr int kSize = 3;
 
 /** A cube scrambled with the application's own generator. */
-CubeState scrambled(std::uint32_t seed, std::size_t moves = 20)
+CubeState scrambled(std::uint32_t seed, std::size_t moves = 20,
+                    int size = kSize)
 {
-    CubeState cube(kSize);
-    cube.apply(make_scramble(kSize, seed, moves));
+    CubeState cube(size);
+    cube.apply(make_scramble(size, seed, moves));
+    return cube;
+}
+
+/**
+ * A big cube turned by its outer faces alone, which leaves it reduced.
+ *
+ * Every row along an edge and every centre began one colour and no move here
+ * can break either up, so this is the state a reduction hands over -- and the
+ * only way to reach one without a reduction to hand.
+ */
+CubeState outer_scrambled(std::uint32_t seed, int size,
+                          std::size_t moves = 30)
+{
+    CubeState cube(size);
+
+    // The generator reaches inside a big cube on purpose, so its moves are
+    // filtered down here to the ones a three by three would have made.
+    for (const auto& move : make_scramble(size, seed, moves)) {
+        if (move.layers == layer(0) || move.layers == layer(size - 1)) {
+            cube.apply(move);
+        }
+    }
     return cube;
 }
 
@@ -46,9 +70,53 @@ TEST_CASE("the solver says which cubes it solves")
 {
     const LayerByLayer solver;
 
+    CHECK(solver.supports(2));
     CHECK(solver.supports(3));
-    for (const int size : {1, 2, 4, 5, 7, 9}) {
+    for (const int size : {1, 4, 5, 7, 9}) {
         CHECK_FALSE(solver.supports(size));
+    }
+}
+
+TEST_CASE("a two by two is solved by the corner stages alone")
+{
+    const LayerByLayer solver;
+
+    for (std::uint32_t seed = 0; seed < 500; ++seed) {
+        auto cube = scrambled(seed, 20, 2);
+        const auto solution = solver.solve(cube);
+
+        cube.apply(solution);
+        INFO("seed " << seed);
+        REQUIRE(cube.is_solved());
+    }
+}
+
+TEST_CASE("a two by two solution is outer face turns as well")
+{
+    const LayerByLayer solver;
+
+    for (std::uint32_t seed = 0; seed < 100; ++seed) {
+        for (const auto& move : solver.solve(scrambled(seed, 20, 2))) {
+            INFO("seed " << seed);
+            REQUIRE(is_outer_face_turn(move, 2));
+            REQUIRE(is_layer_run(move.layers, 2));
+        }
+    }
+}
+
+TEST_CASE("the three-layer stages finish a reduced cube of any size")
+{
+    // What a reduction will hand over, without a reduction yet to hand it.
+    // The stages read pieces as faces and colours rather than as coordinates,
+    // so a nine by nine whose rows are already paired is a three by three to
+    // them.
+    for (const int size : {4, 5, 6, 7, 9}) {
+        for (std::uint32_t seed = 0; seed < 40; ++seed) {
+            auto cube = outer_scrambled(seed, size);
+            cube.apply(solve_as_three_layers(cube));
+            INFO("size " << size << " seed " << seed);
+            REQUIRE(cube.is_solved());
+        }
     }
 }
 

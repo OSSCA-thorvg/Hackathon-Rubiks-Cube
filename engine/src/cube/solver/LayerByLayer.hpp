@@ -34,6 +34,25 @@ public:
 };
 
 /**
+ * The moves that finish a cube whose pieces are already three layers deep.
+ *
+ * The seven stages above, without the compression at the end, for a caller
+ * that has more to add to the sequence.
+ *
+ * A cube of any size may be handed in, as long as it is *reduced*: every row
+ * of pieces along an edge already one pair of colours, every centre already
+ * one colour. Under outer face turns such a cube behaves exactly as a three by
+ * three does -- which is why the last stage of solving a big cube is this
+ * function rather than a second copy of it -- and asking it about an
+ * unreduced one is a precondition violation.
+ *
+ * A two by two, which has neither edges nor centres to reduce, is always in
+ * that state; so is a three by three.
+ */
+[[nodiscard]] std::vector<CubeMove> solve_as_three_layers(
+    const CubeState& state);
+
+/**
  * The same sequence with neighbouring turns of one layer run together.
  *
  * Stages are written to be read one at a time, so where two of them meet a

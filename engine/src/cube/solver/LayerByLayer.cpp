@@ -8,6 +8,7 @@
 
 #include "cube/Cubie.hpp"
 #include "cube/Surface.hpp"
+#include "cube/solver/Turning.hpp"
 
 namespace rubiks::cube::solver {
 namespace {
@@ -37,77 +38,6 @@ struct FaceTurn {
     int turns;
 };
 
-[[nodiscard]] int normalized_turns(int quarter_turns) noexcept
-{
-    return ((quarter_turns % 4) + 4) % 4;
-}
-
-/** Whether a face is the one at the far end of its axis. */
-[[nodiscard]] bool positive_face(Face face, int size) noexcept
-{
-    return outer_layer(face, size) == size - 1;
-}
-
-/**
- * The move a face turn is.
- *
- * Clockwise from outside a face at the near end of its axis is
- * counter-clockwise about that axis, which is the whole of the conversion --
- * the same one `moves::L`, `D` and `B` make.
- */
-[[nodiscard]] CubeMove to_move(const FaceTurn& turn, int size) noexcept
-{
-    return CubeMove{axis_of(turn.face), depth_layers(turn.face, 1, 1, size),
-                    positive_face(turn.face, size) ? turn.turns : -turn.turns};
-}
-
-/** A face carried round by `quarters` turns of the up face. */
-[[nodiscard]] Face about_up(Face face, int quarters) noexcept
-{
-    Face carried = face;
-    for (int i = 0, n = normalized_turns(quarters); i < n; ++i) {
-        carried = turned_face(Axis::Y, carried);
-    }
-    return carried;
-}
-
-/**
- * Which face a piece shows on after one face is turned.
- *
- * The two faces on the turning axis keep their stickers, so they answer with
- * themselves. Everything the stages ask about where a piece will end up is
- * this question rather than a coordinate, which is what lets one body of code
- * serve every size: a cube of any size has the same six faces.
- */
-[[nodiscard]] Face carried_by(Face turning, int turns, Face showing,
-                              int size) noexcept
-{
-    if (axis_of(showing) == axis_of(turning)) return showing;
-
-    const int quarters =
-        normalized_turns(positive_face(turning, size) ? turns : -turns);
-    Face landed = showing;
-    for (int i = 0; i < quarters; ++i) {
-        landed = turned_face(axis_of(turning), landed);
-    }
-    return landed;
-}
-
-void set_axis(CubiePosition& position, Axis axis, int value) noexcept
-{
-    switch (axis) {
-        case Axis::X:
-            position.x = value;
-            return;
-        case Axis::Y:
-            position.y = value;
-            return;
-        case Axis::Z:
-            break;
-    }
-    position.z = value;
-}
-
 /** The one cubie that shows all three of these faces. */
 [[nodiscard]] CubiePosition corner_slot(Face a, Face b, Face c,
                                         int size) noexcept
@@ -133,41 +63,6 @@ void set_axis(CubiePosition& position, Axis axis, int value) noexcept
     set_axis(position, axis_of(a), outer_layer(a, size));
     set_axis(position, axis_of(b), outer_layer(b, size));
     return position;
-}
-
-/** The faces a slot shows: three for a corner, two for an edge, one centre. */
-[[nodiscard]] std::vector<Face> exposed_faces(const CubiePosition& position,
-                                              int size)
-{
-    std::vector<Face> showing;
-    for (const Face face : faces()) {
-        if (coordinate_on(axis_of(face), position) == outer_layer(face, size)) {
-            showing.push_back(face);
-        }
-    }
-    return showing;
-}
-
-[[nodiscard]] FaceColor sticker_at(const CubeState& cube,
-                                   const CubiePosition& position,
-                                   Face face) noexcept
-{
-    return cube.at(position.x, position.y, position.z).sticker(face);
-}
-
-/**
- * The colour a face wears on a solved cube.
- *
- * `solved_color()` rather than the centre this used to read. The domain says
- * what solved means -- `is_solved()` holds every sticker against this same
- * function -- so this is the cube's own answer rather than a guess about the
- * order an enum happens to be written in. It is also the only answer that
- * exists at every size: a two by two has no centres, and the centres of a
- * bigger one are not yet one colour while it is being reduced.
- */
-[[nodiscard]] FaceColor home_colour(Face face) noexcept
-{
-    return solved_color(face);
 }
 
 [[nodiscard]] Face face_wearing(FaceColor colour) noexcept
@@ -341,46 +236,13 @@ struct Placement {
     return 0;
 }
 
-/**
- * A cube being solved, and the moves that got it here.
- *
- * The solver turns its own copy as it writes, so the sequence it returns and
- * the sequence it reasoned about are the same one by construction. What is
- * left to get wrong is a stage that never finishes, and nothing else.
- */
-class Work {
-public:
-    explicit Work(CubeState cube) : cube_(std::move(cube)) {}
-
-    [[nodiscard]] const CubeState& cube() const noexcept { return cube_; }
-
-    [[nodiscard]] int size() const noexcept { return cube_.size(); }
-
-    [[nodiscard]] std::vector<CubeMove> take() noexcept
-    {
-        return std::move(moves_);
+/** Runs a written sequence with every face carried round by `frame`. */
+void run(Work& work, const std::vector<FaceTurn>& sequence, int frame)
+{
+    for (const auto& step : sequence) {
+        work.turn(about_up(step.face, frame), step.turns);
     }
-
-    void turn(Face face, int turns)
-    {
-        if (normalized_turns(turns) == 0) return;
-        const auto move = to_move(FaceTurn{face, turns}, cube_.size());
-        cube_.apply(move);
-        moves_.push_back(move);
-    }
-
-    /** Runs a written sequence with every face carried round by `frame`. */
-    void run(const std::vector<FaceTurn>& sequence, int frame)
-    {
-        for (const auto& step : sequence) {
-            turn(about_up(step.face, frame), step.turns);
-        }
-    }
-
-private:
-    CubeState cube_;
-    std::vector<CubeMove> moves_;
-};
+}
 
 // The written sequences. Nine of them, and everything else in this file is
 // working out where to stand before using one.
@@ -551,7 +413,7 @@ bool apply_best(Work& work, const std::vector<FaceTurn>& sequence,
             for (int frame = 0; frame < 4; ++frame) {
                 Work trial{work.cube()};
                 trial.turn(Face::Up, align);
-                trial.run(both[way], frame);
+                run(trial, both[way], frame);
 
                 const int reached = score(trial.cube());
                 if (reached <= best) continue;
@@ -565,7 +427,7 @@ bool apply_best(Work& work, const std::vector<FaceTurn>& sequence,
 
     if (best_frame < 0) return false;
     work.turn(Face::Up, best_align);
-    work.run(both[best_way], best_frame);
+    run(work, both[best_way], best_frame);
     return true;
 }
 
@@ -586,7 +448,7 @@ void repeat_until(Work& work, const std::vector<FaceTurn>& sequence,
     for (int guard = 0; score(work.cube()) < target; ++guard) {
         assert(guard < 4);
         if (apply_best(work, sequence, score)) continue;
-        work.run(sequence, 0);
+        run(work, sequence, 0);
     }
 }
 
@@ -694,7 +556,7 @@ void place_bottom_corners(Work& work)
                 // leaves the rest of the bottom layer alone, so the corners
                 // already finished stay finished.
                 const auto sides = besides(piece, Face::Down);
-                work.run(kCornerLift, frame_of(sides.front(), sides.back()));
+                run(work, kCornerLift, frame_of(sides.front(), sides.back()));
                 continue;
             }
 
@@ -708,11 +570,11 @@ void place_bottom_corners(Work& work)
                                               work.size()));
             const Face leaning = wearing(waiting, bottom);
             if (leaning == right) {
-                work.run(kCornerFromRight, frame);
+                run(work, kCornerFromRight, frame);
             } else if (leaning == front) {
-                work.run(kCornerFromFront, frame);
+                run(work, kCornerFromFront, frame);
             } else {
-                work.run(kCornerFromTop, frame);
+                run(work, kCornerFromTop, frame);
             }
         }
     }
@@ -736,7 +598,7 @@ void place_middle_edges(Work& work)
                 // for that slot, used on an occupied one, puts the occupant
                 // back on top -- so there is no second sequence for getting
                 // one out.
-                work.run(kInsertRight,
+                run(work, kInsertRight,
                          frame_of(piece.faces.front(), piece.faces.back()));
                 continue;
             }
@@ -754,9 +616,9 @@ void place_middle_edges(Work& work)
             const int here = up_turns_between(Face::Front, matching);
 
             if (about_up(Face::Right, here) == belongs) {
-                work.run(kInsertRight, here);
+                run(work, kInsertRight, here);
             } else {
-                work.run(kInsertLeft, here);
+                run(work, kInsertLeft, here);
             }
         }
     }
@@ -786,8 +648,8 @@ void turn_top_corners_up(Work& work)
                 home_colour(Face::Up)) {
                 break;
             }
-            work.run(kCornerTwist, 0);
-            work.run(kCornerTwist, 0);
+            run(work, kCornerTwist, 0);
+            run(work, kCornerTwist, 0);
         }
         work.turn(Face::Up, 1);
     }

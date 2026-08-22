@@ -1538,14 +1538,37 @@ describe('attachGameController', () => {
 });
 
 describe('sharing the cube', () => {
-  it('has nothing to share until something has happened to the cube', () => {
+  it('sends the plain address for a cube nothing has happened to', async () => {
     const harness = createHarness();
 
-    expect(harness.ui.shareButton.disabled).toBe(true);
+    // Pressable from the first moment. There is no record to encode, and the
+    // page on its own opens the cube on the screen, so that is what travels.
+    expect(harness.ui.shareButton.disabled).toBe(false);
+
+    harness.ui.shareButton.click();
+    await vi.waitFor(() => expect(harness.copied).toHaveLength(1));
+
+    expect(harness.copied[0]).toBe('https://example.test/cube/');
+    expect(harness.copied[0]).not.toContain('#');
+    expect(harness.ui.status.textContent).toBe(
+      'Link copied. It opens a fresh cube.',
+    );
+  });
+
+  it('carries the record once there is one', async () => {
+    const harness = createHarness();
 
     harness.commitMove();
     harness.controller.afterEngineFrame();
     expect(harness.ui.shareButton.disabled).toBe(false);
+
+    harness.ui.shareButton.click();
+    await vi.waitFor(() => expect(harness.copied).toHaveLength(1));
+
+    expect(harness.copied[0]).toContain('#s=');
+    expect(harness.ui.status.textContent).toBe(
+      'Link copied. It opens this cube.',
+    );
   });
 
   it('copies a link carrying the record as it stands', async () => {

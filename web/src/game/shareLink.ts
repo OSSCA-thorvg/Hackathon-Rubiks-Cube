@@ -65,6 +65,19 @@ export function clearShareFragment(
  * the fragment names, and would leave the sender's own address holding a state
  * -- which is exactly the thing every reload here is supposed not to have.
  */
+/**
+ * The address of this page carrying nothing at all.
+ *
+ * What Share copies when the cube has had nothing happen to it. The fragment
+ * is taken off rather than assumed absent: the lifecycle clears one it opened
+ * with, and this does not have to know that it did.
+ */
+export function pageUrl(href: string): string {
+  const url = new URL(href);
+  url.hash = '';
+  return url.toString();
+}
+
 export function shareUrl(href: string, encoded: string): string {
   const url = new URL(href);
   url.hash = `${SHARE_FRAGMENT_KEY}=${encoded}`;

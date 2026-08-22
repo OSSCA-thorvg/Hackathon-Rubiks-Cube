@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   clearShareFragment,
+  pageUrl,
   readShareFragment,
   shareUrl,
 } from '../../src/game/shareLink.ts';
@@ -41,6 +42,29 @@ describe('clearShareFragment', () => {
     clearShareFragment({ href: 'https://example.test/cube/', hash: '' }, history);
 
     expect(history.replaceState).not.toHaveBeenCalled();
+  });
+});
+
+describe('pageUrl', () => {
+  it('is the address itself when it carries nothing', () => {
+    expect(pageUrl('https://example.test/cube/')).toBe(
+      'https://example.test/cube/',
+    );
+  });
+
+  it('takes off a fragment the address still had', () => {
+    // The lifecycle clears the one a shared link opened with, so this is
+    // belt and braces -- but what Share hands over for an untouched cube
+    // must not be a link to somebody else's cube.
+    expect(pageUrl('https://example.test/cube/#s=OLD')).toBe(
+      'https://example.test/cube/',
+    );
+  });
+
+  it('keeps the path and the query, which are not the state', () => {
+    expect(pageUrl('https://example.test/cube/?ref=talk#s=OLD')).toBe(
+      'https://example.test/cube/?ref=talk',
+    );
   });
 });
 

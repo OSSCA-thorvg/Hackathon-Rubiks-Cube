@@ -36,8 +36,16 @@ test.beforeEach(async ({ page, context }) => {
 test('a link opens the same cube somewhere else', async ({ page, context }) => {
   const shell = page.locator('.game-shell');
 
-  // Nothing has happened, so there is nothing to send.
-  await expect(page.locator('#share')).toBeDisabled();
+  // Nothing has happened yet, and the button works all the same: what it
+  // hands over then is the page itself, which opens the cube on the screen.
+  await expect(page.locator('#share')).toBeEnabled();
+  await page.locator('#share').click();
+  await expect(page.locator('#status')).toHaveText(
+    'Link copied. It opens a fresh cube.',
+  );
+  const plain = await page.evaluate(() => navigator.clipboard.readText());
+  expect(plain).not.toContain('#');
+  expect(plain).toContain('/Hackathon-Rubiks-Cube/');
 
   await page.locator('#scramble').click();
   await expect(shell).toHaveAttribute('data-game-state', 'ready');

@@ -20,7 +20,7 @@ import {
 } from './GameSession.ts';
 import { SessionRecords, type SolveRecord } from './SessionRecords.ts';
 import { encodeSession, type SharedSession } from './shareCode.ts';
-import { shareUrl } from './shareLink.ts';
+import { pageUrl, shareUrl } from './shareLink.ts';
 import type { TimerEnvironment } from './SolveTimer.ts';
 
 export type { GameState } from './GameSession.ts';
@@ -518,14 +518,27 @@ export function attachGameController(
    * Watching is not in the way, for the same reason it is not in the way of a
    * move button: it leaves the record untouched, and a press ends it first.
    * Anything else being played is, because the middle of a sequence is a cube
-   * nobody has been handed yet. A cursor of nothing is a cube a link would
-   * have opened anyway, and a cursor below the scramble boundary is a solve
-   * stopped inside the scramble -- a state the payload has no shape for.
+   * nobody has been handed yet. A cursor below the scramble boundary is a
+   * solve stopped inside the scramble -- a state the payload has no shape for.
+   *
+   * A cursor of nothing used to be refused here on the grounds that a link
+   * would have opened that cube anyway. That is true, and it is a reason to
+   * hand over the plain address rather than a reason to hand over nothing: a
+   * button that cannot be pressed on the screen somebody wants to send is a
+   * button they have to work out an explanation for. What travels then is the
+   * page, which opens the cube they are looking at.
    */
   const canShare = (now: EngineFrame): boolean =>
-    (!now.busy || now.watching) &&
-    now.cursor > 0 &&
-    now.cursor >= now.scrambleEnd;
+    (!now.busy || now.watching) && now.cursor >= now.scrambleEnd;
+
+  /**
+   * Whether the record has anything a link would have to carry.
+   *
+   * False only for the untouched cube, which the guard above has already
+   * narrowed this to: a cursor at nothing with no scramble behind it is the
+   * cube the engine was made with, and every page opens on one of those.
+   */
+  const hasStateToShare = (now: EngineFrame): boolean => now.cursor > 0;
 
   /**
    * The session a link carries, read off the record when one is asked for.
@@ -938,18 +951,28 @@ export function attachGameController(
       const now = engineNow();
       if (!canShare(now)) return;
 
-      const encoded = encodeSession(sharableNow(now));
-      if (encoded === null) {
-        session.announce('This cube cannot be written into a link.');
-        return;
+      // The plain address for an untouched cube: there is no record to encode
+      // and a fragment carrying an empty one would only be a longer way of
+      // saying the same thing.
+      let link: string = pageUrl(shareTarget.currentUrl());
+      let copied = 'Link copied. It opens a fresh cube.';
+
+      if (hasStateToShare(now)) {
+        const encoded = encodeSession(sharableNow(now));
+        if (encoded === null) {
+          session.announce('This cube cannot be written into a link.');
+          return;
+        }
+        link = shareUrl(shareTarget.currentUrl(), encoded);
+        copied = 'Link copied. It opens this cube.';
       }
 
       // Guarded on the way back rather than on the way out: a controller torn
       // down while the clipboard was thinking has no status line left to
       // write to, and the elements are no longer this controller's.
-      void shareTarget.copy(shareUrl(shareTarget.currentUrl(), encoded)).then(
+      void shareTarget.copy(link).then(
         (): void => {
-          if (active) session.announce('Link copied. It opens this cube.');
+          if (active) session.announce(copied);
         },
         (): void => {
           if (active) session.announce('Could not copy the link.');

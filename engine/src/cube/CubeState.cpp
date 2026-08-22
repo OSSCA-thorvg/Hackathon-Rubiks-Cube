@@ -90,9 +90,17 @@ bool CubeState::is_solved() const noexcept
 
 void CubeState::rotate_quarter(Axis axis, LayerMask layers) noexcept
 {
-    // Cubies outside the turning layers keep their slot, so the copy starts
-    // from the current state and only the moving ones are overwritten.
-    std::vector<Cubie> next = cubies_;
+    // Cubies outside the turning layers keep their slot, so the working copy
+    // starts from the current state and only the moving ones are overwritten.
+    //
+    // The buffer is kept between calls rather than made afresh each time. A
+    // solver looking for a sequence turns a throwaway cube hundreds of
+    // thousands of times, and at that rate one heap allocation per quarter
+    // turn is most of what turning costs. Swapping at the end leaves the old
+    // cubies in the buffer, which is the right size for the next call -- so
+    // after the first turn of a given size nothing is allocated at all.
+    static thread_local std::vector<Cubie> next;
+    next = cubies_;
 
     for (int x = 0; x < size_; ++x) {
         for (int y = 0; y < size_; ++y) {
@@ -107,7 +115,7 @@ void CubeState::rotate_quarter(Axis axis, LayerMask layers) noexcept
             }
         }
     }
-    cubies_ = std::move(next);
+    cubies_.swap(next);
 }
 
 void CubeState::apply(const CubeMove& move) noexcept

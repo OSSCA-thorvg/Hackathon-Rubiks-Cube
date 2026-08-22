@@ -10,11 +10,6 @@ namespace {
 
 constexpr std::uint32_t kBytesPerPixel = 4;
 
-// Clear color behind the scene; native and browser tests assert it as part
-// of the rendered scene contract. Face colors belong to the scene, but the
-// background is a property of the target rather than of the geometry.
-constexpr std::uint8_t kBackgroundColor[4] = {32, 32, 32, 255};
-
 tvg::Shape* add_shape(tvg::SwCanvas& canvas) noexcept
 {
     auto* shape = tvg::Shape::gen();
@@ -123,6 +118,14 @@ bool ThorVGSoftwareRenderer::render(
     return canvas_->sync() == tvg::Result::Success;
 }
 
+void ThorVGSoftwareRenderer::set_background(graphics::Color color) noexcept
+{
+    // No usable_ guard and no failure path: this writes a field the next
+    // rebuild reads. A renderer that cannot draw is already refusing to
+    // draw, and remembering a color for it costs nothing.
+    background_ = color;
+}
+
 std::uintptr_t ThorVGSoftwareRenderer::pixel_buffer() const noexcept
 {
     if (!usable_) return 0;
@@ -159,9 +162,11 @@ bool ThorVGSoftwareRenderer::rebuild_canvas(
         tvg::Result::Success) {
         return false;
     }
-    if (background->fill(kBackgroundColor[0], kBackgroundColor[1],
-                         kBackgroundColor[2], kBackgroundColor[3]) !=
-        tvg::Result::Success) {
+    // Face colors belong to the scene; the ground behind them is a property
+    // of the target, so it is read from the renderer rather than arriving
+    // with the geometry.
+    if (background->fill(background_.r, background_.g, background_.b,
+                         background_.a) != tvg::Result::Success) {
         return false;
     }
 

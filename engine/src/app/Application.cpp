@@ -189,6 +189,12 @@ struct ApplicationState {
     // it, so it is the one setting a turn in progress can be changed under.
     graphics::Palette palette = graphics::Palette::Classic;
 
+    // The ground behind the cube. Kept here rather than only on the renderer
+    // so that a query has an answer without reaching through the rendering
+    // boundary, and so the two cannot drift: every write goes through
+    // set_canvas_theme(), which sets both.
+    graphics::CanvasTheme canvas_theme = graphics::CanvasTheme::Dark;
+
     // Everything that has happened to the cube, as one sequence. How many
     // moves are the user's own is read off it rather than counted alongside
     // it, so there is no second number to keep in step.
@@ -464,6 +470,17 @@ constexpr std::array<std::array<AmbientStep, 4>, kAmbientPatternCount>
     switch (palette) {
         case graphics::Palette::Classic:
         case graphics::Palette::HighContrast:
+            return true;
+    }
+    return false;
+}
+
+/** Reports whether an enum arriving through a primitive boundary is valid. */
+[[nodiscard]] bool valid_canvas_theme(graphics::CanvasTheme theme) noexcept
+{
+    switch (theme) {
+        case graphics::CanvasTheme::Light:
+        case graphics::CanvasTheme::Dark:
             return true;
     }
     return false;
@@ -1355,6 +1372,23 @@ bool set_palette(graphics::Palette palette) noexcept
 graphics::Palette palette() noexcept
 {
     return state ? state->palette : graphics::Palette::Classic;
+}
+
+bool set_canvas_theme(graphics::CanvasTheme theme) noexcept
+{
+    if (!state || !valid_canvas_theme(theme)) return false;
+
+    // Both, in one place: the field is what a query reads and the renderer
+    // is what a frame reads, and a refused value has already left above, so
+    // neither can be written without the other.
+    state->canvas_theme = theme;
+    state->renderer->set_background(graphics::canvas_background(theme));
+    return true;
+}
+
+graphics::CanvasTheme canvas_theme() noexcept
+{
+    return state ? state->canvas_theme : graphics::CanvasTheme::Dark;
 }
 
 bool set_speed_scale(float scale) noexcept

@@ -89,6 +89,30 @@ export const CubePalette = {
 /** One sticker-palette value. */
 export type CubePalette = (typeof CubePalette)[keyof typeof CubePalette];
 
+/**
+ * The ground the software canvas is cleared to, as the C ABI numbers it.
+ *
+ * Two values where the page offers three: `System` is a question about the
+ * machine and it is answered before anything reaches the engine. A renderer
+ * needs a color, not a preference.
+ *
+ * Not the sticker palette. A palette is the six shades a cube is read by and
+ * this is the one surface it is read against, so the two axes are independent
+ * and all four combinations have to stay legible.
+ *
+ * An object rather than an `enum`, like every other ABI enum here: the build
+ * compiles TypeScript with `erasableSyntaxOnly`, which has no room for a form
+ * that emits code.
+ */
+export const CubeCanvasTheme = {
+  Light: 0,
+  Dark: 1,
+} as const;
+
+/** One canvas-theme value. */
+export type CubeCanvasTheme =
+  (typeof CubeCanvasTheme)[keyof typeof CubeCanvasTheme];
+
 /** Face-relative turns accepted by programmatic move controls. */
 export type FaceTurns = -1 | 1 | 2;
 
@@ -740,6 +764,31 @@ export class CubeEngine {
       throw new Error(`Engine returned an invalid palette ${palette}.`);
     }
     return palette;
+  }
+
+  /**
+   * Chooses the ground the cube is drawn against.
+   *
+   * Accepted while the engine is busy, for the same reason the palette is:
+   * the color is read where the target is cleared and nowhere else, so a
+   * person switching the page to Light in the middle of a watched pattern
+   * gets a light page and the pattern keeps running.
+   */
+  setCanvasTheme(theme: CubeCanvasTheme): void {
+    this.assertUsable();
+    if (this.module._thorvg_rubiks_set_canvas_theme(theme) === 0) {
+      throw new Error(`Engine rejected canvas theme ${theme}.`);
+    }
+  }
+
+  /** Returns the ground the cube is being drawn against. */
+  canvasTheme(): CubeCanvasTheme {
+    this.assertUsable();
+    const theme = this.module._thorvg_rubiks_canvas_theme();
+    if (theme !== CubeCanvasTheme.Light && theme !== CubeCanvasTheme.Dark) {
+      throw new Error(`Engine returned an invalid canvas theme ${theme}.`);
+    }
+    return theme;
   }
 
   /**

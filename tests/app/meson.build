@@ -48,6 +48,12 @@ solve_test = executable(
   dependencies: [application_dep, catch2_dep],
 )
 
+canvas_theme_test = executable(
+  'canvas-theme-test',
+  files('CanvasThemeTest.cpp'),
+  dependencies: [application_dep, catch2_dep],
+)
+
 share_restore_test = executable(
   'share-restore-test',
   files('ShareRestoreTest.cpp'),
@@ -61,4 +67,5 @@ test('solve command', solve_test)
 test('shared state restore', share_restore_test)
 test('pointer interaction wiring', pointer_interaction_test)
 test('rendered scene contract', render_contract_test)
+test('canvas theme ground', canvas_theme_test)
 test('input validation', input_validation_test)

@@ -128,6 +128,12 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_flat_style(): number;
   /** Returns 1 when the palette was accepted; invalid values are rejected. */
   _thorvg_rubiks_set_palette(palette: number): number;
+
+  /** Returns 1 when the canvas theme was accepted; others are rejected. */
+  _thorvg_rubiks_set_canvas_theme(theme: number): number;
+
+  /** Returns the current canvas theme as its ABI integer. */
+  _thorvg_rubiks_canvas_theme(): number;
   /** The current graphics::Palette as an integer. */
   _thorvg_rubiks_palette(): number;
   /** Returns 1 when taken; out-of-range values are clamped, not refused. */

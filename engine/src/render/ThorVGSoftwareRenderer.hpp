@@ -5,6 +5,7 @@
 
 #include <thorvg.h>
 
+#include "graphics/Color.hpp"
 #include "graphics/RenderScene.hpp"
 #include "render/Renderer.hpp"
 
@@ -62,6 +63,15 @@ public:
     [[nodiscard]] bool render(
         const graphics::RenderScene& scene) noexcept override;
 
+    /**
+     * Sets the opaque color every frame after this one is cleared to.
+     *
+     * Takes effect on the next render rather than immediately: the canvas
+     * holds nothing between frames, so there is no painted background here
+     * to go back and change.
+     */
+    void set_background(graphics::Color color) noexcept override;
+
     [[nodiscard]] std::uintptr_t pixel_buffer() const noexcept override;
 
     [[nodiscard]] std::uint32_t pixel_byte_length() const noexcept override;
@@ -79,6 +89,10 @@ private:
     /** Replaces the canvas contents with the background and the scene faces. */
     [[nodiscard]] bool rebuild_canvas(
         const graphics::RenderScene& scene) noexcept;
+
+    // Dark by default, which is the ground the renderer has always had and
+    // the one the native build with no UI in front of it still wants.
+    graphics::Color background_{32, 32, 32, 255};
 
     tvg::SwCanvas* canvas_ = nullptr;
     std::uint32_t* buffer_ = nullptr;

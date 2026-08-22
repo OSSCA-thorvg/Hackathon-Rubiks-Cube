@@ -426,6 +426,26 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_palette() noexcept
     return static_cast<int>(rubiks::app::palette());
 }
 
+/** Chooses the ground the cube is drawn against; invalid values are rejected. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_canvas_theme(int theme) noexcept
+{
+    constexpr int kFirst =
+        static_cast<int>(rubiks::graphics::CanvasTheme::Light);
+    constexpr int kLast = static_cast<int>(rubiks::graphics::CanvasTheme::Dark);
+    if (theme < kFirst || theme > kLast) return 0;
+
+    return rubiks::app::set_canvas_theme(
+               static_cast<rubiks::graphics::CanvasTheme>(theme))
+               ? 1
+               : 0;
+}
+
+/** Returns the current graphics::CanvasTheme integer. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_canvas_theme() noexcept
+{
+    return static_cast<int>(rubiks::app::canvas_theme());
+}
+
 /**
  * Sets how much faster than the written tempos every animation runs.
  *

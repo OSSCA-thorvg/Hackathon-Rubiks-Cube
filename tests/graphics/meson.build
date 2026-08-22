@@ -45,3 +45,11 @@ rings_test = executable(
 )
 
 test('ring diagram', rings_test)
+
+canvas_theme_test = executable(
+  'canvas-theme-test',
+  files('CanvasThemeTest.cpp'),
+  dependencies: [graphics_dep, catch2_dep],
+)
+
+test('canvas theme', canvas_theme_test)

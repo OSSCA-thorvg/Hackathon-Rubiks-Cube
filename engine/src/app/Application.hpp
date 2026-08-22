@@ -5,6 +5,7 @@
 
 #include "cube/CubeMove.hpp"
 #include "cube/Cubie.hpp"
+#include "graphics/CanvasTheme.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/Palette.hpp"
 
@@ -467,6 +468,27 @@ inline constexpr std::uint32_t kMaxRestoreMoves = 4096;
 
 /** Returns the current palette, defaulting to Classic outside a lifecycle. */
 [[nodiscard]] graphics::Palette palette() noexcept;
+
+/**
+ * Chooses the ground the cube is drawn against.
+ *
+ * Read where the target is cleared and nowhere else, so like the palette it
+ * cancels no gesture, relays out nothing, and is accepted while the engine is
+ * busy -- a person switching the page to Light in the middle of a watched
+ * pattern gets a light page and the pattern keeps running.
+ *
+ * @return false outside a lifecycle and for a value that names no theme.
+ */
+[[nodiscard]] bool set_canvas_theme(graphics::CanvasTheme theme) noexcept;
+
+/**
+ * Returns the current canvas theme, defaulting to Dark outside a lifecycle.
+ *
+ * Dark rather than Light because that is the ground the renderer has always
+ * cleared to and the one the native build, which has no page around it to ask,
+ * still wants.
+ */
+[[nodiscard]] graphics::CanvasTheme canvas_theme() noexcept;
 
 /**
  * Sets how much faster than the written tempos every animation runs.

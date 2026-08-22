@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include "graphics/Color.hpp"
 #include "graphics/RenderScene.hpp"
 
 namespace rubiks::render {
@@ -35,6 +36,25 @@ public:
      */
     [[nodiscard]] virtual bool render(
         const graphics::RenderScene& scene) noexcept = 0;
+
+    /**
+     * Sets the opaque background the next frames are cleared to.
+     *
+     * On the boundary rather than on the software renderer alone, because
+     * the application owns its renderer through this interface and could
+     * not reach a method the concrete class kept to itself. A backend with
+     * no background of its own is not obliged to have one, so the default
+     * accepts the color and does nothing with it -- the same shape the
+     * pixel-buffer accessors below already take.
+     *
+     * The renderer is told a color rather than a theme: a theme is the
+     * language of presentation, and a renderer is the tool that paints a
+     * target.
+     */
+    virtual void set_background(graphics::Color color) noexcept
+    {
+        static_cast<void>(color);
+    }
 
     /**
      * Returns the address of the CPU-visible pixel buffer.

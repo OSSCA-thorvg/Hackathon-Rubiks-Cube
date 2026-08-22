@@ -6,6 +6,7 @@ graphics_lib = static_library(
   files(
     'AxisGizmo.cpp',
     'Camera.cpp',
+    'CanvasTheme.cpp',
     'CubeGeometry.cpp',
     'Layout.cpp',
     'NetGeometry.cpp',

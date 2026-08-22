@@ -4,6 +4,7 @@ import {
   computeDrawingBufferSize,
   CubeFace,
   CubeEngine,
+  CubeCanvasTheme,
   CubeFlatStyle,
   CubePalette,
   CubeViewMode,
@@ -41,6 +42,8 @@ function createFakeModule() {
     setFlatStyleResult: 1,
     palette: CubePalette.Classic,
     setPaletteResult: 1,
+    canvasTheme: CubeCanvasTheme.Dark,
+    setCanvasThemeResult: 1,
     speedScale: 1,
     setSpeedScaleResult: 1,
     busyResult: 0,
@@ -180,6 +183,11 @@ function createFakeModule() {
       return behavior.setPaletteResult;
     }),
     _thorvg_rubiks_palette: vi.fn((): number => behavior.palette),
+    _thorvg_rubiks_set_canvas_theme: vi.fn((theme: number): number => {
+      if (behavior.setCanvasThemeResult !== 0) behavior.canvasTheme = theme;
+      return behavior.setCanvasThemeResult;
+    }),
+    _thorvg_rubiks_canvas_theme: vi.fn((): number => behavior.canvasTheme),
     _thorvg_rubiks_set_speed_scale: vi.fn((scale: number): number => {
       // Clamped rather than refused, the way the engine does it.
       if (behavior.setSpeedScaleResult !== 0) {
@@ -554,6 +562,21 @@ describe('CubeEngine gameplay and view controls', () => {
       'rejected palette',
     );
     behavior.setPaletteResult = 1;
+
+    // The ground is a fourth axis and crosses none of the others: the cube
+    // is drawn in the palette it was set to whichever ground it stands on.
+    expect(engine.canvasTheme()).toBe(CubeCanvasTheme.Dark);
+    engine.setCanvasTheme(CubeCanvasTheme.Light);
+    expect(engine.canvasTheme()).toBe(CubeCanvasTheme.Light);
+    expect(engine.palette()).toBe(CubePalette.Classic);
+    behavior.canvasTheme = 5;
+    expect(() => engine.canvasTheme()).toThrow('invalid canvas theme');
+    behavior.canvasTheme = CubeCanvasTheme.Dark;
+    behavior.setCanvasThemeResult = 0;
+    expect(() => engine.setCanvasTheme(CubeCanvasTheme.Light)).toThrow(
+      'rejected canvas theme',
+    );
+    behavior.setCanvasThemeResult = 1;
 
     // The speed comes back clamped rather than echoed, and a value that is
     // not a number is the one thing the engine refuses outright.

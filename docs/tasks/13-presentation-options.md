@@ -8,6 +8,8 @@
 
 보이고 들리는 방식을 사용자가 고를 수 있게 합니다. 서로 독립적인 세 옵션이고, 하나의 옵션 면에 함께 놓입니다.
 
+> **개정 (UI polish and showcase)** — 세 옵션이 한 면에 함께 놓인다는 계약은 유지되고, 그 면이 canvas 옆의 왼쪽 rail에서 Settings drawer(좁은 화면에서는 bottom sheet)로 옮겨졌습니다. Palette, 속도, turn sound는 stage 위에 상주할 만큼 자주 쓰이지 않으면서 primary action과 같은 무게로 보이고 있었습니다. Element id(`#mute`, `#speed`, `#speed-value`, `[data-palette]`)와 각 옵션의 의미는 그대로입니다.
+
 1. **색맹 palette**: 세 이색형 색각 전부에서 구분되는 대체 palette를 더하고 두 벌 중 하나를 고르게 합니다.
 2. **회전 효과음**: 회전이 commit되는 순간의 짧은 소리를 더합니다.
 3. **Animation 속도**: 90°당 시간을 슬라이더로 조절합니다. 사용자 snap, scramble, 되감기 재생이 하나의 control을 공유합니다.

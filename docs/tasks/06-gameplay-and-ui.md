@@ -508,6 +508,8 @@ npm --prefix web run build
 - 스케치의 `engine.scramble()`은 인자가 없지만 구현은 `uint32` seed를 받습니다. Engine이 스스로 난수를 만들면 native와 WASM이 갈라지고 재현 가능한 test가 불가능합니다. Seed 생성은 Browser(`crypto.getRandomValues()`)가 맡습니다.
 - 스케치의 toolbar는 canvas 아래 한 줄이지만 구현은 desktop에서 canvas 좌우 rail, mobile에서 canvas 아래 normal flow로 나뉩니다. 정사각형 canvas를 최대한 크게 유지하기 위해서입니다.
 
+  > **개정 (UI polish and showcase)** — 좌우 rail은 제거되었습니다. Phase가 하나씩 control을 같은 rail에 덧붙인 끝에 rail이 stage보다 시선을 먼저 끌었고, 폭이 좁아 긴 label이 줄바꿈되었습니다. 지금은 desktop과 mobile이 같은 한 열을 씁니다: header, stage, action dock, view bar가 stage 폭을 공유하고 설정은 drawer/bottom sheet로 들어갑니다. Canvas를 정사각형으로 크게 유지한다는 원래 의도는 `.game-stage { width: min(100%, 70dvh) }`가 그대로 지킵니다. 보이는 view mode label `Both`도 diagram의 `Both`와 구별되도록 `Split`으로 개정되었으며, `data-view="both"`와 ABI 값은 그대로입니다.
+
 ## 개정 기록
 
 - **`committed_move_count()`가 저장 counter에서 파생값이 됩니다 ([Phase 11](./11-move-history-solve-and-undo.md)의 결정).** 이름과 시그니처는 그대로이고 반환값이 timeline의 `cursor - scramble_end`(cursor가 그 위일 때, 아니면 0)가 됩니다. 되감기가 생기면 저장 counter가 timeline과 어긋나기 때문입니다 — undo는 재생이라 count에서 빠지므로 5수 뒤 두 번 undo한 판이 counter 5, 실제 적용 3이 됩니다. 감소 규칙을 더하는 대신 파생으로 옮기면 절단·solve·복원에서의 보정도 함께 필요 없어집니다. Phase 10까지는 저장 counter가 정확하므로 이 개정은 Phase 11에서 일어납니다. Web과 ABI 시그니처는 바뀌지 않습니다.

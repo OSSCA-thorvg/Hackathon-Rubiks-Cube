@@ -2,7 +2,7 @@
 
 ## Status
 
-`Planned`
+`Completed`
 
 Phase 번호를 붙이지 않는 횡단 작업입니다. 상위 계획의 Phase 17은 이미 **Solve hint and step-through**로 예약되어 있으므로 그 의미와 번호를 바꾸지 않습니다. 이 문서는 완성된 기능을 다시 설계하는 phase가 아니라, Phase 6~16에서 하나씩 추가된 UI를 ThorVG showcase에 맞는 하나의 제품 화면으로 재편하는 작업을 다룹니다.
 
@@ -669,39 +669,39 @@ Sticker의 `Classic / HighContrast` palette와 Canvas theme을 합치지 않습�
 
 ### 1. Theme tokens and controller
 
-- [ ] 이 문서의 최종 정보 구조 확정
-- [ ] CSS color literal을 semantic token으로 이동
-- [ ] System/Light/Dark theme selector
-- [ ] `ThemeController`와 system media-query listener/teardown
-- [ ] theme preference 한 값의 fail-soft persistence
-- [ ] first-paint theme 적용
-- [ ] Phase 14의 theme persistence 예외 개정 기록
+- [x] 이 문서의 최종 정보 구조 확정
+- [x] CSS color literal을 semantic token으로 이동
+- [x] System/Light/Dark theme selector
+- [x] `ThemeController`와 system media-query listener/teardown
+- [x] theme preference 한 값의 fail-soft persistence
+- [x] first-paint theme 적용
+- [x] Phase 14의 theme persistence 예외 개정 기록
 
 ### 2. Canvas theme
 
 DOM 재배치 없이 현재 화면 위에서 끝낼 수 있는 단계입니다. 여기까지가 통과하면 theme은 shell 작업과 무관하게 완성되어 있습니다.
 
-- [ ] `CanvasTheme`과 `canvas_background()`
-- [ ] `Renderer::set_background()` virtual과 software renderer override
-- [ ] Application state, C ABI, generated WASM boundary
-- [ ] `CubeEngine` theme method와 `ThemeController` 연결
-- [ ] Classic/HighContrast × Light/Dark 조합 검증
+- [x] `CanvasTheme`과 `canvas_background()`
+- [x] `Renderer::set_background()` virtual과 software renderer override
+- [x] Application state, C ABI, generated WASM boundary
+- [x] `CubeEngine` theme method와 `ThemeController` 연결
+- [x] Classic/HighContrast × Light/Dark 조합 검증
 
 ### 3. Contract and shell extraction
 
-- [ ] `web/src/ui/GameShell.ts`로 markup과 typed query 이동
-- [ ] `bootstrap.ts`를 support check와 lifecycle wiring으로 축소
-- [ ] 기존 id, data attribute, `GameUi` field 유지
-- [ ] bootstrap unit test를 새 landmark와 settings/activity 구조로 개정
+- [x] `web/src/ui/GameShell.ts`로 markup과 typed query 이동
+- [x] `bootstrap.ts`를 support check와 lifecycle wiring으로 축소
+- [x] 기존 id, data attribute, `GameUi` field 유지
+- [x] bootstrap unit test를 새 landmark와 settings/activity 구조로 개정
 
 ### 4. Responsive information architecture
 
-- [ ] desktop side rail 제거, header/stage/action dock/view bar 구성
-- [ ] mobile action hierarchy와 settings bottom sheet
-- [ ] Moves/Session tab panel
-- [ ] contextual Diagram controls, view bar의 Watch toggle, rewind 계열의 Scramble/Stop 자리 교체
-- [ ] status와 solver note를 control 가까이 이동
-- [ ] interaction hint와 첫 gesture 후 제거
+- [x] desktop side rail 제거, header/stage/action dock/view bar 구성
+- [x] mobile action hierarchy와 settings bottom sheet
+- [x] Moves/Session tab panel
+- [x] contextual Diagram controls, view bar의 Watch toggle, rewind 계열의 Scramble/Stop 자리 교체
+- [x] status와 solver note를 control 가까이 이동
+- [x] interaction hint와 첫 gesture 후 제거
 
 ### 4b. e2e migration
 
@@ -720,26 +720,26 @@ DOM 재배치 없이 현재 화면 위에서 끝낼 수 있는 단계입니다. 
 | `page-states.spec.ts` | 2 |
 | `move-log.spec.ts` | 1 |
 
-- [ ] `openSettings()` / `closeSettings()` helper를 `tests/e2e`에 추가
-- [ ] 위 10개 spec을 helper 경유로 개정
-- [ ] `#ambient`는 view bar에 남으므로 서랍을 거치지 않는지 확인
-- [ ] 기존 spec이 id와 attribute selector만 쓰는 것을 유지해 `Both` → `Split` 같은 label 개정이 spec을 건드리지 않게 함
+- [x] `openSettings()` / `closeSettings()` helper를 `tests/e2e`에 추가
+- [x] 위 10개 spec을 helper 경유로 개정
+- [x] `#ambient`는 view bar에 남으므로 서랍을 거치지 않는지 확인
+- [x] 기존 spec이 id와 attribute selector만 쓰는 것을 유지해 `Both` → `Split` 같은 label 개정이 spec을 건드리지 않게 함
 
 ### 5. Visual polish
 
-- [ ] Primary/secondary/ghost/danger/segmented control variant
-- [ ] typography, spacing, radius, shadow token 정리
-- [ ] inline SVG share/settings icon과 accessible label
-- [ ] hover, active, focus-visible, disabled, busy state
-- [ ] reduced-motion drawer/feedback transition
+- [x] Primary/secondary/ghost/danger/segmented control variant
+- [x] typography, spacing, radius, shadow token 정리
+- [x] inline SVG share/settings icon과 accessible label
+- [x] hover, active, focus-visible, disabled, busy state
+- [x] reduced-motion drawer/feedback transition
 
 ### 6. Verification
 
-- [ ] Native renderer/background tests
-- [ ] TypeScript unit tests
-- [ ] Desktop/mobile browser e2e
-- [ ] 두 theme의 visual QA
-- [ ] WASM와 production build
+- [x] Native renderer/background tests
+- [x] TypeScript unit tests
+- [x] Desktop/mobile browser e2e
+- [x] 두 theme의 visual QA
+- [x] WASM와 production build
 
 ## Test plan
 
@@ -784,11 +784,11 @@ Screenshot baseline을 CI에 넣지 않습니다. 저장소에는 snapshot 도�
 
 대신 아래를 사람이 한 번 훑는 checklist로 둡니다. 나중에 shell이 안정된 뒤 screenshot을 도입한다면 canvas animation, timer, scroll position을 고정하거나 mask한 control shell만 대상으로 삼습니다.
 
-- [ ] Desktop Light / Dark
-- [ ] Mobile Light / Dark
-- [ ] Settings open Light / Dark
-- [ ] Error/unsupported Light / Dark
-- [ ] Classic/HighContrast × Light/Dark 네 조합의 sticker 판독
+- [x] Desktop Light / Dark
+- [x] Mobile Light / Dark
+- [x] Settings open Light / Dark
+- [x] Error/unsupported Light / Dark
+- [x] Classic/HighContrast × Light/Dark 네 조합의 sticker 판독
 
 ## Acceptance criteria
 
@@ -816,6 +816,50 @@ npm --prefix web run test:unit
 npm --prefix web run test:e2e
 npm --prefix web run build
 ```
+
+## Implementation record
+
+구현하면서 이 문서의 계획과 달라진 결정들입니다.
+
+### Theme token은 `light-dark()` 하나로 선언합니다
+
+문서는 light block과 dark block, 그리고 media query 안의 dark 복사본까지 세 벌을 적고 “실제 구현은 selector를 합친다”고 적어 두었습니다. 순수 CSS에서 media query 경계를 넘어 selector를 합칠 수는 없으므로, 대신 token마다 `light-dark(light, dark)` 한 줄을 씁니다. `light-dark()`는 used `color-scheme`을 읽으므로 theme을 고르는 일은 `:root[data-theme]`에서 `color-scheme`을 좁히는 것이 전부가 됩니다. 복사본이 사라지므로 한쪽만 고쳐 두 theme이 어긋나는 경로도 없어집니다.
+
+### `CubeCanvasTheme`은 `enum`이 아니라 `as const` 객체입니다
+
+문서 예시는 `export enum`이었지만 이 저장소의 `tsconfig`는 `erasableSyntaxOnly`를 켜 두어 코드를 생성하는 형태를 받지 않습니다. `CubePalette`, `CubeViewMode`가 이미 쓰는 `as const` 객체 + 동명 type alias 형태를 따랐습니다.
+
+### `[hidden]`이 component `display`를 이깁니다
+
+`#stop`, `#solver-note`, settings panel은 모두 `hidden` 속성으로 숨기면서 `display`를 지정하는 class를 답니다. 명시도에서 class가 이기므로 `hidden`인 Stop이 화면에 그대로 남았습니다. `[hidden] { display: none !important }` 한 줄을 두어 속성이 언제나 이기게 했습니다.
+
+### e2e는 `colorScheme: 'dark'`로 고정합니다
+
+저장된 값이 없으면 page는 기계를 따르고, Playwright의 기본 기계는 light입니다. Rendered scene contract가 어두운 ground에 대해 쓰였으므로 suite 전체를 dark로 고정하고, 다른 ground는 `theme.spec.ts`가 `emulateMedia`로 직접 확인합니다.
+
+### Scramble은 watching 중에도 살아 있습니다
+
+State 표의 “Watching → Scramble disabled”는 구현하지 않았습니다. 지금 Scramble을 누르면 watching을 먼저 끄고 scramble을 시작합니다 — move button과 같은 계약이고, watching에서 빠져나오는 유효한 경로입니다. 이 작업은 UI 재배치이므로 그 동작을 그대로 두었습니다. Stop이 나타나지 않는다는 점은 계획대로입니다.
+
+### Error page에서도 theme은 바꿀 수 있습니다
+
+`unsupported`와 `error`에서 timer와 Share는 숨기지만 settings trigger는 남깁니다. Theme은 engine이 없어도 동작하는 page 자신의 것이고, cube를 못 돌리는 browser도 이 메시지를 읽는 browser이기 때문입니다.
+
+### 시작 시 disable은 gameplay control에만 겁니다
+
+기존 bootstrap은 `button, input` 전체를 disable했습니다. 그때는 모든 control이 game control이었지만 지금은 settings trigger, theme selector, activity tab이 함께 걸려 처음에 서랍이 열리지 않았습니다. `GameUi` field에서 목록을 만들어 game이 소유하는 control만 끕니다.
+
+### `ActivityTabs.ts`가 늘고 `StatusPresenter.ts`는 만들지 않았습니다
+
+Moves/Session 전환은 tab list의 keyboard 계약까지 있어 자기 모듈이 되었습니다. 반대로 status는 `GameSession`이 이미 한 곳에서 쓰고 있어 옮길 것이 없었으므로, 별도 presenter를 만들지 않고 markup에서 위치만 stage 아래로 옮겼습니다.
+
+### Stage는 두 변 중 작은 쪽으로 정한 정사각형입니다
+
+Engine이 정사각 영역에 그리므로 넓고 낮은 canvas는 같은 그림에 여백만 더합니다. `.game-stage { width: min(100%, 70dvh) }`로 두고 좁은 화면에서는 폭이 결정하게 합니다.
+
+### 좁은 화면에서 Share는 숨깁니다
+
+Header에 timer와 gear가 함께 들어가야 하고, Share는 solve가 끝난 뒤에야 쓰이는 명령이라 첫 화면에서 자리를 차지할 이유가 없습니다.
 
 ## Completion
 

@@ -214,6 +214,13 @@ Parity는 예외가 아니라 투영의 성질로 다룹니다. 축약된 cube�
 짝수 큐브에서만 생기는 문제이므로, 발생하는 seed를 찾아 test에 박아 두는 것이 이 phase의 acceptance criteria 중 하나입니다 — 발생하지 않는 입력만으로 초록인 test는 목적을 검사하지 않습니다.
 8×8·9×9가 한동안 "될 때도 있고 안 될 때도 있는" 상태였던 이유는 엣지가 하나의 퍼즐이 아니기 때문이었습니다. 조각은 코너로부터의 깊이를 절대 벗어나지 못해 깊이 쌍마다 별개의 세계가 있고(8·9는 셋), 세계마다 순열의 홀짝이 따로 보존되는데, 엣지 단계의 도구는 모든 세계에서 짝수이고 안쪽 slice 하나만 자기 세계 하나를 뒤집습니다. 그래서 세계 둘 이상이 홀수인 큐브는 어떤 재시도로도 닿지 못했습니다. 세계마다 남은 swap 수를 큐브에서 직접 세어 홀수인 세계의 slice를 한 번씩 돌리는 것으로 바뀌었고, **2×2부터 9×9까지 전부 풀립니다.** 남은 것은 계산 시간(9×9에서 5초)과 해법 길이(9×9에서 천 수)입니다.
 
+## [x] 횡단 작업: [UI polish and showcase](./ui-polish-and-showcase.md)
+
+Phase 번호가 없는 것은 이것이 새 기능이 아니라 재편이기 때문입니다. Phase 6~16이 하나씩 더한 control이 전부 canvas 좌우 rail의 같은 면에 쌓여, 화면이 stage 하나가 아니라 두 개의 도구 패널 사이에 놓인 미리보기처럼 보이고 있었습니다.
+기능은 하나도 빠지지 않고 Play/View/Settings/Activity 네 영역으로 재분류되었으며, element id와 engine command의 의미는 그대로입니다. 좌우 rail이 사라지고 desktop과 mobile이 같은 한 열을 공유합니다.
+System/Light/Dark theme이 더해졌고, DOM shell뿐 아니라 ThorVG software canvas의 배경까지 함께 따라갑니다 — 이를 위해 renderer의 clear color가 파일 상수에서 `Renderer` 경계의 값으로 올라갔습니다. Phase 14의 "브라우저 저장소를 전혀 쓰지 않는다"는 theme preference 한 값에 한해 좁게 개정되었습니다.
+Phase 17은 이 작업의 영향을 받지 않습니다. 번호도 의미도 그대로입니다.
+
 ## [ ] Phase 17: Solve hint and step-through
 
 Phase 16의 solver를 사용해 다음 한 수만 알려 주는 힌트와, 해법을 한 수씩 진행하는 모드를 제공합니다.

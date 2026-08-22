@@ -25,6 +25,8 @@ Sticker 배열을 직접 싣는 편이 짧지만 그렇게 하지 않습니다. 
 ## Out of scope
 
 - **모든 브라우저 저장소** — localStorage, sessionStorage, IndexedDB를 전혀 쓰지 않습니다. 세션 복원, 기록 영속화, 옵션(Phase 13) 저장이 전부 여기 포함됩니다
+
+  > **개정 (UI polish and showcase)** — Game/session/record/presentation option은 여전히 저장하지 않습니다. 단, page가 그려지기 전에 필요한 UI theme preference 한 값만 `localStorage`에 둡니다. 그 값은 cube/timeline/timer와 무관하고 migration도 restore 순서도 만들지 않으며, 저장하지 않으면 저장된 Light 페이지가 어두운 채로 열렸다가 깜빡이는 것을 막을 방법이 없습니다. 읽기와 쓰기는 fail-soft이고, 실패는 persistence만 잃습니다.
 - 계정, leaderboard, network backend
 - Replay 파일 공유 — 공유되는 것은 현재 상태 하나입니다
 - 구버전 payload의 migration — 알 수 없는 version은 조용히 버리고 초기 상태에서 시작합니다
@@ -153,7 +155,7 @@ thorvg_rubiks_restore_apply(scramble_count: uint32, user_count: uint32) -> int
 - 최초 render는 restore 뒤에 일어나므로, 복원된 상태가 첫 화면부터 canvas에 보입니다.
 - 복원은 startup 호출 순서 계약 안에서만 일어나므로, 복원 후에 살아남은 재생·snap·snapshot이 상태를 덮는 경로가 없습니다.
 - 복원은 commit으로 관찰되지 않습니다: 복원 직후 효과음, completion, timer 전이가 발생하지 않습니다.
-- 앱은 브라우저 저장소를 전혀 사용하지 않고, reload는 언제나 초기 상태에서 시작합니다.
+- 앱은 UI theme preference 한 값 외에는 브라우저 저장소를 사용하지 않고, cube/session/record는 reload마다 초기 상태에서 시작합니다. (원문: “앱은 브라우저 저장소를 전혀 사용하지 않고” — UI polish and showcase에서 개정)
 - 기록은 세션 메모리에만 있으며, solve가 푼 판은 제외되고, 공유로 연 판의 완주는 기록이 되지 않습니다.
 - 개인 데이터는 URL에 실리지 않습니다 — fragment의 내용은 cube 상태뿐입니다.
 - Native, WASM, TypeScript unit, browser e2e와 production build가 모두 통과합니다.

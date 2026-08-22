@@ -677,6 +677,426 @@ void place_middle_edges(Work& work)
     }
 }
 
+// The bottom two layers, built a pair at a time.
+//
+// What used to be here was the way a beginner is taught: all four corners
+// into the bottom layer, and then all four middle edges fetched afterwards.
+// The fetching is what costs. Every middle-edge insertion lifts the corner
+// above it out and puts it back, so each corner is placed twice over and the
+// second placing is paid for at full price. Carrying a corner and its edge in
+// together is the one idea in F2L, and it is worth about a fifth of the whole
+// solution.
+
+/**
+ * A three by three the search can turn without touching the heap.
+ *
+ * `CubeState` is the cube; this is a scratch copy of one, and the difference
+ * that matters is that its cubies are an array rather than a vector. The
+ * search below turns a throwaway cube tens of thousands of times for every
+ * slot it fills, so a turn has to cost nothing.
+ *
+ * It is a three by three whatever size the cube is. A reduced cube turns
+ * exactly like one under outer faces -- that is what reduced means, and what
+ * `solve_as_three_layers` is already relying on -- so the search reads one
+ * wing of each edge row and one cell of each centre and works on that. A nine
+ * by nine has seven hundred and twenty-nine cubies and twenty-six of them
+ * decide this stage; turning the other seven hundred was the whole cost.
+ *
+ * The turning itself is `CubeState::rotate_quarter` written out again, which
+ * is a repetition and is why it is only nine lines: the permutation comes
+ * from `turned_position` and `turned_face`, the same two functions the cube
+ * itself turns by, so the copy cannot drift from the original.
+ */
+struct Small {
+    std::array<Cubie, 27> cubies{};
+
+    [[nodiscard]] static constexpr int size() noexcept { return 3; }
+
+    [[nodiscard]] static std::size_t spot(int x, int y, int z) noexcept
+    {
+        return static_cast<std::size_t>((x * 3 + y) * 3 + z);
+    }
+
+    [[nodiscard]] const Cubie& at(int x, int y, int z) const noexcept
+    {
+        return cubies[spot(x, y, z)];
+    }
+
+    void turn(Face face, int turns) noexcept
+    {
+        const auto move = to_move(face_turn(face, turns), 3);
+        for (int i = 0, n = normalized_turns(move.quarter_turns); i < n; ++i) {
+            quarter(move.axis, move.layers);
+        }
+    }
+
+    void quarter(Axis axis, LayerMask layers) noexcept
+    {
+        std::array<Cubie, 27> next = cubies;
+
+        for (int x = 0; x < 3; ++x) {
+            for (int y = 0; y < 3; ++y) {
+                for (int z = 0; z < 3; ++z) {
+                    const CubiePosition from{x, y, z};
+                    if ((layers & layer(coordinate_on(axis, from))) == 0) {
+                        continue;
+                    }
+
+                    const auto& was = cubies[spot(x, y, z)];
+                    Cubie carried = was;
+                    for (std::size_t i = 0; i < kFaceCount; ++i) {
+                        const auto face = static_cast<Face>(i);
+                        carried.stickers[face_index(turned_face(axis, face))] =
+                            was.sticker(face);
+                    }
+
+                    const auto to = turned_position(axis, from, 3);
+                    next[spot(to.x, to.y, to.z)] = carried;
+                }
+            }
+        }
+        cubies = next;
+    }
+};
+
+/** The three by three a cube of any size turns as, once it is reduced. */
+[[nodiscard]] Small small_of(const CubeState& cube)
+{
+    const int last = cube.size() - 1;
+    const auto pick = [last](int coordinate) {
+        return coordinate == 0 ? 0 : (coordinate == 2 ? last : 1);
+    };
+
+    Small small;
+    for (int x = 0; x < 3; ++x) {
+        for (int y = 0; y < 3; ++y) {
+            for (int z = 0; z < 3; ++z) {
+                small.cubies[Small::spot(x, y, z)] =
+                    cube.at(pick(x), pick(y), pick(z));
+            }
+        }
+    }
+    return small;
+}
+
+template <typename Cube>
+[[nodiscard]] FaceColor sticker_of(const Cube& cube, const CubiePosition& at,
+                                   Face face) noexcept
+{
+    return cube.at(at.x, at.y, at.z).sticker(face);
+}
+
+/**
+ * Reading slots without building anything.
+ *
+ * `read` and `at_home` above say these same things and say them better, but
+ * they hand back vectors, and the search asks tens of thousands of times for
+ * every slot it fills. The stages themselves keep the readable form; this one
+ * stage is where it is worth spelling out.
+ */
+template <typename Cube>
+[[nodiscard]] bool corner_at(const Cube& cube, Face down_or_up, Face front,
+                             Face right) noexcept
+{
+    const auto slot = corner_slot(down_or_up, front, right, cube.size());
+    return sticker_of(cube, slot, down_or_up) == home_colour(down_or_up) &&
+           sticker_of(cube, slot, front) == home_colour(front) &&
+           sticker_of(cube, slot, right) == home_colour(right);
+}
+
+template <typename Cube>
+[[nodiscard]] bool edge_at(const Cube& cube, Face a, Face b) noexcept
+{
+    const auto slot = edge_slot(a, b, cube.size());
+    return sticker_of(cube, slot, a) == home_colour(a) &&
+           sticker_of(cube, slot, b) == home_colour(b);
+}
+
+/** Whether one slot holds both of its own pieces, each the right way round. */
+template <typename Cube>
+[[nodiscard]] bool pair_home(const Cube& cube, int frame) noexcept
+{
+    const Face front = about_up(Face::Front, frame);
+    const Face right = about_up(Face::Right, frame);
+    return corner_at(cube, Face::Down, front, right) &&
+           edge_at(cube, front, right);
+}
+
+/**
+ * What a slot's search is not allowed to leave broken: the cross, and every
+ * pair already standing.
+ *
+ * Asked of the end of a sequence and never of the middle of one. A single
+ * trigger does disturb the slot beside the one it works on, which is the
+ * whole reason these come in runs rather than one at a time.
+ */
+template <typename Cube>
+[[nodiscard]] bool pairs_kept(const Cube& cube, unsigned keep) noexcept
+{
+    for (int frame = 0; frame < 4; ++frame) {
+        if ((keep & (1U << frame)) == 0) continue;
+        if (!pair_home(cube, frame)) return false;
+    }
+    for (const Face side : kSides) {
+        if (!edge_at(cube, Face::Down, side)) return false;
+    }
+    return true;
+}
+
+[[nodiscard]] constexpr bool among(FaceColor one, FaceColor a, FaceColor b,
+                                   FaceColor c) noexcept
+{
+    return one == a || one == b || one == c;
+}
+
+/** Whether a slot's corner is somewhere in the top layer, turned any way. */
+[[nodiscard]] bool corner_waiting(const Small& cube, int frame) noexcept
+{
+    const auto first = home_colour(Face::Down);
+    const auto second = home_colour(about_up(Face::Front, frame));
+    const auto third = home_colour(about_up(Face::Right, frame));
+
+    for (int at = 0; at < 4; ++at) {
+        const Face front = about_up(Face::Front, at);
+        const Face right = about_up(Face::Right, at);
+        const auto slot = corner_slot(Face::Up, front, right, cube.size());
+        const auto up = sticker_of(cube, slot, Face::Up);
+        const auto on_front = sticker_of(cube, slot, front);
+        const auto on_right = sticker_of(cube, slot, right);
+        if (among(first, up, on_front, on_right) &&
+            among(second, up, on_front, on_right) &&
+            among(third, up, on_front, on_right)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** Whether a slot's edge is somewhere in the top layer, turned either way. */
+[[nodiscard]] bool edge_waiting(const Small& cube, int frame) noexcept
+{
+    const auto first = home_colour(about_up(Face::Front, frame));
+    const auto second = home_colour(about_up(Face::Right, frame));
+
+    for (const Face side : kSides) {
+        const auto slot = edge_slot(Face::Up, side, cube.size());
+        const auto up = sticker_of(cube, slot, Face::Up);
+        const auto out = sticker_of(cube, slot, side);
+        if ((up == first && out == second) || (up == second && out == first)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * The six triggers a pair is carried with.
+ *
+ * A face bordering the slot turned out of the way, the top turned, the face
+ * put back. Two such faces, three ways to turn the top between them. There is
+ * nothing else in this stage -- no table of pictures, only these and a search
+ * for how few of them a case needs.
+ */
+const std::array<std::vector<FaceTurn>, 6> kTriggers{{
+    {{Face::Right, 1}, {Face::Up, 1}, {Face::Right, -1}},
+    {{Face::Right, 1}, {Face::Up, -1}, {Face::Right, -1}},
+    {{Face::Right, 1}, {Face::Up, 2}, {Face::Right, -1}},
+    {{Face::Front, -1}, {Face::Up, -1}, {Face::Front, 1}},
+    {{Face::Front, -1}, {Face::Up, 1}, {Face::Front, 1}},
+    {{Face::Front, -1}, {Face::Up, 2}, {Face::Front, 1}},
+}};
+
+constexpr int kUnreached = 1000;
+
+/**
+ * The fewest triggers that make `done` true, written out as actual faces.
+ *
+ * Depth is counted in triggers rather than in turns, because that is the
+ * shape the cases have: a pair that must be lifted out, put together and
+ * dropped in is three triggers however many quarter turns those come to.
+ * Every node is tested, so a slot already full costs nothing and a slot one
+ * trigger away is never handed a longer answer.
+ *
+ * `frames` is which slots the triggers may work on, and it is what the two
+ * uses below differ in. It matters more than it looks: the triggers of one
+ * slot turn two faces, and a piece sitting in the slot diagonally opposite is
+ * on neither of them -- so no depth of slot-local search will ever reach it.
+ * That was found by measuring, after a first version searched three deep for
+ * several seconds and still handed a third of its slots to the fallback.
+ *
+ * The alternative to all of this was the table -- forty-one pictures with a
+ * sequence written under each. Six sequences and a search hold the same
+ * knowledge, and like `apply_best` above this cannot disagree with the cube,
+ * because what it does is ask the cube.
+ */
+template <typename Done>
+void search_triggers(Small& cube, const int* frames, int frame_count,
+                     int depth, int cost, std::vector<FaceTurn>& path,
+                     std::vector<FaceTurn>& best, int& best_cost,
+                     const Done& done)
+{
+    if (cost < best_cost && done(cube)) {
+        best = path;
+        best_cost = cost;
+    }
+
+    // Three turns is the least one more trigger can add, so a branch that
+    // cannot come in under what is already found is never opened.
+    if (depth == 0 || cost + 3 >= best_cost) return;
+
+    for (int i = 0; i < frame_count; ++i) {
+        const int frame = frames[i];
+        for (int align = 0; align < 4; ++align) {
+            for (const auto& trigger : kTriggers) {
+                const std::size_t was = path.size();
+                if (align != 0) {
+                    cube.turn(Face::Up, align);
+                    path.push_back(FaceTurn{Face::Up, align});
+                }
+                for (const auto& step : trigger) {
+                    const Face face = about_up(step.face, frame);
+                    cube.turn(face, step.turns);
+                    path.push_back(FaceTurn{face, step.turns});
+                }
+
+                search_triggers(cube, frames, frame_count, depth - 1,
+                                cost + (align == 0 ? 3 : 4), path, best,
+                                best_cost, done);
+
+                // Turned back rather than copied, which is what lets one cube
+                // serve the whole search.
+                for (auto step = trigger.rbegin(); step != trigger.rend();
+                     ++step) {
+                    cube.turn(about_up(step->face, frame), -step->turns);
+                }
+                if (align != 0) cube.turn(Face::Up, -align);
+                path.resize(was);
+            }
+        }
+    }
+}
+
+/** The shallowest run of triggers reaching `done`, or nothing found. */
+template <typename Done>
+[[nodiscard]] bool shallowest(const Small& from, const int* frames,
+                              int frame_count, int limit,
+                              std::vector<FaceTurn>& found, const Done& done)
+{
+    // Shallowest first, and the shallower passes are not waste: nearly every
+    // slot is one or two triggers away, and finding that in a hundred nodes
+    // rather than nine thousand is the difference between this stage costing
+    // nothing and costing the whole solve.
+    for (int depth = 0; depth <= limit; ++depth) {
+        Small cube = from;
+        std::vector<FaceTurn> path;
+        int best_cost = kUnreached;
+        found.clear();
+
+        search_triggers(cube, frames, frame_count, depth, 0, path, found,
+                        best_cost, done);
+        if (best_cost != kUnreached) return true;
+    }
+    return false;
+}
+
+constexpr std::array<int, 4> kEveryFrame{0, 1, 2, 3};
+
+/**
+ * Fills one slot, the way the method is actually taught.
+ *
+ * First the direct try: the pair may already be together, or one trigger from
+ * it, and working at the slot itself is both the shortest answer and the one
+ * that leaves the rest of the cube alone. Only when that fails are the two
+ * pieces fetched up to the top layer first -- which is what a person does on
+ * finding a corner buried in the wrong slot -- and the direct try made again
+ * from there.
+ *
+ * @return whether a sequence was found. `found` is left alone if not.
+ */
+[[nodiscard]] bool insert_pair(const Small& from, int frame, unsigned keep,
+                               std::vector<FaceTurn>& found)
+{
+    const unsigned wanted = keep | (1U << frame);
+    const int here = frame;
+    const auto filled = [wanted](const Small& cube) {
+        return pairs_kept(cube, wanted);
+    };
+
+    // Two triggers, not three, before giving up on the direct try. Three is
+    // where the cost is -- fourteen thousand arrangements against six hundred
+    // -- and measuring said that when two will not do, the reason is almost
+    // always a piece buried somewhere this search cannot reach at any depth.
+    // Fetching first and then looking again is both quicker and, by a little,
+    // shorter. The third trigger is still tried, but last, once fetching has
+    // failed too.
+    if (shallowest(from, &here, 1, 2, found, filled)) return true;
+
+    std::vector<FaceTurn> lift;
+    const auto waiting = [keep, frame](const Small& cube) {
+        return corner_waiting(cube, frame) && edge_waiting(cube, frame) &&
+               pairs_kept(cube, keep);
+    };
+
+    if (shallowest(from, kEveryFrame.data(), 4, 2, lift, waiting)) {
+        Small lifted = from;
+        for (const auto& step : lift) lifted.turn(step.face, step.turns);
+
+        std::vector<FaceTurn> insertion;
+        if (shallowest(lifted, &here, 1, 3, insertion, filled)) {
+            found = lift;
+            found.insert(found.end(), insertion.begin(), insertion.end());
+            return true;
+        }
+    }
+
+    return shallowest(from, &here, 1, 3, found, filled);
+}
+
+/**
+ * The bottom two layers.
+ *
+ * A slot the search cannot reach is left for the next pass rather than
+ * forced: the four are not independent, and one filled out of turn brings
+ * another within reach. If a whole pass adds nothing, the two stages this one
+ * replaced are run for whatever is left -- they were the entire method before
+ * F2L was here, they finish from any position, and having them behind this is
+ * what lets the search be allowed to give up instead of having to be proved
+ * complete.
+ */
+void fill_bottom_two_layers(Work& work)
+{
+    Small small = small_of(work.cube());
+
+    unsigned filled = 0;
+    for (int frame = 0; frame < 4; ++frame) {
+        if (pair_home(small, frame)) filled |= 1U << frame;
+    }
+
+    for (int pass = 0; pass < 4 && filled != 0xFU; ++pass) {
+        bool moved = false;
+        for (int frame = 0; frame < 4; ++frame) {
+            if ((filled & (1U << frame)) != 0) continue;
+
+            std::vector<FaceTurn> found;
+            if (!insert_pair(small, frame, filled, found)) continue;
+
+            for (const auto& step : found) {
+                work.turn(step.face, step.turns);
+                small.turn(step.face, step.turns);
+            }
+            filled |= 1U << frame;
+            moved = true;
+        }
+        if (!moved) break;
+    }
+
+    if (filled == 0xFU) return;
+
+    place_bottom_corners(work);
+    place_middle_edges(work);
+}
+
+
 void turn_top_edges_up(Work& work)
 {
     repeat_until(work, kTopCross, top_edges_turned_up, 4);
@@ -787,26 +1207,26 @@ std::vector<CubeMove> solve_as_three_layers(const CubeState& state)
     Work work{state};
 
     // A two by two is corners and nothing else: no cross to build, no middle
-    // layer between the two it has, and no edges on top to finish with. So the
-    // stages that deal with edges are not skipped by a flag here -- there is
-    // simply nothing for them to find.
+    // layer between the two it has, and no edges on top to finish with. So it
+    // is not that the stages dealing with edges are skipped by a flag -- there
+    // is simply nothing for them to find, and its one stage is written out
+    // below rather than reached through a search for pairs that do not exist.
     if (state.size() > 2) {
         build_flower(work);
         assert(flower_built(work.cube()));
 
         fold_flower(work);
         assert(bottom_cross_built(work.cube()));
-    }
 
-    place_bottom_corners(work);
-    assert(bottom_corners_built(work.cube()));
-
-    if (state.size() > 2) {
-        place_middle_edges(work);
+        fill_bottom_two_layers(work);
+        assert(bottom_corners_built(work.cube()));
         assert(middle_layer_built(work.cube()));
 
         turn_top_edges_up(work);
         assert(top_edges_turned_up(work.cube()) == 4);
+    } else {
+        place_bottom_corners(work);
+        assert(bottom_corners_built(work.cube()));
     }
 
     turn_top_corners_up(work);

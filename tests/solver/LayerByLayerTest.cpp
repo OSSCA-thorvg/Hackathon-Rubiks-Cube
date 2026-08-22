@@ -202,8 +202,8 @@ TEST_CASE("solutions stay within a length worth watching")
     // A regression bound rather than a promise about the method: these are the
     // numbers this implementation gives today, and a change that doubles them
     // is a change somebody should have meant.
-    CHECK(longest <= 200);
-    CHECK(total / kSeeds <= 145);
+    CHECK(longest <= 150);
+    CHECK(total / kSeeds <= 110);
 }
 
 TEST_CASE("neighbouring turns of one layer are run together")

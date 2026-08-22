@@ -11,12 +11,17 @@ namespace rubiks::cube::solver {
 /**
  * The method a person is taught first: one layer, then the next, then the last.
  *
- * Seven stages, each of which only ever uses sequences that put back what the
- * stages before it finished. There is no search and no table of positions --
- * what a stage does is find the piece it is looking for, bring it to the one
- * place its insertion is written for, and insert it. So the sequences number
- * about half a dozen in total, and everything else is getting a piece to where
- * one of them applies.
+ * Six stages, each of which only ever uses sequences that put back what the
+ * stages before it finished. There is no table of positions anywhere in it:
+ * about a dozen sequences are written down, and everything else is working out
+ * where to stand before using one -- either by reading the piece being looked
+ * for, or, in the three places where a person would recognise a picture
+ * instead, by trying the ways round and asking the cube which came out best.
+ *
+ * The two layers under the last one are built together rather than one after
+ * the other, a corner and its edge carried in as a pair. That is the one thing
+ * here taken from how the method is done rather than how it is taught, and it
+ * is worth about a fifth of the whole solution.
  *
  * Three by three only. The interface says so out loud, so a bigger cube is
  * met with "no solver for this size" rather than with a wrong answer.
@@ -36,7 +41,7 @@ public:
 /**
  * The moves that finish a cube whose pieces are already three layers deep.
  *
- * The seven stages above, without the compression at the end, for a caller
+ * The six stages above, without the compression at the end, for a caller
  * that has more to add to the sequence.
  *
  * A cube of any size may be handed in, as long as it is *reduced*: every row

@@ -87,12 +87,17 @@ Dark theme을 반전시켜 Light theme을 만들지 않습니다. 같은 semanti
 
 Mobile에서는 첫 세 개만 첫 줄에 두고 Rewind/Solve는 secondary row 또는 overflow에 둡니다.
 
+`#solver-note`는 Solve가 이 cube size에서 영영 불가능한 이유를 적는 한 줄이므로 dock 바로 아래, status line 위에 둡니다. Solve가 가능한 동안에는 `hidden`이며, 이 계약은 지금과 같습니다.
+
 ### View bar
 
 - Scene: `3D / Split / 2D`
 - Diagram: `Net / Rings / Both`
+- Ambient: `Watch` toggle
 
 기존 view mode의 `Both` label은 `Split`으로 바꿉니다. ABI와 `data-view="both"` 값은 바꾸지 않고 보이는 문구만 개정합니다. Diagram control은 Scene이 2D 영역을 포함하는 `Split` 또는 `2D`일 때만 활성 상태로 보입니다. 3D에서 숨기더라도 선택값은 유지되어 다음 Split/2D 진입 때 그대로 복원됩니다.
+
+`Watch`(`#ambient`)는 cube를 바꾸는 game command가 아니라 화면이 스스로 도는 presentation mode이므로 action dock이 아니라 view bar 오른쪽 끝에 둡니다. Scene과 Diagram이 “무엇을 보는가”를 정하고 Watch가 “보고만 있는가”를 정하므로 세 control이 한 줄에서 같은 축을 이룹니다. 켜는 것과 끄는 것이 모두 이 버튼 하나이고 `aria-pressed`로 상태를 말하는 기존 toggle 계약을 그대로 유지합니다. [GameController](../../web/src/game/GameController.ts)의 `WATCHABLE`이 `idle`과 `completed`만 허용하므로 진행 중인 sitting에서는 disabled로 보입니다. Mobile에서는 Scene/Diagram 다음 줄의 오른쪽 끝입니다.
 
 ### Settings
 
@@ -132,7 +137,9 @@ Mobile에서는 첫 세 개만 첫 줄에 두고 Rewind/Solve는 secondary row �
 │                    ThorVG Stage                       │
 │                                                       │
 ├─── Undo ── Rewind ── Scramble/Stop ── Solve ── Redo ───┤
-│       Scene: 3D / Split / 2D    Diagram: Net / ...    │
+│  Scene: 3D / Split / 2D   Diagram: Net / ...   Watch  │
+│  solver note (hidden by default)                      │
+│  status line                                          │
 └────────────────────────────────────────────────────────┘
 
 ┌ Moves | Session ────────────────────────────────┐
@@ -154,7 +161,8 @@ Title                         Timer  Settings
 └─────────────────────────────────────┘
 [ Undo ]      [ Scramble / Stop ]      [ Redo ]
 [ 3D ]              [ Split ]            [ 2D ]
-[ Net ]             [ Rings ]           [ Both ]
+[ Net ]     [ Rings ]     [ Both ]     [ Watch ]
+status line
 Moves | Session
 Advanced controls ▾
 ```
@@ -167,17 +175,35 @@ Advanced controls ▾
 
 ## State visibility contract
 
-| 상태 | Primary center | History | Stop | Diagram controls |
+가시성은 한 축이 아니라 두 축이 정합니다. [GameSession](../../web/src/game/GameSession.ts)의 `GameState`는 `idle | scrambling | ready | running | completed` 다섯 값이고, 그 위에 engine이 매 frame 답하는 `busy`와 `watching`이 겹칩니다. 하나의 표로 적으면 `completed`가 빠지거나 재생 상태가 session 상태인 것처럼 읽히므로 둘로 나눕니다.
+
+### Session state
+
+| `GameState` | Primary center | History | Watch |
+| --- | --- | --- | --- |
+| `idle` | Scramble | disabled | 활성 |
+| `scrambling` | Scramble | disabled | disabled |
+| `ready` | Scramble | history에 따라 | disabled |
+| `running` | Scramble | history에 따라 | disabled |
+| `completed` | Scramble | history에 따라 | 활성 |
+
+`completed`는 timer가 멈추고 record가 쓰인 뒤입니다. 화면 구성은 `ready`/`running`과 같지만 Watch를 다시 누를 수 있는 두 상태 중 하나이므로 표에 따로 적습니다.
+
+### Engine overlay
+
+| Engine | Primary center | Move/History | Stop | Diagram |
 | --- | --- | --- | --- | --- |
-| Idle | Scramble | disabled | hidden | view에 따라 활성 |
-| Scrambling | Stop | disabled | visible | 활성 |
-| Ready | Scramble | history에 따라 | hidden | 활성 |
-| Running | Scramble | history에 따라 | hidden | 활성 |
-| Rewind/Solve playback | Stop | disabled | visible | 활성 |
-| Ambient | Stop | disabled | visible | 활성 |
+| 한가함 | Scramble | 평소대로 | hidden | view에 따라 |
+| Scramble 재생 (`busy`) | Scramble, disabled | disabled | hidden | 활성 |
+| Rewind/Solve/Undo/Redo 재생 (`busy`, stoppable) | **Stop** | disabled | visible | 활성 |
+| Watching (`busy` + `watching`) | Scramble, disabled | move는 활성, history는 disabled | hidden | 활성 |
 | Unsupported/Error | 없음 | hidden | hidden | hidden |
 
-상태 메시지는 stage 바로 아래의 한 줄 status/toast 영역에 표시합니다. 오류가 아닌 일반 상태는 layout을 밀지 않도록 최소 높이를 예약합니다. 사소한 명령 거절은 modal을 만들지 않고 해당 control과 status에 짧게 표시합니다.
+**Stop은 재생 전체가 아니라 끊을 수 있는 재생만 끊습니다.** [Application.cpp](../../engine/src/app/Application.cpp)의 재생기는 `stoppable`을 기본 `false`로 두고 rewind와 replay에서만 켭니다. 반쯤 재생된 scramble은 아무도 요청하지 않은 cube이고, 이렇게 멈춘 watched pattern은 빌려 간 cube를 되돌려 놓지 못하기 때문에 의도적으로 그렇게 되어 있습니다. 이 작업은 UI 재배치이지 engine invariant 개정이 아니므로 그 결정을 따릅니다. 따라서 dock 중앙의 Scramble/Stop 교체는 rewind 계열 재생에만 적용되고, scramble 재생 중에는 Scramble이 disabled 상태로 자리를 지키며, watching을 끄는 것은 Stop이 아니라 Watch toggle 자신입니다.
+
+Watching 중에도 move button과 keyboard letter가 살아 있고 누르면 watching을 먼저 끄고 그 turn을 실행하는 것 역시 기존 계약이며 그대로 둡니다.
+
+상태 메시지는 stage와 control 바로 아래의 한 줄 status/toast 영역에 표시합니다. 오류가 아닌 일반 상태는 layout을 밀지 않도록 최소 높이를 예약합니다. 사소한 명령 거절은 modal을 만들지 않고 해당 control과 status에 짧게 표시합니다.
 
 ## Markup structure example
 
@@ -192,7 +218,8 @@ Advanced controls ▾
     </div>
 
     <div class="app-header__tools">
-      <output id="timer" aria-label="Elapsed time">00:00.00</output>
+      <!-- output is an implicit polite live region; the timer must not be one -->
+      <output id="timer" aria-label="Elapsed time" aria-live="off">00:00.00</output>
       <button class="button button--ghost" id="share" type="button">
         Share
       </button>
@@ -210,8 +237,12 @@ Advanced controls ▾
   </header>
 
   <section class="game-stage" aria-labelledby="game-title">
-    <canvas id="view" aria-label="Interactive Rubik's Cube"></canvas>
-    <p class="interaction-hint">Drag a sticker to turn · drag empty space to orbit</p>
+    <!-- the label keeps the full instruction; the visible hint only repeats it -->
+    <canvas
+      id="view"
+      aria-label="Interactive Rubik's Cube. Drag a sticker to turn a layer, or drag empty space to orbit the view."
+    ></canvas>
+    <p class="interaction-hint" aria-hidden="true">Drag a sticker to turn · drag empty space to orbit</p>
   </section>
 
   <div class="action-dock" role="group" aria-label="Cube actions">
@@ -223,12 +254,26 @@ Advanced controls ▾
     <button class="button button--secondary" id="redo" type="button">Redo</button>
   </div>
 
+  <p class="solver-note" id="solver-note" hidden>
+    No solver for this cube size yet — Rewind still works.
+  </p>
+
   <div class="view-bar">
     <div class="segmented-control" role="group" aria-label="Scene">
       <button type="button" data-view="3d" aria-pressed="false">3D</button>
       <button type="button" data-view="both" aria-pressed="true">Split</button>
       <button type="button" data-view="2d" aria-pressed="false">2D</button>
     </div>
+
+    <div class="segmented-control" role="group" aria-label="Diagram">
+      <button type="button" data-flat="net" aria-pressed="true">Net</button>
+      <button type="button" data-flat="rings" aria-pressed="false">Rings</button>
+      <button type="button" data-flat="both" aria-pressed="false">Both</button>
+    </div>
+
+    <button class="button button--ghost" id="ambient" type="button" aria-pressed="false">
+      Watch
+    </button>
   </div>
 
   <p id="status" class="status-line" role="status" aria-live="polite"></p>
@@ -321,6 +366,7 @@ export function createGameShell(host: HTMLElement): GameShell {
 | Accent | `#2563eb` | `#60a5fa` |
 | Accent soft | `rgb(37 99 235 / 12%)` | `rgb(96 165 250 / 14%)` |
 | Danger | `#dc2626` | `#f87171` |
+| Danger border | `#f3b3b3` | `#63373c` |
 | Canvas | `#e7ebf0` | `#202020` |
 
 Light는 순백 page가 아니라 옅은 중성 page 위에 흰 surface를 놓습니다. Dark는 순검정 대신 청회색 surface 단계를 사용합니다. Canvas의 Light background도 순백이 아닙니다. 흰 sticker와 구분되고 검은 cubie seam은 유지되는 값이어야 합니다.
@@ -340,6 +386,7 @@ Light는 순백 page가 아니라 옅은 중성 page 위에 흰 surface를 놓�
   --color-accent: #2563eb;
   --color-accent-soft: rgb(37 99 235 / 12%);
   --color-danger: #dc2626;
+  --color-danger-border: #f3b3b3;
   --color-canvas: #e7ebf0;
 
   --radius-control: 0.625rem;
@@ -360,6 +407,7 @@ Light는 순백 page가 아니라 옅은 중성 page 위에 흰 surface를 놓�
   --color-accent: #60a5fa;
   --color-accent-soft: rgb(96 165 250 / 14%);
   --color-danger: #f87171;
+  --color-danger-border: #63373c;
   --color-canvas: #202020;
 
   --shadow-stage: 0 1.5rem 4rem rgb(0 0 0 / 40%);
@@ -379,6 +427,7 @@ Light는 순백 page가 아니라 옅은 중성 page 위에 흰 surface를 놓�
     --color-accent: #60a5fa;
     --color-accent-soft: rgb(96 165 250 / 14%);
     --color-danger: #f87171;
+  --color-danger-border: #63373c;
     --color-canvas: #202020;
   }
 }
@@ -411,7 +460,7 @@ Dark token을 두 곳에 복사하는 대신 실제 구현은 `[data-theme="dark
 }
 
 .button--danger {
-  border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
+  border-color: var(--color-danger-border);
   color: var(--color-danger);
   background: transparent;
 }
@@ -423,7 +472,7 @@ Dark token을 두 곳에 복사하는 대신 실제 구현은 `[data-theme="dark
 }
 ```
 
-`color-mix()`를 쓰기 전에 지원 대상 browser와 production build를 확인합니다. 지원 범위를 넓혀야 한다면 danger border token을 theme마다 하나 더 두는 쪽이 fallback보다 단순합니다.
+Danger border는 `color-mix()`로 계산하지 않고 theme마다 literal token 하나를 둡니다. 이 값이 필요한 곳은 danger button 하나뿐이라 계산식이 사는 값이 없고, token 두 줄이 browser 지원 확인과 fallback 규칙보다 짧기 때문입니다. 다른 곳에서 `color-mix()`가 필요해지면 그때 지원 대상과 production build를 확인합니다.
 
 ## Theme behavior
 
@@ -520,11 +569,28 @@ Color canvas_background(CanvasTheme theme) noexcept
 
 Renderer는 theme enum을 알지 않고 최종 color만 받습니다. Theme은 presentation의 언어이고 renderer는 target을 칠하는 도구이기 때문입니다.
 
+Setter는 concrete class가 아니라 `Renderer` 경계에 둡니다. [Application](../../engine/src/app/Application.cpp)은 renderer를 `std::unique_ptr<render::Renderer>`로 소유하므로 `ThorVGSoftwareRenderer`에만 method를 붙이면 application에서 호출할 방법이 없습니다. `pixel_buffer()`와 `pixel_byte_length()`가 이미 기본 구현을 가진 virtual이므로 같은 형태를 따릅니다. Background를 갖지 않는 backend는 기본 구현이 아무것도 하지 않습니다.
+
 ```cpp
-class ThorVGSoftwareRenderer {
+class Renderer {
 public:
-    /** 다음 frame부터 사용할 불투명 target background를 정합니다. */
-    void set_background(graphics::Color color) noexcept;
+    /**
+     * 다음 frame부터 사용할 불투명 target background를 정합니다.
+     *
+     * Background는 geometry가 아니라 target의 성질이므로 scene이 아니라
+     * renderer가 들고 있습니다. 기본 구현은 아무것도 하지 않습니다.
+     */
+    virtual void set_background(graphics::Color color) noexcept
+    {
+        static_cast<void>(color);
+    }
+};
+```
+
+```cpp
+class ThorVGSoftwareRenderer : public Renderer {
+public:
+    void set_background(graphics::Color color) noexcept override;
 
 private:
     graphics::Color background_{32, 32, 32, 255};
@@ -580,7 +646,8 @@ Sticker의 `Classic / HighContrast` palette와 Canvas theme을 합치지 않습�
 - 선택은 색만으로 표현하지 않고 fill/border와 `aria-pressed`를 함께 씁니다.
 - Theme selector는 세 개의 button과 `aria-pressed`를 사용합니다. 자동으로 바뀌는 System effective theme도 preference button은 계속 System으로 표시합니다.
 - Settings icon에는 visible tooltip 또는 accessible name이 있습니다. SVG 자체는 `aria-hidden="true"`입니다.
-- Status는 `aria-live="polite"`를 유지하되 timer와 move log는 live region으로 만들지 않습니다.
+- Status는 `aria-live="polite"`를 유지하되 timer와 move log는 live region으로 만들지 않습니다. `<output>`은 암묵적으로 polite live region이므로 timer는 지금처럼 `aria-live="off"`를 명시해 그것을 끕니다.
+- Canvas의 조작 설명은 `aria-label`에 남기고 화면에 보이는 hint는 `aria-hidden="true"`로 둡니다. 첫 gesture 뒤 hint를 지워도 끊어진 `aria-describedby` 참조가 남지 않게 하기 위해서입니다.
 - Drawer open 상태에서 background control은 keyboard focus 대상이 아닙니다.
 - Error/unsupported UI는 두 theme에서 같은 의미와 충분한 대비를 가집니다.
 - DOM transition은 `prefers-reduced-motion`을 존중합니다. Cube turn animation 속도는 기존 Phase 13 계약을 유지합니다.
@@ -598,16 +665,11 @@ Sticker의 `Classic / HighContrast` palette와 Canvas theme을 합치지 않습�
 
 ## Implementation steps
 
-### 1. Contract and shell extraction
+순서는 “초록 상태로 멈출 수 있는 지점”을 기준으로 정합니다. Canvas theme은 C++/ABI/WASM만 건드리는 독립 수직 slice여서 DOM을 하나도 옮기지 않고 끝까지 갈 수 있고, 정보 구조 재배치는 e2e를 가장 크게 흔들므로 뒤에 둡니다. 그래서 원래 목록의 2와 4를 앞으로 당겼습니다.
+
+### 1. Theme tokens and controller
 
 - [ ] 이 문서의 최종 정보 구조 확정
-- [ ] `web/src/ui/GameShell.ts`로 markup과 typed query 이동
-- [ ] `bootstrap.ts`를 support check와 lifecycle wiring으로 축소
-- [ ] 기존 id, data attribute, `GameUi` field 유지
-- [ ] bootstrap unit test를 새 landmark와 settings/activity 구조로 개정
-
-### 2. Theme tokens and controller
-
 - [ ] CSS color literal을 semantic token으로 이동
 - [ ] System/Light/Dark theme selector
 - [ ] `ThemeController`와 system media-query listener/teardown
@@ -615,22 +677,53 @@ Sticker의 `Classic / HighContrast` palette와 Canvas theme을 합치지 않습�
 - [ ] first-paint theme 적용
 - [ ] Phase 14의 theme persistence 예외 개정 기록
 
-### 3. Responsive information architecture
+### 2. Canvas theme
+
+DOM 재배치 없이 현재 화면 위에서 끝낼 수 있는 단계입니다. 여기까지가 통과하면 theme은 shell 작업과 무관하게 완성되어 있습니다.
+
+- [ ] `CanvasTheme`과 `canvas_background()`
+- [ ] `Renderer::set_background()` virtual과 software renderer override
+- [ ] Application state, C ABI, generated WASM boundary
+- [ ] `CubeEngine` theme method와 `ThemeController` 연결
+- [ ] Classic/HighContrast × Light/Dark 조합 검증
+
+### 3. Contract and shell extraction
+
+- [ ] `web/src/ui/GameShell.ts`로 markup과 typed query 이동
+- [ ] `bootstrap.ts`를 support check와 lifecycle wiring으로 축소
+- [ ] 기존 id, data attribute, `GameUi` field 유지
+- [ ] bootstrap unit test를 새 landmark와 settings/activity 구조로 개정
+
+### 4. Responsive information architecture
 
 - [ ] desktop side rail 제거, header/stage/action dock/view bar 구성
 - [ ] mobile action hierarchy와 settings bottom sheet
 - [ ] Moves/Session tab panel
-- [ ] contextual Diagram controls와 Scramble/Stop 자리 교체
-- [ ] status를 stage 가까이 이동
+- [ ] contextual Diagram controls, view bar의 Watch toggle, rewind 계열의 Scramble/Stop 자리 교체
+- [ ] status와 solver note를 control 가까이 이동
 - [ ] interaction hint와 첫 gesture 후 제거
 
-### 4. Canvas theme
+### 4b. e2e migration
 
-- [ ] `CanvasTheme`과 `canvas_background()`
-- [ ] renderer background 상태와 setter
-- [ ] Application state, C ABI, generated WASM boundary
-- [ ] `CubeEngine` theme method와 `ThemeController` 연결
-- [ ] Classic/HighContrast × Light/Dark 조합 검증
+이 단계에서 가장 큰 덩어리이고 따로 세지 않으면 빠지는 작업입니다. Settings로 들어가는 control(`#reset`, `#cube-size`, `#speed`, `#mute`, `[data-palette]`, `#home-view`)과 Advanced로 내려가는 control(`#turn-depth`, `#turn-wide`)을 지금은 spec이 화면에서 곧바로 누릅니다. 서랍이 닫혀 있으면 전부 실패합니다.
+
+현재 e2e 14개 spec 중 10개가 여기에 해당합니다.
+
+| Spec | 해당 참조 |
+| --- | --- |
+| `gameplay-ui.spec.ts` | 18 |
+| `cube-size.spec.ts` | 13 |
+| `ambient.spec.ts` | 12 |
+| `turn-sound.spec.ts` / `speed.spec.ts` / `ambient-mix.spec.ts` | 각 7 |
+| `solve.spec.ts` | 5 |
+| `palette.spec.ts` | 3 |
+| `page-states.spec.ts` | 2 |
+| `move-log.spec.ts` | 1 |
+
+- [ ] `openSettings()` / `closeSettings()` helper를 `tests/e2e`에 추가
+- [ ] 위 10개 spec을 helper 경유로 개정
+- [ ] `#ambient`는 view bar에 남으므로 서랍을 거치지 않는지 확인
+- [ ] 기존 spec이 id와 attribute selector만 쓰는 것을 유지해 `Both` → `Split` 같은 label 개정이 spec을 건드리지 않게 함
 
 ### 5. Visual polish
 
@@ -679,19 +772,23 @@ Sticker의 `Classic / HighContrast` palette와 Canvas theme을 합치지 않습�
 - System theme은 `prefers-color-scheme`을 따릅니다.
 - Light/Dark 전환 뒤 canvas background pixel도 함께 바뀝니다.
 - 3D에서는 Diagram selector가 비활성/숨김이고 Split/2D로 돌아오면 이전 선택을 유지합니다.
-- Playback에서 Scramble 자리의 Stop이 나타나고 종료 뒤 원래 자리로 돌아옵니다.
+- Rewind/Solve/Undo/Redo 재생에서 Scramble 자리에 Stop이 나타나고 종료 뒤 원래 자리로 돌아옵니다.
+- Scramble 재생과 watching 중에는 Stop이 나타나지 않고, watching은 view bar의 Watch를 다시 눌러 끝납니다.
+- Watch는 view bar에서 눌리고 `idle`/`completed` 밖에서는 disabled입니다.
+- Settings 안의 control이 helper로 서랍을 연 뒤 desktop과 mobile 모두에서 조작됩니다.
 - 모든 기존 gameplay, pointer, sharing, solve e2e가 DOM 재배치 뒤에도 통과합니다.
 
-### Visual regression
+### Visual QA
 
-Control shell만 안정적인 screenshot 대상으로 삼습니다. Canvas animation, timer, scroll position은 고정하거나 mask하여 불안정한 pixel diff를 만들지 않습니다.
+Screenshot baseline을 CI에 넣지 않습니다. 저장소에는 snapshot 도구 설정도, 이를 돌릴 workflow도 없고([playwright.config.ts](../../web/playwright.config.ts), `.github/workflows/deploy-pages.yml`), baseline은 플랫폼마다 달라 실패가 대개 회귀가 아니라 렌더링 차이입니다. 이 작업의 크기에 비해 유지 비용이 큽니다.
 
-- Desktop Light
-- Desktop Dark
-- Mobile Light
-- Mobile Dark
-- Settings open Light/Dark
-- Error/unsupported Light/Dark
+대신 아래를 사람이 한 번 훑는 checklist로 둡니다. 나중에 shell이 안정된 뒤 screenshot을 도입한다면 canvas animation, timer, scroll position을 고정하거나 mask한 control shell만 대상으로 삼습니다.
+
+- [ ] Desktop Light / Dark
+- [ ] Mobile Light / Dark
+- [ ] Settings open Light / Dark
+- [ ] Error/unsupported Light / Dark
+- [ ] Classic/HighContrast × Light/Dark 네 조합의 sticker 판독
 
 ## Acceptance criteria
 
@@ -700,6 +797,9 @@ Control shell만 안정적인 screenshot 대상으로 삼습니다. Canvas anima
 - Mobile 첫 control 영역에는 primary action과 scene selector가 먼저 오고, 설정은 bottom sheet에 있습니다.
 - `Both`라는 보이는 label은 scene mode에 남지 않고 `Split`으로 개정되어 Diagram의 `Both`와 구별됩니다.
 - 모든 기존 command와 view/palette 의미가 유지되고 UI framework dependency가 추가되지 않습니다.
+- `Watch`는 view bar에서 Scene/Diagram과 한 줄을 이루고 `aria-pressed` toggle 계약을 유지합니다.
+- Stop은 rewind 계열 재생에서만 나타나며 scramble 재생과 watching의 engine invariant는 바뀌지 않습니다.
+- `#solver-note`는 dock과 status 사이에 있고 solver가 있는 cube size에서는 `hidden`입니다.
 - System/Light/Dark가 DOM shell과 software canvas에 함께 적용됩니다.
 - Theme만 fail-soft로 저장되고 cube session, records와 다른 presentation option은 reload 뒤 복원되지 않습니다.
 - Classic/HighContrast palette와 Light/Dark canvas의 네 조합이 모두 읽을 수 있습니다.

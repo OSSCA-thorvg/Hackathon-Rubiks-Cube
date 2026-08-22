@@ -6,8 +6,14 @@ import {
 import {
   computeDrawingBufferSize,
   CubeEngine,
+  type CubeCanvasTheme,
   type CubeEngineSize,
 } from './wasm/CubeEngine.ts';
+import {
+  canvasThemeOf,
+  type EffectiveTheme,
+  type ThemeListener,
+} from './ui/ThemeController.ts';
 import {
   attachGameController,
   type GameController,
@@ -34,6 +40,8 @@ export type EngineLike = PointerTarget &
     dispose(): void;
     /** @returns true while further frames still have to be drawn. */
     advance(elapsedMs: number): boolean;
+    /** The ground the cube is drawn against, which the page decides. */
+    setCanvasTheme(theme: CubeCanvasTheme): void;
     /** @returns false when the engine would not take the shared record. */
     restoreSession(
       size: number,
@@ -85,6 +93,18 @@ export type DocumentLike = {
   removeEventListener(type: string, listener: (event: Event) => void): void;
 };
 
+/**
+ * The part of the theme controller the lifecycle needs.
+ *
+ * A reader and a subscription rather than the controller itself, because the
+ * lifecycle has no business setting a theme -- it only has to paint the
+ * canvas the color the page already is, and keep painting it that color.
+ */
+export type ThemeSource = {
+  effective(): EffectiveTheme;
+  subscribe(listener: ThemeListener): () => void;
+};
+
 export type StartAppOptions = {
   readonly canvas: HTMLCanvasElement;
   /** Gameplay controls the lifecycle hands to the game controller. */
@@ -92,6 +112,8 @@ export type StartAppOptions = {
   readonly setState: (state: AppState, message: string) => void;
   /** Called for failures after the app reached the ready state. */
   readonly onError: (error: unknown) => void;
+  /** Where the canvas ground comes from; absent leaves the engine default. */
+  readonly theme?: ThemeSource;
   /** Test seams; production uses CubeEngine and the real globals. */
   readonly createEngine?: (canvas: HTMLCanvasElement) => Promise<EngineLike>;
   readonly createObserver?: (callback: () => void) => ObserverLike;
@@ -178,8 +200,15 @@ export async function startApp(
 
   const engine = await createEngine(canvas);
 
+  const theme: ThemeSource | null = options.theme ?? null;
+
   let opening: OpeningState = 'fresh';
   try {
+    // Ahead of the first render as well, and for the same reason the restore
+    // is: a frame drawn on the engine's default ground would show a dark
+    // rectangle on a light page for exactly as long as it takes the first
+    // theme change to arrive, which on a light machine is forever.
+    if (theme !== null) engine.setCanvasTheme(canvasThemeOf(theme.effective()));
     // Ahead of the first render, which is the point of the order. Nothing is
     // animating after a restore, so no frame loop starts on its own -- a
     // restore behind this line would leave the logical cube shared and the
@@ -203,6 +232,8 @@ export async function startApp(
   // owed back when it returns. Nothing else may set it: a loop that ended
   // because the cube stopped moving is not owed anything.
   let pausedWhileHidden = false;
+  // Handed back by the theme source, and the only way this stops listening.
+  let unsubscribeTheme: (() => void) | null = null;
 
   const drawFrame = (timestamp: number): void => {
     frameHandle = null;
@@ -325,6 +356,7 @@ export async function startApp(
     });
     // Before the engine is disposed: cancelling a gesture calls into it,
     // and so does every control the game controller still has wired up.
+    attempt(() => unsubscribeTheme?.());
     attempt(() => pointer?.teardown());
     attempt(() => game?.teardown());
     attempt(() => observer?.disconnect());
@@ -360,6 +392,21 @@ export async function startApp(
         onError(error);
       },
     });
+    // A theme change is not a cube change, so it asks for one frame rather
+    // than starting a loop: nothing is moving, and the ground is repainted
+    // by the same render every other still frame goes through.
+    unsubscribeTheme =
+      theme?.subscribe((next: EffectiveTheme): void => {
+        if (!active) return;
+
+        try {
+          engine.setCanvasTheme(canvasThemeOf(next));
+          engine.render();
+        } catch (error) {
+          teardown();
+          onError(error);
+        }
+      }) ?? null;
     observer = createObserver(applySize);
     observer.observe(canvas);
     // Device pixel ratio changes arrive with window resize events.

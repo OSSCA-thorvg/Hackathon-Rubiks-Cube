@@ -8,6 +8,7 @@ import {
   type CanvasProbe,
   type NetView,
 } from './sceneContract.ts';
+import { pressInSettings } from './shell.ts';
 
 /** A viewport large enough to keep the desktop HUD beside the canvas. */
 const DESKTOP = { width: 1200, height: 1200 };
@@ -107,6 +108,6 @@ test('your own moves are written out in notation as you make them', async ({
   ).toHaveCount(3);
 
   // A new cube has no record at all.
-  await page.locator('#reset').click();
+  await pressInSettings(page, '#reset');
   await expect(entries).toHaveCount(0);
 });

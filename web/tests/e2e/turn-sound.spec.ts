@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { fillInSettings, pressInSettings } from './shell.ts';
 
 /** A viewport large enough to keep the desktop HUD beside the canvas. */
 const DESKTOP = { width: 1200, height: 1200 };
@@ -44,8 +45,7 @@ async function voices(page: Page): Promise<{ contexts: number; voices: number }>
 
 /** Runs one scramble and waits for the sequence to finish playing. */
 async function scramble(page: Page): Promise<void> {
-  await page.locator('#scramble-moves').fill(String(SCRAMBLE_MOVES));
-  await page.locator('#scramble-moves').blur();
+  await fillInSettings(page, '#scramble-moves', String(SCRAMBLE_MOVES));
   await page.locator('#scramble').click();
   await expect(page.locator('.game-shell')).toHaveAttribute(
     'data-game-state',
@@ -76,10 +76,10 @@ test('a turn that lands makes a sound, and mute stops it', async ({ page }) => {
   expect(afterScramble.voices).toBeGreaterThan(0);
   expect(afterScramble.voices).toBeLessThanOrEqual(SCRAMBLE_MOVES);
 
-  await page.locator('#mute').click();
+  await pressInSettings(page, '#mute');
   await expect(page.locator('#mute')).toHaveAttribute('aria-pressed', 'true');
 
-  await page.locator('#reset').click();
+  await pressInSettings(page, '#reset');
   await scramble(page);
 
   // The same sequence again with nothing added to the count, and no second
@@ -96,7 +96,7 @@ test('watching turns the cube in silence', async ({ page }) => {
 
   // A gesture first, so the context exists and silence afterwards means the
   // sound was not asked for rather than that it could not be made.
-  await page.locator('#home-view').click();
+  await pressInSettings(page, '#home-view');
   expect((await voices(page)).contexts).toBe(1);
 
   await page.locator('#ambient').click();

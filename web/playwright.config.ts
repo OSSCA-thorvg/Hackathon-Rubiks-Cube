@@ -20,6 +20,11 @@ export default defineConfig({
     // Trailing slash matters: specs navigate with relative paths like
     // './' so the subpath is preserved.
     baseURL: smokeBaseUrl ?? previewUrl,
+    // The rendered-scene contract is written against the dark ground, and
+    // with no saved preference the page follows the machine. Saying which
+    // machine this is here keeps every pixel assertion in the suite reading
+    // the same background; theme.spec.ts overrides it to check the other one.
+    colorScheme: 'dark',
   },
   webServer: smokeBaseUrl
     ? undefined

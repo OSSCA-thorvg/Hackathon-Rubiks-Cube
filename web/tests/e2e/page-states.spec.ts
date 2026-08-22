@@ -19,7 +19,7 @@ test('a browser without WebAssembly gets the unsupported page', async ({
   );
   await expect(page.locator('#status')).toContainText('does not support');
   await expect(page.locator('.game-stage')).toBeHidden();
-  await expect(page.locator('.move-controls')).toBeHidden();
+  await expect(page.locator('.advanced')).toBeHidden();
 
   for (const id of ['#scramble', '#reset', '#home-view']) {
     await expect(page.locator(id)).toBeDisabled();

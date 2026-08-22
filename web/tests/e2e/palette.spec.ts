@@ -7,6 +7,7 @@ import {
   NET_BLOCKS,
   probeCanvas,
 } from './sceneContract.ts';
+import { fillInSettings, openSettings } from './shell.ts';
 
 /** A viewport large enough to keep the desktop HUD beside the canvas. */
 const DESKTOP = { width: 1200, height: 1200 };
@@ -40,6 +41,11 @@ test('the palette changes both drawings at once and goes back', async ({
 }) => {
   await page.goto('/');
   await expect(page.locator('.game-shell')).toBeVisible();
+
+  // The palette lives in Settings now. Left open for the whole case: the
+  // probe reads canvas pixels rather than the screen, so a drawer over the
+  // page changes nothing it looks at.
+  await openSettings(page);
 
   const classic = page.locator('[data-palette="classic"]');
   const highContrast = page.locator('[data-palette="high-contrast"]');
@@ -76,9 +82,9 @@ test('the palette can be changed while a scramble is playing', async ({
 
   const highContrast = page.locator('[data-palette="high-contrast"]');
 
-  await page.locator('#scramble-moves').fill('40');
-  await page.locator('#scramble-moves').blur();
+  await fillInSettings(page, '#scramble-moves', '40');
   await page.locator('#scramble').click();
+  await openSettings(page);
 
   // Mid-sequence the controls that turn a layer are out and this one is not.
   // Scramble itself stays live throughout -- it is a command that replaces the

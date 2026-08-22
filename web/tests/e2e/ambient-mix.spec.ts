@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { expectedNet, probeCanvas } from './sceneContract.ts';
+import { fillInSettings } from './shell.ts';
 
 /** The largest cube, which is where a narrow pattern showed up worst. */
 const SIZE = 9;
@@ -12,10 +13,10 @@ test('a watched big cube is mixed all over rather than in a few bands', async ({
   await page.goto('./');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 
-  await page.locator('#cube-size').fill(String(SIZE));
+  await fillInSettings(page, '#cube-size', String(SIZE));
   await page.locator('#cube-size').dispatchEvent('change');
   // The quick end of the slider, so a watch worth measuring fits in a test.
-  await page.locator('#speed').fill('4');
+  await fillInSettings(page, '#speed', '4');
   await page.locator('#speed').dispatchEvent('input');
 
   const solved = await probeCanvas(page, SIZE);

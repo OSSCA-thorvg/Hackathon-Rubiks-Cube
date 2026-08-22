@@ -1,15 +1,69 @@
+/*
+ * One palette declared once, in both grounds.
+ *
+ * Every token names a role rather than a color, and light-dark() carries the
+ * two answers for that role in one declaration. The alternative -- a light
+ * block and a dark copy of it, plus a third copy inside a prefers-color-scheme
+ * query -- is three places a value can be changed in two of them.
+ *
+ * The used color-scheme is the whole of what light-dark() reads, so choosing a
+ * theme is nothing more than narrowing it. `System` writes no attribute, which
+ * is also what the small script in the page head leaves behind, so the page
+ * before the script and the page after it agree without sharing any code.
+ */
 :root {
-  color-scheme: dark;
+  color-scheme: light dark;
+
+  --color-page: light-dark(#f4f6f9, #090c12);
+  --color-surface: light-dark(#ffffff, #121720);
+  --color-surface-raised: light-dark(#ffffff, #181e29);
+  --color-text: light-dark(#121826, #f5f7fa);
+  --color-text-muted: light-dark(#667085, #98a2b3);
+  --color-border: light-dark(#dce2ea, #29313d);
+  --color-accent: light-dark(#2563eb, #60a5fa);
+  --color-accent-soft: light-dark(rgb(37 99 235 / 12%), rgb(96 165 250 / 14%));
+  --color-accent-ink: light-dark(#ffffff, #08111f);
+  --color-danger: light-dark(#dc2626, #f87171);
+  --color-danger-border: light-dark(#f3b3b3, #63373c);
+  --color-danger-soft: light-dark(rgb(220 38 38 / 8%), rgb(248 113 113 / 12%));
+  --color-canvas: light-dark(#e7ebf0, #202020);
+
+  --radius-control: 0.625rem;
+  --radius-panel: 1rem;
+  --shadow-stage: 0 1.5rem 4rem light-dark(rgb(16 24 40 / 12%), rgb(0 0 0 / 40%));
+  --shadow-panel: 0 0.5rem 1.5rem light-dark(rgb(16 24 40 / 8%), rgb(0 0 0 / 24%));
+
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
-  color: #f7f7f8;
-  background: #090a0d;
   font-synthesis: none;
+  color: var(--color-text);
+  background: var(--color-page);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/*
+ * `hidden` outranks whatever a component sets its display to.
+ *
+ * Stop, the solver note and the settings panel are all hidden by the
+ * attribute and all carry a class that sets `display`, which without this
+ * wins on specificity and puts them on screen. The attribute is the page's
+ * plainest statement that something is not there, so it is the one that
+ * has to hold.
+ */
+[hidden] {
+  display: none !important;
 }
 
 body {
@@ -17,399 +71,339 @@ body {
   min-width: 320px;
   min-height: 100vh;
   min-height: 100dvh;
-  background:
-    radial-gradient(circle at 50% 10%, #252833 0, #111319 42%, #090a0d 78%);
+  color: var(--color-text);
+  background: var(--color-page);
 }
 
 button,
-summary {
+summary,
+input {
   font: inherit;
 }
 
-button {
+/*
+ * Controls
+ *
+ * Four variants and one shape. What tells them apart is fill and border, not
+ * only color: a person who cannot see the accent still sees which button is
+ * filled in.
+ */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
   min-width: 44px;
   min-height: 44px;
-  border: 1px solid rgb(255 255 255 / 16%);
-  border-radius: 0.75rem;
-  padding: 0.65rem 0.85rem;
-  color: #f7f7f8;
-  background: rgb(20 22 28 / 88%);
-  box-shadow: 0 0.35rem 1rem rgb(0 0 0 / 25%);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  color: var(--color-text);
+  background: var(--color-surface);
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
   cursor: pointer;
   transition:
     border-color 140ms ease,
     background-color 140ms ease,
-    transform 140ms ease;
+    color 140ms ease;
 }
 
-button:hover:not(:disabled) {
-  border-color: rgb(255 255 255 / 42%);
-  background: rgb(39 43 53 / 94%);
+.button:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
-button:active:not(:disabled) {
+.button:active:not(:disabled) {
   transform: translateY(1px);
 }
 
-button:focus-visible,
-summary:focus-visible {
-  outline: 3px solid #8bc5ff;
-  outline-offset: 3px;
+.button--primary {
+  border-color: var(--color-accent);
+  color: var(--color-accent-ink);
+  background: var(--color-accent);
+}
+
+.button--primary:hover:not(:disabled) {
+  color: var(--color-accent-ink);
+  filter: brightness(1.06);
+}
+
+/* A toggle says so with fill and border as well as with color, so the state
+   is readable without seeing the accent hue. */
+.button[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.button--ghost {
+  border-color: transparent;
+  background: transparent;
+}
+
+.button--ghost:hover:not(:disabled) {
+  border-color: var(--color-border);
+}
+
+.button--danger {
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
+  background: transparent;
+}
+
+.button--danger:hover:not(:disabled) {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+.button--icon {
+  padding: 0.55rem;
+}
+
+.button--icon svg {
+  display: block;
 }
 
 button:disabled,
-.number-field input:disabled {
+input:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
-  opacity: 0.46;
 }
 
-button[aria-pressed="true"] {
-  border-color: #f7f7f8;
-  color: #111319;
-  background: #f7f7f8;
+button:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+[role="tabpanel"]:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 /*
- * A chosen button under the pointer, which needs saying twice over.
+ * A row of choices where exactly one is taken.
  *
- * The plain hover rule is the more specific of the two, so on its own it
- * paints the unchosen background beneath the chosen foreground and the label
- * goes dark on dark -- most visibly on a button the pointer stays on after
- * pressing it, which is what the watch toggle is.
+ * The chosen one is filled and the others are not, so the group reads as a
+ * single answer rather than as three buttons that happen to be next to each
+ * other.
  */
-button[aria-pressed="true"]:hover:not(:disabled) {
-  border-color: #fff;
-  background: #fff;
+.segmented {
+  display: inline-flex;
+  padding: 0.2rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
 }
+
+.segmented button {
+  min-height: 40px;
+  padding: 0.4rem 0.85rem;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-control) - 0.2rem);
+  color: var(--color-text-muted);
+  background: transparent;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.segmented button:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+.segmented button[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+/* Layout */
 
 #app {
   width: 100%;
 }
 
 .game-shell {
-  --shell-inline-padding: max(1rem, env(safe-area-inset-left));
-  --side-panel-width: clamp(6.75rem, 10vw, 8.5rem);
-  --side-panel-gap: clamp(0.65rem, 1.5vw, 1rem);
-
-  /* What the two absolutely positioned rails take outside the stage. The
-     stage subtracts it so the rails stay on screen; deriving it here keeps
-     the two from drifting apart when a rail is resized. */
-  --side-rails: calc(
-    2 * (var(--side-panel-width) + var(--side-panel-gap) +
-      var(--shell-inline-padding))
-  );
-
-  width: min(100%, 64rem);
+  width: min(100%, 72rem);
   margin: 0 auto;
   padding:
     max(1rem, env(safe-area-inset-top))
-    var(--shell-inline-padding)
-    max(1rem, env(safe-area-inset-bottom))
-    var(--shell-inline-padding);
+    max(1rem, env(safe-area-inset-left))
+    max(1.5rem, env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-right));
   display: grid;
-  justify-items: center;
   gap: 0.85rem;
+  justify-items: stretch;
 }
 
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.app-header__eyebrow {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.app-header__title {
+  margin: 0.1rem 0 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.app-header__tools {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.timer {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+/*
+ * The stage, which is the largest and highest-contrast surface on the page.
+ * Everything below it is a tool, and none of it competes for the first look.
+ */
+/* Square, and sized by whichever of the two the window has less of. The
+   engine draws into a square region, so a wide short canvas would only be
+   adding margin around the same picture. */
 .game-stage {
   position: relative;
-  width: min(calc(100vw - var(--side-rails)), 82dvh, 70rem);
-  aspect-ratio: 1;
+  width: min(100%, 70dvh);
+  margin: 0 auto;
 }
 
 #view {
   display: block;
   width: 100%;
-  height: 100%;
-  border: 1px solid rgb(255 255 255 / 9%);
-  border-radius: 1.25rem;
-  background: #202020;
-  box-shadow:
-    0 1.5rem 4rem rgb(0 0 0 / 42%),
-    inset 0 0 0 1px rgb(255 255 255 / 3%);
+  aspect-ratio: 1;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-canvas);
+  box-shadow: var(--shadow-stage);
   touch-action: none;
 }
 
-.hud {
+/* Over the stage rather than under it, so it is read where the gesture it
+   describes happens. On its own chip, because the net reaches the bottom of
+   the canvas and plain text over stickers is text nobody can read. */
+.interaction-hint {
   position: absolute;
-  inset: 0;
+  inset: auto 0 0.75rem;
+  width: fit-content;
+  max-width: calc(100% - 1.5rem);
+  margin: 0 auto;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  background: light-dark(rgb(255 255 255 / 88%), rgb(9 12 18 / 82%));
+  font-size: 0.8rem;
+  text-align: center;
   pointer-events: none;
 }
 
-.hud button,
-.hud output {
-  pointer-events: auto;
-}
-
-.hud__header {
-  position: absolute;
-  inset: 1rem 1rem auto;
+/*
+ * One obvious thing to press, in the middle, where a thumb reaches it.
+ * Stop takes exactly that place while a rewind is playing, so the control
+ * that breaks a sequence off is the one that started it.
+ */
+.action-dock {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-#game-title {
-  width: 18%;
-  margin: 0;
-  font-size: clamp(0.72rem, 1.6vw, 1.05rem);
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-  color: rgb(255 255 255 / 72%);
-}
-
-#timer {
-  min-width: 7.5ch;
-  padding: 0.4rem 0.55rem;
-  border: 1px solid rgb(255 255 255 / 12%);
-  border-radius: 0.65rem;
-  font-size: clamp(0.9rem, 2vw, 1.25rem);
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  line-height: 1;
-  text-align: center;
-  color: #fff;
-  background: rgb(10 11 14 / 78%);
-  backdrop-filter: blur(0.6rem);
-}
-
-.view-switch,
-.game-actions {
-  position: absolute;
-  top: 50%;
-  width: var(--side-panel-width);
-  display: grid;
-  gap: 0.45rem;
-  transform: translateY(-50%);
-}
-
-.view-switch {
-  right: calc(100% + var(--side-panel-gap));
-}
-
-.game-actions {
-  left: calc(100% + var(--side-panel-gap));
-}
-
-.view-switch__group {
-  display: grid;
-  gap: 0.45rem;
-}
-
-/* The flat style is a choice within the 2D view, so it reads as a sub-group
-   rather than as three more peers of 3D and Both. */
-.view-switch__group--flat {
-  padding-left: 0.5rem;
-  border-left: 2px solid rgb(255 255 255 / 18%);
-}
-
-/* How the cube is presented rather than which of it is shown: it belongs in
-   this column with the other display choices, but below a line, because the
-   two above change what is on screen and these change how it looks. */
-.option-panel {
-  display: grid;
-  gap: 0.45rem;
-  padding-top: 0.55rem;
-  border-top: 2px solid rgb(255 255 255 / 18%);
-}
-
-.option-panel__group {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  gap: 0.45rem;
-}
-
-/* Two to a row, so the longer of the two labels comes down with the width
-   rather than being cut. */
-.option-panel__group button {
-  padding-inline: 0.25rem;
-  font-size: clamp(0.62rem, 1.15vw, 0.78rem);
-}
-
-/* The name and the reading share the top line and the track has the width to
-   itself. Three across fits, but in a column this narrow it leaves the track a
-   few dozen pixels -- and a slider you cannot aim is not a control. */
-.option-panel__slider {
-  display: grid;
-  grid-template-columns: auto 1fr;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   align-items: center;
-  gap: 0.15rem 0.4rem;
-  padding-inline: 0.4rem;
-  color: rgb(255 255 255 / 72%);
-  font-size: clamp(0.68rem, 1.4vw, 0.85rem);
+  justify-content: center;
 }
 
-.option-panel__slider input {
-  /* Placed rather than left to flow: the track spans both columns on the
-     second line, and the reading has to come back up beside the name rather
-     than being pushed onto a third. */
-  grid-row: 2;
-  grid-column: 1 / -1;
-  width: 100%;
-  min-width: 0;
-  accent-color: rgb(255 255 255 / 78%);
+.action-dock .button--primary,
+.action-dock .button--danger {
+  min-width: 9rem;
 }
 
-/* Tabular figures, so the reading does not shuffle sideways as it changes. */
-.option-panel__slider output {
-  grid-row: 1;
-  grid-column: 2;
-  min-width: 3.1rem;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Undo, Redo, Rewind and Solve are one idea -- getting to a place on the
-   record without turning the cube by hand -- so they share a block instead of
-   reading as four more commands under Reset. Stop is not one of them: it is
-   not a place to go to but a way out of going there, so it comes in below on a
-   line of its own, and only while there is something to come out of. */
-.game-actions__group {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.45rem;
-}
-
-/* Two by two rather than four in a line: the panel is one narrow column, and
-   four of these words side by side are four words nobody can read. */
-.game-actions__group button {
-  padding-inline: 0.25rem;
-  font-size: clamp(0.66rem, 1.25vw, 0.82rem);
-}
-
-/* Why Solve is out of reach, for the one reason that does not go away. Under
-   the row it belongs to and quieter than it, because it is an explanation of
-   a control rather than a control. */
 .solver-note {
   margin: 0;
-  font-size: 0.72rem;
-  line-height: 1.35;
-  color: rgb(255 255 255 / 72%);
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  text-align: center;
 }
 
-.view-switch button,
-.game-actions button {
-  width: 100%;
-  padding-inline: 0.4rem;
-  font-size: clamp(0.72rem, 1.5vw, 0.92rem);
-}
-
-/* The length belongs to Scramble, so it sits with it rather than reading as
-   a fourth command. */
-.number-field {
+/*
+ * What is being looked at, and whether it is being looked at rather than
+ * worked on. Scene and Diagram say the first; Watch says the second.
+ */
+.view-bar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 0.5rem;
-  padding-inline: 0.4rem;
-  color: rgb(255 255 255 / 72%);
-  font-size: clamp(0.68rem, 1.4vw, 0.85rem);
+  align-items: center;
+  justify-content: center;
 }
 
-.number-field input {
-  width: 3.6rem;
-  padding: 0.3rem 0.4rem;
-  border: 1px solid rgb(255 255 255 / 18%);
-  border-radius: 0.5rem;
-  color: inherit;
-  font: inherit;
-  text-align: right;
-  background: rgb(20 22 28 / 72%);
+.status-line {
+  min-height: 1.35rem;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  text-align: center;
 }
 
-/*
- * A refused edit, for as long as the flash lasts.
- *
- * A mark of its own rather than only the status line: pressing Scramble
- * straight after a refusal rewrites that line in the same interaction, so the
- * box the refusal came from is the one place it can still be seen. In the
- * error page's colors, because it is the same kind of news.
- *
- * An animation always runs -- the reduced-motion one fades where this one also
- * moves -- because its end is what takes the mark away again.
- */
-.number-field input[data-refused] {
-  animation: field-refused 1.4s ease-out;
+/* Activity: two boards of the same width, one at a time. */
+
+.activity {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
 }
 
-@keyframes field-refused {
-  0% {
-    border-color: rgb(230 57 70 / 90%);
-    color: #ff9ca5;
-    background: rgb(74 15 22 / 60%);
-    transform: translateX(0);
-  }
-
-  12% {
-    transform: translateX(-0.18rem);
-  }
-
-  36% {
-    transform: translateX(0.18rem);
-  }
-
-  60% {
-    transform: translateX(-0.09rem);
-  }
-
-  80% {
-    transform: translateX(0);
-  }
-
-  100% {
-    border-color: rgb(255 255 255 / 18%);
-    color: rgb(255 255 255 / 72%);
-    background: rgb(20 22 28 / 72%);
-    transform: translateX(0);
-  }
+.activity__tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.4rem 0.5rem 0;
+  border-bottom: 1px solid var(--color-border);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .number-field input[data-refused] {
-    animation-name: field-refused-still;
-  }
-}
-
-@keyframes field-refused-still {
-  from {
-    border-color: rgb(230 57 70 / 90%);
-    color: #ff9ca5;
-    background: rgb(74 15 22 / 60%);
-  }
-
-  to {
-    border-color: rgb(255 255 255 / 18%);
-    color: rgb(255 255 255 / 72%);
-    background: rgb(20 22 28 / 72%);
-  }
-}
-
-/*
- * The moves you made, in the notation a solver reads.
- *
- * Below the cube rather than beside it: it is the one thing on the page that
- * grows without limit, and the rails either side of the stage are sized for
- * controls. It is a list and reads as one -- no live region, because what a
- * screen reader wants here is to walk back through the moves rather than to
- * be told each one as it lands.
- */
-.move-log {
-  width: min(100%, 48rem);
-  border: 1px solid rgb(255 255 255 / 10%);
-  border-radius: 0.9rem;
-  padding: 0.6rem 1rem 0.7rem;
-  background: rgb(20 22 28 / 72%);
-}
-
-.move-log__title {
-  margin: 0 0 0.45rem;
-  color: rgb(255 255 255 / 52%);
-  font-size: 0.72rem;
+.activity__tab {
+  min-height: 44px;
+  padding: 0.5rem 0.9rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-muted);
+  background: none;
+  font-size: 0.85rem;
   font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.activity__tab[aria-selected="true"] {
+  border-bottom-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.activity__panel {
+  padding: 0.75rem 1rem 0.9rem;
 }
 
 /* Four rows deep and scrolling past that: a long solve would otherwise push
@@ -430,19 +424,17 @@ button[aria-pressed="true"]:hover:not(:disabled) {
    log would have to put in and take out again. */
 .move-log__list:empty::after {
   content: "No moves of your own yet.";
-  color: rgb(255 255 255 / 40%);
+  color: var(--color-text-muted);
   font-size: 0.82rem;
-  text-transform: none;
-  letter-spacing: normal;
 }
 
 .move-log__item {
   min-width: 2.1rem;
   padding: 0.18rem 0.35rem;
-  border: 1px solid rgb(255 255 255 / 14%);
+  border: 1px solid var(--color-border);
   border-radius: 0.4rem;
-  color: rgb(255 255 255 / 84%);
-  background: rgb(255 255 255 / 5%);
+  color: var(--color-text);
+  background: var(--color-accent-soft);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.8rem;
   font-weight: 650;
@@ -453,106 +445,68 @@ button[aria-pressed="true"]:hover:not(:disabled) {
    outline of a move rather than as one, because that is what it is now. */
 .move-log__item[data-state="pending"] {
   border-style: dashed;
-  color: rgb(255 255 255 / 46%);
+  color: var(--color-text-muted);
   background: none;
 }
 
 /* Where the cursor is -- the last move still on the cube, which is what a
-   rewind is walking down through. Nothing is marked once a rewind has gone
-   below the scramble boundary: none of these moves is on the cube then. */
+   rewind is walking down through. */
 .move-log__item[data-state="current"] {
-  border-color: #8bc5ff;
+  border-color: var(--color-accent);
   border-style: solid;
-  color: #0b0d12;
-  background: #8bc5ff;
-}
-
-/*
- * How this sitting has gone. Nothing here survives a reload, which is why it
- * says "this session" rather than pretending to be a record book.
- */
-.records {
-  width: min(100%, 48rem);
-  border: 1px solid rgb(255 255 255 / 10%);
-  border-radius: 0.9rem;
-  padding: 0.6rem 1rem 0.7rem;
-  background: rgb(20 22 28 / 72%);
-}
-
-.records__title {
-  margin: 0 0 0.45rem;
-  color: rgb(255 255 255 / 52%);
-  font-size: 0.72rem;
-  font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  color: var(--color-accent-ink);
+  background: var(--color-accent);
 }
 
 .records__best {
-  margin: 0 0 0.4rem;
-  color: #8bc5ff;
-  font-size: 1rem;
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 650;
 }
 
 .records__list {
   display: grid;
-  gap: 0.25rem;
+  gap: 0.3rem;
+  max-height: 8rem;
   margin: 0;
   padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   list-style: none;
 }
 
 .records__item {
-  color: rgb(255 255 255 / 62%);
-  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
 }
 
-.move-controls {
-  width: min(100%, 48rem);
-  border: 1px solid rgb(255 255 255 / 10%);
-  border-radius: 0.9rem;
-  padding: 0.75rem 1rem;
-  color: rgb(255 255 255 / 78%);
-  background: rgb(20 22 28 / 72%);
+/* Advanced controls: everything that is read before it is pressed. */
+
+.advanced {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  padding: 0.6rem 1rem;
+  background: var(--color-surface);
 }
 
-.move-controls summary {
+.advanced summary {
   min-height: 44px;
   display: flex;
   align-items: center;
-  cursor: pointer;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
   font-weight: 650;
+  cursor: pointer;
 }
 
-.move-controls summary::before {
-  content: "+";
-  width: 1.5rem;
-  font-size: 1.25rem;
+.advanced__hint {
+  margin: 0.2rem 0 0.75rem;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
 }
 
-.move-controls[open] summary::before {
-  content: "−";
-}
-
-.move-controls p {
-  margin: 0 0 0.75rem;
-  color: rgb(255 255 255 / 58%);
-  font-size: 0.875rem;
-}
-
-.move-grid {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(44px, 1fr));
-  gap: 0.5rem;
-}
-
-/*
- * How deep the buttons below it reach, sitting above them because it is read
- * before they are pressed rather than after.
- */
 .turn-depth {
   display: flex;
   gap: 0.5rem;
@@ -560,27 +514,175 @@ button[aria-pressed="true"]:hover:not(:disabled) {
   margin: 0 0 0.75rem;
 }
 
-#status {
-  min-height: 1.35rem;
-  margin: 0;
-  color: rgb(255 255 255 / 62%);
-  font-size: 0.875rem;
+.move-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(44px, 1fr));
+  gap: 0.5rem;
+  padding-bottom: 0.6rem;
+}
+
+/* Fields */
+
+.number-field,
+.slider-field {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.number-field input {
+  width: 4.5rem;
+  min-height: 44px;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  color: var(--color-text);
+  background: var(--color-surface-raised);
+  font-variant-numeric: tabular-nums;
   text-align: center;
 }
+
+.slider-field input {
+  flex: 1;
+  min-width: 6rem;
+  accent-color: var(--color-accent);
+}
+
+.slider-field output {
+  min-width: 3.5rem;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* A refused number is put back and says so, rather than being clamped. */
+.number-field input[data-refused] {
+  animation: field-refused 900ms ease-out;
+}
+
+@keyframes field-refused {
+  0%,
+  60% {
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+    background: var(--color-danger-soft);
+  }
+  100% {
+    border-color: var(--color-border);
+    color: var(--color-text);
+    background: var(--color-surface-raised);
+  }
+}
+
+/* Settings: one element, two shapes. */
+
+.settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: light-dark(rgb(16 24 40 / 32%), rgb(0 0 0 / 52%));
+}
+
+.settings {
+  position: fixed;
+  inset: 0 0 0 auto;
+  z-index: 11;
+  width: min(24rem, 100%);
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  padding: 1.25rem;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel);
+  overflow-y: auto;
+  animation: settings-in 160ms ease-out;
+}
+
+@keyframes settings-in {
+  from {
+    transform: translateX(1.5rem);
+    opacity: 0;
+  }
+}
+
+.settings__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.settings__title {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.settings__group {
+  display: grid;
+  gap: 0.6rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.settings__group:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.settings__group--danger {
+  justify-items: start;
+}
+
+.settings__label {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.settings__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.settings .segmented {
+  flex-wrap: wrap;
+}
+
+/* Page states */
 
 #app[data-state="loading"] #view {
   visibility: hidden;
 }
 
-#app[data-state="loading"] .move-controls,
-#app[data-state="loading"] .move-log,
-#app[data-state="loading"] .records,
-#app[data-state="unsupported"] .move-controls,
-#app[data-state="unsupported"] .move-log,
-#app[data-state="unsupported"] .records,
-#app[data-state="error"] .move-controls,
-#app[data-state="error"] .move-log,
-#app[data-state="error"] .records {
+#app[data-state="loading"] .activity,
+#app[data-state="loading"] .advanced,
+#app[data-state="unsupported"] .activity,
+#app[data-state="unsupported"] .advanced,
+#app[data-state="unsupported"] .action-dock,
+#app[data-state="unsupported"] .view-bar,
+#app[data-state="error"] .activity,
+#app[data-state="error"] .advanced,
+#app[data-state="error"] .action-dock,
+#app[data-state="error"] .view-bar {
+  display: none;
+}
+
+/* The clock and the link go, because there is no session to time and none
+   to share. The gear stays: the theme is the page's own and works whether
+   or not an engine ever arrived, and a browser that cannot run the cube is
+   still a browser somebody reads this message on. */
+#app[data-state="unsupported"] #timer,
+#app[data-state="unsupported"] #share,
+#app[data-state="error"] #timer,
+#app[data-state="error"] #share {
   display: none;
 }
 
@@ -589,163 +691,131 @@ button[aria-pressed="true"]:hover:not(:disabled) {
   display: none;
 }
 
-#app[data-state="unsupported"] #status,
-#app[data-state="error"] #status {
+#app[data-state="unsupported"] .status-line,
+#app[data-state="error"] .status-line {
   max-width: 36rem;
+  margin: 0 auto;
   padding: 1rem;
-  border: 1px solid rgb(230 57 70 / 42%);
-  border-radius: 0.8rem;
-  color: #ff9ca5;
-  background: rgb(74 15 22 / 35%);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-panel);
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
 }
 
-@media (max-width: 720px), (max-height: 640px) {
+/* Narrow screens: the same structure, restacked. */
+
+@media (max-width: 959px) {
   .game-shell {
-    gap: 0.75rem;
+    gap: 0.7rem;
   }
 
+  /* On a phone the window is tall and narrow, so the width is what the
+     stage is sized by and the height follows it. */
   .game-stage {
-    width: min(100%, 38rem);
-    aspect-ratio: auto;
-    display: grid;
-    gap: 0.75rem;
+    width: 100%;
+  }
+
+  .app-header__title {
+    font-size: 1.1rem;
+  }
+
+  /* Share is not a first action on a phone, and the header has no room for
+     a word that is only wanted after a solve. It moves nowhere -- it just
+     stops taking space from the timer and the settings gear. */
+  .app-header__tools #share {
+    display: none;
   }
 
   #view {
-    width: 100%;
-    height: auto;
-    aspect-ratio: 1;
+    max-height: none;
   }
 
-  .hud {
-    position: static;
-    display: grid;
-    gap: 0.6rem;
-    pointer-events: auto;
-  }
-
-  .hud__header,
-  .view-switch,
-  .game-actions {
-    position: static;
-    width: 100%;
-    transform: none;
-  }
-
-  .hud__header {
-    align-items: center;
-    order: -1;
-  }
-
-  #game-title {
-    width: auto;
-    font-size: 1rem;
-  }
-
-  .view-switch,
-  .game-actions {
+  .action-dock {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .view-switch {
-    grid-template-columns: 1fr 1fr;
+  /* Undo, the primary, and Redo on the first row; the two long-running
+     commands on a second one. */
+  .action-dock #undo {
+    order: 1;
   }
 
-  .view-switch__group {
+  .action-dock .button--primary,
+  .action-dock .button--danger {
+    order: 2;
+    min-width: 0;
+  }
+
+  .action-dock #redo {
+    order: 3;
+  }
+
+  .action-dock #rewind {
+    order: 4;
+  }
+
+  .action-dock #solve {
+    order: 5;
+  }
+
+  .view-bar {
+    display: grid;
+    gap: 0.5rem;
+    justify-items: stretch;
+  }
+
+  .view-bar .segmented {
+    display: grid;
     grid-auto-flow: column;
     grid-auto-columns: minmax(0, 1fr);
   }
 
-  /* The row keeps its shape here, so it takes a line of its own rather than
-     being squeezed into one cell of the action grid. There is width to spare
-     on this layout, so the four go back into one line at the size of their
-     neighbours. */
-  .game-actions__group {
-    grid-column: 1 / -1;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* A sheet from the bottom rather than a drawer from the side. */
+  .settings {
+    inset: auto 0 0 0;
+    width: 100%;
+    max-height: 85dvh;
+    border-left: none;
+    border-top: 1px solid var(--color-border);
+    border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+    animation: settings-up 180ms ease-out;
   }
 
-  .game-actions__group button {
-    padding-inline: 0.4rem;
-    font-size: 0.84rem;
+  @keyframes settings-up {
+    from {
+      transform: translateY(2rem);
+      opacity: 0;
+    }
   }
+}
 
-  .view-switch__group--flat {
-    padding-left: 0.4rem;
-  }
-
-  /* The column has become two side by side here, so the options take a line
-     of their own under both rather than sitting in one of the cells. */
-  .option-panel {
-    grid-column: 1 / -1;
-  }
-
-  .option-panel__group button {
-    padding-inline: 0.4rem;
-    font-size: 0.84rem;
-  }
-
-  /* Room across on this layout, so the three parts go back on one line. */
-  .option-panel__slider {
-    grid-template-columns: auto 1fr auto;
-  }
-
-  .option-panel__slider input,
-  .option-panel__slider output {
-    grid-row: auto;
-    grid-column: auto;
-  }
-
-  .view-switch button,
-  .game-actions button {
-    font-size: 0.84rem;
-  }
-
-  /* Two rows of moves rather than four: the cube is what the screen is for,
-     and the record is still there to be scrolled. */
-  .move-log {
-    padding: 0.5rem 0.75rem 0.6rem;
-  }
-
-  .move-log__list {
-    max-height: 3.4rem;
-  }
-
-  /* The same trim as the log beside it: the board is a footnote to the cube
-     on a screen this size, not a second panel competing with it. */
-  .records {
-    padding: 0.5rem 0.75rem 0.6rem;
-  }
-
+@media (max-width: 400px) {
   .move-grid {
     grid-template-columns: repeat(4, minmax(44px, 1fr));
   }
 }
 
-@media (max-width: 400px) {
-  .game-shell {
-    --shell-inline-padding: max(0.65rem, env(safe-area-inset-left));
-  }
-
-  .game-actions {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  #home-view {
-    grid-column: 1 / -1;
-  }
-
-  .move-grid {
-    grid-template-columns: repeat(3, minmax(44px, 1fr));
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
+  .button,
+  .settings {
+    transition: none;
+    animation: none;
+  }
+
+  .number-field input[data-refused] {
+    animation: field-refused-still 900ms steps(1, end);
+  }
+
+  @keyframes field-refused-still {
+    0%,
+    60% {
+      border-color: var(--color-danger);
+      color: var(--color-danger);
+      background: var(--color-danger-soft);
+    }
+    100% {
+      border-color: var(--color-border);
+    }
   }
 }

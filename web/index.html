@@ -5,6 +5,30 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ThorVG Rubik's Cube</title>
+    <script>
+      /*
+       * Runs before the first paint and waits for nothing.
+       *
+       * An explicit Light or Dark has to be on the element before the
+       * stylesheet is read, or a page saved as Light opens dark for as long
+       * as it takes the module graph to load. `System` writes nothing, which
+       * is exactly what the stylesheet reads as "ask the machine", so the
+       * page before this script and the page after it agree.
+       *
+       * The key and the two accepted values are repeated from
+       * ui/ThemeController.ts rather than imported: this cannot wait for a
+       * module, and a third value here would only ever be a value the
+       * controller demotes to System on the very next line it runs.
+       */
+      try {
+        var saved = localStorage.getItem('thorvg-rubiks-theme');
+        if (saved === 'light' || saved === 'dark') {
+          document.documentElement.dataset.theme = saved;
+        }
+      } catch (error) {
+        /* No storage is no preference, which is the default anyway. */
+      }
+    </script>
   </head>
   <body>
     <div id="app"></div>

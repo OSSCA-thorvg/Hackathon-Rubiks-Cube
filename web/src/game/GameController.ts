@@ -597,6 +597,13 @@ export function attachGameController(
     ui.stopButton.hidden = !rewinding;
     ui.stopButton.disabled = !rewinding;
 
+    // Stop takes Scramble's place rather than appearing beside it: the dock
+    // has one obvious thing in the middle of it, and while a rewind is
+    // playing the obvious thing is the way out of it. Only the rewind family
+    // reaches here -- a scramble and a watched pattern are not stoppable, so
+    // Scramble stays where it is through both of those.
+    ui.scrambleButton.hidden = rewinding;
+
     // The same reading the controls are set from, so the list can never be
     // describing a different moment than the buttons above it. It draws only
     // when the record has changed, which is what makes calling it every frame

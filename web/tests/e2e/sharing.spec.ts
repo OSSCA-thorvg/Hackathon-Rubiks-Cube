@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { probeCanvas } from './sceneContract.ts';
+import { fillInSettings } from './shell.ts';
 
 /** A viewport large enough to keep the desktop HUD beside the canvas. */
 const DESKTOP = { width: 1200, height: 1200 };
@@ -168,8 +169,7 @@ test('a session keeps its own solves and nothing else', async ({ page }) => {
 
   // A cube taken apart by one move and put back by hand is a solve of your
   // own, however many wrong turns went into it.
-  await page.locator('#scramble-moves').fill('1');
-  await page.locator('#scramble-moves').blur();
+  await fillInSettings(page, '#scramble-moves', '1');
   await page.locator('#scramble').click();
   await expect(shell).toHaveAttribute('data-game-state', 'ready');
 

@@ -9,6 +9,12 @@ import {
   QUARTER_TURN_DRAG,
   WHITE,
 } from './sceneContract.ts';
+import {
+  fillInSettings,
+  openSettings,
+  pressInSettings,
+  tapInSettings,
+} from './shell.ts';
 
 /** A viewport large enough to keep the desktop HUD beside the canvas. */
 const DESKTOP = { width: 1200, height: 1200 };
@@ -51,7 +57,7 @@ async function restartWithSeed(page: Page, seed: number): Promise<void> {
 
 /** Sets the scramble length, the way a person changing the box would. */
 async function setScrambleMoves(page: Page, count: number): Promise<void> {
-  await page.locator('#scramble-moves').fill(String(count));
+  await fillInSettings(page, '#scramble-moves', String(count));
 }
 
 test.beforeEach(async ({ page }) => {
@@ -87,7 +93,7 @@ test('scramble starts a session on first committed move and Reset restores it', 
     '00:00.00',
   );
 
-  await page.locator('#reset').click();
+  await pressInSettings(page, '#reset');
   await expect(root).toHaveAttribute('data-game-state', 'idle');
   await expect(timer).toHaveText('00:00.00');
   assertSceneContract(await probeCanvas(page));
@@ -130,14 +136,14 @@ test('Both is default and 3D, 2D, and Home view controls preserve gameplay', asy
     .not.toBe(before);
 
   // Put the cube back, so what follows is about the view controls alone.
-  await page.locator('#reset').click();
+  await pressInSettings(page, '#reset');
 
   await both.click();
   await orbitOnce(page);
   const orbited = await canvas.evaluate(
     (element) => (element as HTMLCanvasElement).toDataURL(),
   );
-  await page.locator('#home-view').click();
+  await pressInSettings(page, '#home-view');
   expect(
     await canvas.evaluate(
       (element) => (element as HTMLCanvasElement).toDataURL(),
@@ -146,18 +152,32 @@ test('Both is default and 3D, 2D, and Home view controls preserve gameplay', asy
   assertSceneContract(await probeCanvas(page));
 });
 
-test('desktop action groups sit outside opposite canvas edges', async ({
+test('the desktop stage keeps the page to itself, with no side rails', async ({
   page,
 }) => {
   const canvas = await page.locator('#view').boundingBox();
-  const viewSwitch = await page.locator('.view-switch').boundingBox();
-  const gameActions = await page.locator('.game-actions').boundingBox();
+  const header = await page.locator('.app-header').boundingBox();
+  const dock = await page.locator('.action-dock').boundingBox();
+  const viewBar = await page.locator('.view-bar').boundingBox();
 
   expect(canvas).not.toBeNull();
-  expect(viewSwitch).not.toBeNull();
-  expect(gameActions).not.toBeNull();
-  expect(viewSwitch!.x + viewSwitch!.width).toBeLessThan(canvas!.x);
-  expect(gameActions!.x).toBeGreaterThan(canvas!.x + canvas!.width);
+  expect(header).not.toBeNull();
+  expect(dock).not.toBeNull();
+  expect(viewBar).not.toBeNull();
+
+  // Header above, commands below, and nothing beside. The rails this
+  // replaced sat outside the canvas on both edges and made the stage look
+  // like a preview panel between two toolbars.
+  expect(header!.y + header!.height).toBeLessThanOrEqual(canvas!.y + 1);
+  expect(dock!.y).toBeGreaterThanOrEqual(canvas!.y + canvas!.height - 1);
+  expect(viewBar!.y).toBeGreaterThanOrEqual(dock!.y + dock!.height - 1);
+
+  // One column, one centre. Half a pixel of rounding either way is the
+  // browser's, not the layout's.
+  const centre = (box: { x: number; width: number }): number =>
+    box.x + box.width / 2;
+  expect(Math.abs(centre(dock!) - centre(canvas!))).toBeLessThan(2);
+  expect(Math.abs(centre(viewBar!) - centre(canvas!))).toBeLessThan(2);
 });
 
 test('a scramble is turned into the cube where it can be watched', async ({
@@ -224,7 +244,7 @@ test('a drag over the cube while a scramble plays only sweeps the view', async (
 
   // The drag did something: the viewpoint is no longer where Home puts it.
   const swept = await probeCanvas(page);
-  await page.locator('#home-view').click();
+  await pressInSettings(page, '#home-view');
   const dragged = await probeCanvas(page);
   expect(dragged.cubeGrid).not.toEqual(swept.cubeGrid);
 
@@ -289,7 +309,7 @@ test.describe('on a phone', () => {
     await expect(root).toHaveAttribute('data-game-state', 'ready');
 
     // The move controls are collapsed until asked for, on every viewport.
-    await page.locator('.move-controls summary').tap();
+    await page.locator('.advanced summary').tap();
     await page.locator('[data-face="r"][data-turn="1"]').tap();
 
     await expect(root).toHaveAttribute('data-game-state', 'running');
@@ -297,7 +317,7 @@ test.describe('on a phone', () => {
       .poll(async () => timer.textContent())
       .not.toBe('00:00.00');
 
-    await page.locator('#reset').tap();
+    await tapInSettings(page, '#reset');
     await expect(root).toHaveAttribute('data-game-state', 'idle');
     await expect(timer).toHaveText('00:00.00');
     assertSceneContract(await probeCanvas(page));
@@ -310,7 +330,7 @@ test('mobile layout moves actions below the canvas without horizontal overflow',
   await page.setViewportSize({ width: 390, height: 844 });
 
   const canvas = await page.locator('#view').boundingBox();
-  const actions = await page.locator('.game-actions').boundingBox();
+  const actions = await page.locator('.action-dock').boundingBox();
   expect(canvas).not.toBeNull();
   expect(actions).not.toBeNull();
   expect(actions!.y).toBeGreaterThanOrEqual(canvas!.y + canvas!.height);
@@ -321,7 +341,16 @@ test('mobile layout moves actions below the canvas without horizontal overflow',
   }));
   expect(geometry.content).toBeLessThanOrEqual(geometry.viewport);
 
-  for (const id of ['#scramble', '#reset', '#home-view']) {
+  // On the page and in the drawer alike: a target too small to hit is too
+  // small wherever it was put.
+  for (const id of ['#scramble', '#ambient']) {
+    const box = await page.locator(id).boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+  }
+
+  await openSettings(page);
+  for (const id of ['#reset', '#home-view']) {
     const box = await page.locator(id).boundingBox();
     expect(box).not.toBeNull();
     expect(box!.height).toBeGreaterThanOrEqual(44);
@@ -473,7 +502,7 @@ test('the flat view can show the net over the rings, and both take drags', async
     .poll(async () => (await faceStickers(page, WHITE)).length)
     .toBe(18);
 
-  await page.locator('#reset').click();
+  await pressInSettings(page, '#reset');
 });
 
 test('dragging a sticker round its ring turns the cube', async ({ page }) => {
@@ -508,5 +537,5 @@ test('dragging a sticker round its ring turns the cube', async ({ page }) => {
     .poll(async () => (await faceStickers(page, WHITE)).length)
     .toBe(9);
 
-  await page.locator('#reset').click();
+  await pressInSettings(page, '#reset');
 });

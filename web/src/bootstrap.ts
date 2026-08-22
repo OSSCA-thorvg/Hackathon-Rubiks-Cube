@@ -1,18 +1,67 @@
-import { startApp, type AppState, type StartAppOptions } from './AppLifecycle.ts';
-import type { GameUi } from './game/GameController.ts';
 import {
-  DEFAULT_CUBE_SIZE,
-  DEFAULT_SCRAMBLE_MOVES,
-  MAX_CUBE_SIZE,
-  MAX_SCRAMBLE_MOVES,
-  MIN_CUBE_SIZE,
-} from './wasm/CubeEngine.ts';
+  startApp,
+  type AppState,
+  type StartAppOptions,
+} from './AppLifecycle.ts';
+import type { GameUi } from './game/GameController.ts';
+import { attachActivityTabs } from './ui/ActivityTabs.ts';
+import { createGameShell } from './ui/GameShell.ts';
+import { attachSettingsPanel } from './ui/SettingsPanel.ts';
+import {
+  attachThemeController,
+  attachThemeSelector,
+  type StorageLike,
+  type ThemeController,
+} from './ui/ThemeController.ts';
 
 /** Lifecycle entry point, injectable so tests can observe the wiring. */
 export type StartAppFn = (options: StartAppOptions) => Promise<unknown>;
 
 /** Browser feature detection seam, injectable for DOM integration tests. */
 export type SupportCheckFn = () => boolean;
+
+/**
+ * Where the page's theme comes from; injectable so tests need no globals.
+ *
+ * Returns null for a page that cannot have one, which is how a test says it
+ * is not exercising the theme rather than having to stand in for a media
+ * query and a storage.
+ */
+export type ThemeFactory = () => ThemeController | null;
+
+/**
+ * Every control the game controller owns, flattened out of the typed shell.
+ *
+ * Read off the fields rather than by querying the markup, so a control the
+ * page adds beside them -- a tab, a theme button, the settings trigger --
+ * cannot be switched off by a rule that was written for the cube.
+ */
+function gameplayControls(
+  ui: GameUi,
+): (HTMLButtonElement | HTMLInputElement)[] {
+  return [
+    ui.scrambleButton,
+    ui.scrambleMovesInput,
+    ui.resetButton,
+    ui.cubeSizeInput,
+    ui.turnDepthInput,
+    ui.turnWideButton,
+    ui.undoButton,
+    ui.redoButton,
+    ui.rewindButton,
+    ui.solveButton,
+    ui.stopButton,
+    ui.shareButton,
+    ui.ambientButton,
+    ui.homeViewButton,
+    ui.muteButton,
+    ui.speedInput,
+    ...ui.viewButtons,
+    ...ui.flatButtons,
+    ...ui.paletteButtons,
+    ...ui.moveButtons,
+  ];
+}
 
 /** Returns whether the browser has every primitive required by the app. */
 export function supportsBrowser(): boolean {
@@ -31,9 +80,37 @@ export function supportsBrowser(): boolean {
 }
 
 /**
- * Wires the page DOM to the app lifecycle: renders the stage markup,
- * reflects lifecycle states on the container, and routes both startup
- * rejections and post-ready failures to the error UI.
+ * Local storage, or nothing when the browser will not hand it over.
+ *
+ * Reaching for the property is itself what throws in a browser with site data
+ * blocked, so the guard is around the access and not only around the calls
+ * made on what it returns.
+ */
+function readableStorage(): StorageLike | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** Builds the real theme controller from the page's own globals. */
+export function createPageTheme(): ThemeController {
+  return attachThemeController({
+    root: document.documentElement,
+    systemDark: window.matchMedia('(prefers-color-scheme: dark)'),
+    storage: readableStorage(),
+  });
+}
+
+/**
+ * Wires the page DOM to the app lifecycle: builds the shell, attaches the
+ * page's own small controllers, reflects lifecycle states on the container,
+ * and routes both startup rejections and post-ready failures to the error UI.
+ *
+ * What is left here is wiring. The markup moved to GameShell, the panel and
+ * the tabs own their own behavior, and the theme is a controller this hands
+ * to the lifecycle rather than something the lifecycle asks the page for.
  *
  * The returned promise settles when startup finished either way; it never
  * rejects, because failures are presented through the error state.
@@ -42,157 +119,17 @@ export function bootstrap(
   app: HTMLElement,
   start: StartAppFn = startApp,
   supportCheck: SupportCheckFn = supportsBrowser,
+  createTheme: ThemeFactory = createPageTheme,
 ): Promise<void> {
-  app.innerHTML = `
-<main class="game-shell" data-game-state="idle">
-  <section class="game-stage" aria-labelledby="game-title">
-    <canvas id="view" aria-label="Interactive Rubik's Cube. Drag a sticker to turn a layer, or drag empty space to orbit the view."></canvas>
+  const shell = createGameShell(app);
+  const statusElement = shell.ui.status;
 
-    <div class="hud">
-      <header class="hud__header">
-        <h1 id="game-title">ThorVG Rubik's Cube</h1>
-        <output id="timer" aria-label="Elapsed time" aria-live="off">00:00.00</output>
-      </header>
-
-      <div class="view-switch">
-        <div class="view-switch__group" role="group" aria-label="View mode">
-          <button type="button" data-view="3d" aria-pressed="false">3D</button>
-          <button type="button" data-view="both" aria-pressed="true">Both</button>
-          <button type="button" data-view="2d" aria-pressed="false">2D</button>
-        </div>
-        <div class="view-switch__group view-switch__group--flat" role="group" aria-label="Flat view style">
-          <button type="button" data-flat="net" aria-pressed="true">Net</button>
-          <button type="button" data-flat="rings" aria-pressed="false">Rings</button>
-          <button type="button" data-flat="both" aria-pressed="false">Net + Rings</button>
-        </div>
-        <div class="option-panel" role="group" aria-label="Presentation options">
-          <div class="option-panel__group" role="group" aria-label="Sticker colors">
-            <button type="button" data-palette="classic" aria-pressed="true">Classic</button>
-            <button type="button" data-palette="high-contrast" aria-pressed="false">High contrast</button>
-          </div>
-          <button type="button" id="mute" aria-pressed="false">Mute turns</button>
-          <label class="option-panel__slider" for="speed">
-            <span>Speed</span>
-            <input type="range" id="speed" min="0.25" max="4" step="0.25" value="1">
-            <output id="speed-value" for="speed">1.00×</output>
-          </label>
-        </div>
-      </div>
-
-      <div class="game-actions" aria-label="Game actions">
-        <label class="number-field" for="cube-size">
-          <span>Cube</span>
-          <input type="number" id="cube-size" inputmode="numeric" step="1" min="${MIN_CUBE_SIZE}" max="${MAX_CUBE_SIZE}" value="${DEFAULT_CUBE_SIZE}">
-        </label>
-        <label class="number-field" for="scramble-moves">
-          <span>Moves</span>
-          <input type="number" id="scramble-moves" inputmode="numeric" step="1" min="1" max="${MAX_SCRAMBLE_MOVES}" value="${DEFAULT_SCRAMBLE_MOVES}">
-        </label>
-        <button type="button" id="scramble">Scramble</button>
-        <button type="button" id="reset">Reset</button>
-        <div class="game-actions__group" role="group" aria-label="Move history">
-          <button type="button" id="undo">Undo</button>
-          <button type="button" id="redo">Redo</button>
-          <button type="button" id="rewind">Rewind</button>
-          <button type="button" id="solve">Solve</button>
-        </div>
-        <p class="solver-note" id="solver-note" hidden>No solver for this cube size yet — Rewind still works.</p>
-        <button type="button" id="stop" hidden>Stop</button>
-        <button type="button" id="share">Share</button>
-        <button type="button" id="ambient" aria-pressed="false">Watch</button>
-        <button type="button" id="home-view">Home view</button>
-      </div>
-    </div>
-  </section>
-
-  <section class="move-log" aria-labelledby="move-log-title">
-    <h2 class="move-log__title" id="move-log-title">Your moves</h2>
-    <ol class="move-log__list" id="move-log" aria-labelledby="move-log-title"></ol>
-  </section>
-
-  <section class="records" aria-labelledby="records-title">
-    <h2 class="records__title" id="records-title">This session</h2>
-    <p class="records__best" id="record-best">No solves yet.</p>
-    <ol class="records__list" id="record-list" aria-labelledby="records-title"></ol>
-  </section>
-
-  <details class="move-controls">
-    <summary>Keyboard and move controls</summary>
-    <p>Use R, L, U, D, F, or B. Hold Shift for a counter-clockwise turn.</p>
-    <div class="turn-depth" role="group" aria-label="Which layers a face turn takes">
-      <label class="number-field" for="turn-depth">
-        <span>Depth</span>
-        <input type="number" id="turn-depth" inputmode="numeric" step="1" min="1" max="${DEFAULT_CUBE_SIZE - 1}" value="1">
-      </label>
-      <button type="button" id="turn-wide" aria-pressed="false">Wide</button>
-    </div>
-    <div class="move-grid" aria-label="Face turns">
-      <button type="button" data-face="r" data-turn="1" aria-label="Turn right face clockwise">R</button>
-      <button type="button" data-face="r" data-turn="-1" aria-label="Turn right face counter-clockwise">R′</button>
-      <button type="button" data-face="l" data-turn="1" aria-label="Turn left face clockwise">L</button>
-      <button type="button" data-face="l" data-turn="-1" aria-label="Turn left face counter-clockwise">L′</button>
-      <button type="button" data-face="u" data-turn="1" aria-label="Turn upper face clockwise">U</button>
-      <button type="button" data-face="u" data-turn="-1" aria-label="Turn upper face counter-clockwise">U′</button>
-      <button type="button" data-face="d" data-turn="1" aria-label="Turn down face clockwise">D</button>
-      <button type="button" data-face="d" data-turn="-1" aria-label="Turn down face counter-clockwise">D′</button>
-      <button type="button" data-face="f" data-turn="1" aria-label="Turn front face clockwise">F</button>
-      <button type="button" data-face="f" data-turn="-1" aria-label="Turn front face counter-clockwise">F′</button>
-      <button type="button" data-face="b" data-turn="1" aria-label="Turn back face clockwise">B</button>
-      <button type="button" data-face="b" data-turn="-1" aria-label="Turn back face counter-clockwise">B′</button>
-    </div>
-  </details>
-
-  <p id="status" role="status" aria-live="polite">Loading engine…</p>
-</main>
-`;
-
-  const root = app.querySelector<HTMLElement>('.game-shell')!;
-  const statusElement = app.querySelector<HTMLParagraphElement>('#status')!;
-  const canvas = app.querySelector<HTMLCanvasElement>('#view')!;
-  const gameUi: GameUi = {
-    root,
-    canvas,
-    timer: app.querySelector<HTMLOutputElement>('#timer')!,
-    status: statusElement,
-    scrambleButton: app.querySelector<HTMLButtonElement>('#scramble')!,
-    scrambleMovesInput: app.querySelector<HTMLInputElement>('#scramble-moves')!,
-    resetButton: app.querySelector<HTMLButtonElement>('#reset')!,
-    cubeSizeInput: app.querySelector<HTMLInputElement>('#cube-size')!,
-    turnDepthInput: app.querySelector<HTMLInputElement>('#turn-depth')!,
-    turnWideButton: app.querySelector<HTMLButtonElement>('#turn-wide')!,
-    undoButton: app.querySelector<HTMLButtonElement>('#undo')!,
-    redoButton: app.querySelector<HTMLButtonElement>('#redo')!,
-    rewindButton: app.querySelector<HTMLButtonElement>('#rewind')!,
-    solveButton: app.querySelector<HTMLButtonElement>('#solve')!,
-    solverNote: app.querySelector<HTMLParagraphElement>('#solver-note')!,
-    stopButton: app.querySelector<HTMLButtonElement>('#stop')!,
-    shareButton: app.querySelector<HTMLButtonElement>('#share')!,
-    recordBest: app.querySelector<HTMLParagraphElement>('#record-best')!,
-    recordList: app.querySelector<HTMLOListElement>('#record-list')!,
-    moveLogList: app.querySelector<HTMLOListElement>('#move-log')!,
-    ambientButton: app.querySelector<HTMLButtonElement>('#ambient')!,
-    homeViewButton: app.querySelector<HTMLButtonElement>('#home-view')!,
-    viewButtons: [
-      ...app.querySelectorAll<HTMLButtonElement>('[data-view]'),
-    ],
-    flatButtons: [
-      ...app.querySelectorAll<HTMLButtonElement>('[data-flat]'),
-    ],
-    paletteButtons: [
-      ...app.querySelectorAll<HTMLButtonElement>('[data-palette]'),
-    ],
-    muteButton: app.querySelector<HTMLButtonElement>('#mute')!,
-    speedInput: app.querySelector<HTMLInputElement>('#speed')!,
-    speedValue: app.querySelector<HTMLOutputElement>('#speed-value')!,
-    moveButtons: [
-      ...app.querySelectorAll<HTMLButtonElement>('[data-face]'),
-    ],
-  };
-  for (const control of app.querySelectorAll<
-    HTMLButtonElement | HTMLInputElement
-  >('button, input')) {
-    control.disabled = true;
-  }
+  // Only the gameplay controls, which the game controller takes over from
+  // here and owns the enabled state of. The settings trigger, the theme
+  // selector and the activity tabs are the page's own and work whether or
+  // not an engine ever arrives -- a browser that cannot run the cube can
+  // still be read in the theme its owner chose.
+  for (const control of gameplayControls(shell.ui)) control.disabled = true;
 
   const setState = (state: AppState, message: string): void => {
     app.dataset.state = state;
@@ -212,8 +149,39 @@ export function bootstrap(
     return Promise.resolve();
   }
 
-  return start({ canvas, gameUi, setState, onError: fail }).then(
-    () => undefined,
-    fail,
-  );
+  // After the support check, so a browser that cannot run the cube is told so
+  // rather than failing on a media query on the way there.
+  const theme: ThemeController | null = createTheme();
+  if (theme !== null) {
+    attachThemeSelector({ buttons: shell.themeButtons, controller: theme });
+  }
+
+  attachSettingsPanel({
+    trigger: shell.settingsTrigger,
+    panel: shell.settingsPanel,
+    backdrop: shell.settingsBackdrop,
+    close: shell.settingsClose,
+  });
+
+  attachActivityTabs({
+    tabs: shell.activityTabs,
+    panels: shell.activityPanels,
+  });
+
+  // The hint is a first-visit line and nothing else: the first gesture is
+  // proof it was read, and there is nothing to remember past that. A reload
+  // is a fresh page and offers it again, which is the same promise the rest
+  // of the session makes.
+  const dismissHint = (): void => {
+    shell.interactionHint.hidden = true;
+  };
+  shell.ui.canvas.addEventListener('pointerdown', dismissHint, { once: true });
+
+  return start({
+    canvas: shell.ui.canvas,
+    gameUi: shell.ui,
+    setState,
+    onError: fail,
+    theme: theme ?? undefined,
+  }).then(() => undefined, fail);
 }

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { fillInSettings, pressInSettings } from './shell.ts';
 
 /** A viewport large enough to keep the desktop HUD beside the canvas. */
 const DESKTOP = { width: 1200, height: 1200 };
@@ -8,7 +9,7 @@ const SCRAMBLE_MOVES = 20;
 
 /** Sets the slider and waits for the reading beside it to agree. */
 async function setSpeed(page: Page, scale: string): Promise<void> {
-  await page.locator('#speed').fill(scale);
+  await fillInSettings(page, '#speed', scale);
   await expect(page.locator('#speed-value')).toHaveText(
     `${Number(scale).toFixed(2)}×`,
   );
@@ -16,8 +17,7 @@ async function setSpeed(page: Page, scale: string): Promise<void> {
 
 /** Runs one scramble and returns how long it took to finish playing. */
 async function timeScramble(page: Page): Promise<number> {
-  await page.locator('#scramble-moves').fill(String(SCRAMBLE_MOVES));
-  await page.locator('#scramble-moves').blur();
+  await fillInSettings(page, '#scramble-moves', String(SCRAMBLE_MOVES));
 
   const started = Date.now();
   await page.locator('#scramble').click();
@@ -41,7 +41,7 @@ test('the slider changes how long a played sequence takes', async ({
 
   const slow = await timeScramble(page);
 
-  await page.locator('#reset').click();
+  await pressInSettings(page, '#reset');
   await setSpeed(page, '4');
   const fast = await timeScramble(page);
 
@@ -63,8 +63,7 @@ test('the slider holds the engine s range, and stays live while playing', async 
 
   await setSpeed(page, '0.25');
 
-  await page.locator('#scramble-moves').fill('3');
-  await page.locator('#scramble-moves').blur();
+  await fillInSettings(page, '#scramble-moves', '3');
   await page.locator('#scramble').click();
 
   // Changed mid-sequence: like the palette, this is not a command to the cube,

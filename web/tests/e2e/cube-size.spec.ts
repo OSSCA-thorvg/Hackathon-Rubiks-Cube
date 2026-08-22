@@ -7,6 +7,7 @@ import {
   pagePointInNet,
   probeCanvas,
 } from './sceneContract.ts';
+import { fillInSettings } from './shell.ts';
 
 /** A viewport large enough to keep the desktop HUD beside the canvas. */
 const DESKTOP = { width: 1200, height: 1200 };
@@ -22,14 +23,14 @@ const NOTATION = /^(\d+-)?(\d+)?[RLUDFB]w?(['2])?$/;
 
 /** Puts a cube of `size` on the table and waits for it to be drawn. */
 async function chooseSize(page: Page, size: number): Promise<void> {
-  await page.locator('#cube-size').fill(String(size));
+  await fillInSettings(page, '#cube-size', String(size));
   await page.locator('#cube-size').dispatchEvent('change');
   await expect(page.locator('#cube-size')).toHaveValue(String(size));
 }
 
 /** Opens the panel the face buttons and the depth controls live in. */
 async function openMoveControls(page: Page): Promise<void> {
-  await page.locator('.move-controls summary').click();
+  await page.locator('.advanced summary').click();
   await expect(page.locator('#turn-depth')).toBeVisible();
 }
 

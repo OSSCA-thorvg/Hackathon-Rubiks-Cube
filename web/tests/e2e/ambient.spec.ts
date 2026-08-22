@@ -7,6 +7,7 @@ import {
   probeCanvas,
   QUARTER_TURN_DRAG,
 } from './sceneContract.ts';
+import { pressInSettings } from './shell.ts';
 
 /** A viewport large enough to keep the desktop HUD beside the canvas. */
 const DESKTOP = { width: 1200, height: 1200 };
@@ -96,7 +97,7 @@ test('a drag looks around a watched pattern instead of ending it', async ({
   expect(swept.cubeGrid).not.toEqual(solved.cubeGrid);
   expect(swept.net).toEqual(solved.net);
 
-  await page.locator('#home-view').click();
+  await pressInSettings(page, '#home-view');
   assertSceneContract(await probeCanvas(page));
 });
 
@@ -113,11 +114,15 @@ test('switching views leaves a watched pattern running, as it does a scramble', 
   // The same controls, over the same kind of playback, twice: what they do to
   // a scramble part way through is what they have to do to a pattern.
   for (const selector of ['[data-view="3d"]', '[data-view="2d"]',
-                          '[data-flat="rings"]', '[data-view="both"]',
-                          '#home-view']) {
+                          '[data-flat="rings"]', '[data-view="both"]']) {
     await page.locator(selector).click();
     await expect(watch).toHaveAttribute('aria-pressed', 'true');
   }
+
+  // Home view is a presentation reset rather than a view mode, so it sits in
+  // Settings now. It has to leave a watched pattern running all the same.
+  await pressInSettings(page, '#home-view');
+  await expect(watch).toHaveAttribute('aria-pressed', 'true');
 
   await expect(canvas).toHaveAttribute('data-view-mode', 'both');
   await expect(canvas).toHaveAttribute('data-flat-style', 'rings');
@@ -150,7 +155,7 @@ test('a scramble watched over is still the scramble that was made', async ({
   await expect(shell).toHaveAttribute('data-game-state', 'running');
   await expect(watch).toBeDisabled();
 
-  await page.locator('#reset').click();
+  await pressInSettings(page, '#reset');
   await expect(shell).toHaveAttribute('data-game-state', 'idle');
   await expect(watch).toBeEnabled();
 });
@@ -187,7 +192,7 @@ test('a move button ends watching and turns the cube it gave back', async ({
 
   // The move buttons stay live through watching, because pressing one is a
   // way out of it -- the same as the letter it carries on the keyboard.
-  await page.locator('.move-controls summary').click();
+  await page.locator('.advanced summary').click();
   const right = page.locator('[data-face="r"][data-turn="1"]');
   await expect(right).toBeEnabled();
   await right.click();

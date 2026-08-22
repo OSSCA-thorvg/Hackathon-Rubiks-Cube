@@ -5,6 +5,7 @@ import {
   expectedNet,
   probeCanvas,
 } from './sceneContract.ts';
+import { fillInSettings } from './shell.ts';
 
 /** A viewport large enough to keep the desktop HUD beside the canvas. */
 const DESKTOP = { width: 1200, height: 1200 };
@@ -72,15 +73,14 @@ test('a bigger cube is worked out too', async ({ page }) => {
 
   // Four is the smallest cube that has to be turned into a three by three
   // before it can be solved, so this is the reduction running in a browser.
-  await page.locator('#cube-size').fill('4');
-  await page.locator('#cube-size').blur();
+  await fillInSettings(page, '#cube-size', '4');
   await expect(shell).toHaveAttribute('data-game-state', 'idle');
 
   // At the tempo a rewind uses, a reduction and the stages after it are
   // several hundred moves and the better part of a minute. The speed control
   // is the application's own answer to that, and it is what a person watching
   // this would reach for.
-  await page.locator('#speed').fill('4');
+  await fillInSettings(page, '#speed', '4');
   await expect(page.locator('#speed-value')).toHaveText('4.00×');
 
   await page.locator('#scramble').click();
@@ -133,7 +133,6 @@ test('the biggest cube has a solver too, and Rewind is still its own', async ({
   page,
 }) => {
   const note = page.locator('#solver-note');
-  const size = page.locator('#cube-size');
 
   await expect(note).toBeHidden();
 
@@ -141,8 +140,7 @@ test('the biggest cube has a solver too, and Rewind is still its own', async ({
   // test was written for. Every size this application builds has a solver
   // now, so what is checked is that -- and that Rewind, which never needed
   // one, is where it was.
-  await size.fill('9');
-  await size.blur();
+  await fillInSettings(page, '#cube-size', '9');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
   await expect(note).toBeHidden();
 
@@ -160,7 +158,6 @@ test('the biggest cube has a solver too, and Rewind is still its own', async ({
   await settled(page);
   expect((await probeCanvas(page, 9)).net).toEqual(expectedNet(9));
 
-  await size.fill('3');
-  await size.blur();
+  await fillInSettings(page, '#cube-size', '3');
   await expect(note).toBeHidden();
 });

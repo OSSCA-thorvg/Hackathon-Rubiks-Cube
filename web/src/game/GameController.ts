@@ -6,6 +6,7 @@ import {
   DEFAULT_SCRAMBLE_MOVES,
   isValidScrambleMoves,
   MAX_CUBE_SIZE,
+  SOLVE_WARNING_CUBE_SIZE,
   MAX_SCRAMBLE_MOVES,
   MIN_CUBE_SIZE,
   type FaceTurns,
@@ -398,6 +399,39 @@ export function attachGameController(
     ui.canvas.dataset.flatStyle = FLAT_NAME_BY_STYLE[style];
   };
 
+  /**
+   * What the line under the dock says about Solve, if it says anything.
+   *
+   * Three states rather than two, because there are two different things a
+   * person can need to know before pressing. One is that Solve will never
+   * answer for this cube, which is a fact about the build. The other is that
+   * it will answer and take a long time doing it, which is a fact about the
+   * size in hand -- and it has to be readable *before* the press, because the
+   * solve happens inside one call into the engine and nothing on the page
+   * answers again until it returns. There is no stopping it and no progress
+   * to show; the only kind moment is this one.
+   */
+  const writeSolverNote = (solvable: boolean): void => {
+    if (!solvable) {
+      ui.solverNote.textContent =
+        'No solver for this cube size yet — Rewind still works.';
+      ui.solverNote.hidden = false;
+      return;
+    }
+
+    const size = engine.cubeSize();
+    if (size < SOLVE_WARNING_CUBE_SIZE) {
+      ui.solverNote.hidden = true;
+      return;
+    }
+
+    ui.solverNote.textContent =
+      `Solve works on a ${size}×${size}, but it can take minutes and the ` +
+      'page will not respond while it runs. Rewind undoes the scramble ' +
+      'instead.';
+    ui.solverNote.hidden = false;
+  };
+
   const updatePaletteControls = (): void => {
     const selected = engine.palette();
     for (const button of ui.paletteButtons) {
@@ -598,7 +632,7 @@ export function attachGameController(
     // control that is out of reach for good should say so.
     const solvable = engine.canSolve();
     ui.solveButton.disabled = movesOff || !solvable || engine.isSolved();
-    ui.solverNote.hidden = solvable;
+    writeSolverNote(solvable);
 
     ui.shareButton.disabled = !canShare(now);
 

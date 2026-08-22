@@ -57,8 +57,11 @@ TEST_CASE("a solver is there for the cube it was built for")
 
     // Every size this application builds, which is what it took two solvers
     // to say: the first handles the two smallest and the second turns the
-    // rest into the second smallest.
-    for (const int size : {4, 5, 6, 7, 8, 9}) {
+    // rest into the second smallest. Walked in full rather than sampled,
+    // because "there is a solver for every cube that can be built" is the
+    // claim, and a gap in the middle of the range would be exactly the kind
+    // of thing a sample misses.
+    for (int size = 4; size <= rubiks::app::kMaxCubeSize; ++size) {
         REQUIRE(rubiks::app::set_cube_size(size));
         INFO("size " << size);
         CHECK(rubiks::app::can_solve());

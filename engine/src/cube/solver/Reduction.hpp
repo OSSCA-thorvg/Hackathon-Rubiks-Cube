@@ -71,8 +71,15 @@ namespace rubiks::cube::solver {
  * which is the whole of the method, and the reason those stages were written
  * to read pieces as faces and colours rather than as coordinates.
  *
- * **Four through nine**, which is every size this application builds that is
- * not already a three by three.
+ * **Four up to the largest cube the application builds**, which is every size
+ * it builds that is not already a three by three. Nothing in the method knows
+ * a size: a workshop is derived from the cube it is asked about.
+ *
+ * The cost is not flat across that range. A forty-move scramble takes about
+ * three and a half seconds to solve at nine and about three and a half minutes
+ * at twenty-eight, and the answer grows from a thousand moves to nearly eight
+ * thousand. Every one of them solves; what a caller has to decide is whether
+ * to make somebody wait, because this does not return until it is done.
  *
  * What it builds and holds is one workshop per size it has been asked about:
  * which cells a size has, which tools move which of them, where a setup leaves

@@ -1,6 +1,6 @@
 # thorvg-rubiks
 
-브라우저에서 동작하는 루빅스 큐브입니다. 크기는 2×2×2부터 9×9×9까지 실행 중에 고를 수 있습니다.
+브라우저에서 동작하는 루빅스 큐브입니다. 크기는 2×2×2부터 28×28×28까지 실행 중에 고를 수 있습니다. 상한이 28인 것은 한 수가 자기 layer를 비트 하나씩으로 적기 때문입니다 — 그보다 넓은 큐브의 수는 기록에도, move log에도, 공유 링크에도 담기지 않습니다.
 
 C++로 작성된 engine이 Cube state, 3D interaction, rendering을 담당하고, [ThorVG](https://github.com/thorvg/thorvg)를 graphics pipeline의 최종 2D rendering backend로 사용합니다. Engine은 Emscripten으로 WASM으로 빌드되며, Web shell은 Vite + Vanilla TypeScript로 구성된 정적 Web application입니다.
 

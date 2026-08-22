@@ -139,7 +139,21 @@ export const MAX_DIMENSION = 8192;
  * refuse a size before anything crosses the boundary.
  */
 export const MIN_CUBE_SIZE = 2;
-export const MAX_CUBE_SIZE = 9;
+export const MAX_CUBE_SIZE = 28;
+
+/**
+ * The size past which a solve is worth warning about before it is asked for.
+ *
+ * Not a limit: every size up to the largest solves, and correctly. What grows
+ * is the wait, and the wait is spent inside one call into the engine -- so
+ * nothing on the page answers until it comes back, and there is no stopping
+ * it half way. Nine was the largest cube this application built for a long
+ * time and takes a few seconds; past that the number climbs into minutes.
+ *
+ * Mirrored here rather than asked of the engine because it is a fact about
+ * what a person should be told, not about what the engine will do.
+ */
+export const SOLVE_WARNING_CUBE_SIZE = 10;
 
 /** The size the engine opens with, before anyone chooses one. */
 export const DEFAULT_CUBE_SIZE = 3;

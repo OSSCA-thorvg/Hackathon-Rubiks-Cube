@@ -24,7 +24,9 @@ using rubiks::cube::solved_color;
 using rubiks::cube::CubeMove;
 using rubiks::cube::is_layer_run;
 using rubiks::cube::pack;
+using rubiks::cube::kPackedMaxLayers;
 using rubiks::cube::solver::parities;
+using rubiks::cube::solver::Reduction;
 using rubiks::cube::solver::projected;
 using rubiks::cube::solver::reachable;
 using rubiks::cube::solver::reduce;
@@ -127,9 +129,36 @@ TEST_CASE("the biggest cubes are reduced and solved too", "[.big]")
     // what the sizes above check and take minutes to do it, because the board
     // the search reads grows with the square of the size. Run them with
     // `solver-test "[.big]"` after touching this file.
-    for (const int size : {7, 8, 9}) {
+    for (const int size : {7, 8, 9, 12}) {
         reduces_and_finishes(size, 0);
     }
+}
+
+TEST_CASE("the widest cube that can be written down is solved as well",
+          "[.big]")
+{
+    // The ceiling itself, which is the packing field rather than anything in
+    // the method. Minutes on its own, and the reason it is here at all is
+    // that "every size the application builds solves" is a claim about the
+    // end of the range and not only about the middle of it.
+    reduces_and_finishes(kPackedMaxLayers, 0);
+}
+
+TEST_CASE("every size that can be built has a reduction, and nothing wider")
+{
+    const Reduction solver;
+
+    // Cheap enough to walk in full, unlike solving them. Four is where a cube
+    // stops being one the three-layer stages take on their own.
+    for (int size = 4; size <= kPackedMaxLayers; ++size) {
+        INFO("size " << size);
+        CHECK(solver.supports(size));
+    }
+
+    // Past the field a move's layers are written into, a solution could not
+    // be recorded even if it were found.
+    CHECK_FALSE(solver.supports(kPackedMaxLayers + 1));
+    CHECK_FALSE(solver.supports(3));
 }
 
 TEST_CASE("a reduction is the same reduction every time")

@@ -18,6 +18,16 @@ const SIZE = 5;
 /** Half a quarter turn: past what commits, short of what commits two. */
 const SHORT_TURN = 0.5;
 
+/**
+ * The widest cube the application builds.
+ *
+ * Written out here rather than imported, the way the palette spec writes out
+ * its colours: this is the browser's copy of what the engine promises, and
+ * the point of the check is that the two agree. The number is the layer field
+ * in cube::PackedMove -- past it a move could not be written down at all.
+ */
+const LARGEST_SIZE = 28;
+
 /** Every move a 5x5 can be written as, numbered rather than named. */
 const NOTATION = /^(\d+-)?(\d+)?[RLUDFB]w?(['2])?$/;
 
@@ -188,21 +198,51 @@ test('a link carries the cube it was made on', async ({ page, context }) => {
 });
 
 test('the largest cube still draws and turns', async ({ page }) => {
-  await chooseSize(page, 9);
+  await chooseSize(page, LARGEST_SIZE);
   await openMoveControls(page);
 
-  const solved = await probeCanvas(page, 9);
-  expect(solved.net).toEqual(expectedNet(9));
+  const solved = await probeCanvas(page, LARGEST_SIZE);
+  expect(solved.net).toEqual(expectedNet(LARGEST_SIZE));
 
   // The deepest layer the largest cube offers, which is one short of all of
   // them: the whole cube at once is a rotation and no control makes one.
-  await setDepth(page, 8);
+  await setDepth(page, LARGEST_SIZE - 1);
   await page.locator('#turn-wide').click();
   await page.locator('[data-face="r"][data-turn="1"]').click();
 
   await expect(page.locator('#move-log li')).toHaveCount(1);
-  await expect(page.locator('#move-log li').first()).toHaveText('8Rw');
+  await expect(page.locator('#move-log li').first()).toHaveText(
+    `${LARGEST_SIZE - 1}Rw`,
+  );
 
-  const turned = await probeCanvas(page, 9);
+  const turned = await probeCanvas(page, LARGEST_SIZE);
   expect(turned.net).not.toEqual(solved.net);
+});
+
+test('the biggest cube says what Solve will cost before it is pressed', async ({
+  page,
+}) => {
+  const note = page.locator('#solver-note');
+
+  await expect(note).toBeHidden();
+
+  await chooseSize(page, LARGEST_SIZE);
+
+  // Readable before the press and not after: the solve happens inside one
+  // call into the engine, so the page has nothing to say once it starts.
+  await expect(note).toBeVisible();
+  await expect(note).toContainText(`${LARGEST_SIZE}×${LARGEST_SIZE}`);
+  await expect(note).toContainText('will not respond');
+
+  // And Solve is still offered, because it does work -- it is only slow.
+  await page.locator('#scramble').click();
+  await expect(page.locator('.game-shell')).toHaveAttribute(
+    'data-game-state',
+    'ready',
+  );
+  await expect(page.locator('#solve')).toBeEnabled();
+
+  // A cube small enough not to be worth warning about says nothing at all.
+  await chooseSize(page, 3);
+  await expect(note).toBeHidden();
 });

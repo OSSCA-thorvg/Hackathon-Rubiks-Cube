@@ -13,6 +13,9 @@ import {
   CubeFlatStyle,
   CubePalette,
   CubeViewMode,
+  MAX_CUBE_SIZE,
+  MIN_CUBE_SIZE,
+  SOLVE_WARNING_CUBE_SIZE,
 } from '../../src/wasm/CubeEngine.ts';
 
 /** Builds semantic controls matching bootstrap's production markup. */
@@ -186,9 +189,9 @@ function createHarness(
       if (busy || cursor === 0) return false;
       return startRewind(0);
     }),
-    canSolve: vi.fn((): boolean => cubeSize <= 9),
+    canSolve: vi.fn((): boolean => true),
     solve: vi.fn((): boolean => {
-      if (busy || solved || cubeSize > 9) return false;
+      if (busy || solved) return false;
 
       // A solution is written in above the cursor and then played forward,
       // so the record grows at once and the cursor walks up to its end.
@@ -247,7 +250,7 @@ function createHarness(
       },
     ),
     setCubeSize: vi.fn((size: number): boolean => {
-      if (size < 2 || size > 9) return false;
+      if (size < MIN_CUBE_SIZE || size > MAX_CUBE_SIZE) return false;
       if (size !== cubeSize) {
         cubeSize = size;
         engine.resetCube();
@@ -516,7 +519,13 @@ describe('attachGameController', () => {
     const harness = createHarness();
     const size = harness.ui.cubeSizeInput;
 
-    for (const refused of ['1', '10', '-3', '2.5', 'four']) {
+    for (const refused of [
+      '1',
+      String(MAX_CUBE_SIZE + 1),
+      '-3',
+      '2.5',
+      'four',
+    ]) {
       size.value = refused;
       size.dispatchEvent(new Event('change'));
       expect(size.value).toBe('3');
@@ -1339,6 +1348,43 @@ describe('attachGameController', () => {
       expect(harness.engine.canSolve()).toBe(true);
       expect(harness.ui.solverNote.hidden).toBe(true);
     }
+  });
+
+  it('warns about the wait before a big cube is handed to the solver', () => {
+    const harness = createHarness();
+    const { solveButton, solverNote } = harness.ui;
+
+    const setSize = (size: number): void => {
+      harness.ui.cubeSizeInput.value = String(size);
+      harness.ui.cubeSizeInput.dispatchEvent(new Event('change'));
+      harness.controller.afterEngineFrame();
+    };
+
+    setSize(SOLVE_WARNING_CUBE_SIZE - 1);
+    expect(solverNote.hidden).toBe(true);
+
+    setSize(MAX_CUBE_SIZE);
+
+    // Readable before the press, which is the only moment it can be read:
+    // the solve is one call into the engine and the page is gone until it
+    // comes back. And Solve stays offered -- it does work, it is slow.
+    expect(solverNote.hidden).toBe(false);
+    expect(solverNote.textContent).toContain(
+      `${MAX_CUBE_SIZE}×${MAX_CUBE_SIZE}`,
+    );
+    expect(solverNote.textContent).toContain('will not respond');
+    expect(solverNote.textContent).toContain('Rewind');
+
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+    expect(solveButton.disabled).toBe(false);
+    expect(solverNote.hidden).toBe(false);
+
+    // And a build with no solver for the size still says the other thing,
+    // which is a different fact and a different sentence.
+    harness.engine.canSolve.mockReturnValue(false);
+    harness.controller.afterEngineFrame();
+    expect(solverNote.textContent).toContain('No solver for this cube size');
   });
 
   it('plays a solution and says the cube was not solved by you', () => {

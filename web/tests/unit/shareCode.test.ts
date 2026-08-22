@@ -7,7 +7,10 @@ import {
   SHARE_VERSION,
   type SharedSession,
 } from '../../src/game/shareCode.ts';
-import { MAX_SHARED_MOVES } from '../../src/wasm/CubeEngine.ts';
+import {
+  MAX_CUBE_SIZE,
+  MAX_SHARED_MOVES,
+} from '../../src/wasm/CubeEngine.ts';
 
 /** R, U and F packed, which are the words the engine writes for those turns. */
 const R = 0x44;
@@ -198,9 +201,16 @@ describe('decodeSession refusals', () => {
   });
 
   it('refuses a size no cube is built at', () => {
+    // Written against the range rather than against the numbers either side
+    // of it, so moving the ceiling does not quietly stop testing the edge.
     expect(decodeSession(payload(SHARE_VERSION, [], [R], [], 1))).toBeNull();
-    expect(decodeSession(payload(SHARE_VERSION, [], [R], [], 10))).toBeNull();
+    expect(
+      decodeSession(payload(SHARE_VERSION, [], [R], [], MAX_CUBE_SIZE + 1)),
+    ).toBeNull();
     expect(decodeSession(payload(SHARE_VERSION, [], [R], [], 0))).toBeNull();
+    expect(
+      decodeSession(payload(SHARE_VERSION, [], [R], [], MAX_CUBE_SIZE)),
+    ).not.toBeNull();
   });
 
   it('carries a bigger cube there and back', () => {

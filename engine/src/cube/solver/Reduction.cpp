@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "cube/Cubie.hpp"
+#include "cube/PackedMove.hpp"
 #include "cube/Surface.hpp"
 #include "cube/solver/LayerByLayer.hpp"
 #include "cube/solver/Projection.hpp"
@@ -1283,7 +1284,12 @@ Reduction::~Reduction() = default;
 
 bool Reduction::supports(int size) const noexcept
 {
-    return size >= 4 && size <= 9;
+    // Every size the application builds that is not already a three by three.
+    // The method has no size in it: a workshop is derived from the cube it is
+    // asked about, so what bounds this is what can be built and written down
+    // rather than anything here. What it costs grows with the cube, and that
+    // is the caller's to warn about rather than this one's to refuse.
+    return size >= 4 && size <= kPackedMaxLayers;
 }
 
 std::vector<CubeMove> Reduction::solve(const CubeState& state) const

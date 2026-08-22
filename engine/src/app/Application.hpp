@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "cube/CubeMove.hpp"
+#include "cube/PackedMove.hpp"
 #include "cube/Cubie.hpp"
 #include "graphics/CanvasTheme.hpp"
 #include "graphics/Layout.hpp"
@@ -105,13 +106,23 @@ void pointer_cancel() noexcept;
 /**
  * The sizes of cube this application will build.
  *
- * Two is the smallest cube there is. Nine is where the drawing stops being
- * worth looking at rather than where it stops working: the ring diagram packs
- * 6N^2 slots into one figure, and a frame draws that many stickers three times
- * over. Both ends are read in one place, so moving either is one number.
+ * Two is the smallest cube there is. Twenty-eight is the largest one that can
+ * be written down: a move carries its layers as a bit per layer in the field
+ * `cube::kPackedMaxLayers` describes, so a wider cube has moves the record,
+ * the move log and a shared link cannot hold. The ceiling is that limit rather
+ * than a number somebody liked.
+ *
+ * Nine used to stand here on the grounds that the drawing stops being worth
+ * looking at past it. Measured, that turned out not to be the binding cost:
+ * a split frame at twenty-eight draws 4704 stickers three times over in about
+ * six milliseconds. What does grow steeply is solving -- see Reduction -- and
+ * that is answered where the solve is asked for, not by refusing to build the
+ * cube.
+ *
+ * Both ends are read in one place, so moving either is one number.
  */
 inline constexpr int kMinCubeSize = 2;
-inline constexpr int kMaxCubeSize = 9;
+inline constexpr int kMaxCubeSize = cube::kPackedMaxLayers;
 
 /**
  * Builds a cube of a different size, and starts the session over.

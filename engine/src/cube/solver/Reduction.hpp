@@ -37,4 +37,29 @@ namespace rubiks::cube::solver {
  */
 [[nodiscard]] std::vector<CubeMove> solve_centres(const CubeState& state);
 
+/**
+ * The moves that turn a big cube into a three by three: both halves, and the
+ * one thing left over when they are done.
+ *
+ * A cube can come out of a reduction in a position no three by three can be
+ * in, because pieces a three by three cannot tell apart -- the centres of one
+ * face -- can hold a permutation the rest of the cube then has to answer for.
+ * Two things follow from it, and neither is met with a written sequence.
+ *
+ * One is corners sitting in an odd order, which is seen by projecting the
+ * reduced cube and asking. What answers it is a change of target: two rows are
+ * told to want each other's colours, which is one swap of the three by three's
+ * edges and puts the same oddness on the other side of the ledger.
+ *
+ * The other is the edge pieces' own arrangement, which the stage cannot reach
+ * at all when it is an odd number of swaps from what is being asked -- every
+ * tool that keeps the centres is an even permutation of them. What answers
+ * that is the one odd move a big cube has, a quarter turn of a single inner
+ * slice, after which the centres are gathered again.
+ *
+ * What comes back is always reduced, and always a cube the three-layer stages
+ * can finish.
+ */
+[[nodiscard]] std::vector<CubeMove> reduce(const CubeState& state);
+
 }  // namespace rubiks::cube::solver

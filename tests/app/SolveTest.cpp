@@ -55,10 +55,13 @@ TEST_CASE("a solver is there for the cube it was built for")
     REQUIRE(rubiks::app::set_cube_size(2));
     CHECK(rubiks::app::can_solve());
 
-    for (const int size : {4, 5, 9}) {
+    // Every size this application builds, which is what it took two solvers
+    // to say: the first handles the two smallest and the second turns the
+    // rest into the second smallest.
+    for (const int size : {4, 5, 6, 7, 8, 9}) {
         REQUIRE(rubiks::app::set_cube_size(size));
         INFO("size " << size);
-        CHECK_FALSE(rubiks::app::can_solve());
+        CHECK(rubiks::app::can_solve());
     }
 
     REQUIRE(rubiks::app::set_cube_size(3));
@@ -103,17 +106,6 @@ TEST_CASE("a solve is refused when there is nothing for it to do")
         CHECK_FALSE(rubiks::app::solve());
         CHECK(record() == before);
         CHECK(rubiks::app::timeline_cursor() == 0);
-    }
-
-    SECTION("a cube of a size no solver here handles")
-    {
-        REQUIRE(rubiks::app::set_cube_size(4));
-        arrive(3, 10);
-
-        const auto before = record();
-        CHECK_FALSE(rubiks::app::solve());
-        CHECK(record() == before);
-        CHECK(rubiks::app::timeline_cursor() == 10);
     }
 
     SECTION("a cube something else is turning")

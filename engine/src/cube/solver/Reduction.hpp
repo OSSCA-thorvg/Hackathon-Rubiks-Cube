@@ -1,9 +1,11 @@
 #pragma once
 
+#include <memory>
 #include <vector>
 
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
+#include "cube/solver/Solver.hpp"
 
 /**
  * Turning a big cube into a three by three, which is how a big cube is solved.
@@ -61,5 +63,40 @@ namespace rubiks::cube::solver {
  * can finish.
  */
 [[nodiscard]] std::vector<CubeMove> reduce(const CubeState& state);
+
+/**
+ * A solver for the cubes that have to be turned into a three by three first.
+ *
+ * The reduction above, and then the stages that finish a three by three --
+ * which is the whole of the method, and the reason those stages were written
+ * to read pieces as faces and colours rather than as coordinates.
+ *
+ * **Four through nine**, which is every size this application builds that is
+ * not already a three by three.
+ *
+ * What it builds and holds is one workshop per size it has been asked about:
+ * which cells a size has, which tools move which of them, where a setup leaves
+ * each one. That is the state the interface exists to make room for, arriving
+ * a little later than the constructor because the size of the cube is not
+ * known until one turns up.
+ */
+class Reduction final : public Solver {
+public:
+    Reduction();
+    ~Reduction() override;
+
+    [[nodiscard]] bool supports(int size) const noexcept override;
+
+    [[nodiscard]] std::vector<CubeMove> solve(
+        const CubeState& state) const override;
+
+private:
+    struct Workshops;
+
+    // Held by pointer so that a workshop can be built on the way through a
+    // `solve()` that is const: what the interface promises is that solving
+    // does not change the answer, not that nothing is written down.
+    std::unique_ptr<Workshops> prepared_;
+};
 
 }  // namespace rubiks::cube::solver

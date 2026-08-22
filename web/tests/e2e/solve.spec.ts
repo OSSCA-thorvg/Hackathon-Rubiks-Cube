@@ -66,6 +66,41 @@ test('a scrambled cube is worked out and played back solved', async ({
   await expect(page.locator('#undo')).toBeEnabled();
 });
 
+test('a bigger cube is worked out too', async ({ page }) => {
+  const shell = page.locator('.game-shell');
+  const solve = page.locator('#solve');
+
+  // Four is the smallest cube that has to be turned into a three by three
+  // before it can be solved, so this is the reduction running in a browser.
+  await page.locator('#cube-size').fill('4');
+  await page.locator('#cube-size').blur();
+  await expect(shell).toHaveAttribute('data-game-state', 'idle');
+
+  // At the tempo a rewind uses, a reduction and the stages after it are
+  // several hundred moves and the better part of a minute. The speed control
+  // is the application's own answer to that, and it is what a person watching
+  // this would reach for.
+  await page.locator('#speed').fill('4');
+  await expect(page.locator('#speed-value')).toHaveText('4.00×');
+
+  await page.locator('#scramble').click();
+  await expect(shell).toHaveAttribute('data-game-state', 'ready', {
+    timeout: 60_000,
+  });
+  const scrambled = await probeCanvas(page, 4);
+
+  await expect(solve).toBeEnabled();
+  await solve.click();
+  await settled(page);
+
+  // Read off the drawing rather than off the engine: sixteen cells of one
+  // colour on each of the six faces of the net.
+  const solvedNow = await probeCanvas(page, 4);
+  expect(solvedNow.net).not.toEqual(scrambled.net);
+  expect(solvedNow.net).toEqual(expectedNet(4));
+  await expect(shell).toHaveAttribute('data-game-state', 'completed');
+});
+
 test('a solve broken off is picked up again by redo', async ({ page }) => {
   const stop = page.locator('#stop');
 
@@ -94,7 +129,7 @@ test('a solve broken off is picked up again by redo', async ({ page }) => {
   await expect(redo).toBeEnabled();
 });
 
-test('a cube with no solver says so, and can still be rewound', async ({
+test('the biggest cube has a solver too, and Rewind is still its own', async ({
   page,
 }) => {
   const note = page.locator('#solver-note');
@@ -102,27 +137,28 @@ test('a cube with no solver says so, and can still be rewound', async ({
 
   await expect(note).toBeHidden();
 
-  await size.fill('4');
+  // Nine used to be the size with nothing to solve it, which is what this
+  // test was written for. Every size this application builds has a solver
+  // now, so what is checked is that -- and that Rewind, which never needed
+  // one, is where it was.
+  await size.fill('9');
   await size.blur();
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
-
-  await expect(note).toBeVisible();
-  await expect(page.locator('#solve')).toBeDisabled();
+  await expect(note).toBeHidden();
 
   await page.locator('#scramble').click();
   await expect(page.locator('.game-shell')).toHaveAttribute(
     'data-game-state',
     'ready',
+    { timeout: 60_000 },
   );
 
-  // Still no solver for this cube, and the one command that never needed one
-  // is exactly where it was.
-  await expect(page.locator('#solve')).toBeDisabled();
+  await expect(page.locator('#solve')).toBeEnabled();
   await expect(page.locator('#rewind')).toBeEnabled();
 
   await page.locator('#rewind').click();
   await settled(page);
-  expect((await probeCanvas(page, 4)).net).toEqual(expectedNet(4));
+  expect((await probeCanvas(page, 9)).net).toEqual(expectedNet(9));
 
   await size.fill('3');
   await size.blur();

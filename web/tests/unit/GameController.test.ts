@@ -186,9 +186,9 @@ function createHarness(
       if (busy || cursor === 0) return false;
       return startRewind(0);
     }),
-    canSolve: vi.fn((): boolean => cubeSize <= 3),
+    canSolve: vi.fn((): boolean => cubeSize <= 9),
     solve: vi.fn((): boolean => {
-      if (busy || solved || cubeSize > 3) return false;
+      if (busy || solved || cubeSize > 9) return false;
 
       // A solution is written in above the cursor and then played forward,
       // so the record grows at once and the cursor walks up to its end.
@@ -1314,19 +1314,31 @@ describe('attachGameController', () => {
     harness.finishScramble();
     expect(solveButton.disabled).toBe(false);
 
-    // A size with no solver, which is the one reason that does not go away --
-    // so it is written out, and Rewind is still there.
-    harness.ui.cubeSizeInput.value = '5';
-    harness.ui.cubeSizeInput.dispatchEvent(new Event('change'));
+    // Every size this application builds has a solver now, so the engine is
+    // asked to say otherwise -- what is under test is the screen's answer to
+    // "no solver for this one", which stays worth having whether or not any
+    // size in this build gives it.
+    harness.engine.canSolve.mockReturnValue(false);
     harness.controller.afterEngineFrame();
-    expect(harness.engine.canSolve()).toBe(false);
     expect(solveButton.disabled).toBe(true);
     expect(solverNote.hidden).toBe(false);
 
-    harness.ui.cubeSizeInput.value = '3';
-    harness.ui.cubeSizeInput.dispatchEvent(new Event('change'));
+    harness.engine.canSolve.mockReturnValue(true);
     harness.controller.afterEngineFrame();
     expect(solverNote.hidden).toBe(true);
+  });
+
+  it('has a solver for every size it builds', () => {
+    const harness = createHarness();
+
+    for (const size of ['2', '4', '6', '9']) {
+      harness.ui.cubeSizeInput.value = size;
+      harness.ui.cubeSizeInput.dispatchEvent(new Event('change'));
+      harness.controller.afterEngineFrame();
+
+      expect(harness.engine.canSolve()).toBe(true);
+      expect(harness.ui.solverNote.hidden).toBe(true);
+    }
   });
 
   it('plays a solution and says the cube was not solved by you', () => {

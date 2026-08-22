@@ -110,7 +110,7 @@ TEST_CASE("the three-layer stages finish a reduced cube of any size")
     // The stages read pieces as faces and colours rather than as coordinates,
     // so a nine by nine whose rows are already paired is a three by three to
     // them.
-    for (const int size : {4, 5, 6, 7, 9}) {
+    for (const int size : {4, 5, 6, 7, 8, 9}) {
         for (std::uint32_t seed = 0; seed < 40; ++seed) {
             auto cube = outer_scrambled(seed, size);
             cube.apply(solve_as_three_layers(cube));

@@ -17,6 +17,7 @@
 #include "cube/Scramble.hpp"
 #include "cube/Surface.hpp"
 #include "cube/solver/LayerByLayer.hpp"
+#include "cube/solver/Reduction.hpp"
 #include "cube/solver/Solver.hpp"
 #include "graphics/AxisGizmo.hpp"
 #include "graphics/Camera.hpp"
@@ -193,13 +194,18 @@ struct ApplicationState {
     // it, so there is no second number to keep in step.
     cube::MoveTimeline timeline;
 
-    // The one solver this application has. Held by the interface rather than
-    // by its type, so that adding a second implementation is a change to this
-    // line and to nothing that reads it -- and held at all, rather than made
-    // per call, because a solver is allowed to have built something in its
-    // constructor that it would be a waste to build twice.
-    std::unique_ptr<cube::solver::Solver> solver =
-        std::make_unique<cube::solver::LayerByLayer>();
+    // The solvers this application has, each held by the interface rather than
+    // by its type. Adding one is a line here and nothing that reads them, and
+    // which of them answers for a cube is a question they answer themselves.
+    // Held rather than made per call because a solver is allowed to have built
+    // something it would be a waste to build twice -- one of these builds a
+    // workshop for every size it is asked about and keeps it.
+    std::vector<std::unique_ptr<cube::solver::Solver>> solvers = [] {
+        std::vector<std::unique_ptr<cube::solver::Solver>> made;
+        made.push_back(std::make_unique<cube::solver::LayerByLayer>());
+        made.push_back(std::make_unique<cube::solver::Reduction>());
+        return made;
+    }();
 
     // The whole of the playback state. Its presence is what "a sequence is
     // playing" means, so there is no second flag to fall out of step with it.
@@ -1198,9 +1204,26 @@ bool solve_rewind() noexcept
                        cube::TimelineEffect::Rewind);
 }
 
+namespace {
+
+/** The solver that handles a cube of this size, or nothing. */
+[[nodiscard]] const cube::solver::Solver* solver_for(int size) noexcept
+{
+    if (!state) return nullptr;
+
+    for (const auto& solver : state->solvers) {
+        if (solver->supports(size)) return solver.get();
+    }
+    return nullptr;
+}
+
+}  // namespace
+
 bool can_solve() noexcept
 {
-    return state && state->solver->supports(size_of_cube());
+    // The lifecycle first: `size_of_cube()` asks the state what it is, so
+    // there has to be one before anything else is asked.
+    return state && solver_for(size_of_cube()) != nullptr;
 }
 
 bool solve() noexcept
@@ -1210,7 +1233,7 @@ bool solve() noexcept
     // Worked out before anything is written, so that a cube already solved --
     // the one case with nothing to play -- refuses here with the record and
     // the cube untouched, the way every other empty command does.
-    auto plan = state->solver->solve(state->cube_state);
+    auto plan = solver_for(size_of_cube())->solve(state->cube_state);
     if (plan.empty()) return false;
 
     // Written down and then played forward, which is what a scramble does. So

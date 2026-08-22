@@ -8,6 +8,7 @@
 
 #include "cube/Cubie.hpp"
 #include "cube/Surface.hpp"
+#include "cube/solver/Projection.hpp"
 #include "cube/solver/Turning.hpp"
 
 namespace rubiks::cube::solver {
@@ -37,33 +38,6 @@ struct FaceTurn {
     Face face;
     int turns;
 };
-
-/** The one cubie that shows all three of these faces. */
-[[nodiscard]] CubiePosition corner_slot(Face a, Face b, Face c,
-                                        int size) noexcept
-{
-    CubiePosition position{0, 0, 0};
-    for (const Face face : {a, b, c}) {
-        set_axis(position, axis_of(face), outer_layer(face, size));
-    }
-    return position;
-}
-
-/**
- * One cubie of the run that shows both of these faces.
- *
- * A three by three has exactly one; a bigger cube has a row of them along the
- * edge, all of the same two colours once the cube has been reduced. Any of
- * them answers for the row, so the first is taken and the choice is written
- * down here rather than at each caller.
- */
-[[nodiscard]] CubiePosition edge_slot(Face a, Face b, int size) noexcept
-{
-    CubiePosition position{1, 1, 1};
-    set_axis(position, axis_of(a), outer_layer(a, size));
-    set_axis(position, axis_of(b), outer_layer(b, size));
-    return position;
-}
 
 [[nodiscard]] Face face_wearing(FaceColor colour) noexcept
 {
@@ -738,6 +712,13 @@ std::vector<CubeMove> LayerByLayer::solve(const CubeState& state) const
 
 std::vector<CubeMove> solve_as_three_layers(const CubeState& state)
 {
+    // What "reduced" was only a word for until there was something that could
+    // ask. A cube that fails either of these has no answer here rather than a
+    // long one: the stages turn outer faces alone, and no run of those reaches
+    // a position that an even cube can hold and a three by three cannot.
+    assert(reduced(state));
+    assert(state.size() < 3 || reachable(parities(projected(state))));
+
     if (state.is_solved()) return {};
 
     Work work{state};

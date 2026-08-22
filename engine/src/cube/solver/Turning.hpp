@@ -138,6 +138,66 @@ inline void set_axis(CubiePosition& position, Axis axis, int value) noexcept
     position.z = value;
 }
 
+/** The axis that is neither of these two. */
+[[nodiscard]] inline Axis remaining_axis(Axis a, Axis b) noexcept
+{
+    for (const Axis axis : {Axis::X, Axis::Y, Axis::Z}) {
+        if (axis != a && axis != b) return axis;
+    }
+    assert(false);
+    return Axis::X;
+}
+
+/** The one cubie that shows all three of these faces. */
+[[nodiscard]] inline CubiePosition corner_slot(Face a, Face b, Face c,
+                                               int size) noexcept
+{
+    CubiePosition position{0, 0, 0};
+    for (const Face face : {a, b, c}) {
+        set_axis(position, axis_of(face), outer_layer(face, size));
+    }
+    return position;
+}
+
+/**
+ * One cubie of the run that shows both of these faces.
+ *
+ * A three by three has exactly one; a bigger cube has a row of them along the
+ * edge, all of the same two colours once the cube has been reduced. Any of
+ * them answers for the row, so the first is taken and the choice is written
+ * down here rather than at each caller.
+ */
+[[nodiscard]] inline CubiePosition edge_slot(Face a, Face b, int size) noexcept
+{
+    CubiePosition position{1, 1, 1};
+    set_axis(position, axis_of(a), outer_layer(a, size));
+    set_axis(position, axis_of(b), outer_layer(b, size));
+    return position;
+}
+
+/**
+ * Every cubie of that run, from one end of the edge to the other.
+ *
+ * What `edge_slot` takes the first of. A reduction has to look at all of them
+ * -- a row is paired or it is not, and one wing cannot say which -- while the
+ * stages that follow a reduction need only ask one.
+ *
+ * Empty for a two by two, which has no edge pieces at all.
+ */
+[[nodiscard]] inline std::vector<CubiePosition> edge_row(Face a, Face b,
+                                                         int size)
+{
+    const Axis along = remaining_axis(axis_of(a), axis_of(b));
+
+    std::vector<CubiePosition> row;
+    for (int i = 1; i <= size - 2; ++i) {
+        auto position = edge_slot(a, b, size);
+        set_axis(position, along, i);
+        row.push_back(position);
+    }
+    return row;
+}
+
 /** The faces a slot shows: three for a corner, two for an edge, one centre. */
 [[nodiscard]] inline std::vector<Face> exposed_faces(
     const CubiePosition& position, int size)

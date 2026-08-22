@@ -5,6 +5,7 @@ cube_solver_lib = static_library(
   'rubiks-cube-solver',
   files(
     'LayerByLayer.cpp',
+    'Projection.cpp',
     'Reduction.cpp',
   ),
   dependencies: cube_dep,

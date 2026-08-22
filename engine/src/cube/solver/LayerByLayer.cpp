@@ -269,22 +269,29 @@ const std::vector<FaceTurn> kTopCross{{Face::Front, 1},  {Face::Right, 1},
                                       {Face::Up, 1},     {Face::Right, -1},
                                       {Face::Up, -1},    {Face::Front, -1}};
 
-/** Moves three top corners round, leaving how they are turned to the next. */
-const std::vector<FaceTurn> kCornerCycle{
-    {Face::Up, 1},    {Face::Right, 1},  {Face::Up, -1}, {Face::Left, -1},
-    {Face::Up, 1},    {Face::Right, -1}, {Face::Up, -1}, {Face::Left, 1}};
+/**
+ * Turns three of the top corners up, and moves them about while it does.
+ *
+ * Seven moves for three corners, where turning them one at a time from
+ * underneath costs eight for one. What it gives up is where they end up, which
+ * is why the stage that places them comes after this one rather than before:
+ * a sequence that moves corners without turning them exists (below), while the
+ * other way round the placement would be undone.
+ */
+const std::vector<FaceTurn> kCornerTurn{
+    {Face::Right, 1},  {Face::Up, 1}, {Face::Right, -1}, {Face::Up, 1},
+    {Face::Right, 1},  {Face::Up, 2}, {Face::Right, -1}};
 
 /**
- * Turns the front-right top corner in place, over two rounds of four.
+ * Moves three top corners round, leaving how they are turned alone.
  *
- * One round leaves the corner in the bottom layer; two brings it back where it
- * was, turned by a third. So this is only ever used in pairs, which is why the
- * loop that uses it counts pairs rather than moves.
+ * The one thing the seven above cannot do, and the reason the two are in this
+ * order. Nine moves, and it never touches the layers underneath.
  */
-const std::vector<FaceTurn> kCornerTwist{{Face::Right, -1},
-                                         {Face::Down, -1},
-                                         {Face::Right, 1},
-                                         {Face::Down, 1}};
+const std::vector<FaceTurn> kCornerSwap{
+    {Face::Right, -1}, {Face::Front, 1},  {Face::Right, -1},
+    {Face::Back, 2},   {Face::Right, 1},  {Face::Front, -1},
+    {Face::Right, -1}, {Face::Back, 2},   {Face::Right, 2}};
 
 /** Moves three top edges round, leaving everything else where it is. */
 const std::vector<FaceTurn> kEdgeCycle{
@@ -298,6 +305,21 @@ const std::vector<FaceTurn> kEdgeCycle{
     for (const Face side : kSides) {
         const auto slot = edge_slot(Face::Up, side, cube.size());
         if (sticker_at(cube, slot, Face::Up) == home_colour(Face::Up)) ++count;
+    }
+    return count;
+}
+
+/** How many of the top corners are already showing the top colour. */
+[[nodiscard]] int top_corners_turned_up_count(const CubeState& cube)
+{
+    int count = 0;
+    for (int frame = 0; frame < 4; ++frame) {
+        const auto slot =
+            corner_slot(Face::Up, about_up(Face::Front, frame),
+                        about_up(Face::Right, frame), cube.size());
+        if (sticker_at(cube, slot, Face::Up) == home_colour(Face::Up)) {
+            ++count;
+        }
     }
     return count;
 }
@@ -416,11 +438,68 @@ bool apply_best(Work& work, const std::vector<FaceTurn>& sequence,
  * corner stage has ever needed that; the edge stage reaches its target from
  * every arrangement in one or two improving rounds.
  */
+/**
+ * The same, looking two applications ahead when one is not enough.
+ *
+ * Turning the last corners up is the one place where the best single use of a
+ * sequence can be a step backwards: the way a person is taught it, two of the
+ * cases want one sequence and then its opposite, and after the first of them
+ * fewer corners are up than before. A search that only ever accepts an
+ * improvement never finds the pair.
+ *
+ * So the pairs are tried too -- a thousand of them, each a few turns of a copy,
+ * which is nothing next to what it saves. It is the same knowledge a person
+ * has as "these two cases take two algorithms", held as a search rather than
+ * as a list of pictures.
+ */
+void repeat_until_deep(Work& work, const std::vector<FaceTurn>& sequence,
+                       int (*score)(const CubeState&), int target)
+{
+    const std::array<std::vector<FaceTurn>, 2> both{sequence,
+                                                    reversed(sequence)};
+
+    for (int guard = 0; score(work.cube()) < target; ++guard) {
+        assert(guard < 4);
+        if (apply_best(work, sequence, score)) continue;
+
+        int best = -1;
+        int first_align = 0;
+        int first_frame = 0;
+        std::size_t first_way = 0;
+
+        for (std::size_t way = 0; way < both.size(); ++way) {
+            for (int align = 0; align < 4; ++align) {
+                for (int frame = 0; frame < 4; ++frame) {
+                    Work trial{work.cube()};
+                    trial.turn(Face::Up, align);
+                    run(trial, both[way], frame);
+
+                    // What the best second use of the sequence would reach
+                    // from there, which is what makes the first one worth it.
+                    Work after{trial.cube()};
+                    apply_best(after, sequence, score);
+
+                    const int reached = score(after.cube());
+                    if (reached <= best) continue;
+                    best = reached;
+                    first_align = align;
+                    first_frame = frame;
+                    first_way = way;
+                }
+            }
+        }
+
+        assert(best >= 0);
+        work.turn(Face::Up, first_align);
+        run(work, both[first_way], first_frame);
+    }
+}
+
 void repeat_until(Work& work, const std::vector<FaceTurn>& sequence,
                   int (*score)(const CubeState&), int target)
 {
     for (int guard = 0; score(work.cube()) < target; ++guard) {
-        assert(guard < 4);
+        assert(guard < 8);
         if (apply_best(work, sequence, score)) continue;
         run(work, sequence, 0);
     }
@@ -603,30 +682,14 @@ void turn_top_edges_up(Work& work)
     repeat_until(work, kTopCross, top_edges_turned_up, 4);
 }
 
-void place_top_corners(Work& work)
-{
-    repeat_until(work, kCornerCycle, top_corners_in_place, 4);
-}
-
 void turn_top_corners_up(Work& work)
 {
-    // One trip round the top, a corner at a time, and four single turns of the
-    // top add up to none -- so the layer is where it started when this ends,
-    // and so is the bottom, which each pair of rounds puts back.
-    for (int visited = 0; visited < 4; ++visited) {
-        for (int pairs = 0;; ++pairs) {
-            assert(pairs < 3);
-            const auto corner = corner_slot(Face::Up, Face::Front, Face::Right,
-                                            work.size());
-            if (sticker_at(work.cube(), corner, Face::Up) ==
-                home_colour(Face::Up)) {
-                break;
-            }
-            run(work, kCornerTwist, 0);
-            run(work, kCornerTwist, 0);
-        }
-        work.turn(Face::Up, 1);
-    }
+    repeat_until_deep(work, kCornerTurn, top_corners_turned_up_count, 4);
+}
+
+void place_top_corners(Work& work)
+{
+    repeat_until(work, kCornerSwap, top_corners_in_place, 4);
 }
 
 void place_top_edges(Work& work)
@@ -746,10 +809,11 @@ std::vector<CubeMove> solve_as_three_layers(const CubeState& state)
         assert(top_edges_turned_up(work.cube()) == 4);
     }
 
+    turn_top_corners_up(work);
+    assert(top_corners_turned_up(work.cube()));
+
     place_top_corners(work);
     assert(top_corners_in_place(work.cube()) == 4);
-
-    turn_top_corners_up(work);
     assert(top_corners_turned_up(work.cube()));
 
     if (state.size() > 2) {

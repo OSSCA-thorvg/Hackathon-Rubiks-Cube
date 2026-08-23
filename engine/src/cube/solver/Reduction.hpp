@@ -40,6 +40,46 @@ namespace rubiks::cube::solver {
 [[nodiscard]] std::vector<CubeMove> solve_centres(const CubeState& state);
 
 /**
+ * How the centre stage's tools sit against the cube's clusters, at one size.
+ *
+ * A cluster is the set of slots one piece can ever reach. No sequence of turns
+ * moves a piece out of its own, so the centres of a big cube are not one
+ * puzzle but a few dozen side by side -- the same fact the edge stage already
+ * counts, under the name of worlds. A tool that stays inside a single cluster
+ * can be chosen by looking at that cluster alone, which is what makes solving
+ * them one at a time possible; a tool that spans several cannot.
+ *
+ * Whether our tools are of the first kind is not something to assume. The
+ * families were written to be short and to keep the other faces still, not to
+ * respect clusters, and the coarse one is not expected to: it carries a whole
+ * strip between faces. So this counts, and a test reads the counts.
+ */
+struct CentreLocality {
+    int cells = 0;             ///< Centre stickers there are at this size.
+    int clusters = 0;          ///< Closed sets they fall into.
+    int smallest_cluster = 0;  ///< Cells in the smallest of them.
+    int largest_cluster = 0;   ///< Cells in the largest.
+
+    int coarse = 0;        ///< Tools that are a slice against a face it cuts.
+    int coarse_local = 0;  ///< How many of those stay inside one cluster.
+    int fine = 0;          ///< Tools that are two slices about different axes.
+    int fine_local = 0;
+    int narrow = 0;  ///< Tools whose first half is a slice under a face turn.
+    int narrow_local = 0;
+
+    /// The most clusters any one fine or narrow tool reaches into.
+    int widest_fine_reach = 0;
+
+    /// Local fine and narrow tools the poorest cluster has to work with.
+    int fewest_local_tools = 0;
+    /// The same for the best-served cluster.
+    int most_local_tools = 0;
+};
+
+/** The counts above, worked out for a cube of `size`. */
+[[nodiscard]] CentreLocality centre_locality(int size);
+
+/**
  * The moves that turn a big cube into a three by three: both halves, and the
  * one thing left over when they are done.
  *

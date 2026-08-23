@@ -221,6 +221,12 @@ Phase 번호가 없는 것은 이것이 새 기능이 아니라 재편이기 때
 System/Light/Dark theme이 더해졌고, DOM shell뿐 아니라 ThorVG software canvas의 배경까지 함께 따라갑니다 — 이를 위해 renderer의 clear color가 파일 상수에서 `Renderer` 경계의 값으로 올라갔습니다. Phase 14의 "브라우저 저장소를 전혀 쓰지 않는다"는 theme preference 한 값에 한해 좁게 개정되었습니다.
 Phase 17은 이 작업의 영향을 받지 않습니다. 번호도 의미도 그대로입니다.
 
+## [ ] Phase 16.6: [Cluster-wise reduction](./16.6-clusterwise-reduction.md)
+
+16.5가 "남은 것"으로 적어 둔 계산 시간을 겨냥합니다. 28×28 Solve가 native에서 217초이고, 단계별로 재 보면 3×3 마무리는 0.3%이며 센터와 엣지 짝짓기가 전부입니다 — 라운드마다 모든 도구(28×28에서 25만 개) × 모든 setup을 평가하는 탐색이 크기의 약 5제곱으로 늘기 때문입니다.
+Demaine 외(ESA 2011)가 증명한 대로 조각은 자기 cluster(도달 가능한 24자리)를 벗어나지 못하고 cluster마다 다른 cluster를 건드리지 않는 해법이 항상 있으므로, 탐색을 큐브 전체가 아니라 cluster 단위로 돌립니다. 먼저 후보를 칸으로 색인해 좁히고(해법은 한 수도 바뀌지 않아야 합니다), 그다음 센터·엣지 마무리를 cluster/world 순회로 바꿉니다. 3×3 마무리와 interface·ABI·UI는 건드리지 않고, 경고 임계값은 끝난 뒤 숫자로 다시 정합니다.
+Phase 17은 이 작업의 영향을 받지 않습니다.
+
 ## [ ] Phase 17: Solve hint and step-through
 
 Phase 16의 solver를 사용해 다음 한 수만 알려 주는 힌트와, 해법을 한 수씩 진행하는 모드를 제공합니다.

@@ -33,6 +33,7 @@ using rubiks::cube::solver::reduce;
 using rubiks::cube::solver::reduced;
 using rubiks::cube::solver::solve_as_three_layers;
 using rubiks::cube::solver::solve_centres;
+using rubiks::cube::solver::CentreLocality;
 
 CubeState scrambled(std::uint32_t seed, int size, std::size_t moves = 40)
 {
@@ -240,5 +241,57 @@ TEST_CASE("an odd number of slices from solved is reduced all the same")
             cube.apply(solve_as_three_layers(cube));
             REQUIRE(cube.is_solved());
         }
+    }
+}
+
+TEST_CASE("the centre tools are read against the clusters they move in")
+{
+    // What solving one cluster at a time rests on: a tool whose cells all sit
+    // in one cluster can be chosen by looking at that cluster alone. The
+    // coarse family is not expected to pass -- it carries a strip from one
+    // face to another on purpose -- so what is checked is the two families
+    // that would do the work, and the shape of the clusters themselves.
+    for (const int size : {4, 5, 6, 7, 9}) {
+        const auto locality = rubiks::cube::solver::centre_locality(size);
+        INFO("size " << size << ": " << locality.cells << " cells in "
+                     << locality.clusters << " clusters, smallest "
+                     << locality.smallest_cluster << ", largest "
+                     << locality.largest_cluster << "; fine "
+                     << locality.fine_local << "/" << locality.fine
+                     << " local, narrow " << locality.narrow_local << "/"
+                     << locality.narrow << " local, widest reach "
+                     << locality.widest_fine_reach << "; local tools per "
+                     << "cluster " << locality.fewest_local_tools << ".."
+                     << locality.most_local_tools);
+
+        // Every centre sticker is in exactly one cluster, and a cluster is
+        // never wider than the twenty-four slots a piece can reach.
+        CHECK(locality.cells == 6 * (size - 2) * (size - 2));
+        CHECK(locality.clusters > 0);
+        CHECK(locality.largest_cluster <= 24);
+        CHECK(locality.smallest_cluster >= 1);
+
+        CHECK(locality.fine > 0);
+        CHECK(locality.narrow > 0);
+
+        // Not every tool is local, and the counts above say by how much:
+        // roughly half the fine family and a quarter of the narrow one reach
+        // into two clusters or more. A commutator of a slice at depth a and a
+        // slice at depth b moves cells at both (a, b) and (b, a), and those
+        // are mirror positions that no turn carries into one another -- so
+        // spanning is what the family does by construction, not a defect.
+        //
+        // What a cluster-at-a-time stage can use is the local part, and what
+        // matters is that the part is not thin. So that is what is checked.
+        CHECK(locality.fine_local > 0);
+        CHECK(locality.narrow_local > 0);
+
+        // Every cluster has local tools, and the poorest of them is the one
+        // holding the six true centres of an odd cube -- six cells, and only
+        // the middle slice reaches them. Forty-eight tools for six cells is
+        // thin but not empty. Whether thin is enough is not a question this
+        // can answer: it is answered by a cluster-at-a-time stage actually
+        // finishing, which is the next step's to show.
+        CHECK(locality.fewest_local_tools > 0);
     }
 }

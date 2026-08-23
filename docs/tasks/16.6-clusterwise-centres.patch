@@ -1,0 +1,260 @@
+diff --git engine/src/cube/solver/Reduction.cpp private/tmp/claude-501/-Users-hjh-projects-ossca-ThorVG-------/c6ec050c-1637-4d29-a03e-2a03c41a7500/scratchpad/Reduction-2a.cpp
+index a5e4b69..ef92f59 100644
+--- engine/src/cube/solver/Reduction.cpp
++++ private/tmp/claude-501/-Users-hjh-projects-ossca-ThorVG-------/c6ec050c-1637-4d29-a03e-2a03c41a7500/scratchpad/Reduction-2a.cpp
+@@ -490,6 +490,14 @@ public:
+         return static_cast<int>(cells_.size());
+     }
+ 
++    /** Whether a cell is showing the colour asked of it. */
++    [[nodiscard]] bool settled(const CubeState& cube, int cell) const
++    {
++        const auto& at = cells_[static_cast<std::size_t>(cell)];
++        return sticker_at(cube, at.at, at.face) ==
++               wants_[static_cast<std::size_t>(cell)];
++    }
++
+     /** How many of them are showing the colour asked of them. */
+     [[nodiscard]] int at_home(const CubeState& cube) const
+     {
+@@ -819,6 +827,9 @@ struct Prepared {
+     std::vector<Turn> steps;
+     std::vector<std::pair<int, int>> moved;
+     Carries carries{};
++
++    /// Whether this is a slice against a face it cuts, the broad family.
++    bool coarse = false;
+ };
+ 
+ /** One choice of setup and tool, or nothing when none was any good. */
+@@ -853,6 +864,7 @@ public:
+             prepared.steps = written_out(tool);
+             prepared.moved = centres_.hops(prepared.steps);
+             prepared.carries = centres_.carries(prepared.moved);
++            prepared.coarse = is_face_turn(tool.second.front());
+             if (prepared.moved.empty()) continue;
+             centre_tools_.push_back(std::move(prepared));
+         }
+@@ -865,6 +877,51 @@ public:
+                     : sources_after(centres_, {setup}));
+         }
+ 
++        // The closed sets, and which tools stay inside one of them.
++        //
++        // A piece cannot leave the set of slots it can reach, so the centres
++        // are not one puzzle but a few dozen side by side. A tool that keeps
++        // to one of them can be judged by that set alone -- and a stage that
++        // does so looks at a few dozen tools where the whole list is tens of
++        // thousands. Which tools those are is counted rather than assumed:
++        // about half of them cross, because a commutator of a slice at depth
++        // a and a slice at depth b moves cells at (a, b) and at (b, a), and
++        // those are mirror places no turn carries into one another.
++        cluster_of_ = orbits_under(centres_, quarter_turns(size));
++        const int clusters =
++            cluster_of_.empty()
++                ? 0
++                : *std::max_element(cluster_of_.begin(), cluster_of_.end()) + 1;
++
++        cluster_cells_.assign(static_cast<std::size_t>(clusters), {});
++        for (std::size_t i = 0; i < cluster_of_.size(); ++i) {
++            cluster_cells_[static_cast<std::size_t>(cluster_of_[i])].push_back(
++                static_cast<int>(i));
++        }
++
++        local_tools_.assign(static_cast<std::size_t>(clusters), {});
++        for (std::size_t i = 0; i < centre_tools_.size(); ++i) {
++            int only = -1;
++            bool local = true;
++            for (const auto& [from, to] : centre_tools_[i].moved) {
++                for (const int end : {from, to}) {
++                    const int which = cluster_of_[static_cast<std::size_t>(end)];
++                    if (only < 0) only = which;
++                    if (which != only) local = false;
++                }
++            }
++            if (local && only >= 0) {
++                local_tools_[static_cast<std::size_t>(only)].push_back(i);
++            }
++        }
++
++        // A slice against a face it cuts, which is the family that carries a
++        // whole strip between faces. It crosses clusters by design and is the
++        // only thing that clears a scrambled cube in big strides, so it keeps
++        // its own list and its own pass in front of the clusters.
++        for (std::size_t i = 0; i < centre_tools_.size(); ++i) {
++            if (centre_tools_[i].coarse) coarse_.push_back(i);
++        }
+     }
+ 
+     [[nodiscard]] int size() const noexcept { return size_; }
+@@ -881,6 +938,20 @@ public:
+     {
+         return centre_sources_;
+     }
++    [[nodiscard]] const std::vector<std::size_t>& coarse() const noexcept
++    {
++        return coarse_;
++    }
++    [[nodiscard]] const std::vector<std::vector<int>>& cluster_cells()
++        const noexcept
++    {
++        return cluster_cells_;
++    }
++    [[nodiscard]] const std::vector<std::vector<std::size_t>>& local_tools()
++        const noexcept
++    {
++        return local_tools_;
++    }
+ 
+ private:
+     /** Each cell answering for itself, which is what no setup at all does. */
+@@ -916,6 +987,10 @@ private:
+     std::vector<Prepared> centre_tools_;
+     std::vector<Turn> centre_setups_;
+     std::vector<std::vector<int>> centre_sources_;
++    std::vector<int> cluster_of_;
++    std::vector<std::vector<int>> cluster_cells_;
++    std::vector<std::vector<std::size_t>> local_tools_;
++    std::vector<std::size_t> coarse_;
+ };
+ 
+ /**
+@@ -1206,6 +1281,70 @@ private:
+ 
+ };
+ 
++/**
++ * The best of a list of tools, under every setup, or nothing worth doing.
++ *
++ * The one place a round is decided, so that the passes below differ in which
++ * tools they hand it and in nothing else. A setup is free to try because it is
++ * a face turn: a face turn cannot take a centre off its face, so it never
++ * changes how many are home -- only which of a face's pieces sits where a tool
++ * will reach -- and it is left on rather than taken back because doing so
++ * costs a move and nothing else.
++ */
++[[nodiscard]] Choice best_centre_tool(const Work& work, const Board& board,
++                                      const std::vector<Prepared>& tools,
++                                      const std::vector<std::vector<int>>& sources,
++                                      const std::vector<std::size_t>& among,
++                                      const Carries& wanted)
++{
++    Choice choice;
++    int best = 0;
++
++    for (const std::size_t i : among) {
++        if (!worth_trying(tools[i].carries, wanted)) continue;
++        for (std::size_t s = 0; s < sources.size(); ++s) {
++            const int delta =
++                board.gain(work.cube(), sources[s], tools[i].moved);
++            if (delta <= best) continue;
++            best = delta;
++            choice = Choice{i, s, true};
++        }
++    }
++    return choice;
++}
++
++/**
++ * Every face's centre block one colour, one closed set at a time.
++ *
++ * Three passes, and what separates them is how many tools a round has to ask.
++ *
++ * **Coarse first.** A slice against a face it cuts exchanges a whole strip
++ * between two faces and leaves the other four alone: a lot of ground for four
++ * moves, and there are only a few thousand of them at any size. While a
++ * scrambled cube still has strips to trade this is where nearly every gain
++ * comes from, and doing it here keeps the answer short -- a stage built only
++ * from three-cycles would gain two or three a round from the beginning and run
++ * to twice the moves.
++ *
++ * **Then one cluster at a time.** When no strip is worth trading, what is left
++ * is scattered pieces, and those are moved by tools that stay inside a single
++ * closed set. A cluster has a few dozen to a few hundred of those against the
++ * tens of thousands in the whole list, and -- this is the point -- that number
++ * does not grow with the cube. So the last and longest part of the stage, the
++ * part that used to cost the most, stops caring how big the cube is.
++ *
++ * Judging a local tool by the whole board is not a shortcut that needs
++ * checking: it moves nothing outside its cluster, and a setup is a face turn
++ * which carries a cluster to itself, so its count over the board and its count
++ * over the cluster are the same number.
++ *
++ * **And the whole list when a cluster stops moving.** Some clusters are poorly
++ * served -- the six true centres of an odd cube are reached only by the middle
++ * slice -- and a greedy pass inside one can stand still. Rather than guess
++ * whether that happens, the round falls back to the search this stage has
++ * always used, which is known to find a gain whenever one is wanted. It is
++ * expensive and it is rare, and being rare is measured rather than assumed.
++ */
+ void build_centres(Work& work, const CentreWorkshop& shop)
+ {
+     const Board& board = shop.centres();
+@@ -1217,28 +1356,52 @@ void build_centres(Work& work, const CentreWorkshop& shop)
+ 
+     const int target = board.target();
+ 
++    std::vector<std::size_t> everything(tools.size());
++    for (std::size_t i = 0; i < everything.size(); ++i) everything[i] = i;
++
++    const auto play = [&](const Choice& choice) {
++        work.apply(before[choice.setup]);
++        for (const auto& step : tools[choice.tool].steps) work.apply(step);
++    };
++
+     for (int guard = 0; board.at_home(work.cube()) < target; ++guard) {
+         assert(guard < target * 2 + 8);
+-        const auto wanted = board.wanted(work.cube());
++        const auto choice = best_centre_tool(work, board, tools, sources,
++                                             shop.coarse(),
++                                             board.wanted(work.cube()));
++        if (!choice.found) break;
++        play(choice);
++    }
+ 
+-        Choice choice;
+-        int best = 0;
++    const auto& cluster_cells = shop.cluster_cells();
++    const auto& local_tools = shop.local_tools();
+ 
+-        for (std::size_t i = 0; i < tools.size(); ++i) {
+-            if (!worth_trying(tools[i].carries, wanted)) continue;
+-            for (std::size_t s = 0; s < sources.size(); ++s) {
+-                const int delta =
+-                    board.gain(work.cube(), sources[s], tools[i].moved);
+-                if (delta <= best) continue;
+-                best = delta;
+-                choice = Choice{i, s, true};
++    for (std::size_t which = 0; which < cluster_cells.size(); ++which) {
++        const auto& cells = cluster_cells[which];
++
++        for (int guard = 0;; ++guard) {
++            assert(guard < static_cast<int>(cells.size()) * 8 + 32);
++
++            bool done = true;
++            for (const int cell : cells) {
++                if (!board.settled(work.cube(), cell)) done = false;
++            }
++            if (done) break;
++
++            const auto wanted = board.wanted(work.cube());
++            auto choice = best_centre_tool(work, board, tools, sources,
++                                           local_tools[which], wanted);
++            if (!choice.found) {
++                choice = best_centre_tool(work, board, tools, sources,
++                                          everything, wanted);
+             }
+-        }
+ 
+-        assert(choice.found);
+-        work.apply(before[choice.setup]);
+-        for (const auto& step : tools[choice.tool].steps) work.apply(step);
++            assert(choice.found);
++            play(choice);
++        }
+     }
++
++    assert(board.at_home(work.cube()) == target);
+ }
+ 
+ /**

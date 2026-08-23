@@ -209,11 +209,13 @@ void write_header()
               << "           a reduction gathers the centres more than once\n"
               << "  finish = solve_as_three_layers on the reduced cube\n"
               << "  solve  = Reduction::solve, warm -- what a person waits for\n"
-              << "  moves  = after compress(); raw = before it\n\n"
+              << "  moves  = after compress(); raw = before it\n"
+              << "  c/e/f  = moves the centre stage, the rest of the "
+                 "reduction, and the finish spend\n\n"
               << " size |   prep |  centre |   edge* |  reduce | finish |"
-              << "   solve |  worst |  moves |    raw\n"
+              << "   solve |  worst |  moves |    raw |     c |     e |     f\n"
               << "------+--------+---------+---------+---------+--------+"
-              << "---------+--------+--------+-------\n";
+              << "---------+--------+--------+--------+-------+-------+------\n";
 }
 
 void write_row(const Measured& m)
@@ -229,7 +231,12 @@ void write_row(const Measured& m)
               << edge << " | " << std::setw(7) << m.reduction << " | "
               << std::setw(6) << m.finish << " | " << std::setw(7) << m.solve
               << " | " << std::setw(6) << m.solve_worst << " | " << std::setw(6)
-              << m.moves << " | " << std::setw(6) << m.moves_raw << "\n"
+              << m.moves << " | " << std::setw(6) << m.moves_raw << " | "
+              << std::setw(5) << m.centre_moves << " | " << std::setw(5)
+              << (m.reduction_moves > m.centre_moves
+                      ? m.reduction_moves - m.centre_moves
+                      : 0)
+              << " | " << std::setw(5) << m.finish_moves << "\n"
               << std::flush;
 }
 

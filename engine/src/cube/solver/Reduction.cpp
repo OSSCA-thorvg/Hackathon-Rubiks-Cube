@@ -340,20 +340,31 @@ struct Commutator {
     return before;
 }
 
+/** Whether a turn is one of the six outer faces rather than an inner slice. */
+[[nodiscard]] bool is_face_turn(const Turn& turn) noexcept
+{
+    return turn.first_depth == 1 && turn.last_depth == 1;
+}
+
+/** Where a sticker ends up after one turn. */
+[[nodiscard]] Facelet carried_one(Facelet cell, const Turn& step, int size)
+{
+    const auto move = to_move(step, size);
+    if ((move.layers & layer(coordinate_on(move.axis, cell.at))) == 0) {
+        return cell;
+    }
+    for (int i = 0, n = normalized_turns(move.quarter_turns); i < n; ++i) {
+        cell.at = turned_position(move.axis, cell.at, size);
+        cell.face = turned_face(move.axis, cell.face);
+    }
+    return cell;
+}
+
 /** Where a sticker ends up after a run of turns. */
 [[nodiscard]] Facelet carried_through(Facelet cell,
                                       const std::vector<Turn>& steps, int size)
 {
-    for (const auto& step : steps) {
-        const auto move = to_move(step, size);
-        if ((move.layers & layer(coordinate_on(move.axis, cell.at))) == 0) {
-            continue;
-        }
-        for (int i = 0, n = normalized_turns(move.quarter_turns); i < n; ++i) {
-            cell.at = turned_position(move.axis, cell.at, size);
-            cell.face = turned_face(move.axis, cell.face);
-        }
-    }
+    for (const auto& step : steps) cell = carried_one(cell, step, size);
     return cell;
 }
 
@@ -424,6 +435,34 @@ public:
             index_[slot_of(cells_[i])] = static_cast<int>(i);
         }
 
+        // Whether every cell here shows exactly one face, which is what a
+        // centre is. Told from the position rather than asked of the caller:
+        // a cell at an extreme on one axis and inside on the other two is on
+        // one face and no other.
+        centres_only_ = true;
+        for (const auto& cell : cells_) {
+            int extremes = 0;
+            for (const Axis axis : kAxes) {
+                const int at = coordinate_on(axis, cell.at);
+                if (at == 0 || at == size - 1) ++extremes;
+            }
+            if (extremes != 1) centres_only_ = false;
+        }
+
+        // Which cells lie at each coordinate along each axis, which is what
+        // `hops` reads a turn's layers with.
+        for (auto& axis : along_) {
+            axis.assign(static_cast<std::size_t>(size), {});
+        }
+        for (std::size_t i = 0; i < cells_.size(); ++i) {
+            for (const Axis axis : kAxes) {
+                const auto at = static_cast<std::size_t>(
+                    coordinate_on(axis, cells_[i].at));
+                along_[static_cast<std::size_t>(axis)][at].push_back(
+                    static_cast<int>(i));
+            }
+        }
+
         // Which faces have a cell asking for each colour. Nearly always the
         // one face that wears it, but a target that has two rows swapped puts
         // a colour on a face it does not belong to -- and this is read to say
@@ -474,16 +513,117 @@ public:
         return lands;
     }
 
-    /** The cells a run of turns actually moves, as "from here to there". */
+    /**
+     * The cells a run of turns actually moves, as "from here to there".
+     *
+     * Read from the layers the turns name rather than from the whole board.
+     * A cell no step of the run ever has in its layers is skipped by every
+     * one of them, so it is where it started -- and a commutator names four
+     * or eight layers out of a cube's worth. Working the whole board out to
+     * discover that is what made building a size's tables cost a minute at
+     * twenty-eight by twenty-eight, for an answer that is eight cells long.
+     *
+     * A step's layers are a set of *positions*, and a cell has reached its
+     * position by the time that step runs, so each one is carried back
+     * through the steps in front of it to say which cell started there. The
+     * result is a superset of what moves -- every candidate is then asked
+     * properly -- which is all it has to be.
+     *
+     * The pairs come out in cell order, as they did when the whole board was
+     * walked. That is not cosmetic: the edge stage puts these vectors in a
+     * set to tell two tools that do the same thing apart, and two orderings
+     * of the same permutation would be two entries.
+     */
     [[nodiscard]] std::vector<std::pair<int, int>> hops(
         const std::vector<Turn>& steps) const
     {
-        std::vector<std::pair<int, int>> moved;
-        const auto lands = landing(steps);
-        for (std::size_t i = 0; i < lands.size(); ++i) {
-            if (lands[i] != static_cast<int>(i)) {
-                moved.emplace_back(static_cast<int>(i), lands[i]);
+        // A face turn's layer is a whole face, which on a board of centres is
+        // most of what there is -- and walking it is what a run of eight turns
+        // spends nearly all of its preparation on. It can be left out, and
+        // exactly when is worth saying rather than assuming.
+        //
+        // On a board of centres a face turn moves that face's centres and no
+        // others: a centre of another face is inside on the turning axis, so
+        // the layer misses it. And it leaves them on their own face. So a cell
+        // that never falls in a *slice* is only ever spun by its own face's
+        // turns, and if those add up to nothing it ends where it began. Which
+        // is the condition below -- and when it does not hold, the face is
+        // walked after all.
+        std::array<int, kFaceCount> spun{};
+        for (const auto& step : steps) {
+            if (is_face_turn(step)) spun[face_index(step.face)] += step.turns;
+        }
+        bool faces_cancel = true;
+        for (const int turns : spun) {
+            if (normalized_turns(turns) != 0) faces_cancel = false;
+        }
+        const bool skip_faces = centres_only_ && faces_cancel;
+
+        // How many cells the layers name between them, before any of them are
+        // walked. A face turn on a small cube names most of the board, and
+        // carrying every one of those back through the steps in front of it
+        // costs more than reading the board straight through -- so when the
+        // layers are not the smaller half, the board is read straight through.
+        // Both roads end at the same pairs; this only picks the shorter.
+        std::size_t named = 0;
+        for (std::size_t k = 0; k < steps.size(); ++k) {
+            if (skip_faces && is_face_turn(steps[k])) continue;
+            const auto move = to_move(steps[k], size_);
+            const auto axis = static_cast<std::size_t>(move.axis);
+            for (int at = 0; at < size_; ++at) {
+                if ((move.layers & layer(at)) == 0) continue;
+                named += along_[axis][static_cast<std::size_t>(at)].size();
             }
+        }
+
+        std::vector<int> candidates;
+        if (named >= cells_.size()) {
+            candidates.resize(cells_.size());
+            for (std::size_t i = 0; i < candidates.size(); ++i) {
+                candidates[i] = static_cast<int>(i);
+            }
+            std::vector<std::pair<int, int>> moved;
+            for (const int i : candidates) {
+                const auto& cell = cells_[static_cast<std::size_t>(i)];
+                const int lands =
+                    index_[slot_of(carried_through(cell, steps, size_))];
+                assert(lands >= 0);
+                if (lands != i) moved.emplace_back(i, lands);
+            }
+            return moved;
+        }
+
+        std::vector<char> seen(cells_.size(), 0);
+
+        for (std::size_t k = 0; k < steps.size(); ++k) {
+            if (skip_faces && is_face_turn(steps[k])) continue;
+            const auto move = to_move(steps[k], size_);
+            const auto axis = static_cast<std::size_t>(move.axis);
+
+            for (int at = 0; at < size_; ++at) {
+                if ((move.layers & layer(at)) == 0) continue;
+                for (const int cell : along_[axis][static_cast<std::size_t>(at)]) {
+                    Facelet origin = cells_[static_cast<std::size_t>(cell)];
+                    for (std::size_t j = k; j-- > 0;) {
+                        origin = carried_one(origin, undone(steps[j]), size_);
+                    }
+                    const int started = index_[slot_of(origin)];
+                    assert(started >= 0);
+                    if (seen[static_cast<std::size_t>(started)]) continue;
+                    seen[static_cast<std::size_t>(started)] = 1;
+                    candidates.push_back(started);
+                }
+            }
+        }
+
+        std::sort(candidates.begin(), candidates.end());
+
+        std::vector<std::pair<int, int>> moved;
+        for (const int i : candidates) {
+            const auto& cell = cells_[static_cast<std::size_t>(i)];
+            const int lands = index_[slot_of(carried_through(cell, steps, size_))];
+            assert(lands >= 0);
+            if (lands != i) moved.emplace_back(i, lands);
         }
         return moved;
     }
@@ -609,6 +749,8 @@ private:
     std::vector<FaceColor> wants_;
     std::array<std::uint8_t, kFaceCount> asked_for_{};
     std::vector<int> index_;
+    std::array<std::vector<std::vector<int>>, 3> along_;
+    bool centres_only_ = false;
 };
 
 /**
@@ -670,12 +812,6 @@ private:
         }
     }
     return steps;
-}
-
-/** Whether a turn is one of the six outer faces rather than an inner slice. */
-[[nodiscard]] bool is_face_turn(const Turn& turn) noexcept
-{
-    return turn.first_depth == 1 && turn.last_depth == 1;
 }
 
 /** One tool, worked out once and read every round. */

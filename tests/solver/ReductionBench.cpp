@@ -256,3 +256,33 @@ TEST_CASE("what a reduction costs at the sizes that take minutes", "[.bench]")
     }
     std::cout << std::endl;
 }
+
+/**
+ * Every move of every solution, printed so two builds can be diffed.
+ *
+ * The optimisations this phase makes to the search are meant to change what is
+ * looked at and not what is chosen. That is a claim about two versions of the
+ * code, which no single run can check -- so this prints the solutions, and the
+ * check is `diff` between a run before a change and a run after it.
+ *
+ * Hidden behind its own tag rather than `[.bench]`, because it is wanted at a
+ * different moment: a benchmark is read, this is compared.
+ */
+TEST_CASE("every solution, move by move", "[.dump]")
+{
+    for (const int size : {4, 5, 6, 7, 8, 9}) {
+        Reduction solver;
+        for (const std::uint32_t seed : kSeeds) {
+            const auto cube = scrambled(seed, size);
+            const auto moves = solver.solve(cube);
+
+            std::cout << "size " << size << " seed " << seed << " moves "
+                      << moves.size() << "\n";
+            for (const auto& move : moves) {
+                std::cout << "  " << static_cast<int>(move.axis) << " "
+                          << move.layers << " " << move.quarter_turns << "\n";
+            }
+        }
+    }
+    std::cout << std::flush;
+}

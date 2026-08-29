@@ -93,6 +93,30 @@ struct NetGuide {
     NetCell cell;
 };
 
+/**
+ * The net drawn from a colouring of stickers instead of from a cube.
+ *
+ * What somebody is painting is not a cube yet and mostly will not be one until
+ * the last square is right, so there is no `CubeState` to hand this -- and
+ * making one would mean building a cube nobody has checked, which is the one
+ * thing the domain will not do. A painting is the weaker thing, and this draws
+ * the weaker thing.
+ *
+ * The colours arrive in the order `cube::surface_stickers()` counts them, the
+ * same order the reading blames squares in, so that what a refusal points at
+ * and what is drawn cannot disagree.
+ *
+ * `blamed` is outlined rather than filled over: the colour of a square that is
+ * being complained about is exactly what its owner needs to see while mending
+ * it.
+ */
+[[nodiscard]] RenderScene build_net_painting(
+    const std::vector<cube::FaceColor>& painting, int size, const Rect& rect,
+    Palette palette, const std::vector<int>& blamed);
+
+/** Blamed-square outline thickness, as a share of one cell. */
+inline constexpr float kNetBlameWidthCells = 0.12f;
+
 /** Guide line thickness, as a share of one cell. */
 inline constexpr float kNetGuideWidthCells = 0.14f;
 

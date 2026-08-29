@@ -11,7 +11,9 @@ import type { TimerEnvironment } from '../../src/game/SolveTimer.ts';
 import {
   CubeFace,
   CubeFlatStyle,
+  CubePaintFault,
   CubePalette,
+  CubeStickerColour,
   CubeViewMode,
   MAX_CUBE_SIZE,
   MIN_CUBE_SIZE,
@@ -53,6 +55,31 @@ function createUi(): GameUi {
     <output id="speed-value"></output>
     <button data-face="r" data-turn="1" type="button">R</button>
     <button data-face="r" data-turn="-1" type="button">R prime</button>
+    <button id="paint" type="button" aria-pressed="false">Paint</button>
+    <section id="paint-bar" hidden>
+      <button data-sticker="2" type="button" aria-pressed="true">
+        <span data-sticker-tally="2">0/9</span>
+      </button>
+      <button data-sticker="3" type="button" aria-pressed="false">
+        <span data-sticker-tally="3">0/9</span>
+      </button>
+      <button data-sticker="4" type="button" aria-pressed="false">
+        <span data-sticker-tally="4">0/9</span>
+      </button>
+      <button data-sticker="5" type="button" aria-pressed="false">
+        <span data-sticker-tally="5">0/9</span>
+      </button>
+      <button data-sticker="0" type="button" aria-pressed="false">
+        <span data-sticker-tally="0">0/9</span>
+      </button>
+      <button data-sticker="1" type="button" aria-pressed="false">
+        <span data-sticker-tally="1">0/9</span>
+      </button>
+      <button id="paint-fill" type="button" aria-pressed="false">Fill face</button>
+      <button id="paint-apply" type="button">Use this cube</button>
+      <button id="paint-cancel" type="button">Cancel</button>
+      <p id="paint-note"></p>
+    </section>
     <ol id="move-log"></ol>
     <p id="record-best"></p>
     <ol id="record-list"></ol>
@@ -91,6 +118,15 @@ function createUi(): GameUi {
     speedInput: root.querySelector<HTMLInputElement>('#speed')!,
     speedValue: root.querySelector<HTMLOutputElement>('#speed-value')!,
     moveButtons: [...root.querySelectorAll<HTMLButtonElement>('[data-face]')],
+    paintButton: root.querySelector<HTMLButtonElement>('#paint')!,
+    paintBar: root.querySelector<HTMLElement>('#paint-bar')!,
+    paintSwatches: [
+      ...root.querySelectorAll<HTMLButtonElement>('[data-sticker]'),
+    ],
+    paintFillButton: root.querySelector<HTMLButtonElement>('#paint-fill')!,
+    paintApplyButton: root.querySelector<HTMLButtonElement>('#paint-apply')!,
+    paintCancelButton: root.querySelector<HTMLButtonElement>('#paint-cancel')!,
+    paintNote: root.querySelector<HTMLElement>('#paint-note')!,
   };
 }
 
@@ -116,6 +152,11 @@ function createHarness(
   let viewMode = CubeViewMode.Both;
   let flatStyle = CubeFlatStyle.Net;
   let palette = CubePalette.Classic;
+  let painting = false;
+  let touched = false;
+  let filling = false;
+  let brush: CubeStickerColour = CubeStickerColour.White;
+  let fault: CubePaintFault = CubePaintFault.None;
   // Clamped the way the engine clamps, so the control is tested against the
   // answer it will actually be given rather than the one it asked for.
   let speedScale = 1;
@@ -230,6 +271,43 @@ function createHarness(
       busy = false;
     }),
     isAmbient: vi.fn((): boolean => watching),
+
+    // The draft, kept the way the engine keeps it: its presence is what "is
+    // being painted" means, and the one thing this fake decides for itself is
+    // that a colouring which was never touched is a cube -- which is true of
+    // the real one too, since a draft opens as a copy of what is on the cube.
+    beginPainting: vi.fn((): boolean => {
+      if (busy || painting) return false;
+      painting = true;
+      touched = false;
+      fault = CubePaintFault.None;
+      return true;
+    }),
+    cancelPainting: vi.fn((): void => {
+      painting = false;
+    }),
+    isPainting: vi.fn((): boolean => painting),
+    setBrush: vi.fn((colour: CubeStickerColour): void => {
+      brush = colour;
+      touched = true;
+    }),
+    brush: vi.fn((): CubeStickerColour => brush),
+    paintedCount: vi.fn((): number => cubeSize * cubeSize),
+    applyPainting: vi.fn((): boolean => {
+      if (touched) {
+        fault = CubePaintFault.ColourCount;
+        return false;
+      }
+      painting = false;
+      fault = CubePaintFault.None;
+      return true;
+    }),
+    paintFault: vi.fn((): CubePaintFault => fault),
+    setFilling: vi.fn((wholeFace: boolean): boolean => {
+      filling = wholeFace;
+      return true;
+    }),
+    isFilling: vi.fn((): boolean => filling),
     isSolved: vi.fn((): boolean => solved),
     committedMoveCount: vi.fn((): number =>
       cursor > scrambleEnd ? cursor - scrambleEnd : 0,
@@ -1837,3 +1915,101 @@ describe('a controller attached to a cube that was already restored', () => {
     expect(harness.ui.shareButton.disabled).toBe(false);
   });
 });
+
+describe('colouring a real cube onto the net', () => {
+  it('opens a draft, shows the picker, and puts it away again', () => {
+    const harness = createHarness();
+
+    expect(harness.ui.paintBar.hidden).toBe(true);
+    expect(harness.ui.paintButton.getAttribute('aria-pressed')).toBe('false');
+
+    harness.ui.paintButton.click();
+
+    expect(harness.engine.beginPainting).toHaveBeenCalled();
+    expect(harness.ui.paintBar.hidden).toBe(false);
+    expect(harness.ui.paintButton.getAttribute('aria-pressed')).toBe('true');
+
+    // Pressed again means put it away, and the cube was never touched.
+    harness.ui.paintButton.click();
+
+    expect(harness.engine.cancelPainting).toHaveBeenCalled();
+    expect(harness.ui.paintBar.hidden).toBe(true);
+  });
+
+  it('stops watching before it takes a copy of the cube', () => {
+    const harness = createHarness();
+    harness.ui.ambientButton.click();
+    expect(harness.engine.isAmbient()).toBe(true);
+
+    harness.ui.paintButton.click();
+
+    // A draft taken mid-pattern would be a copy of a moment nobody chose.
+    expect(harness.engine.isAmbient()).toBe(false);
+    expect(harness.engine.isPainting()).toBe(true);
+  });
+
+  it('presses one colour at a time and counts what each still needs', () => {
+    const harness = createHarness();
+    harness.ui.paintButton.click();
+
+    const white = harness.ui.paintSwatches.find(
+      (button) => button.dataset.sticker === '2',
+    )!;
+    const red = harness.ui.paintSwatches.find(
+      (button) => button.dataset.sticker === '0',
+    )!;
+
+    expect(white.getAttribute('aria-pressed')).toBe('true');
+    red.click();
+
+    expect(harness.engine.setBrush).toHaveBeenCalledWith(0);
+    expect(red.getAttribute('aria-pressed')).toBe('true');
+    expect(white.getAttribute('aria-pressed')).toBe('false');
+
+    // Nine of nine on a three by three, written where the colour is picked so
+    // that a face copied down short is caught before it is submitted.
+    const tally = red.querySelector<HTMLElement>('[data-sticker-tally]')!;
+    expect(tally.textContent).toBe('9/9');
+    expect(tally.dataset.short).toBe('false');
+  });
+
+  it('takes a colouring that is a cube and leaves the draft behind', () => {
+    const harness = createHarness();
+    harness.ui.paintButton.click();
+    harness.ui.paintApplyButton.click();
+
+    expect(harness.engine.applyPainting).toHaveBeenCalled();
+    expect(harness.ui.paintBar.hidden).toBe(true);
+    expect(harness.ui.status.textContent).toContain('your cube now');
+  });
+
+  it('keeps the draft open when the colouring is not a cube, and says why', () => {
+    const harness = createHarness();
+    harness.ui.paintButton.click();
+
+    // Any change at all is refused by the fake, which is how a refusal is
+    // reached without this test having to know what makes a cube.
+    harness.ui.paintSwatches[1]!.click();
+    harness.ui.paintApplyButton.click();
+
+    expect(harness.ui.paintBar.hidden).toBe(false);
+    expect(harness.ui.paintNote.textContent).toContain('too many squares');
+  });
+
+  it('presses Fill face on and off', () => {
+    const harness = createHarness();
+    harness.ui.paintButton.click();
+
+    expect(harness.ui.paintFillButton.getAttribute('aria-pressed')).toBe(
+      'false',
+    );
+    harness.ui.paintFillButton.click();
+    expect(harness.ui.paintFillButton.getAttribute('aria-pressed')).toBe('true');
+    expect(harness.engine.isFilling()).toBe(true);
+
+    harness.ui.paintFillButton.click();
+    expect(harness.ui.paintFillButton.getAttribute('aria-pressed')).toBe(
+      'false',
+    );
+  });
+})

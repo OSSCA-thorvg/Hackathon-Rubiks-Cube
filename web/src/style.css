@@ -359,6 +359,101 @@ input:focus-visible,
   justify-content: center;
 }
 
+/*
+ * Colouring a real cube onto the net.
+ *
+ * Below the view bar rather than inside the settings surface: this is work
+ * somebody is doing and not a preference they set once, and it has to stay in
+ * sight the whole time they are doing it.
+ */
+.paint-bar {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-surface);
+}
+
+.paint-bar__swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.swatch {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.swatch[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.swatch__chip {
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid rgb(0 0 0 / 25%);
+  border-radius: 0.25rem;
+}
+
+/*
+ * The six sticker colours, written out here because this is the one place a
+ * person picks a sticker by looking at it. They are the palette's classic
+ * shades: the chip has to be the colour the cube will be drawn in, or the
+ * picker is naming one thing and the net showing another.
+ */
+[data-sticker-chip='0'] { background: rgb(183 18 52); }
+[data-sticker-chip='1'] { background: rgb(255 88 0); }
+[data-sticker-chip='2'] { background: rgb(255 255 255); }
+[data-sticker-chip='3'] { background: rgb(255 213 0); }
+[data-sticker-chip='4'] { background: rgb(0 155 72); }
+[data-sticker-chip='5'] { background: rgb(0 70 173); }
+
+.swatch__tally {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Short of what it needs, said in weight and colour rather than colour alone. */
+.swatch__tally[data-short='true'] {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.paint-bar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.paint-bar__note:empty {
+  display: none;
+}
+
+.paint-bar__note {
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--color-danger-border);
+  border-radius: 0.5rem;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
 .status-line {
   min-height: 1.35rem;
   margin: 0;

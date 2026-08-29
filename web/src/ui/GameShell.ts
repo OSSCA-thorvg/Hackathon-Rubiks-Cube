@@ -129,7 +129,51 @@ export function createGameShell(host: HTMLElement): GameShell {
     </div>
 
     <button class="button" type="button" id="ambient" aria-pressed="false">Watch</button>
+    <button class="button" type="button" id="paint" aria-pressed="false">Paint</button>
   </div>
+
+  <section class="paint-bar" id="paint-bar" aria-label="Colour your cube" hidden>
+    <div class="paint-bar__swatches" role="group" aria-label="Sticker colour">
+      <button class="swatch" type="button" data-sticker="2" aria-pressed="true">
+        <span class="swatch__chip" data-sticker-chip="2" aria-hidden="true"></span>
+        <span class="swatch__name">White</span>
+        <span class="swatch__tally" data-sticker-tally="2">0/9</span>
+      </button>
+      <button class="swatch" type="button" data-sticker="3" aria-pressed="false">
+        <span class="swatch__chip" data-sticker-chip="3" aria-hidden="true"></span>
+        <span class="swatch__name">Yellow</span>
+        <span class="swatch__tally" data-sticker-tally="3">0/9</span>
+      </button>
+      <button class="swatch" type="button" data-sticker="4" aria-pressed="false">
+        <span class="swatch__chip" data-sticker-chip="4" aria-hidden="true"></span>
+        <span class="swatch__name">Green</span>
+        <span class="swatch__tally" data-sticker-tally="4">0/9</span>
+      </button>
+      <button class="swatch" type="button" data-sticker="5" aria-pressed="false">
+        <span class="swatch__chip" data-sticker-chip="5" aria-hidden="true"></span>
+        <span class="swatch__name">Blue</span>
+        <span class="swatch__tally" data-sticker-tally="5">0/9</span>
+      </button>
+      <button class="swatch" type="button" data-sticker="0" aria-pressed="false">
+        <span class="swatch__chip" data-sticker-chip="0" aria-hidden="true"></span>
+        <span class="swatch__name">Red</span>
+        <span class="swatch__tally" data-sticker-tally="0">0/9</span>
+      </button>
+      <button class="swatch" type="button" data-sticker="1" aria-pressed="false">
+        <span class="swatch__chip" data-sticker-chip="1" aria-hidden="true"></span>
+        <span class="swatch__name">Orange</span>
+        <span class="swatch__tally" data-sticker-tally="1">0/9</span>
+      </button>
+    </div>
+
+    <div class="paint-bar__actions">
+      <button class="button" type="button" id="paint-fill">Fill face</button>
+      <button class="button button--primary" type="button" id="paint-apply">Use this cube</button>
+      <button class="button" type="button" id="paint-cancel">Cancel</button>
+    </div>
+
+    <p class="paint-bar__note" id="paint-note" role="alert"></p>
+  </section>
 
   <p class="status-line" id="status" role="status" aria-live="polite">Loading engine…</p>
 
@@ -263,6 +307,13 @@ export function createGameShell(host: HTMLElement): GameShell {
     ambientButton: requireElement<HTMLButtonElement>(root, '#ambient'),
     homeViewButton: requireElement<HTMLButtonElement>(root, '#home-view'),
     viewButtons: requireAll<HTMLButtonElement>(root, '[data-view]'),
+    paintButton: requireElement<HTMLButtonElement>(root, '#paint'),
+    paintBar: requireElement<HTMLElement>(root, '#paint-bar'),
+    paintSwatches: requireAll<HTMLButtonElement>(root, '[data-sticker]'),
+    paintFillButton: requireElement<HTMLButtonElement>(root, '#paint-fill'),
+    paintApplyButton: requireElement<HTMLButtonElement>(root, '#paint-apply'),
+    paintCancelButton: requireElement<HTMLButtonElement>(root, '#paint-cancel'),
+    paintNote: requireElement<HTMLElement>(root, '#paint-note'),
     flatButtons: requireAll<HTMLButtonElement>(root, '[data-flat]'),
     paletteButtons: requireAll<HTMLButtonElement>(root, '[data-palette]'),
     muteButton: requireElement<HTMLButtonElement>(root, '#mute'),

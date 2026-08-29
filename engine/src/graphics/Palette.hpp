@@ -41,4 +41,15 @@ enum class Palette { Classic, HighContrast };
  */
 [[nodiscard]] Color guide_color(cube::Axis axis) noexcept;
 
+/**
+ * The colour a square is ringed in when a painting is being complained about.
+ *
+ * Near-white and nearly opaque, which is the one thing left after the six
+ * stickers and the three guides have taken their hues: a complaint has to read
+ * over any of the six it might land on, and must not be mistaken for a fourth
+ * axis. Its job is to be seen and to leave the colour underneath visible,
+ * since that colour is exactly what its owner is being asked to look at.
+ */
+[[nodiscard]] Color blame_color() noexcept;
+
 }  // namespace rubiks::graphics

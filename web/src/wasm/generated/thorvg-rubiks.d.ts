@@ -144,6 +144,20 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_reset_view(): void;
   /** Returns 1 while a gesture, animation, or pending commit is active. */
   _thorvg_rubiks_is_busy(): number;
+  _thorvg_rubiks_paint_begin(): number;
+  _thorvg_rubiks_paint_cancel(): void;
+  _thorvg_rubiks_is_painting(): number;
+  _thorvg_rubiks_set_paint_brush(colour: number): number;
+  _thorvg_rubiks_paint_brush(): number;
+  _thorvg_rubiks_paint_at(x: number, y: number): number;
+  _thorvg_rubiks_paint_fill(x: number, y: number): number;
+  _thorvg_rubiks_set_paint_filling(wholeFace: number): number;
+  _thorvg_rubiks_is_paint_filling(): number;
+  _thorvg_rubiks_painted_count(colour: number): number;
+  _thorvg_rubiks_paint_apply(): number;
+  _thorvg_rubiks_paint_fault(): number;
+  _thorvg_rubiks_paint_blamed_count(): number;
+  _thorvg_rubiks_paint_blamed_at(index: number): number;
 };
 
 /** Factory that creates one engine module instance. */

@@ -10,6 +10,7 @@
 #include "cube/Cubie.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/NetGeometry.hpp"
+#include "graphics/Palette.hpp"
 
 // Colouring a real cube onto the net: what a draft is while it is open, what
 // it takes to be believed, and what the application looks like afterwards.
@@ -47,6 +48,16 @@ struct Aim {
                    (static_cast<float>(col) + 0.5f) * cell,
                net.y + static_cast<float>(block.row) * side +
                    (static_cast<float>(row) + 0.5f) * cell};
+}
+
+/** The four bytes drawn at a point of the canvas. */
+const std::uint8_t* pixel_at(float x, float y)
+{
+    const auto* bytes =
+        reinterpret_cast<const std::uint8_t*>(rubiks::app::pixel_buffer());
+    const auto column = static_cast<std::size_t>(x);
+    const auto row = static_cast<std::size_t>(y);
+    return bytes + (row * kCanvas + column) * 4;
 }
 
 /** How many stickers of the draft carry a colour. */
@@ -233,4 +244,50 @@ TEST_CASE("nothing about painting answers before the engine is up")
     CHECK(rubiks::app::painting_blamed_count() == 0);
     CHECK(rubiks::app::painting_draft().empty());
     rubiks::app::cancel_painting();
+}
+
+TEST_CASE("the net draws the draft, and rings what a refusal points at")
+{
+    // The layout is left as it comes, because `front_cell` aims with the same
+    // default one -- a view mode set here and not there would have the test
+    // pressing in one net and reading pixels out of another.
+    const EngineLifecycle engine(kCanvas, kCanvas);
+    REQUIRE(rubiks::app::begin_painting());
+    REQUIRE(rubiks::app::set_brush(rubiks::cube::FaceColor::Red));
+
+    const auto aim = front_cell(1, 1, 3);
+    REQUIRE(rubiks::app::paint_at(aim.x, aim.y));
+    REQUIRE(rubiks::app::render());
+
+    // What is on screen is the draft and not the cube: the cube's front face
+    // is still every bit green, and this square is not.
+    const auto red = rubiks::graphics::to_color(rubiks::cube::FaceColor::Red,
+                                                rubiks::graphics::Palette::Classic);
+    const auto* painted = pixel_at(aim.x, aim.y);
+    CHECK(painted[0] == red.r);
+    CHECK(painted[1] == red.g);
+    CHECK(painted[2] == red.b);
+    CHECK(rubiks::app::is_solved());
+
+    // Refused, the square it points at is ringed -- and the colour underneath
+    // is still there to be looked at, which is the point of ringing rather
+    // than painting over.
+    CHECK_FALSE(rubiks::app::apply_painting());
+    REQUIRE(rubiks::app::painting_blamed_count() > 0);
+    REQUIRE(rubiks::app::render());
+
+    const auto* middle = pixel_at(aim.x, aim.y);
+    CHECK(middle[0] == red.r);
+    CHECK(middle[1] == red.g);
+    CHECK(middle[2] == red.b);
+
+    // The draft goes back to the cube when the draft goes.
+    rubiks::app::cancel_painting();
+    REQUIRE(rubiks::app::render());
+    const auto green = rubiks::graphics::to_color(
+        rubiks::cube::FaceColor::Green, rubiks::graphics::Palette::Classic);
+    const auto* restored = pixel_at(aim.x, aim.y);
+    CHECK(restored[0] == green.r);
+    CHECK(restored[1] == green.g);
+    CHECK(restored[2] == green.b);
 }

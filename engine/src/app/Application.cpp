@@ -231,6 +231,10 @@ struct ApplicationState {
         cube::FaceColor brush = cube::FaceColor::White;
         cube::PaintReading reading;
 
+        // Whether a press covers the face it lands on rather than the one
+        // square. Held with the draft because it means nothing without one.
+        bool filling = false;
+
         // Whether a press is still down. A drag across the net colours every
         // cell it crosses, which is how a face gets copied off a real cube
         // without lifting the finger between squares.
@@ -843,7 +847,8 @@ bool pointer_down(float x, float y) noexcept
     // may move while somebody is writing down what is on theirs, and a drag
     // from this press carries the brush rather than a layer.
     if (state->paint) {
-        state->paint->stroking = paint_at(x, y);
+        state->paint->stroking = state->paint->filling ? fill_face_at(x, y)
+                                                       : paint_at(x, y);
         return state->paint->stroking;
     }
 
@@ -982,7 +987,17 @@ bool render() noexcept
 
     const auto flat = flat_parts();
 
-    if (flat.net) {
+    if (flat.net && state->paint) {
+        // A draft is drawn instead of the cube, because a draft is what is
+        // being edited and mostly is not a cube at all until the last square
+        // is right. No guides either: nothing here turns, so there is nowhere
+        // for a guide to promise.
+        graphics::append_scene(
+            scene, graphics::build_net_painting(
+                       state->paint->stickers, size_of_cube(),
+                       state->placement.net, state->palette,
+                       state->paint->reading.blamed));
+    } else if (flat.net) {
         // The net is already screen-space, so it only has to be appended. It
         // gets the same rotation as the 3D scene, which is what makes one
         // gesture move every view in the same frame.
@@ -1202,6 +1217,18 @@ bool paint_at(float x, float y) noexcept
     state->paint->stickers[static_cast<std::size_t>(slot)] =
         state->paint->brush;
     return true;
+}
+
+bool set_filling(bool whole_face) noexcept
+{
+    if (!state || !state->paint) return false;
+    state->paint->filling = whole_face;
+    return true;
+}
+
+bool is_filling() noexcept
+{
+    return state && state->paint && state->paint->filling;
 }
 
 bool fill_face_at(float x, float y) noexcept

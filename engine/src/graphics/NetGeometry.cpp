@@ -476,6 +476,80 @@ RenderScene build_net_scene(const cube::CubeState& state, const Rect& rect,
     return scene;
 }
 
+RenderScene build_net_painting(const std::vector<cube::FaceColor>& painting,
+                               int size, const Rect& rect, Palette palette,
+                               const std::vector<int>& blamed)
+{
+    const auto all = cube::surface_stickers(size);
+    if (painting.size() != all.size()) return {};
+
+    // Where each sticker sits in the painting, laid out flat so that a cell of
+    // the net can be turned into a colour without a search per square.
+    std::vector<int> at(static_cast<std::size_t>(size) * size * size *
+                            cube::kFaceCount,
+                        -1);
+    const auto slot_of = [size](const cube::SurfaceSticker& s) {
+        return (static_cast<std::size_t>((s.x * size + s.y) * size + s.z)) *
+                   cube::kFaceCount +
+               cube::face_index(s.face);
+    };
+    for (std::size_t i = 0; i < all.size(); ++i) {
+        at[slot_of(all[i])] = static_cast<int>(i);
+    }
+
+    const NetMetrics metrics = net_metrics(rect, size);
+
+    RenderScene scene;
+    scene.faces.reserve(static_cast<std::size_t>(6 * size * size));
+
+    for (const auto face : net_faces()) {
+        const Vec2 origin = net_face_origin(face, rect);
+
+        for (int row = 0; row < size; ++row) {
+            for (int col = 0; col < size; ++col) {
+                const auto cell = net_cell(face, col, row, size);
+                const int index = at[slot_of(cell)];
+                if (index < 0) continue;
+
+                RenderFace quad = sticker_quad(origin, col, row, metrics);
+                quad.color = to_color(
+                    painting[static_cast<std::size_t>(index)], palette);
+                scene.faces.push_back(quad);
+            }
+        }
+    }
+
+    // The squares a refusal points at, ringed in the colour the axis guides do
+    // not use, so a complaint reads as a complaint and not as another axis.
+    const float width = kNetBlameWidthCells * net_cell_side(rect, size);
+    for (const int index : blamed) {
+        if (index < 0 || static_cast<std::size_t>(index) >= all.size()) continue;
+
+        const auto placed = net_position(all[static_cast<std::size_t>(index)],
+                                         size);
+        if (!placed) continue;
+
+        const Vec2 middle =
+            net_cell_center(placed->face, placed->col, placed->row, rect, size);
+        const float half = 0.5f * kNetStickerScale * net_cell_side(rect, size);
+
+        RenderStroke ring;
+        ring.start = Vec2{middle.x - half, middle.y - half};
+        ring.closed = true;
+        ring.width = width;
+        ring.color = blame_color();
+        for (const auto& corner :
+             {Vec2{middle.x + half, middle.y - half},
+              Vec2{middle.x + half, middle.y + half},
+              Vec2{middle.x - half, middle.y + half},
+              Vec2{middle.x - half, middle.y - half}}) {
+            ring.segments.push_back(RenderSegment{corner, corner, corner});
+        }
+        scene.strokes.push_back(std::move(ring));
+    }
+    return scene;
+}
+
 RenderScene build_net_scene(const cube::CubeState& state, const Rect& rect,
                             const std::optional<ActiveRotation>& active,
                             Palette palette)

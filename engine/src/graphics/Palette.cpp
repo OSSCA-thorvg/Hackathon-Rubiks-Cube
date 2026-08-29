@@ -92,4 +92,9 @@ Color guide_color(cube::Axis axis) noexcept
     return Color{176, 255, 64, 235};
 }
 
+Color blame_color() noexcept
+{
+    return Color{250, 250, 250, 245};
+}
+
 }  // namespace rubiks::graphics

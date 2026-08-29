@@ -476,6 +476,16 @@ void cancel_painting() noexcept;
 [[nodiscard]] bool paint_at(float x, float y) noexcept;
 
 /**
+ * Whether a press lays the brush on one cell or on the whole face.
+ *
+ * A mode rather than a second gesture, because a button on the page has no
+ * point on the net to act at -- and "press Fill, then press the face" is one
+ * thing to learn where a modifier key or a double press would be two.
+ */
+[[nodiscard]] bool set_filling(bool whole_face) noexcept;
+[[nodiscard]] bool is_filling() noexcept;
+
+/**
  * Lays the brush on every cell of the face under a point.
  *
  * A four by four is ninety-six cells and a twenty-eight is four thousand seven

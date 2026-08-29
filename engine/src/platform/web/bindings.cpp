@@ -426,6 +426,101 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_palette() noexcept
     return static_cast<int>(rubiks::app::palette());
 }
 
+/**
+ * Colouring a real cube onto the net.
+ *
+ * Ten small calls rather than one that carries a buffer, because a person
+ * colours one square at a time and the browser has nothing to hand over in
+ * bulk -- the draft lives in the engine and is drawn from there, so what
+ * crosses this boundary is a press and a colour.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_begin() noexcept
+{
+    return rubiks::app::begin_painting() ? 1 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_paint_cancel() noexcept
+{
+    rubiks::app::cancel_painting();
+}
+
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_is_painting() noexcept
+{
+    return rubiks::app::is_painting() ? 1 : 0;
+}
+
+/** Chooses the colour a press lays down; invalid values are rejected. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_paint_brush(int colour) noexcept
+{
+    constexpr int kFirst = static_cast<int>(rubiks::cube::FaceColor::Red);
+    constexpr int kLast = static_cast<int>(rubiks::cube::FaceColor::Blue);
+    if (colour < kFirst || colour > kLast) return 0;
+
+    return rubiks::app::set_brush(
+               static_cast<rubiks::cube::FaceColor>(colour))
+               ? 1
+               : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_brush() noexcept
+{
+    return static_cast<int>(rubiks::app::brush());
+}
+
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_at(float x, float y) noexcept
+{
+    return rubiks::app::paint_at(x, y) ? 1 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_fill(float x, float y) noexcept
+{
+    return rubiks::app::fill_face_at(x, y) ? 1 : 0;
+}
+
+/** Whether a press covers the whole face it lands on. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_paint_filling(int whole_face) noexcept
+{
+    return rubiks::app::set_filling(whole_face != 0) ? 1 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_is_paint_filling() noexcept
+{
+    return rubiks::app::is_filling() ? 1 : 0;
+}
+
+/** How many of a colour the draft carries; zero for an invalid colour. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_painted_count(int colour) noexcept
+{
+    constexpr int kFirst = static_cast<int>(rubiks::cube::FaceColor::Red);
+    constexpr int kLast = static_cast<int>(rubiks::cube::FaceColor::Blue);
+    if (colour < kFirst || colour > kLast) return 0;
+
+    return rubiks::app::painted_count(
+        static_cast<rubiks::cube::FaceColor>(colour));
+}
+
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_apply() noexcept
+{
+    return rubiks::app::apply_painting() ? 1 : 0;
+}
+
+/** The last refusal as a cube::PaintFault integer; zero is None. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_fault() noexcept
+{
+    return static_cast<int>(rubiks::app::painting_fault());
+}
+
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_blamed_count() noexcept
+{
+    return rubiks::app::painting_blamed_count();
+}
+
+/** One blamed sticker's number, or -1 past the end. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_blamed_at(int index) noexcept
+{
+    return rubiks::app::painting_blamed_at(index);
+}
+
 /** Chooses the ground the cube is drawn against; invalid values are rejected. */
 EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_canvas_theme(int theme) noexcept
 {

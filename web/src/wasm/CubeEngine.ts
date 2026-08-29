@@ -90,6 +90,60 @@ export const CubePalette = {
 export type CubePalette = (typeof CubePalette)[keyof typeof CubePalette];
 
 /**
+ * The six sticker colours, as the C ABI numbers them.
+ *
+ * Not shades. These name which sticker a square is -- red, orange, white,
+ * yellow, green, blue -- and what each is drawn in is the palette's business,
+ * which is why somebody colouring their own cube picks from six identities
+ * rather than from a colour wheel.
+ */
+export const CubeStickerColour = {
+  Red: 0,
+  Orange: 1,
+  White: 2,
+  Yellow: 3,
+  Green: 4,
+  Blue: 5,
+} as const;
+
+/** One sticker colour. */
+export type CubeStickerColour =
+  (typeof CubeStickerColour)[keyof typeof CubeStickerColour];
+
+/** Every sticker colour, in the order the engine numbers them. */
+export const STICKER_COLOURS: readonly CubeStickerColour[] = [
+  CubeStickerColour.Red,
+  CubeStickerColour.Orange,
+  CubeStickerColour.White,
+  CubeStickerColour.Yellow,
+  CubeStickerColour.Green,
+  CubeStickerColour.Blue,
+];
+
+/**
+ * Why a colouring was refused, as the C ABI numbers `cube::PaintFault`.
+ *
+ * Held here as well as in the engine because the page has a sentence to write
+ * for each of them, and a number arriving that this build has no sentence for
+ * is a mismatch worth noticing rather than a blank line.
+ */
+export const CubePaintFault = {
+  None: 0,
+  ColourCount: 1,
+  OrbitCount: 2,
+  OppositePairs: 3,
+  ImpossiblePiece: 4,
+  RepeatedPiece: 5,
+  CornerTwist: 6,
+  EdgeFlip: 7,
+  Permutation: 8,
+} as const;
+
+/** One reason a colouring was refused. */
+export type CubePaintFault =
+  (typeof CubePaintFault)[keyof typeof CubePaintFault];
+
+/**
  * The ground the software canvas is cleared to, as the C ABI numbers it.
  *
  * Two values where the page offers three: `System` is a question about the
@@ -843,6 +897,119 @@ export class CubeEngine {
   isBusy(): boolean {
     this.assertUsable();
     return this.module._thorvg_rubiks_is_busy() !== 0;
+  }
+
+  /**
+   * Opens a draft of the cube as it stands, for somebody to colour.
+   *
+   * Refused rather than thrown on, because both refusals are ordinary: a
+   * sequence is playing, or a draft is already open. Neither is a fault the
+   * page should stop for.
+   */
+  beginPainting(): boolean {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_paint_begin() !== 0;
+  }
+
+  /** Throws the draft away; the cube was never touched. */
+  cancelPainting(): void {
+    this.assertUsable();
+    this.module._thorvg_rubiks_paint_cancel();
+  }
+
+  isPainting(): boolean {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_is_painting() !== 0;
+  }
+
+  /** Chooses the colour a press lays down. Throws only for a colour that is not one. */
+  setBrush(colour: CubeStickerColour): void {
+    this.assertUsable();
+    if (this.module._thorvg_rubiks_set_paint_brush(colour) === 0) {
+      throw new Error(`Engine rejected brush colour ${colour}.`);
+    }
+  }
+
+  brush(): CubeStickerColour {
+    this.assertUsable();
+    const colour = this.module._thorvg_rubiks_paint_brush();
+    if (!STICKER_COLOURS.includes(colour as CubeStickerColour)) {
+      throw new Error(`Engine returned an invalid brush colour ${colour}.`);
+    }
+    return colour as CubeStickerColour;
+  }
+
+  /**
+   * Lays the brush on the square under a point, in drawing-buffer pixels.
+   *
+   * False for a press that missed the net, which is an ordinary thing for a
+   * press to do -- the cross has four empty corners.
+   */
+  paintAt(x: number, y: number): boolean {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_paint_at(x, y) !== 0;
+  }
+
+  /** Lays the brush on every square of the face under a point. */
+  paintFill(x: number, y: number): boolean {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_paint_fill(x, y) !== 0;
+  }
+
+  /** Whether a press covers the whole face it lands on. */
+  setFilling(wholeFace: boolean): boolean {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_set_paint_filling(wholeFace ? 1 : 0) !== 0;
+  }
+
+  isFilling(): boolean {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_is_paint_filling() !== 0;
+  }
+
+  /** How many squares of the draft carry a colour, against the N^2 it needs. */
+  paintedCount(colour: CubeStickerColour): number {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_painted_count(colour);
+  }
+
+  /**
+   * Makes the draft the cube, if it is one.
+   *
+   * False is the ordinary answer for a colouring that is not a cube, and the
+   * draft is still open afterwards with `paintFault()` saying what to mend.
+   */
+  applyPainting(): boolean {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_paint_apply() !== 0;
+  }
+
+  /** What the last refusal was, or `None`. */
+  paintFault(): CubePaintFault {
+    this.assertUsable();
+    const fault = this.module._thorvg_rubiks_paint_fault();
+    if (!Object.values(CubePaintFault).includes(fault as CubePaintFault)) {
+      throw new Error(`Engine returned an unknown paint fault ${fault}.`);
+    }
+    return fault as CubePaintFault;
+  }
+
+  /**
+   * The squares the last refusal blames, as `surface_stickers()` numbers them.
+   *
+   * Read one at a time across the boundary and gathered here, because the
+   * boundary carries primitives only and the list is short enough that a
+   * shared buffer would be more machinery than it saves.
+   */
+  paintBlamed(): number[] {
+    this.assertUsable();
+    const count = this.module._thorvg_rubiks_paint_blamed_count();
+    const blamed: number[] = [];
+    for (let index = 0; index < count; index += 1) {
+      const slot = this.module._thorvg_rubiks_paint_blamed_at(index);
+      if (slot >= 0) blamed.push(slot);
+    }
+    return blamed;
   }
 
   /**

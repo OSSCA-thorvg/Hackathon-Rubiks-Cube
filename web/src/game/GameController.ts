@@ -1,8 +1,11 @@
 import {
   CubeFace,
   CubeFlatStyle,
+  CubePaintFault,
   CubePalette,
+  CubeStickerColour,
   CubeViewMode,
+  STICKER_COLOURS,
   DEFAULT_SCRAMBLE_MOVES,
   isValidScrambleMoves,
   MAX_CUBE_SIZE,
@@ -51,6 +54,16 @@ export type GameEngine = SessionEngine & {
   ): boolean;
   setCubeSize(size: number): boolean;
   cubeSize(): number;
+  beginPainting(): boolean;
+  cancelPainting(): void;
+  isPainting(): boolean;
+  setBrush(colour: CubeStickerColour): void;
+  brush(): CubeStickerColour;
+  paintedCount(colour: CubeStickerColour): number;
+  applyPainting(): boolean;
+  paintFault(): CubePaintFault;
+  setFilling(wholeFace: boolean): boolean;
+  isFilling(): boolean;
   setViewMode(mode: CubeViewMode): void;
   viewMode(): CubeViewMode;
   setFlatStyle(style: CubeFlatStyle): void;
@@ -100,6 +113,16 @@ export type GameUi = {
   readonly moveLogList: HTMLOListElement;
   /** Starts and stops watching; pressed while a pattern is running. */
   readonly ambientButton: HTMLButtonElement;
+  /** Opens and closes a draft of the cube to colour; pressed while one is open. */
+  readonly paintButton: HTMLButtonElement;
+  /** Everything the colouring needs, shown only while a draft is open. */
+  readonly paintBar: HTMLElement;
+  readonly paintSwatches: readonly HTMLButtonElement[];
+  readonly paintFillButton: HTMLButtonElement;
+  readonly paintApplyButton: HTMLButtonElement;
+  readonly paintCancelButton: HTMLButtonElement;
+  /** What a refused colouring was refused for. */
+  readonly paintNote: HTMLElement;
   readonly homeViewButton: HTMLButtonElement;
   readonly viewButtons: readonly HTMLButtonElement[];
   readonly flatButtons: readonly HTMLButtonElement[];
@@ -218,6 +241,34 @@ const PALETTE_BY_NAME: Readonly<Record<string, CubePalette>> = {
   'high-contrast': CubePalette.HighContrast,
 };
 
+/**
+ * What each refusal reads as, one sentence apiece.
+ *
+ * Written here rather than in the engine because a sentence is a thing the
+ * page says and the engine's business is which of them is true. Every fault
+ * the ABI can return has one: a number arriving without a sentence would leave
+ * somebody staring at a cube they were told nothing about.
+ */
+const PAINT_FAULT_SENTENCE: Readonly<Record<CubePaintFault, string>> = {
+  [CubePaintFault.None]: '',
+  [CubePaintFault.ColourCount]:
+    'One colour is on too many squares and another on too few. The tallies beside the colours say which.',
+  [CubePaintFault.OrbitCount]:
+    'Two squares have been given each other\u2019s colours across parts of the cube that never mix. The highlighted ones cannot be reached from one another.',
+  [CubePaintFault.OppositePairs]:
+    'This cube has different colours facing each other than the one here does. That is a real cube, but not one this app solves.',
+  [CubePaintFault.ImpossiblePiece]:
+    'The highlighted piece wears colours no piece of a real cube wears, or wears them the other way round.',
+  [CubePaintFault.RepeatedPiece]:
+    'Two places on the cube hold the same piece. One of the highlighted ones has been copied down twice.',
+  [CubePaintFault.CornerTwist]:
+    'A corner is turned in a way no sequence of moves could leave it. One of them is copied down a third of a turn out.',
+  [CubePaintFault.EdgeFlip]:
+    'An edge is the other way round from how a real cube can leave it. One of the highlighted ones is flipped.',
+  [CubePaintFault.Permutation]:
+    'The corners and the edges disagree: swapping two of one would need two of the other swapped as well.',
+};
+
 /** Produces one arbitrary uint32 using Web Crypto. */
 export function randomUint32(): number {
   const value = new Uint32Array(1);
@@ -232,6 +283,14 @@ function isEditableTarget(target: EventTarget | null): boolean {
     target.isContentEditable ||
     target.matches('input, textarea, select, option')
   );
+}
+
+/** Parses a data-sticker value into the primitive engine colour. */
+function stickerOf(button: HTMLButtonElement): CubeStickerColour | null {
+  const value = Number(button.dataset.sticker);
+  return STICKER_COLOURS.includes(value as CubeStickerColour)
+    ? (value as CubeStickerColour)
+    : null;
 }
 
 /** Parses a data-view value into the primitive engine enum. */
@@ -966,6 +1025,94 @@ export function attachGameController(
     });
   };
 
+  /** How the paint bar reads right now, engine and page kept in one place. */
+  const updatePaintControls = (): void => {
+    const painting = engine.isPainting();
+    ui.paintButton.setAttribute('aria-pressed', String(painting));
+    ui.paintBar.hidden = !painting;
+
+    if (!painting) {
+      ui.paintNote.textContent = '';
+      return;
+    }
+
+    const brush = engine.brush();
+    const wanted = engine.cubeSize() * engine.cubeSize();
+    for (const swatch of ui.paintSwatches) {
+      const colour = stickerOf(swatch);
+      if (colour === null) continue;
+      swatch.setAttribute('aria-pressed', String(colour === brush));
+
+      const tally = swatch.querySelector<HTMLElement>('[data-sticker-tally]');
+      if (!tally) continue;
+      const found = engine.paintedCount(colour);
+      tally.textContent = `${found}/${wanted}`;
+      // Said in the markup as well as in the number, so that "this one is
+      // short" does not rest on colour alone.
+      tally.dataset.short = String(found !== wanted);
+    }
+
+    ui.paintFillButton.setAttribute('aria-pressed', String(engine.isFilling()));
+
+    const fault = engine.paintFault();
+    ui.paintNote.textContent = PAINT_FAULT_SENTENCE[fault];
+  };
+
+  /**
+   * Opens or closes a draft of the cube to colour.
+   *
+   * A cube command, so watching gives way to it first: a draft taken while a
+   * pattern is running would be a copy of a moment nobody chose.
+   */
+  const onPaint = (): void => {
+    run((): void => {
+      if (engine.isPainting()) {
+        engine.cancelPainting();
+        session.announce('Colouring cancelled. The cube is as it was.');
+      } else {
+        leaveAmbient();
+        if (engine.beginPainting()) {
+          session.announce(
+            'Colour your own cube onto the net, then press Use this cube.',
+          );
+        }
+      }
+
+      updatePaintControls();
+      updateEngineControls();
+    });
+  };
+
+  /** Makes the colouring the cube, or says what is stopping it. */
+  const onPaintApply = (): void => {
+    run((): void => {
+      if (engine.applyPainting()) {
+        session.announce('That is your cube now. Press Solve to work it out.');
+      } else {
+        session.announce('That colouring is not a cube yet.');
+      }
+
+      updatePaintControls();
+      updateEngineControls();
+    });
+  };
+
+  const onPaintFill = (): void => {
+    run((): void => {
+      engine.setFilling(!engine.isFilling());
+      updatePaintControls();
+    });
+  };
+
+  const onPaintCancel = (): void => {
+    run((): void => {
+      engine.cancelPainting();
+      session.announce('Colouring cancelled. The cube is as it was.');
+      updatePaintControls();
+      updateEngineControls();
+    });
+  };
+
   /**
    * Copies a link that opens this cube.
    *
@@ -1043,6 +1190,10 @@ export function attachGameController(
         updateViewControls();
       });
     }),
+    ...bindChoices(ui.paintSwatches, stickerOf, (colour) => {
+      engine.setBrush(colour);
+      updatePaintControls();
+    }),
     ...bindChoices(ui.paletteButtons, paletteOf, (palette) => {
       run((): void => {
         engine.setPalette(palette);
@@ -1092,6 +1243,10 @@ export function attachGameController(
   ui.stopButton.addEventListener('click', onStop);
   ui.shareButton.addEventListener('click', onShare);
   ui.ambientButton.addEventListener('click', onAmbient);
+  ui.paintButton.addEventListener('click', onPaint);
+  ui.paintFillButton.addEventListener('click', onPaintFill);
+  ui.paintApplyButton.addEventListener('click', onPaintApply);
+  ui.paintCancelButton.addEventListener('click', onPaintCancel);
   ui.homeViewButton.addEventListener('click', onHomeView);
   ui.muteButton.addEventListener('click', onMute);
   // `input` rather than `change`, so the reading follows the handle while it
@@ -1126,6 +1281,13 @@ export function attachGameController(
         const now = engineNow();
         session.observe(now);
         updateEngineControls(now);
+
+        // The tallies follow the colouring, and a press on the net is the one
+        // thing that changes it without coming through a command. A press asks
+        // for a frame, so this is where it arrives -- and only while there is
+        // a draft, since counting six colours over every sticker is not work
+        // to do on a frame nobody is painting in.
+        if (engine.isPainting()) updatePaintControls();
       });
     },
 
@@ -1147,6 +1309,11 @@ export function attachGameController(
         ui.stopButton,
         ui.shareButton,
         ui.ambientButton,
+        ui.paintButton,
+        ui.paintFillButton,
+        ui.paintApplyButton,
+        ui.paintCancelButton,
+        ...ui.paintSwatches,
       ]) {
         button.disabled = true;
       }
@@ -1172,6 +1339,10 @@ export function attachGameController(
       ui.stopButton.removeEventListener('click', onStop);
       ui.shareButton.removeEventListener('click', onShare);
       ui.ambientButton.removeEventListener('click', onAmbient);
+      ui.paintButton.removeEventListener('click', onPaint);
+      ui.paintFillButton.removeEventListener('click', onPaintFill);
+      ui.paintApplyButton.removeEventListener('click', onPaintApply);
+      ui.paintCancelButton.removeEventListener('click', onPaintCancel);
       ui.homeViewButton.removeEventListener('click', onHomeView);
       ui.muteButton.removeEventListener('click', onMute);
       ui.speedInput.removeEventListener('input', onSpeedChange);

@@ -72,6 +72,20 @@ if host_machine.system() == 'emscripten'
     '_thorvg_rubiks_speed_scale',
     '_thorvg_rubiks_reset_view',
     '_thorvg_rubiks_is_busy',
+    '_thorvg_rubiks_paint_begin',
+    '_thorvg_rubiks_paint_cancel',
+    '_thorvg_rubiks_is_painting',
+    '_thorvg_rubiks_set_paint_brush',
+    '_thorvg_rubiks_paint_brush',
+    '_thorvg_rubiks_paint_at',
+    '_thorvg_rubiks_paint_fill',
+    '_thorvg_rubiks_set_paint_filling',
+    '_thorvg_rubiks_is_paint_filling',
+    '_thorvg_rubiks_painted_count',
+    '_thorvg_rubiks_paint_apply',
+    '_thorvg_rubiks_paint_fault',
+    '_thorvg_rubiks_paint_blamed_count',
+    '_thorvg_rubiks_paint_blamed_at',
   ]
 
   executable(

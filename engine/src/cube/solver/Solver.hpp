@@ -29,8 +29,16 @@ namespace rubiks::cube::solver {
  *
  * Every implementation solves every cube it says it supports. There is no
  * failure path, and that is a property of the domain rather than a promise:
- * `CubeState` exposes no way to reach a cube other than by turning one, so a
- * cube that cannot be solved cannot be built to hand in.
+ * every `CubeState` is a cube that turning could have reached, so a cube that
+ * cannot be solved cannot be built to hand in.
+ *
+ * For a long time turning was the only way to build one, and that was the
+ * whole of the argument. It is no longer: `cube/Assembly.hpp` reads a painting
+ * of stickers -- somebody's real cube, copied onto the net -- and builds a
+ * `CubeState` from it. What it does *not* do is build one from a painting that
+ * no turning reaches; it hands back nothing at all instead. So the property
+ * above still holds, proved a second way rather than weakened. What this
+ * interface relies on was never the door, only what comes through it.
  */
 class Solver {
 public:

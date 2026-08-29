@@ -47,9 +47,15 @@ inline constexpr std::size_t kEdgeSlots = 12;
  * cube -- and two cubes of different sizes turned by the same outer faces
  * project to the same thing.
  *
- * Not a `CubeState`: that class deliberately offers no way to build a position
- * other than by turning one, which is what keeps unreachable cubes out of the
- * domain. This is a reading of a cube rather than a cube.
+ * Not a `CubeState`: every one of those is a position turning could have
+ * reached, which is what keeps unreachable cubes out of the domain, and most
+ * of what can be written into the fields below is not such a position. This is
+ * a reading of a cube rather than a cube.
+ *
+ * Building one from something other than turns is possible now --
+ * `cube/Assembly.hpp` does it from a painting of stickers -- but only for
+ * paintings it has checked, which is the same guarantee arrived at by a
+ * different road. A `Projection` is checked by nobody, and is not meant to be.
  */
 struct Projection {
     /** Which corner piece sits in each corner slot. */

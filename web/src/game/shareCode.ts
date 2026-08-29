@@ -15,6 +15,16 @@ import { layerRun, unpackMove } from './notation.ts';
  * a list of moves is legal by construction, because every one of them is
  * played into the cube the ordinary way.
  *
+ * That reasoning still holds and no longer settles the question on its own.
+ * The engine can now be handed a painting of stickers -- somebody's real cube,
+ * copied onto the net -- and `cube/Assembly.hpp` checks one on arrival rather
+ * than trusting it. A painting is the *only* way to write down such a cube,
+ * since no sequence of moves from solved produces it without solving it first,
+ * so a link that is to carry one has to carry stickers and check them at the
+ * far end. What has not changed is that checking is the price: a payload of
+ * moves is still the cheaper contract, and stays the one every session that
+ * began from a scramble is written in.
+ *
  * A seed is deliberately not carried. Carrying one would make the generator,
  * its arithmetic, and its agreement between native and WASM a permanent
  * compatibility contract of every link ever shared: fix the scramble rules

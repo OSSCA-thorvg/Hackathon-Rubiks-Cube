@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <map>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -216,6 +217,26 @@ struct ApplicationState {
     // The whole of the playback state. Its presence is what "a sequence is
     // playing" means, so there is no second flag to fall out of step with it.
     std::optional<Player> playback;
+
+    /**
+     * A colouring on its way to becoming the cube, when somebody is making one.
+     *
+     * Its presence is what "is being painted" means, so there is no flag
+     * beside it to fall out of step. The reading beside the colours is of the
+     * last refusal, kept so that what to mend stays on screen while it is
+     * being mended rather than vanishing with the press that asked.
+     */
+    struct PaintDraft {
+        std::vector<cube::FaceColor> stickers;
+        cube::FaceColor brush = cube::FaceColor::White;
+        cube::PaintReading reading;
+
+        // Whether a press is still down. A drag across the net colours every
+        // cell it crosses, which is how a face gets copied off a real cube
+        // without lifting the finger between squares.
+        bool stroking = false;
+    };
+    std::optional<PaintDraft> paint;
 
     // Where a shared record is written before it is read. Empty except
     // between restore_buffer() and restore_apply(), which is the whole of its
@@ -638,6 +659,19 @@ void drain_orbit() noexcept
  * kept -- a viewpoint is where the user left it -- and moves already committed
  * are never taken back.
  */
+/**
+ * Drops a draft that has stopped describing the cube it was taken from.
+ *
+ * A draft is a colouring of one cube of one size, so every command that puts a
+ * different cube there leaves it describing nothing. Each of those comes
+ * through here rather than each of them remembering to, and the person is told
+ * by the draft closing rather than by finding it quietly wrong.
+ */
+void discard_painting() noexcept
+{
+    state->paint.reset();
+}
+
 void discard_playback() noexcept
 {
     drain_orbit();
@@ -804,6 +838,15 @@ bool pointer_down(float x, float y) noexcept
     const auto shown = visible_views(state->view_mode);
     const auto flat = flat_parts();
 
+    // A draft turns the net from something to turn into something to colour.
+    // The press is answered here and goes no further: nothing about the cube
+    // may move while somebody is writing down what is on theirs, and a drag
+    // from this press carries the brush rather than a layer.
+    if (state->paint) {
+        state->paint->stroking = paint_at(x, y);
+        return state->paint->stroking;
+    }
+
     // The two drawings never share a rectangle, so asking both in turn cannot
     // give two answers.
     std::optional<interaction::NetPick> net_pick;
@@ -851,12 +894,24 @@ void pointer_move(float x, float y) noexcept
 {
     if (!state) return;
 
+    // A drag across the net colours every cell it crosses, which is how a face
+    // is copied off a real one without lifting the finger between squares.
+    if (state->paint) {
+        if (state->paint->stroking) static_cast<void>(paint_at(x, y));
+        return;
+    }
+
     state->interaction.pointer_move(x, y);
 }
 
 void pointer_up() noexcept
 {
     if (!state) return;
+
+    if (state->paint) {
+        state->paint->stroking = false;
+        return;
+    }
 
     // The multiplier reaches a drag release as much as a played sequence: one
     // slider for how fast the cube turns, whoever turned it.
@@ -867,6 +922,11 @@ void pointer_up() noexcept
 void pointer_cancel() noexcept
 {
     if (!state) return;
+
+    if (state->paint) {
+        state->paint->stroking = false;
+        return;
+    }
 
     state->interaction.cancel();
 }
@@ -968,7 +1028,9 @@ bool scramble(std::uint32_t seed, std::uint32_t move_count) noexcept
 
     // The cube restarts but the viewpoint does not, so a sweep the controller
     // has not published yet still counts. Everything else goes, including a
-    // snap that would otherwise commit onto the new cube.
+    // snap that would otherwise commit onto the new cube, and a colouring of
+    // the cube that is about to stop existing.
+    discard_painting();
     discard_playback();
     state->cube_state = cube::CubeState(size_of_cube());
 
@@ -998,6 +1060,7 @@ void reset_cube() noexcept
     if (!state) return;
 
     // Same split as scramble(): the cube is the only thing this command owns.
+    discard_painting();
     discard_playback();
     state->cube_state = cube::CubeState(size_of_cube());
     state->timeline.clear();
@@ -1024,6 +1087,210 @@ bool set_cube_size(int size) noexcept
 int cube_size() noexcept
 {
     return state ? size_of_cube() : 0;
+}
+
+namespace {
+
+/**
+ * Which sticker of the whole surface a cell of the net is.
+ *
+ * The net names a cell by face, column and row; a painting numbers it by where
+ * `surface_stickers()` counts it. This is the one place the two meet, and it
+ * is here rather than in either of them because neither should have to know
+ * the other: the domain has no net, and the drawing has no painting.
+ */
+[[nodiscard]] int painted_slot(const interaction::NetPick& pick, int size)
+{
+    // Worked out once for a size and kept, because filling a face asks this
+    // once per cell and a drag asks it once per pointer move. Built fresh each
+    // time it walked the whole surface looking for one sticker -- four
+    // thousand seven hundred of them at the widest cube, times the seven
+    // hundred and eighty-four cells of a face being filled.
+    static std::map<int, std::vector<int>> known;
+
+    auto found = known.find(size);
+    if (found == known.end()) {
+        std::vector<int> at(static_cast<std::size_t>(size) * size * size *
+                                cube::kFaceCount,
+                            -1);
+        const auto all = cube::surface_stickers(size);
+        for (std::size_t i = 0; i < all.size(); ++i) {
+            const auto& s = all[i];
+            at[static_cast<std::size_t>((s.x * size + s.y) * size + s.z) *
+                   cube::kFaceCount +
+               cube::face_index(s.face)] = static_cast<int>(i);
+        }
+        found = known.emplace(size, std::move(at)).first;
+    }
+
+    const auto cell = graphics::net_cell(pick.face, pick.col, pick.row, size);
+    return found->second[static_cast<std::size_t>(
+                             (cell.x * size + cell.y) * size + cell.z) *
+                             cube::kFaceCount +
+                         cube::face_index(cell.face)];
+}
+
+/** The cell a point is over, when the net is on screen and holds the point. */
+[[nodiscard]] std::optional<interaction::NetPick> net_cell_at(float x,
+                                                              float y) noexcept
+{
+    if (!std::isfinite(x) || !std::isfinite(y)) return std::nullopt;
+    if (!flat_parts().net) return std::nullopt;
+    return interaction::pick_net(x, y, state->placement.net, size_of_cube());
+}
+
+}  // namespace
+
+bool begin_painting() noexcept
+{
+    if (!state) return false;
+
+    // A draft taken of a cube in the middle of a turn would be a copy of a
+    // moment nobody chose, so a sequence has to finish or be stopped first.
+    if (is_busy()) return false;
+
+    // Already open. Reopening would throw away what has been coloured, and
+    // asking twice is not a way of asking for that.
+    if (state->paint) return false;
+
+    // A gesture still in hand is let go of first. From here on a press on the
+    // net colours and a release ends the colouring, so a drag left half made
+    // would have nothing to finish it -- and would still be sitting there when
+    // the draft was put away.
+    state->interaction.cancel();
+
+    ApplicationState::PaintDraft draft;
+    draft.stickers = cube::painting_of(state->cube_state);
+    state->paint = std::move(draft);
+    return true;
+}
+
+void cancel_painting() noexcept
+{
+    if (!state) return;
+    discard_painting();
+}
+
+bool is_painting() noexcept
+{
+    return state && state->paint.has_value();
+}
+
+bool set_brush(cube::FaceColor colour) noexcept
+{
+    if (!state || !state->paint) return false;
+    state->paint->brush = colour;
+    return true;
+}
+
+cube::FaceColor brush() noexcept
+{
+    if (!state || !state->paint) return cube::FaceColor::White;
+    return state->paint->brush;
+}
+
+bool paint_at(float x, float y) noexcept
+{
+    if (!state || !state->paint) return false;
+
+    const auto pick = net_cell_at(x, y);
+    if (!pick) return false;
+
+    const int slot = painted_slot(*pick, size_of_cube());
+    if (slot < 0) return false;
+
+    state->paint->stickers[static_cast<std::size_t>(slot)] =
+        state->paint->brush;
+    return true;
+}
+
+bool fill_face_at(float x, float y) noexcept
+{
+    if (!state || !state->paint) return false;
+
+    const auto pick = net_cell_at(x, y);
+    if (!pick) return false;
+
+    const int size = size_of_cube();
+    for (int row = 0; row < size; ++row) {
+        for (int col = 0; col < size; ++col) {
+            const int slot =
+                painted_slot(interaction::NetPick{pick->face, col, row}, size);
+            if (slot < 0) continue;
+            state->paint->stickers[static_cast<std::size_t>(slot)] =
+                state->paint->brush;
+        }
+    }
+    return true;
+}
+
+int painted_count(cube::FaceColor colour) noexcept
+{
+    if (!state || !state->paint) return 0;
+
+    int found = 0;
+    for (const auto painted : state->paint->stickers) {
+        if (painted == colour) ++found;
+    }
+    return found;
+}
+
+bool apply_painting() noexcept
+{
+    if (!state || !state->paint) return false;
+
+    // Read once. `assembled()` reads the painting on its own account, so
+    // asking for the reading first would run every check twice -- and at the
+    // widest cube a check is every piece against every one of twenty-four ways
+    // of holding it. What a refusal needs is fetched when there is one.
+    const int size = size_of_cube();
+    auto built = cube::assembled(size, state->paint->stickers);
+    if (!built) {
+        state->paint->reading =
+            cube::read_painting(size, state->paint->stickers);
+        return false;
+    }
+    state->paint->reading = cube::PaintReading{};
+
+    // Past every refusal. What arrives is a starting position and not a move,
+    // so the record goes the way it goes for a change of size -- and a rewind
+    // afterwards comes back to this cube rather than to a solved one, which is
+    // what a person who painted their own cube would expect it to mean.
+    discard_playback();
+    state->cube_state = std::move(*built);
+    state->interaction = interaction::InteractionController(size);
+    state->timeline.clear();
+    discard_painting();
+    return true;
+}
+
+cube::PaintFault painting_fault() noexcept
+{
+    if (!state || !state->paint) return cube::PaintFault::None;
+    return state->paint->reading.fault;
+}
+
+int painting_blamed_count() noexcept
+{
+    if (!state || !state->paint) return 0;
+    return static_cast<int>(state->paint->reading.blamed.size());
+}
+
+int painting_blamed_at(int index) noexcept
+{
+    if (!state || !state->paint) return -1;
+    const auto& blamed = state->paint->reading.blamed;
+    if (index < 0 || static_cast<std::size_t>(index) >= blamed.size()) {
+        return -1;
+    }
+    return blamed[static_cast<std::size_t>(index)];
+}
+
+const std::vector<cube::FaceColor>& painting_draft() noexcept
+{
+    static const std::vector<cube::FaceColor> none;
+    if (!state || !state->paint) return none;
+    return state->paint->stickers;
 }
 
 std::uintptr_t restore_buffer(std::uint32_t total_count) noexcept
@@ -1071,6 +1338,7 @@ bool restore_apply(int size, std::uint32_t scramble_count,
     // Past every refusal, so what follows cannot leave the cube half restored
     // -- the size included, which is why it arrives with the record rather
     // than through a call of its own before it.
+    discard_painting();
     discard_playback();
     state->cube_state = cube::CubeState(size);
     state->interaction = interaction::InteractionController(size);

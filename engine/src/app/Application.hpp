@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "cube/Assembly.hpp"
 #include "cube/CubeMove.hpp"
 #include "cube/PackedMove.hpp"
 #include "cube/Cubie.hpp"
@@ -428,6 +429,95 @@ inline constexpr std::uint32_t kMaxRestoreMoves = 4096;
  */
 [[nodiscard]] bool restore_apply(int size, std::uint32_t scramble_count,
                                  std::uint32_t user_count) noexcept;
+
+/**
+ * Colouring a real cube onto the net, and what it takes to be believed.
+ *
+ * The one way into this application that does not begin from a solved cube. A
+ * person holds the cube they actually have, colours what they see, and asks
+ * for it to be solved -- which means the colours have to be checked before
+ * they become a cube, because most colourings are not cubes and a solver
+ * handed one would never finish. `cube/Assembly.hpp` is that check; this is
+ * the state a person edits on their way to it.
+ *
+ * A draft rather than the cube itself. Turning is refused while one is open
+ * and the cube underneath is untouched until it is applied, so backing out
+ * costs nothing and leaves nothing behind. The draft starts as a copy of what
+ * is on the cube, because a person mending a scrambled cube onto the net has
+ * far less to change than one starting from an empty grid.
+ */
+
+/**
+ * Opens a draft of the cube as it stands.
+ *
+ * @return false while a sequence is playing, since a draft taken of a cube
+ *         mid-turn would be a copy of a moment nobody chose, and false if one
+ *         is already open -- reopening would throw away what has been coloured
+ *         so far, which is not what asking twice means.
+ */
+[[nodiscard]] bool begin_painting() noexcept;
+
+/** Throws the draft away. The cube was never touched, so nothing else changes. */
+void cancel_painting() noexcept;
+
+/** Whether a draft is open, which is the whole of "is being painted". */
+[[nodiscard]] bool is_painting() noexcept;
+
+/** The colour a press lays down. */
+[[nodiscard]] bool set_brush(cube::FaceColor colour) noexcept;
+[[nodiscard]] cube::FaceColor brush() noexcept;
+
+/**
+ * Lays the brush on the cell under a point, in drawing-buffer pixels.
+ *
+ * @return false without a draft, and for a point outside the net -- the four
+ *         empty corners of the cross included.
+ */
+[[nodiscard]] bool paint_at(float x, float y) noexcept;
+
+/**
+ * Lays the brush on every cell of the face under a point.
+ *
+ * A four by four is ninety-six cells and a twenty-eight is four thousand seven
+ * hundred; most faces of a real cube are mostly one colour, so filling and
+ * then mending is the difference between this being usable at those sizes and
+ * not.
+ */
+[[nodiscard]] bool fill_face_at(float x, float y) noexcept;
+
+/** How many of a colour the draft carries, against the N^2 it needs. */
+[[nodiscard]] int painted_count(cube::FaceColor colour) noexcept;
+
+/**
+ * Makes the draft the cube, if it is one.
+ *
+ * What arrives is the new starting position: the record is cleared, exactly as
+ * a change of size clears it, so solving, rewinding, recording and replay
+ * carry on afterwards without knowing where the cube came from.
+ *
+ * A refusal leaves the draft open and unchanged, with `painting_fault()` and
+ * the blamed stickers saying what to mend. Nothing is half applied.
+ *
+ * @return false without a draft, and for a colouring no turning could reach.
+ */
+[[nodiscard]] bool apply_painting() noexcept;
+
+/** What the last refusal was, or `None` when nothing has been refused yet. */
+[[nodiscard]] cube::PaintFault painting_fault() noexcept;
+
+/**
+ * The stickers the last refusal blames, numbered as `surface_stickers()`
+ * counts them.
+ *
+ * Read one at a time rather than handed over as a block: the count is small,
+ * the boundary this crosses carries primitives only, and a fault that blames
+ * nothing at all is an ordinary answer rather than a missing one.
+ */
+[[nodiscard]] int painting_blamed_count() noexcept;
+[[nodiscard]] int painting_blamed_at(int index) noexcept;
+
+/** The draft's colours, in `surface_stickers()` order. Empty without a draft. */
+[[nodiscard]] const std::vector<cube::FaceColor>& painting_draft() noexcept;
 
 /**
  * Starts one animated turn of the layers a face names.

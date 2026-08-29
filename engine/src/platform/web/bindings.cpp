@@ -504,6 +504,33 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_apply() noexcept
     return rubiks::app::apply_painting() ? 1 : 0;
 }
 
+/** How many colours the session's starting colouring has; zero when none. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_origin_painting_count() noexcept
+{
+    return static_cast<int>(rubiks::app::origin_painting_count());
+}
+
+/** One of those colours, or -1 past the end. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_origin_painting_at(int index) noexcept
+{
+    if (index < 0) return -1;
+    return rubiks::app::origin_painting_at(static_cast<std::uint32_t>(index));
+}
+
+/** Hands out the buffer a colouring from a link is written into. */
+EMSCRIPTEN_KEEPALIVE std::uintptr_t thorvg_rubiks_painting_buffer(
+    std::uint32_t count) noexcept
+{
+    return rubiks::app::painting_buffer(count);
+}
+
+/** Reads both buffers back as a painted session. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_restore_painting(
+    int size, std::uint32_t user_count) noexcept
+{
+    return rubiks::app::restore_painting(size, user_count) ? 1 : 0;
+}
+
 /** The last refusal as a cube::PaintFault integer; zero is None. */
 EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_fault() noexcept
 {

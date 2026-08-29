@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  decodePainting,
   decodeSession,
+  encodePainting,
   encodeSession,
   MAX_ENCODED_LENGTH,
+  SHARE_PAINTED_VERSION,
   SHARE_VERSION,
+  type SharedPainting,
   type SharedSession,
 } from '../../src/game/shareCode.ts';
 import {
@@ -246,5 +250,91 @@ describe('decodeSession refusals', () => {
     view.setUint8(1, 3);
     view.setUint32(2, 0xffff_ffff, true);
     expect(decodeSession(base64url(bytes))).toBeNull();
+  });
+});
+
+describe('a link that carries somebody\u2019s own cube', () => {
+  /** A colouring of a solved cube of `size`, face by face. */
+  const solvedPainting = (size: number): number[] => {
+    const colours: number[] = [];
+    for (let face = 0; face < 6; face += 1) {
+      for (let cell = 0; cell < size * size; cell += 1) colours.push(face);
+    }
+    return colours;
+  };
+
+  it('carries the colours and the moves made after them', () => {
+    const session: SharedPainting = {
+      size: 3,
+      painting: solvedPainting(3),
+      user: [R, U],
+    };
+
+    const encoded = encodePainting(session);
+    expect(encoded).not.toBeNull();
+    expect(decodePainting(encoded!)).toEqual(session);
+  });
+
+  it('carries a colouring with no moves after it', () => {
+    const session: SharedPainting = {
+      size: 4,
+      painting: solvedPainting(4),
+      user: [],
+    };
+
+    const encoded = encodePainting(session);
+    expect(encoded).not.toBeNull();
+    expect(decodePainting(encoded!)).toEqual(session);
+  });
+
+  it('is refused by the reader of the other layout, and the other way round', () => {
+    // The two never answer for each other: each refuses a version that is not
+    // its own before reading a byte further, which is what lets a caller ask
+    // both in turn and take whichever answers.
+    const painted = encodePainting({
+      size: 3,
+      painting: solvedPainting(3),
+      user: [],
+    })!;
+    expect(decodeSession(painted)).toBeNull();
+
+    const moves = encodeSession({ size: 3, scramble: [R], user: [] })!;
+    expect(decodePainting(moves)).toBeNull();
+    expect(SHARE_PAINTED_VERSION).not.toBe(SHARE_VERSION);
+  });
+
+  it('will not write a colouring that is the wrong length or the wrong colours', () => {
+    expect(
+      encodePainting({ size: 3, painting: solvedPainting(4), user: [] }),
+    ).toBeNull();
+    expect(
+      encodePainting({
+        size: 3,
+        painting: solvedPainting(3).map((c, i) => (i === 0 ? 6 : c)),
+        user: [],
+      }),
+    ).toBeNull();
+    expect(
+      encodePainting({ size: 1, painting: solvedPainting(1), user: [] }),
+    ).toBeNull();
+  });
+
+  it('will not read a payload that is short, long, or holds a colour that is not one', () => {
+    const good = encodePainting({
+      size: 3,
+      painting: solvedPainting(3),
+      user: [],
+    })!;
+
+    // Every truncation of a good payload is refused rather than half read.
+    for (let cut = 1; cut < good.length; cut += 7) {
+      expect(decodePainting(good.slice(0, cut))).toBeNull();
+    }
+
+    // And nothing may follow the moves.
+    expect(decodePainting(`${good}AAAA`)).toBeNull();
+    expect(decodePainting('not base64url!')).toBeNull();
+    expect(decodePainting('')).toBeNull();
+    expect(decodePainting('A'.repeat(MAX_ENCODED_LENGTH + 1))).toBeNull();
   });
 });

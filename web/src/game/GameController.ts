@@ -23,7 +23,11 @@ import {
   type SessionEngine,
 } from './GameSession.ts';
 import { SessionRecords, type SolveRecord } from './SessionRecords.ts';
-import { encodeSession, type SharedSession } from './shareCode.ts';
+import {
+  encodePainting,
+  encodeSession,
+  type SharedSession,
+} from './shareCode.ts';
 import { pageUrl, shareUrl } from './shareLink.ts';
 import type { TimerEnvironment } from './SolveTimer.ts';
 
@@ -54,6 +58,7 @@ export type GameEngine = SessionEngine & {
   ): boolean;
   setCubeSize(size: number): boolean;
   cubeSize(): number;
+  originPainting(): number[];
   beginPainting(): boolean;
   cancelPainting(): void;
   isPainting(): boolean;
@@ -631,7 +636,8 @@ export function attachGameController(
    * narrowed this to: a cursor at nothing with no scramble behind it is the
    * cube the engine was made with, and every page opens on one of those.
    */
-  const hasStateToShare = (now: EngineFrame): boolean => now.cursor > 0;
+  const hasStateToShare = (now: EngineFrame): boolean =>
+    now.cursor > 0 || engine.originPainting().length > 0;
 
   /**
    * The session a link carries, read off the record when one is asked for.
@@ -1139,7 +1145,20 @@ export function attachGameController(
       let copied = 'Link copied. It opens a fresh cube.';
 
       if (hasStateToShare(now)) {
-        const encoded = encodeSession(sharableNow(now));
+        // A cube somebody painted cannot be written as moves -- nothing from
+        // solved arrives at it without solving it first -- so its link carries
+        // the colours instead, and the moves made since go on the end of them.
+        // Which of the two is right is read off the session rather than
+        // remembered: a colouring is there or it is not.
+        const painting = engine.originPainting();
+        const encoded =
+          painting.length > 0
+            ? encodePainting({
+                size: engine.cubeSize(),
+                painting,
+                user: recordedBetween(now.scrambleEnd, now.cursor),
+              })
+            : encodeSession(sharableNow(now));
         if (encoded === null) {
           session.announce('This cube cannot be written into a link.');
           return;

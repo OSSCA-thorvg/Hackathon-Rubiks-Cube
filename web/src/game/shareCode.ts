@@ -45,6 +45,16 @@ import { layerRun, unpackMove } from './notation.ts';
 export const SHARE_VERSION = 2;
 
 /**
+ * The layout a painted session travels in.
+ *
+ * Its own version rather than a field added to the one above, because the two
+ * carry different things and a reader that had to guess which would be a
+ * reader with a way of guessing wrong. A build that meets a version it does
+ * not know opens a fresh cube, which is the whole migration story.
+ */
+export const SHARE_PAINTED_VERSION = 3;
+
+/**
  * The two stretches one shared state is made of, as packed words.
  *
  * Packed rather than decoded, because nothing between the engine and the text
@@ -57,6 +67,21 @@ export type SharedSession = {
   /** Everything the cube was handed, which may be empty. */
   readonly scramble: readonly number[];
   /** The user's own moves that are on the cube, without a rewound tail. */
+  readonly user: readonly number[];
+};
+
+/**
+ * A session that began from somebody's own cube rather than from a scramble.
+ *
+ * The colours are here and the scramble is not, because there was none: a
+ * painted cube is not reachable from solved by any sequence short of solving
+ * it, so there is nothing to write in that stretch. What follows the colouring
+ * is the user's own, exactly as in the other layout.
+ */
+export type SharedPainting = {
+  readonly size: number;
+  /** One colour per sticker, as `surface_stickers()` counts them. */
+  readonly painting: readonly number[];
   readonly user: readonly number[];
 };
 
@@ -103,6 +128,33 @@ const MAX_PAYLOAD_BYTES = MIN_PAYLOAD_BYTES + MOVE_BYTES * MAX_SHARED_MOVES;
  * unpacked into memory to be measured as bytes.
  */
 export const MAX_ENCODED_LENGTH = Math.ceil((MAX_PAYLOAD_BYTES * 4) / 3);
+
+/**
+ * A painted payload's layout, which is a permanent contract of its own.
+ *
+ * ```text
+ * version(1) | size(1) | colour(1) x 6*size*size
+ *                      | user_count(4) | packed(4) x user_count
+ * ```
+ *
+ * One byte per sticker where three bits would do. Three bits would save
+ * three-quarters of the colours -- fifty-four bytes becoming twenty-one at
+ * three by three -- and would put a bit-packer between a link and a cube, with
+ * its own boundary cases at every size, for a saving that is already far below
+ * what the same session costs as moves. Even at the largest cube this builds
+ * the colours are four thousand seven hundred bytes against the thirty-one
+ * thousand a solved record would be.
+ *
+ * The colour count is not carried. It is six times the size squared and the
+ * size is right there, so a count would be a second statement of the same fact
+ * and a second thing that could disagree with it.
+ */
+const COLOUR_BYTES = 1;
+
+/** How many stickers a cube of a size has, which is what the colours fill. */
+function stickerCount(size: number): number {
+  return 6 * size * size;
+}
 
 /** The alphabet base64url uses, which is the whole of what may appear. */
 const ENCODED_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -164,6 +216,107 @@ export function encodeSession(session: SharedSession): string | null {
   }
 
   return base64urlEncode(bytes);
+}
+
+/**
+ * Writes one painted session as a base64url string, or returns null.
+ *
+ * Null for a size this build does not make, a colour count that is not the one
+ * that size has, a colour that is not one of the six, and a tail of moves too
+ * long or holding a word this version cannot carry. A painting of nothing is
+ * refused as well -- there is no cube of no stickers.
+ */
+export function encodePainting(session: SharedPainting): string | null {
+  if (!isSharableSize(session.size)) return null;
+  if (session.painting.length !== stickerCount(session.size)) return null;
+  if (
+    !session.painting.every(
+      (colour) => Number.isInteger(colour) && colour >= 0 && colour < 6,
+    )
+  ) {
+    return null;
+  }
+  if (session.user.length > MAX_SHARED_MOVES) return null;
+  if (!session.user.every((packed) => isSharableMove(packed, session.size))) {
+    return null;
+  }
+
+  const bytes = new Uint8Array(
+    VERSION_BYTES +
+      SIZE_BYTES +
+      COLOUR_BYTES * session.painting.length +
+      COUNT_BYTES +
+      MOVE_BYTES * session.user.length,
+  );
+  const view = new DataView(bytes.buffer);
+
+  view.setUint8(0, SHARE_PAINTED_VERSION);
+  view.setUint8(VERSION_BYTES, session.size);
+  let offset = VERSION_BYTES + SIZE_BYTES;
+  for (const colour of session.painting) {
+    view.setUint8(offset, colour);
+    offset += COLOUR_BYTES;
+  }
+
+  view.setUint32(offset, session.user.length, true);
+  offset += COUNT_BYTES;
+  for (const packed of session.user) {
+    view.setUint32(offset, packed, true);
+    offset += MOVE_BYTES;
+  }
+
+  return base64urlEncode(bytes);
+}
+
+/**
+ * Reads a base64url string back as a painted session, or returns null.
+ *
+ * Null for anything that is not one, the version above included -- so a caller
+ * asks this and the other reader in turn and takes whichever answers. Every
+ * byte is checked before a colour reaches the engine, and the engine checks
+ * again on its own side that the colours are a cube at all, which is the one
+ * thing this cannot know.
+ */
+export function decodePainting(encoded: string): SharedPainting | null {
+  if (encoded.length === 0 || encoded.length > MAX_ENCODED_LENGTH) return null;
+  if (!ENCODED_PATTERN.test(encoded)) return null;
+
+  const bytes = base64urlDecode(encoded);
+  if (bytes === null) return null;
+  if (bytes.length < VERSION_BYTES + SIZE_BYTES + COUNT_BYTES) return null;
+
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint8(0) !== SHARE_PAINTED_VERSION) return null;
+
+  const size = view.getUint8(VERSION_BYTES);
+  if (!isSharableSize(size)) return null;
+
+  let offset = VERSION_BYTES + SIZE_BYTES;
+  const colours = stickerCount(size);
+  if (offset + colours * COLOUR_BYTES + COUNT_BYTES > bytes.length) return null;
+
+  const painting: number[] = [];
+  for (let index = 0; index < colours; index += 1) {
+    const colour = view.getUint8(offset);
+    offset += COLOUR_BYTES;
+    if (colour >= 6) return null;
+    painting.push(colour);
+  }
+
+  const count = view.getUint32(offset, true);
+  offset += COUNT_BYTES;
+  if (count > MAX_SHARED_MOVES) return null;
+  if (offset + count * MOVE_BYTES !== bytes.length) return null;
+
+  const user: number[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const packed = view.getUint32(offset, true);
+    offset += MOVE_BYTES;
+    if (!isSharableMove(packed, size)) return null;
+    user.push(packed);
+  }
+
+  return { size, painting, user };
 }
 
 /**

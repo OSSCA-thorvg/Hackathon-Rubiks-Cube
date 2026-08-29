@@ -26,6 +26,8 @@ Palette는 나머지 둘과 달리 선행 phase에 의존하지 않아 한때 Ph
 - Web: 속도 슬라이더 UI
 - Native/TS unit test와 e2e
 
+> **개정 (2026-08, [Phase 18](./18-paint-your-cube.md)).** 아래 out of scope의 "임의 색 지정"은 **여전히 유효합니다.** Phase 18이 더한 색 고르개는 색조를 고르는 것이 아니라 **스티커의 정체**(여섯 중 하나)를 고르는 것이고, 그 여섯이 각각 어떤 색으로 그려지는지는 지금도 palette의 일입니다. theme editor는 없습니다.
+
 ## Out of scope
 
 - 옵션의 저장과 복원 — 브라우저 저장소를 쓰지 않기로 했으므로(Phase 14) 설정은 세션 안에서만 유지됩니다

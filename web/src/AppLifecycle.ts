@@ -21,7 +21,7 @@ import {
   type GameEngine,
   type GameUi,
 } from './game/GameController.ts';
-import { decodeSession } from './game/shareCode.ts';
+import { decodePainting, decodeSession } from './game/shareCode.ts';
 import {
   clearShareFragment,
   readShareFragment,
@@ -46,6 +46,12 @@ export type EngineLike = PointerTarget &
     restoreSession(
       size: number,
       scramble: readonly number[],
+      user: readonly number[],
+    ): boolean;
+    /** @returns false when the colouring is not a cube any turning reaches. */
+    restorePainting(
+      size: number,
+      painting: readonly number[],
       user: readonly number[],
     ): boolean;
   };
@@ -155,6 +161,21 @@ function openSharedState(
   if (encoded === null) return 'fresh';
 
   clearShareFragment(location, history);
+
+  // The two layouts are asked in turn and whichever answers is the one the
+  // link is in. Neither can be mistaken for the other -- each refuses a
+  // version that is not its own before it reads a byte further -- so the order
+  // is only a matter of which is tried first.
+  const painted = decodePainting(encoded);
+  if (painted !== null) {
+    if (
+      !engine.restorePainting(painted.size, painted.painting, painted.user)
+    ) {
+      engine.resetCube();
+      return 'unreadable';
+    }
+    return 'shared';
+  }
 
   const shared = decodeSession(encoded);
   if (shared === null) return 'unreadable';

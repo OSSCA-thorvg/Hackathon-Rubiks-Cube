@@ -86,6 +86,10 @@ if host_machine.system() == 'emscripten'
     '_thorvg_rubiks_paint_fault',
     '_thorvg_rubiks_paint_blamed_count',
     '_thorvg_rubiks_paint_blamed_at',
+    '_thorvg_rubiks_origin_painting_count',
+    '_thorvg_rubiks_origin_painting_at',
+    '_thorvg_rubiks_painting_buffer',
+    '_thorvg_rubiks_restore_painting',
   ]
 
   executable(

@@ -242,6 +242,22 @@ struct ApplicationState {
     };
     std::optional<PaintDraft> paint;
 
+    /**
+     * The colouring this session began from, when it began from one.
+     *
+     * Empty for a session that began from a scramble or a reset, so its
+     * emptiness is also the answer to "does a link for this need the
+     * colours". A painted cube cannot be written down as moves -- nothing
+     * from solved arrives at it without solving it first -- so a link has to
+     * carry these, and something has to remember them.
+     */
+    std::vector<cube::FaceColor> origin;
+
+    // Where a colouring arriving from a link is written before it is read.
+    // Empty except between painting_buffer() and restore_painting(), the same
+    // lifetime and for the same reason as the record's buffer below.
+    std::vector<std::uint8_t> painting_bytes;
+
     // Where a shared record is written before it is read. Empty except
     // between restore_buffer() and restore_apply(), which is the whole of its
     // lifetime -- so being empty is also what "no buffer was taken" means,
@@ -676,6 +692,18 @@ void discard_painting() noexcept
     state->paint.reset();
 }
 
+/**
+ * Forgets where the session began, which every fresh cube does.
+ *
+ * Beside `discard_painting()` rather than inside it: closing a draft is not
+ * the same as replacing the cube, and only the second of those makes the
+ * colouring this session started from stop being true.
+ */
+void forget_origin() noexcept
+{
+    state->origin.clear();
+}
+
 void discard_playback() noexcept
 {
     drain_orbit();
@@ -1046,6 +1074,7 @@ bool scramble(std::uint32_t seed, std::uint32_t move_count) noexcept
     // snap that would otherwise commit onto the new cube, and a colouring of
     // the cube that is about to stop existing.
     discard_painting();
+    forget_origin();
     discard_playback();
     state->cube_state = cube::CubeState(size_of_cube());
 
@@ -1076,6 +1105,7 @@ void reset_cube() noexcept
 
     // Same split as scramble(): the cube is the only thing this command owns.
     discard_painting();
+    forget_origin();
     discard_playback();
     state->cube_state = cube::CubeState(size_of_cube());
     state->timeline.clear();
@@ -1287,6 +1317,10 @@ bool apply_painting() noexcept
     state->cube_state = std::move(*built);
     state->interaction = interaction::InteractionController(size);
     state->timeline.clear();
+
+    // Kept before the draft goes, because this is the one thing about the
+    // draft that outlives it: where the session began.
+    state->origin = std::move(state->paint->stickers);
     discard_painting();
     return true;
 }
@@ -1318,6 +1352,99 @@ const std::vector<cube::FaceColor>& painting_draft() noexcept
     static const std::vector<cube::FaceColor> none;
     if (!state || !state->paint) return none;
     return state->paint->stickers;
+}
+
+std::vector<cube::FaceColor> cube_painting() noexcept
+{
+    if (!state) return {};
+    return cube::painting_of(state->cube_state);
+}
+
+std::uint32_t origin_painting_count() noexcept
+{
+    if (!state) return 0;
+    return static_cast<std::uint32_t>(state->origin.size());
+}
+
+int origin_painting_at(std::uint32_t index) noexcept
+{
+    if (!state || index >= state->origin.size()) return -1;
+    return static_cast<int>(state->origin[index]);
+}
+
+std::uintptr_t painting_buffer(std::uint32_t count) noexcept
+{
+    if (!state) return 0;
+
+    // The one count a cube of some size this application builds could have.
+    // Refusing anything else is what keeps zero meaning "refused" for the
+    // address as well.
+    bool fits = false;
+    for (int size = kMinCubeSize; size <= kMaxCubeSize; ++size) {
+        if (count == static_cast<std::uint32_t>(6 * size * size)) fits = true;
+    }
+    if (!fits) return 0;
+
+    state->painting_bytes.assign(count, 0);
+    return reinterpret_cast<std::uintptr_t>(state->painting_bytes.data());
+}
+
+bool restore_painting(int size, std::uint32_t user_count) noexcept
+{
+    if (!state) return false;
+    if (!valid_cube_size(size)) return false;
+
+    // Both buffers are taken out before either is read, whichever way this
+    // goes: they belong to one restore, so a second call with nothing written
+    // into them is refused by the same emptiness that refuses a call without
+    // them at all.
+    std::vector<std::uint8_t> colours;
+    colours.swap(state->painting_bytes);
+    std::vector<std::uint32_t> words;
+    words.swap(state->restore);
+
+    if (colours.size() != static_cast<std::size_t>(6 * size * size)) {
+        return false;
+    }
+    if (words.size() != user_count) return false;
+
+    std::vector<cube::FaceColor> painting;
+    painting.reserve(colours.size());
+    for (const std::uint8_t colour : colours) {
+        if (colour >= cube::kFaceCount) return false;
+        painting.push_back(static_cast<cube::FaceColor>(colour));
+    }
+
+    std::vector<cube::CubeMove> moves;
+    moves.reserve(words.size());
+    for (const std::uint32_t word : words) {
+        const auto move = cube::unpack(word);
+        if (!move || !restorable_layers(move->layers, size)) return false;
+        moves.push_back(*move);
+    }
+
+    // The last refusal, and the one this whole feature exists for: a colouring
+    // that no turning reaches is not a cube, and a solver handed one would
+    // look for a position that does not exist.
+    auto built = cube::assembled(size, painting);
+    if (!built) return false;
+
+    // Past every refusal, so what follows cannot leave the cube half restored.
+    discard_painting();
+    discard_playback();
+    state->cube_state = std::move(*built);
+    state->interaction = interaction::InteractionController(size);
+    state->timeline.clear();
+    state->origin = std::move(painting);
+
+    // The colouring is the starting position, so what follows it is the user's
+    // own -- recorded the ordinary way, which is what happened to the cube
+    // this link came from.
+    for (const auto& move : moves) {
+        state->cube_state.apply(move);
+        state->timeline.record(move);
+    }
+    return true;
 }
 
 std::uintptr_t restore_buffer(std::uint32_t total_count) noexcept
@@ -1366,6 +1493,7 @@ bool restore_apply(int size, std::uint32_t scramble_count,
     // -- the size included, which is why it arrives with the record rather
     // than through a call of its own before it.
     discard_painting();
+    forget_origin();
     discard_playback();
     state->cube_state = cube::CubeState(size);
     state->interaction = interaction::InteractionController(size);

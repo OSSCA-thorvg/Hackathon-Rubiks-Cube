@@ -956,6 +956,74 @@ export class CubeEngine {
     return this.module._thorvg_rubiks_paint_fill(x, y) !== 0;
   }
 
+  /**
+   * The colouring this session began from, or an empty list.
+   *
+   * Its emptiness is the question "does a link for this need the colours"
+   * answered, so a caller asks this rather than remembering what it did.
+   */
+  originPainting(): number[] {
+    this.assertUsable();
+    const count = this.module._thorvg_rubiks_origin_painting_count();
+    const colours: number[] = [];
+    for (let index = 0; index < count; index += 1) {
+      const colour = this.module._thorvg_rubiks_origin_painting_at(index);
+      if (colour < 0) return [];
+      colours.push(colour);
+    }
+    return colours;
+  }
+
+  /**
+   * Puts a painted session on the cube, all at once.
+   *
+   * Two buffers where the other restore takes one, because a painted session
+   * is a colouring and a tail of moves and neither is the other. Each is asked
+   * for and filled in turn, and the heap views are taken freshly after each
+   * call: asking the engine for memory can grow it, which leaves any view made
+   * before the ask pointing at nothing.
+   */
+  restorePainting(
+    size: number,
+    painting: readonly number[],
+    user: readonly number[],
+  ): boolean {
+    this.assertUsable();
+
+    if (painting.length !== 6 * size * size) return false;
+    if (user.length > MAX_SHARED_MOVES) return false;
+
+    const colours = this.module._thorvg_rubiks_painting_buffer(painting.length);
+    if (colours === 0) return false;
+    if (!this.heapRegionUsable(colours, painting.length)) {
+      throw new Error(
+        `Engine returned an invalid painting buffer for ${painting.length} ` +
+          `stickers: pointer ${colours}.`,
+      );
+    }
+    new Uint8Array(this.module.HEAPU8.buffer, colours, painting.length).set(
+      painting,
+    );
+
+    // The record's buffer is asked for second and written second, so that the
+    // ask that could move the heap happens before the view that reads it.
+    if (user.length > 0) {
+      const words = this.module._thorvg_rubiks_restore_buffer(user.length);
+      if (words === 0) return false;
+      if (!this.heapRegionUsable(words, user.length * 4)) {
+        throw new Error(
+          `Engine returned an invalid restore buffer for ${user.length} ` +
+            `moves: pointer ${words}.`,
+        );
+      }
+      new Uint32Array(this.module.HEAPU8.buffer, words, user.length).set(user);
+    }
+
+    return (
+      this.module._thorvg_rubiks_restore_painting(size, user.length) !== 0
+    );
+  }
+
   /** Whether a press covers the whole face it lands on. */
   setFilling(wholeFace: boolean): boolean {
     this.assertUsable();

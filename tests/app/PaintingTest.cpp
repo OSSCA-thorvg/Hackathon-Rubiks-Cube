@@ -1,5 +1,6 @@
 #include "app/Application.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <vector>
 
@@ -290,4 +291,85 @@ TEST_CASE("the net draws the draft, and rings what a refusal points at")
     CHECK(restored[0] == green.r);
     CHECK(restored[1] == green.g);
     CHECK(restored[2] == green.b);
+}
+
+TEST_CASE("a painted session travels as colours and comes back the same")
+{
+    const EngineLifecycle engine(kCanvas, kCanvas);
+
+    // A cube somebody painted, with a move made on it afterwards.
+    REQUIRE(rubiks::app::scramble(11, 8));
+    settle();
+    REQUIRE(rubiks::app::begin_painting());
+    REQUIRE(rubiks::app::apply_painting());
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1, 1, 1));
+    settle();
+
+    // What a link would carry: the colouring the session began from, which is
+    // the one thing about it that cannot be written down as moves.
+    const auto count = rubiks::app::origin_painting_count();
+    REQUIRE(count == 9 * 6);
+    std::vector<std::uint8_t> colours;
+    for (std::uint32_t i = 0; i < count; ++i) {
+        const int colour = rubiks::app::origin_painting_at(i);
+        REQUIRE(colour >= 0);
+        colours.push_back(static_cast<std::uint8_t>(colour));
+    }
+    REQUIRE(rubiks::app::origin_painting_at(count) == -1);
+
+    std::vector<std::uint32_t> words;
+    for (std::uint32_t i = 0; i < rubiks::app::timeline_length(); ++i) {
+        words.push_back(rubiks::app::timeline_move(i));
+    }
+    REQUIRE(words.size() == 1);
+
+    const auto arrived = rubiks::app::cube_painting();
+
+    // A fresh cube, and then the link read back onto it.
+    rubiks::app::reset_cube();
+    REQUIRE(rubiks::app::origin_painting_count() == 0);
+
+    auto* painting = reinterpret_cast<std::uint8_t*>(
+        rubiks::app::painting_buffer(static_cast<std::uint32_t>(colours.size())));
+    REQUIRE(painting != nullptr);
+    std::copy(colours.begin(), colours.end(), painting);
+
+    auto* record = reinterpret_cast<std::uint32_t*>(
+        rubiks::app::restore_buffer(static_cast<std::uint32_t>(words.size())));
+    REQUIRE(record != nullptr);
+    std::copy(words.begin(), words.end(), record);
+
+    REQUIRE(rubiks::app::restore_painting(
+        3, static_cast<std::uint32_t>(words.size())));
+
+    // The same cube, the move still on it, and the record still saying so --
+    // and the colouring is still what this session began from, so the link can
+    // be passed on again.
+    CHECK(rubiks::app::cube_painting() == arrived);
+    CHECK(rubiks::app::timeline_length() == 1);
+    CHECK(rubiks::app::committed_move_count() == 1);
+    CHECK(rubiks::app::origin_painting_count() == count);
+}
+
+TEST_CASE("a link whose colours are not a cube is refused whole")
+{
+    const EngineLifecycle engine(kCanvas, kCanvas);
+    const auto before = rubiks::app::cube_painting();
+
+    // Every sticker white, which is nobody's cube.
+    auto* painting =
+        reinterpret_cast<std::uint8_t*>(rubiks::app::painting_buffer(9 * 6));
+    REQUIRE(painting != nullptr);
+    std::fill(painting, painting + 9 * 6,
+              static_cast<std::uint8_t>(rubiks::cube::FaceColor::White));
+
+    CHECK_FALSE(rubiks::app::restore_painting(3, 0));
+    CHECK(rubiks::app::cube_painting() == before);
+
+    // And a buffer belongs to one restore: the refusal took it, so asking
+    // again without filling one is refused by the same emptiness.
+    CHECK_FALSE(rubiks::app::restore_painting(3, 0));
+
+    CHECK(rubiks::app::painting_buffer(0) == 0);
+    CHECK(rubiks::app::painting_buffer(9 * 6 + 1) == 0);
 }

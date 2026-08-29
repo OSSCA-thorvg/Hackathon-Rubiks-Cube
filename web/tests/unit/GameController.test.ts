@@ -287,6 +287,9 @@ function createHarness(
       painting = false;
     }),
     isPainting: vi.fn((): boolean => painting),
+    // Empty, because this fake's session always begins from a scramble. The
+    // painted path has its own tests, where it is not.
+    originPainting: vi.fn((): number[] => []),
     setBrush: vi.fn((colour: CubeStickerColour): void => {
       brush = colour;
       touched = true;

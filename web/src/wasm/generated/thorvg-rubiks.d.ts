@@ -158,6 +158,10 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_paint_fault(): number;
   _thorvg_rubiks_paint_blamed_count(): number;
   _thorvg_rubiks_paint_blamed_at(index: number): number;
+  _thorvg_rubiks_origin_painting_count(): number;
+  _thorvg_rubiks_origin_painting_at(index: number): number;
+  _thorvg_rubiks_painting_buffer(count: number): number;
+  _thorvg_rubiks_restore_painting(size: number, userCount: number): number;
 };
 
 /** Factory that creates one engine module instance. */

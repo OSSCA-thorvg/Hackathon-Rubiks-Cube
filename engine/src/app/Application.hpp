@@ -529,6 +529,54 @@ void cancel_painting() noexcept;
 /** The draft's colours, in `surface_stickers()` order. Empty without a draft. */
 [[nodiscard]] const std::vector<cube::FaceColor>& painting_draft() noexcept;
 
+/** Every sticker on the cube as it stands, in `surface_stickers()` order. */
+[[nodiscard]] std::vector<cube::FaceColor> cube_painting() noexcept;
+
+/**
+ * The colouring this session began from, when it began from one.
+ *
+ * A cube that was painted cannot be written down as moves: no sequence from
+ * solved arrives at it without solving it first. So a link that is to carry
+ * one has to carry the colours, and this is what it carries -- read one at a
+ * time, because the boundary takes primitives and a link is being built rather
+ * than a frame drawn.
+ *
+ * Empty for a session that began from a scramble or a reset, which is the
+ * question "does this link need the colours" answered without a flag beside
+ * it.
+ */
+[[nodiscard]] std::uint32_t origin_painting_count() noexcept;
+[[nodiscard]] int origin_painting_at(std::uint32_t index) noexcept;
+
+/**
+ * Where a colouring arriving from a link is written before it is read.
+ *
+ * The same two-call shape `restore_buffer` uses, and for the same reason: one
+ * colour per sticker is thousands of values at the sizes this builds, and
+ * handing them over one call at a time would be thousands of calls.
+ *
+ * @return zero for a count no cube has, and zero without an engine.
+ */
+[[nodiscard]] std::uintptr_t painting_buffer(std::uint32_t count) noexcept;
+
+/**
+ * Reads a painted session back onto the cube, all at once.
+ *
+ * Takes both buffers: the colours from `painting_buffer` and the user's moves
+ * from `restore_buffer`, which is why a caller fills the two and then calls
+ * this rather than restoring twice. Everything is checked before anything is
+ * applied -- the size, the colour count, each colour, that the colouring is a
+ * cube at all, and every move -- so a refusal leaves the cube as it was.
+ *
+ * The colouring becomes the starting position and the moves are recorded on
+ * top of it, which is exactly what happened to the cube this link came from.
+ *
+ * @return false without both buffers, for a size this application does not
+ *         build, for a colouring no turning reaches, and for any word the
+ *         payload cannot carry.
+ */
+[[nodiscard]] bool restore_painting(int size, std::uint32_t user_count) noexcept;
+
 /**
  * Starts one animated turn of the layers a face names.
  *

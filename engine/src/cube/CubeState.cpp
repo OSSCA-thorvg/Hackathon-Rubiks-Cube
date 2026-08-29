@@ -35,6 +35,11 @@ namespace {
 
 }  // namespace
 
+CubeState::CubeState(int size, std::vector<Cubie> cubies) noexcept
+    : size_(size), cubies_(std::move(cubies))
+{
+}
+
 Cubie solved_cubie() noexcept
 {
     Cubie cubie;

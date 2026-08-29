@@ -116,10 +116,12 @@ struct CentreLocality {
  * a size: a workshop is derived from the cube it is asked about.
  *
  * The cost is not flat across that range. A forty-move scramble takes about
- * three and a half seconds to solve at nine and about three and a half minutes
- * at twenty-eight, and the answer grows from a thousand moves to nearly eight
- * thousand. Every one of them solves; what a caller has to decide is whether
- * to make somebody wait, because this does not return until it is done.
+ * two and a half seconds to solve at nine and about two minutes at
+ * twenty-eight, and the answer grows from a thousand moves to nearly eight
+ * thousand. The first solve of a size pays for its workshop on top of that --
+ * seventeen seconds at twenty-eight. Every one of them solves; what a caller
+ * has to decide is whether to make somebody wait, because this does not return
+ * until it is done.
  *
  * What it builds and holds is one workshop per size it has been asked about:
  * which cells a size has, which tools move which of them, where a setup leaves

@@ -1,7 +1,7 @@
-diff --git engine/src/cube/solver/Reduction.cpp private/tmp/claude-501/-Users-hjh-projects-ossca-ThorVG-------/c6ec050c-1637-4d29-a03e-2a03c41a7500/scratchpad/Reduction-2a.cpp
+diff --git a/engine/src/cube/solver/Reduction.cpp b/engine/src/cube/solver/Reduction.cpp
 index a5e4b69..ef92f59 100644
---- engine/src/cube/solver/Reduction.cpp
-+++ private/tmp/claude-501/-Users-hjh-projects-ossca-ThorVG-------/c6ec050c-1637-4d29-a03e-2a03c41a7500/scratchpad/Reduction-2a.cpp
+--- a/engine/src/cube/solver/Reduction.cpp
++++ b/engine/src/cube/solver/Reduction.cpp
 @@ -490,6 +490,14 @@ public:
          return static_cast<int>(cells_.size());
      }

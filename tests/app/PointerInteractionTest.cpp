@@ -46,7 +46,7 @@ constexpr unsigned kLitRight = 211;
 /** -X and -Z: the ambient floor; the kicker lights nothing, it only glints. */
 constexpr unsigned kLitAway = 191;
 /** The +Y cut a U turn opens, one layer down from the top. */
-constexpr unsigned kLitCutUp = 273;
+[[maybe_unused]] constexpr unsigned kLitCutUp = 273;
 
 constexpr std::uint8_t lit_channel(unsigned value, unsigned brightness)
 {
@@ -60,13 +60,30 @@ constexpr Rgba lit(const Rgba& color, unsigned brightness)
                 lit_channel(color[2], brightness), color[3]};
 }
 
-// The six faces as the 3D view shows them: a sticker's colour at its plane's
-// brightness. Named by the face so an orbit test reads as which face is where.
-constexpr Rgba kUpLit = lit(kWhite, kLitUp);
-constexpr Rgba kFrontLit = lit(kGreen, kLitFront);
-constexpr Rgba kRightLit = lit(kRed, kLitRight);
-constexpr Rgba kBackLit = lit(kBlue, kLitAway);
-constexpr Rgba kLeftLit = lit(kOrange, kLitAway);
+/** The sticker's chroma raised before it is lit, as the contract writes it. */
+constexpr std::uint8_t saturated_channel(int value, int gray)
+{
+    const int offset = (value - gray) * 115;
+    const int rounded = offset >= 0 ? (offset + 50) / 100 : -((-offset + 50) / 100);
+    const int result = gray + rounded;
+    return static_cast<std::uint8_t>(result < 0 ? 0 : result > 255 ? 255 : result);
+}
+
+constexpr Rgba saturated(const Rgba& color)
+{
+    const int gray = (2126 * color[0] + 7152 * color[1] + 722 * color[2] + 5000) / 10000;
+    return Rgba{saturated_channel(color[0], gray), saturated_channel(color[1], gray),
+                saturated_channel(color[2], gray), color[3]};
+}
+
+// The six faces as the 3D view shows them: a sticker's colour, saturated, at
+// its plane's brightness. Named by the face so an orbit test reads as which
+// face is where.
+constexpr Rgba kUpLit = lit(saturated(kWhite), kLitUp);
+constexpr Rgba kFrontLit = lit(saturated(kGreen), kLitFront);
+constexpr Rgba kRightLit = lit(saturated(kRed), kLitRight);
+constexpr Rgba kBackLit = lit(saturated(kBlue), kLitAway);
+constexpr Rgba kLeftLit = lit(saturated(kOrange), kLitAway);
 
 // The three face centers of the rendered scene contract, as fractions of the
 // square 3D region. Which colors they read depends on the viewpoint, which is
@@ -259,13 +276,44 @@ void require_solved_net()
     }
 }
 
+/** Whether a pixel is the body at some brightness a lit cut face can have. */
+bool is_lit_body(const std::uint8_t* pixel)
+{
+    if (pixel[3] != kBody[3]) return false;
+    for (unsigned b = 190; b <= 300; ++b) {
+        const Rgba shade = lit(kBody, b);
+        if (std::abs(int{pixel[0]} - int{shade[0]}) <= 2 &&
+            std::abs(int{pixel[1]} - int{shade[1]}) <= 2 &&
+            std::abs(int{pixel[2]} - int{shade[2]}) <= 2) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** The pixel a world point falls on from the home viewpoint. */
+const std::uint8_t* pixel_at_world(const rubiks::math::Vec3& world)
+{
+    const auto point = rubiks::interaction::project_to_screen(
+        world, cube_camera(kCanvas, kCanvas), cube_rect(kCanvas, kCanvas));
+    REQUIRE(point);
+    return pixel_at(point->x, point->y, kCanvas);
+}
+
+/**
+ * A point on the cut a U turn opens -- the still middle layer's top at
+ * y = +1/3, in the corner the turned layer does not cover -- which at rest is
+ * behind the front face's green stickers, well inside one.
+ */
+constexpr rubiks::math::Vec3 kCutOfUTurn{0.70f, 1.0f / 3.0f, 0.85f};
+
 /**
  * Whether a coarse sweep of the 3D region finds `color` at some brightness
  * within `spread` of `brightness`, a unit per channel: a cut face is shaded
  * from its near end to its far end like any other face.
  */
-bool cube_region_shows_shade(const Rgba& color, unsigned brightness,
-                             unsigned spread)
+[[maybe_unused]] bool cube_region_shows_shade(const Rgba& color, unsigned brightness,
+                                              unsigned spread)
 {
     constexpr int kSteps = 24;
     const auto rect = cube_rect(kCanvas, kCanvas);
@@ -662,20 +710,20 @@ TEST_CASE("a net drag turns the 3D view with it")
     const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
     REQUIRE(rubiks::app::render());
-    REQUIRE_FALSE(cube_region_shows_shade(kBody, kLitCutUp, 24));
+    REQUIRE_FALSE(is_lit_body(pixel_at_world(kCutOfUTurn)));
 
     drag_net_top_row_left();
     REQUIRE(rubiks::app::render());
 
     // One rotation drives both views, so a layer swung away in the net has
-    // swung away in the cube too, leaving the cut surface on show -- lit as
-    // the +Y plane one layer down, brighter at one end than the other.
-    REQUIRE(cube_region_shows_shade(kBody, kLitCutUp, 24));
+    // swung away in the cube too, leaving the cut surface on show where the
+    // turned layer no longer covers it.
+    REQUIRE(is_lit_body(pixel_at_world(kCutOfUTurn)));
 
     rubiks::app::pointer_up();
     settle();
     REQUIRE(rubiks::app::render());
-    REQUIRE_FALSE(cube_region_shows_shade(kBody, kLitCutUp, 24));
+    REQUIRE_FALSE(is_lit_body(pixel_at_world(kCutOfUTurn)));
 
 }
 

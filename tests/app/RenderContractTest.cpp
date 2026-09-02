@@ -12,6 +12,9 @@
 
 #include "EngineLifecycle.hpp"
 #include "cube/Surface.hpp"
+#include "graphics/Camera.hpp"
+#include "interaction/DragResolver.hpp"
+#include "math/Types.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/NetGeometry.hpp"
 #include "graphics/RingsGeometry.hpp"
@@ -50,8 +53,10 @@ constexpr unsigned kLitFront = 230;  // +Z
 constexpr unsigned kLitRight = 211;  // +X
 // The cut faces a turn opens lie one layer in, so their planes are their own:
 // the +Y cut at y = +1/3 of a U turn and the +X cut at x = +1/3 of an R turn.
-constexpr unsigned kLitCutUp = 273;
-constexpr unsigned kLitCutRight = 218;
+// (Recorded for the contract; the mid-turn checks look for the body at any
+// brightness a cut can have, at the place the cut is.)
+[[maybe_unused]] constexpr unsigned kLitCutUp = 273;
+[[maybe_unused]] constexpr unsigned kLitCutRight = 218;
 
 /**
  * A colour at a brightness, in the integer arithmetic the engine uses.
@@ -69,6 +74,26 @@ constexpr Rgba lit(const Rgba& color, unsigned brightness)
 {
     return Rgba{lit_channel(color[0], brightness), lit_channel(color[1], brightness),
                 lit_channel(color[2], brightness), color[3]};
+}
+
+/**
+ * A sticker's colour with its chroma raised before it is lit (contract v4,
+ * fifth revision): gray = (2126 r + 7152 g + 722 b + 5000) / 10000, and each
+ * channel gray + ((c - gray) * 115 + 50) / 100, rounded away from grey.
+ */
+constexpr std::uint8_t saturated_channel(int value, int gray)
+{
+    const int offset = (value - gray) * 115;
+    const int rounded = offset >= 0 ? (offset + 50) / 100 : -((-offset + 50) / 100);
+    const int result = gray + rounded;
+    return static_cast<std::uint8_t>(result < 0 ? 0 : result > 255 ? 255 : result);
+}
+
+constexpr Rgba saturated(const Rgba& color)
+{
+    const int gray = (2126 * color[0] + 7152 * color[1] + 722 * color[2] + 5000) / 10000;
+    return Rgba{saturated_channel(color[0], gray), saturated_channel(color[1], gray),
+                saturated_channel(color[2], gray), color[3]};
 }
 
 struct Region {
@@ -91,7 +116,7 @@ constexpr Sample kFrontSample{0.31f, 0.61f};
 constexpr Sample kRightSample{0.69f, 0.61f};
 
 // Gaps between neighbouring stickers. The cubie body shows there -- painted
-// under the stickers as each slab's silhouette -- so they are exactly kSeam.
+// under the stickers as each slab's silhouette -- so they are exactly kBody.
 constexpr Sample kSeamSamples[]{
     {0.377f, 0.645f},  // +Z, between the center and right stickers
     {0.313f, 0.534f},  // +Z, between the center and top stickers
@@ -115,10 +140,11 @@ constexpr NetBlock kNetBlocks[]{
 
 constexpr int kCubeSize = 3;
 
-/** Fill of a cut surface, only ever visible while a layer is turning. */
+/**
+ * The cubie body: the cut surfaces a turn opens, and what shows between the
+ * stickers -- the slab silhouettes painted under them.
+ */
 constexpr Rgba kBody{70, 74, 82, 255};
-/** The body where it shows between stickers: darker, and never a lit kBody. */
-constexpr Rgba kSeam{34, 36, 40, 255};
 
 /**
  * Half of the snap animation, which is half of the turn.
@@ -209,11 +235,12 @@ void require_cube_faces(std::uint32_t width, std::uint32_t height)
 {
     // Three faces at three brightnesses: a normal the wrong way round now
     // shows up as the wrong shade as well as the wrong colour.
-    require_pixel_near(pixel_in_cube(kUpSample, width, height), lit(kWhite, kLitUp));
+    require_pixel_near(pixel_in_cube(kUpSample, width, height),
+                       lit(saturated(kWhite), kLitUp));
     require_pixel_near(pixel_in_cube(kFrontSample, width, height),
-                       lit(kGreen, kLitFront));
+                       lit(saturated(kGreen), kLitFront));
     require_pixel_near(pixel_in_cube(kRightSample, width, height),
-                       lit(kRed, kLitRight));
+                       lit(saturated(kRed), kLitRight));
 }
 
 /** Reads the center of all 54 net cells and compares the whole grid. */
@@ -250,43 +277,51 @@ const std::uint8_t* pixel_in_net(float column, float row, std::uint32_t width,
                     height);
 }
 
-/**
- * Whether a coarse sweep of the 3D region finds `color` at some brightness
- * near `brightness` -- within `spread` of it, and a unit per channel of the
- * shade that brightness makes. A cut face is shaded like any other, running
- * from its near end to its far end, so no one byte is the whole of it.
- */
-bool cube_region_shows_shade(const Rgba& color, unsigned brightness,
-                             unsigned spread, std::uint32_t width,
-                             std::uint32_t height)
+/** Whether a pixel is the body at some brightness a lit cut face can have. */
+bool is_lit_body(const std::uint8_t* pixel)
 {
-    constexpr int kSteps = 32;
-    const Region region = cube_region(width, height);
-
-    for (int row = 0; row < kSteps; ++row) {
-        for (int column = 0; column < kSteps; ++column) {
-            const auto* pixel = pixel_at(
-                region.x + (static_cast<float>(column) + 0.5f) /
-                               kSteps * region.side,
-                region.y + (static_cast<float>(row) + 0.5f) / kSteps *
-                               region.side,
-                width, height);
-            if (pixel[3] != color[3]) continue;
-            for (unsigned b = brightness - spread; b <= brightness + spread; ++b) {
-                const Rgba shade = lit(color, b);
-                if (std::abs(int{pixel[0]} - int{shade[0]}) <= 1 &&
-                    std::abs(int{pixel[1]} - int{shade[1]}) <= 1 &&
-                    std::abs(int{pixel[2]} - int{shade[2]}) <= 1) {
-                    return true;
-                }
-            }
+    if (pixel[3] != kBody[3]) return false;
+    for (unsigned b = 190; b <= 300; ++b) {
+        const Rgba shade = lit(kBody, b);
+        if (std::abs(int{pixel[0]} - int{shade[0]}) <= 2 &&
+            std::abs(int{pixel[1]} - int{shade[1]}) <= 2 &&
+            std::abs(int{pixel[2]} - int{shade[2]}) <= 2) {
+            return true;
         }
     }
     return false;
 }
 
-/** How far a cut face's brightness runs either side of its plane's reference. */
-constexpr unsigned kCutSpread = 24;
+/**
+ * The pixel a world-space point falls on, seen from the home viewpoint.
+ *
+ * For looking at a cut face where it is: the seams show the body too, so a
+ * cut cannot be found by colour alone, but it can be found by place.
+ */
+const std::uint8_t* pixel_at_world(const rubiks::math::Vec3& world,
+                                   std::uint32_t width, std::uint32_t height)
+{
+    const Region region = cube_region(width, height);
+    const rubiks::graphics::Rect rect{region.x, region.y, region.side, region.side};
+    const auto point = rubiks::interaction::project_to_screen(
+        world, rubiks::graphics::default_camera(1.0f), rect);
+    REQUIRE(point);
+    return pixel_at(point->x, point->y, width, height);
+}
+
+/**
+ * A point on the cut a turn opens, clear of the turned layer at half way.
+ *
+ * U turns the top layer; the still middle layer's top, y = +1/3, shows where
+ * the turned layer (a square turned 45 degrees, a diamond) does not cover
+ * it: the corners, |x| + |z| > sqrt 2. At rest the line of sight to this
+ * point lands well inside a front-face sticker, green -- not a body at all.
+ * Worked out by ray-casting from the home eye, with a tenth of a unit to
+ * spare from every seam.
+ */
+constexpr rubiks::math::Vec3 kCutOfUTurn{0.70f, 1.0f / 3.0f, 0.85f};
+/** The same for R: the still layers' +X cut at x = +1/3. */
+constexpr rubiks::math::Vec3 kCutOfRTurn{1.0f / 3.0f, 0.70f, 0.85f};
 
 void require_corners(std::uint32_t width, std::uint32_t height)
 {
@@ -427,10 +462,10 @@ TEST_CASE("the seams between stickers show the cubie body")
     const rubiks::test::EngineLifecycle engine(kSize, kSize);
     require_scene(kSize, kSize);
 
-    // Contract v4: the seam colour, unlit and exact, not the background --
+    // Contract v4: the body colour, unlit and exact, not the background --
     // and not any sticker colour either, which is what makes a seam decisive.
     for (const auto& seam : kSeamSamples) {
-        require_pixel(pixel_in_cube(seam, kSize, kSize), kSeam);
+        require_pixel(pixel_in_cube(seam, kSize, kSize), kBody);
     }
 
 }
@@ -473,14 +508,14 @@ TEST_CASE("a sliding turn half way through rasterizes in both views")
 
     // Meanwhile the 3D view is turning the same layer, which opens the cut:
     // the still middle layer's top, lit as the +Y plane one layer down.
-    REQUIRE(cube_region_shows_shade(kBody, kLitCutUp, kCutSpread, kSize, kSize));
+    REQUIRE(is_lit_body(pixel_at_world(kCutOfUTurn, kSize, kSize)));
 
     // Both views come back to rest together, and undoing the turn puts the
     // whole resting contract back exactly as it was.
     while (rubiks::app::advance(16.0)) {
     }
     REQUIRE(rubiks::app::render());
-    REQUIRE_FALSE(cube_region_shows_shade(kBody, kLitCutUp, kCutSpread, kSize, kSize));
+    REQUIRE_FALSE(is_lit_body(pixel_at_world(kCutOfUTurn, kSize, kSize)));
 
     REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Up, 1, 1, -1));
     while (rubiks::app::advance(16.0)) {
@@ -514,7 +549,7 @@ TEST_CASE("a turn across a cut band half way through rasterizes in both views")
     require_pixel(pixel_in_net(7.5f, 4.5f, kSize, kSize), kRed);
 
     // The cut this turn opens faces +X, one layer in from the right face.
-    REQUIRE(cube_region_shows_shade(kBody, kLitCutRight, kCutSpread, kSize, kSize));
+    REQUIRE(is_lit_body(pixel_at_world(kCutOfRTurn, kSize, kSize)));
 
     // And the turn arrives exactly where the commit puts the cube, so the
     // frame after it is the same picture.

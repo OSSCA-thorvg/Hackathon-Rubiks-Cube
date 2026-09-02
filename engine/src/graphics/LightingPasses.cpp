@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "graphics/ConvexHull.hpp"
+#include "graphics/CubeGeometry.hpp"
 
 namespace rubiks::graphics {
 namespace {
@@ -180,7 +181,12 @@ ViewScene LightPass::operator()(ViewScene scene) const
         if (!normal) continue;
 
         const auto& origin = face.points[0];
-        const Color base = face.color;
+        // The stickers get their chroma raised before they are lit; the body
+        // is plastic and stays as it is.
+        const int saturation = static_cast<int>(std::lround(lighting.saturation * 100.0f));
+        const Color base = face.color == kBodyColor || saturation == 100
+                               ? face.color
+                               : saturate(face.color, saturation);
         const math::Vec3 u = face.points[1] - origin;
         const float uu = math::dot(u, u);
         const math::Vec3 v = face.points[3] - origin;
@@ -375,7 +381,6 @@ WorldScene ShadowPass::operator()(WorldScene scene) const
             polygon.push_back(math::Vec3{point.x, ground_y, point.y});
         }
         shadow.polygons.push_back(std::move(polygon));
-        shadow.occluders.push_back(caster.corners);
     }
     if (shadow.polygons.empty()) return scene;
 

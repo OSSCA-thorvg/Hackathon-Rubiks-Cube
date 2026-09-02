@@ -581,7 +581,8 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_canvas_theme() noexcept
  * The same arrangement the shared record uses: the engine owns the memory and
  * the caller writes floats into it through a view, then set_lighting() reads
  * them. The order is the one Lighting::from_values documents: ambient,
- * attenuation, then x, y, z, diffuse, specular, shininess per lamp.
+ * attenuation, saturation, then x, y, z, diffuse, specular, shininess per
+ * lamp, for one to four lamps.
  *
  * @return zero for a count the engine does not accept.
  */

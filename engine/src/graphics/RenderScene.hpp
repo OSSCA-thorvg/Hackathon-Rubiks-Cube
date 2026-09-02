@@ -65,8 +65,6 @@ struct RenderFace {
  */
 struct RenderShadow {
     std::vector<std::vector<math::Vec2>> polygons;
-    /** Convex screen silhouettes of the casters, where the shadow is hidden. */
-    std::vector<std::vector<math::Vec2>> occluders;
     math::Vec2 fade_start{};
     math::Vec2 fade_end{};
     /** Points round the soft patch directly under the cube. */
@@ -121,6 +119,12 @@ struct RenderScene {
     std::vector<RenderStroke> underlays;
     /** Drawn after the underlays and before the faces: it lies on the ground. */
     std::optional<RenderShadow> shadow;
+    /**
+     * The cubies' bodies: each slab's convex screen silhouette, drawn after the
+     * shadow and before the faces in the body colour. It is what shows in the
+     * seams between stickers, and it hides the shadow behind the cube.
+     */
+    std::vector<std::vector<math::Vec2>> bodies;
     std::vector<RenderFace> faces;
     /** Drawn after the faces, so guide lines read on top of the stickers. */
     std::vector<RenderStroke> strokes;
@@ -140,6 +144,9 @@ inline void append_scene(RenderScene& target, RenderScene&& source)
                           std::make_move_iterator(source.strokes.end()));
     // Only the 3D view casts one, so there is never a second to merge with.
     if (!target.shadow && source.shadow) target.shadow = std::move(source.shadow);
+    target.bodies.insert(target.bodies.end(),
+                         std::make_move_iterator(source.bodies.begin()),
+                         std::make_move_iterator(source.bodies.end()));
 }
 
 }  // namespace rubiks::graphics

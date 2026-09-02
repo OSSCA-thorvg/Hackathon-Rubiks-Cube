@@ -41,8 +41,6 @@ template <typename Point>
 struct ShadowGroup {
     /** One convex polygon on the ground per caster. */
     std::vector<std::vector<Point>> polygons;
-    /** The casters again, whose silhouettes the shadow must not show through. */
-    std::vector<std::array<Point, 8>> occluders;
     /** Where the shadow is darkest: the cube's centre dropped onto the ground. */
     Point fade_start{};
     /** Where it has thinned to its floor: the centre cast from the light. */
@@ -117,6 +115,8 @@ struct ViewFace {
 
 struct ViewScene {
     std::vector<ViewFace> faces;
+    /** The casters' corners in view space, on their way to becoming bodies. */
+    std::vector<std::array<math::Vec3, 8>> casters;
     std::optional<ShadowGroup<math::Vec3>> shadow;
 };
 
@@ -137,6 +137,8 @@ struct ClipFace {
 
 struct ClipScene {
     std::vector<ClipFace> faces;
+    /** The casters' corners in NDC; a caster reaching the near plane is dropped. */
+    std::vector<std::array<math::Vec2, 8>> casters;
     std::optional<ShadowGroup<math::Vec2>> shadow;
 };
 

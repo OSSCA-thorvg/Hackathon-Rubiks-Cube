@@ -877,8 +877,8 @@ export class CubeEngine {
   /**
    * Replaces the lights the 3D view is drawn under.
    *
-   * A flat list in the engine's order -- ambient, attenuation, then x, y, z,
-   * diffuse, specular, shininess for the key light and again for the kicker
+   * A flat list in the engine's order -- ambient, attenuation, saturation,
+   * then x, y, z, diffuse, specular, shininess for each lamp (one to four)
    * -- written into a buffer the engine owns, the way a shared record is. For
    * tuning by eye from the address bar; the values that tuning settles on are
    * baked into the engine's defaults.

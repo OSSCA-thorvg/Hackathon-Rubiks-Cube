@@ -672,8 +672,8 @@ void cancel_painting() noexcept;
  *
  * The same arrangement restore_buffer() uses: the engine owns the memory and
  * the caller writes into it through a view, then set_lighting() reads it. The
- * count has to be graphics::Lighting::kValueCount and the order is the one
- * Lighting::from_values documents. Here so the lights can be tuned by eye
+ * count has to satisfy graphics::Lighting::valid_count() and the order is the
+ * one Lighting::from_values documents. Here so the lights can be tuned by eye
  * from the page without a rebuild; the values that come out of that tuning
  * are baked into Lighting::standard().
  *

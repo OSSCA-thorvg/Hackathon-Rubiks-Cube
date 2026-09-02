@@ -139,10 +139,6 @@ function sameGrid(a: number[][], b: number[][]): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-/** Whether a cut surface is showing, which only happens mid-turn. */
-function showsBody(probe: CanvasProbe): boolean {
-  return probe.cubeGrid.some(isBody);
-}
 
 /** Presses the front face's right column, ready to drag. */
 async function grabRightColumn(
@@ -182,8 +178,10 @@ test('dragging the right column turns the cube and the net follows', async ({
   const atRest = await probeCanvas(page);
   assertSceneContract(atRest);
 
+  // Half way round first: at a full quarter the layer lines up again and the
+  // cut it opened is closed, so the picture part way is the one to look at.
   const grab = await grabRightColumn(page, atRest);
-  await page.mouse.move(grab.x, grab.y - dragFor(atRest, 1), { steps: 12 });
+  await page.mouse.move(grab.x, grab.y - dragFor(atRest, 0.5), { steps: 6 });
 
   const midDrag = await probeCanvas(page);
 
@@ -193,9 +191,11 @@ test('dragging the right column turns the cube and the net follows', async ({
   expect(sameGrid(midDrag.net, expectedNet())).toBe(false);
 
   // The layer has swung away from the rest of the cube, so the cut it leaves
-  // behind has to be filled rather than showing the background through it.
-  expect(showsBody(midDrag)).toBe(true);
+  // behind has to be filled rather than showing the background through it:
+  // the body, lit, where the still layers' cut is.
+  expect(isBody(midDrag.cutR)).toBe(true);
 
+  await page.mouse.move(grab.x, grab.y - dragFor(atRest, 1), { steps: 6 });
   await page.mouse.up();
 
   // The snap animates, so the committed state arrives a few frames later.
@@ -205,7 +205,9 @@ test('dragging the right column turns the cube and the net follows', async ({
 
   // The cut in the 3D view closes when the snap actually stops, which is a
   // frame or two after the net has arrived at the settled drawing.
-  await expect.poll(async () => showsBody(await probeCanvas(page))).toBe(false);
+  await expect
+    .poll(async () => isBody((await probeCanvas(page)).cutR))
+    .toBe(false);
 
   // R moves no sticker that the three face samples read, so the rest of the
   // contract still holds exactly.
@@ -288,7 +290,7 @@ test('dragging a net cell turns the cube', async ({ page }) => {
   // The gesture started in the net, but the turn is the cube's: the 3D view
   // shows it too, and comes back to rest along with the drawing below it.
   const turned = await probeCanvas(page);
-  expect(showsBody(turned)).toBe(false);
+  expect(isBody(turned.cutU)).toBe(false);
   expect(sameGrid(turned.cubeGrid, atRest.cubeGrid)).toBe(false);
 
   expect(pageErrors).toEqual([]);

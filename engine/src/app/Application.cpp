@@ -1833,7 +1833,7 @@ graphics::Palette palette() noexcept
 std::uintptr_t lighting_buffer(std::uint32_t count) noexcept
 {
     if (!state) return 0;
-    if (count != graphics::Lighting::kValueCount) return 0;
+    if (!graphics::Lighting::valid_count(count)) return 0;
 
     state->lighting_values.assign(count, 0.0f);
     return reinterpret_cast<std::uintptr_t>(state->lighting_values.data());

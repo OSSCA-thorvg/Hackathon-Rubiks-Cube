@@ -64,6 +64,7 @@ Lighting one_lamp(const Vec3& position, float diffuse = 0.4f,
     Lighting lighting;
     lighting.ambient = ambient;
     lighting.attenuation = 0.0f;
+    lighting.saturation = 1.0f;
     lighting.lamps.push_back(Light{position, diffuse, specular, shininess});
     return lighting;
 }
@@ -138,7 +139,18 @@ TEST_CASE("the unlit lighting hands every colour back byte for byte")
 {
     const Lighting none = Lighting::unlit(default_lighting());
     REQUIRE(none.ambient == 1.0f);
+    REQUIRE(none.saturation == 1.0f);
     REQUIRE(none.lamps.size() == default_lighting().lamps.size());
+    REQUIRE(none.lamps.size() == 1);
+
+    // Through the pass as well: a high-contrast sticker comes back as it went.
+    const Camera camera = identity_camera();
+    ViewScene scene;
+    scene.faces.push_back(facing_face(3.0f, true));
+    scene.faces[0].color = to_color(FaceColor::Green, Palette::HighContrast);
+    const ViewScene plain = light(none, camera)(scene);
+    REQUIRE(plain.faces[0].color == to_color(FaceColor::Green, Palette::HighContrast));
+    REQUIRE_FALSE(plain.faces[0].shading.has_value());
     for (const auto& lamp : none.lamps) {
         REQUIRE(lamp.diffuse == 0.0f);
         REQUIRE(lamp.specular == 0.0f);
@@ -168,22 +180,59 @@ TEST_CASE("a brightness past one lifts a colour and stops at white")
 TEST_CASE("a lighting setup round-trips through its flat list of values")
 {
     const Lighting standard = default_lighting();
-    float values[Lighting::kValueCount];
+    REQUIRE(standard.lamps.size() == 1);
+    REQUIRE(standard.value_count() == 9);
+    float values[Lighting::kHeaderCount + Lighting::kMaxLamps * Lighting::kLampValueCount];
     standard.to_values(values);
 
     Lighting read;
-    REQUIRE(read.from_values(values, Lighting::kValueCount));
+    REQUIRE(read.from_values(values, standard.value_count()));
     REQUIRE(read.ambient == standard.ambient);
     REQUIRE(read.attenuation == standard.attenuation);
-    REQUIRE(read.lamps.size() == 2);
-    REQUIRE(read.lamps[1].position.z == standard.lamps[1].position.z);
-    REQUIRE(read.lamps[1].shininess == standard.lamps[1].shininess);
+    REQUIRE(read.saturation == standard.saturation);
+    REQUIRE(read.lamps.size() == 1);
+    REQUIRE(read.lamps[0].position.z == standard.lamps[0].position.z);
+    REQUIRE(read.lamps[0].shininess == standard.lamps[0].shininess);
+
+    // One to four lamps, six values each after the three of the header.
+    REQUIRE(Lighting::valid_count(9));
+    REQUIRE(Lighting::valid_count(15));
+    REQUIRE(Lighting::valid_count(27));
+    REQUIRE_FALSE(Lighting::valid_count(3));
+    REQUIRE_FALSE(Lighting::valid_count(8));
+    REQUIRE_FALSE(Lighting::valid_count(10));
+    REQUIRE_FALSE(Lighting::valid_count(33));
 
     // A wrong count or a value that is not a number is refused whole.
-    REQUIRE_FALSE(read.from_values(values, Lighting::kValueCount - 1));
-    values[3] = std::numeric_limits<float>::quiet_NaN();
-    REQUIRE_FALSE(read.from_values(values, Lighting::kValueCount));
-    REQUIRE(read.lamps.size() == 2);
+    REQUIRE_FALSE(read.from_values(values, 8));
+    values[4] = std::numeric_limits<float>::quiet_NaN();
+    REQUIRE_FALSE(read.from_values(values, 9));
+    REQUIRE(read.lamps.size() == 1);
+}
+
+TEST_CASE("saturation scales a colour's chroma about its grey and leaves grey alone")
+{
+    REQUIRE(saturate(Color{183, 18, 52, 255}, 100) == Color{183, 18, 52, 255});
+    REQUIRE(saturate(Color{200, 200, 200, 255}, 150) == Color{200, 200, 200, 255});
+    REQUIRE(saturate(Color{255, 255, 255, 255}, 115) == Color{255, 255, 255, 255});
+
+    // gray = (2126*0 + 7152*155 + 722*72 + 5000) / 10000 = 116;
+    // r = 116 + ((0 - 116) * 115 + 50) / 100 -> clamped at 0, g -> 161, b -> 65.
+    REQUIRE(saturate(Color{0, 155, 72, 255}, 115) == Color{0, 161, 65, 255});
+    // gray = 56; r = 56 + 146 = 202, g = 56 - 44 = 12, b = 56 - 5 = 51.
+    REQUIRE(saturate(Color{183, 18, 52, 255}, 115) == Color{202, 12, 51, 255});
+
+    // The lighting applies it to stickers and not to the body.
+    const Camera camera = identity_camera();
+    Lighting lamp = one_lamp(Vec3{0.0f, 0.0f, 0.0f});
+    lamp.saturation = 1.15f;
+    ViewScene scene;
+    scene.faces.push_back(facing_face(3.0f, true));
+    scene.faces.push_back(facing_face(3.0f, true));
+    scene.faces[1].color = kBodyColor;
+    const ViewScene lit = light(lamp, camera)(scene);
+    REQUIRE(lit.faces[0].color == saturate(Color{200, 100, 50, 255}, 115));
+    REQUIRE(lit.faces[1].color == kBodyColor);
 }
 
 TEST_CASE("convex hull of a box's corners drops the inside and orders the rim")
@@ -331,11 +380,12 @@ TEST_CASE("the shadow's points travel through the passes like face corners")
     shadow.fade_start = face.points[0];
     shadow.fade_end = face.points[2];
     shadow.contact = {face.points[1], face.points[3]};
-    Caster box;
-    box.corners.fill(face.points[0]);
-    shadow.occluders.push_back(box.corners);
     shadow.opacity = 77;
     scene.shadow = shadow;
+    // And a caster, which becomes a body on screen.
+    Caster box;
+    for (std::size_t i = 0; i < 8; ++i) box.corners[i] = face.points[i % 4];
+    scene.casters.push_back(box);
 
     const Rect region{40.0f, 10.0f, 200.0f, 200.0f};
     const Camera camera = identity_camera();
@@ -369,9 +419,19 @@ TEST_CASE("the shadow's points travel through the passes like face corners")
         REQUIRE(staged.shadow->blur_sigma == Approx(kShadowBlurShare * region.width));
     }
 
-    // A box collapsed to a point has no silhouette worth the name.
-    REQUIRE(result.shadow->occluders.size() == 1);
-    REQUIRE(result.shadow->occluders[0].size() == 1);
+    // The caster arrives as a body: a flat box's silhouette is its face.
+    REQUIRE(result.bodies.size() == 1);
+    REQUIRE(result.bodies[0].size() == 4);
+
+    SECTION("the body is drawn whether or not there is a shadow")
+    {
+        WorldScene unshadowed = scene;
+        unshadowed.shadow.reset();
+        const RenderScene bare = unshadowed | view(camera) | project(camera) |
+                                 cull() | depth_sort() | viewport(region);
+        REQUIRE_FALSE(bare.shadow.has_value());
+        REQUIRE(bare.bodies.size() == 1);
+    }
 
     SECTION("culling a face does not cull the shadow")
     {
@@ -508,18 +568,10 @@ TEST_CASE("the home viewpoint's sample stickers carry no highlight")
     }
     REQUIRE(samples == 3);
 
-    SECTION("and the kicker's glint does reach the top face's near corner")
+    SECTION("with no specular on the key, no face anywhere carries one")
     {
-        // The kicker is behind the cube for exactly this: its reflection
-        // lands just off the corner of the top face nearest the eye.
-        bool glint_on_top = false;
-        for (std::size_t i = 0; i < world.faces.size(); ++i) {
-            Vec3 centre{0.0f, 0.0f, 0.0f};
-            for (const auto& point : world.faces[i].points) centre += point;
-            centre /= 4.0f;
-            if (centre.y > 0.9f && !scene.faces[i].highlights.empty()) glint_on_top = true;
-        }
-        REQUIRE(glint_on_top);
+        REQUIRE(default_lighting().lamps[0].specular == 0.0f);
+        for (const auto& face : scene.faces) REQUIRE(face.highlights.empty());
     }
 }
 
@@ -754,7 +806,6 @@ TEST_CASE("a resting cube casts one convex shadow onto the ground")
     REQUIRE(scene.shadow.has_value());
     const auto& cast = *scene.shadow;
     REQUIRE(cast.polygons.size() == 1);
-    REQUIRE(cast.occluders.size() == 1);
     REQUIRE(cast.contact.size() == 16);
     REQUIRE(cast.opacity == kShadowOpacity);
 
@@ -863,7 +914,6 @@ TEST_CASE("a turning layer's shadow turns with it")
 
     REQUIRE(scene.shadow.has_value());
     REQUIRE(scene.shadow->polygons.size() == 2);
-    REQUIRE(scene.shadow->occluders.size() == 2);
 
     // The same turn at zero degrees: the still slab's shadow is the same, and
     // the turning slab's is not.
@@ -906,9 +956,9 @@ TEST_CASE("the whole chain puts the shadow below the cube inside its region")
 
     REQUIRE(scene.faces.size() == 27);
     REQUIRE(scene.shadow.has_value());
-    REQUIRE(scene.shadow->occluders.size() == 1);
+    REQUIRE(scene.bodies.size() == 1);
     // A box seen corner-on is a hexagon.
-    REQUIRE(scene.shadow->occluders[0].size() == 6);
+    REQUIRE(scene.bodies[0].size() == 6);
 
     // The anchor under the cube is lower on screen than the cube's middle,
     // and the far anchor is higher up: the shadow leans away behind it.
@@ -953,12 +1003,13 @@ TEST_CASE("the home viewpoint's planes shade to the bytes the contract names")
     REQUIRE(green.has_value());
     REQUIRE(red.has_value());
 
-    // +Y at 290 out of 255: white clamps; +Z at 230 and +X at 211.
+    // +Y at 275 out of 255: white clamps; +Z at 230 and +X at 211, on the
+    // stickers' colours with their saturation raised first.
     REQUIRE(int{white->r} == 255);
-    REQUIRE(int{green->g} == (155 * 230 + 127) / 255);
-    REQUIRE(int{green->b} == (72 * 230 + 127) / 255);
-    REQUIRE(int{red->r} == (183 * 211 + 127) / 255);
-    REQUIRE(int{red->b} == (52 * 211 + 127) / 255);
+    REQUIRE(int{green->g} == (161 * 230 + 127) / 255);
+    REQUIRE(int{green->b} == (65 * 230 + 127) / 255);
+    REQUIRE(int{red->r} == (202 * 211 + 127) / 255);
+    REQUIRE(int{red->b} == (51 * 211 + 127) / 255);
 
     SECTION("and the same bytes for every size a person can pick")
     {

@@ -41,26 +41,13 @@ void append_sticker(WorldScene& scene, const math::Vec3& center,
                     float half_extent, cube::Face face, const Color& color);
 
 /**
- * Color of a cut surface exposed while a layer is turning.
- *
- * A cubie has no body faces at rest, so without this the inside of the cube
- * would show through as background during a turn. Kept clearly apart from the
- * background and from all six sticker colors so a test can tell them apart.
+ * Color of the cubie body: the cut surfaces exposed while a layer is turning,
+ * and the slab silhouettes the renderer paints under the stickers so that the
+ * seams between them show plastic rather than whatever is behind the cube.
+ * Kept clearly apart from the background and from all six sticker colors so
+ * a test can tell them apart.
  */
 inline constexpr Color kBodyColor{70, 74, 82, 255};
-
-/**
- * Color of the cubie body where it shows between the stickers.
- *
- * The renderer paints each slab's silhouette in this under the stickers, so
- * a seam shows dark plastic rather than whatever is behind the cube. Darker
- * than kBodyColor as a groove in shadow is -- and deliberately far from it:
- * a lit cut face is kBodyColor at some brightness, and the anti-aliased edge
- * of a seam against a sticker must not be mistakable for one. Checked against
- * every sticker colour and both grounds: no blend of this with any of them
- * comes within a unit of kBodyColor at any brightness a cut can have.
- */
-inline constexpr Color kSeamColor{34, 36, 40, 255};
 
 /**
  * Rotation of a turning layer, in the domain's sign convention.

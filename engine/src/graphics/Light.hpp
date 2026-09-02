@@ -15,11 +15,10 @@
  * glint a face throws when it sits between a light and the eye. There is no
  * reflection term because Blinn-Phong has none.
  *
- * Two lamps rather than one, the way a product is photographed: a key light
- * high in front for the diffuse shading, and a kicker behind for the glint.
- * One lamp cannot do both -- for the eye to see a reflection on the top face
- * the lamp has to be on the far side of the cube, and from there it leaves
- * the faces the eye is looking at in the dark.
+ * One lamp by default, the key: high in front for the diffuse shading. A
+ * kicker for the glint was tried and taken out -- a distant lamp glazes a
+ * whole face, a near one puts a spot on one face and nothing on the others,
+ * and neither read as a cube. The specular code stays for the knob.
  *
  * The lamps are points rather than directions on purpose. A direction only
  * ever slides a shadow sideways and lights a flat face evenly; a point
@@ -55,30 +54,63 @@ struct Lighting {
      */
     float attenuation = 1.0f;
 
+    /**
+     * Saturation of the stickers before they are lit, as a factor; 1 leaves
+     * them alone. Multiplying a colour down for shade lowers its lightness,
+     * which the eye reads as washing out, and a little more chroma up front
+     * gives that back. Not applied to the cubie body, which is plastic.
+     */
+    float saturation = 1.15f;
+
     /** The key light first: it alone casts the shadow. */
     std::vector<Light> lamps;
 
-    /** The studio arrangement the app is drawn under. */
+    /** The arrangement the app is drawn under. */
     [[nodiscard]] static Lighting standard();
 
     /**
-     * The same lamps with every term switched off but the ambient at 1, so
-     * every colour comes back as it is, byte for byte, while the key still
-     * casts its shadow. What the high-contrast palette is drawn under.
+     * The same lamps with every term switched off but the ambient at 1, and
+     * the saturation at 1, so every colour comes back as it is, byte for byte,
+     * while the key still casts its shadow. What the high-contrast palette is
+     * drawn under.
      */
     [[nodiscard]] static Lighting unlit(const Lighting& base);
 
     /**
-     * Flat list form for tuning by eye: ambient, attenuation, then for each
-     * of the two lamps x, y, z, diffuse, specular, shininess.
+     * Flat list form for tuning by eye: ambient, attenuation, saturation,
+     * then for each lamp x, y, z, diffuse, specular, shininess. One to four
+     * lamps.
      */
-    static constexpr std::size_t kLampCount = 2;
-    static constexpr std::size_t kValueCount = 2 + kLampCount * 6;
+    static constexpr std::size_t kHeaderCount = 3;
+    static constexpr std::size_t kLampValueCount = 6;
+    static constexpr std::size_t kMaxLamps = 4;
+
+    /** Whether `count` values describe a lighting with one to four lamps. */
+    [[nodiscard]] static constexpr bool valid_count(std::size_t count) noexcept
+    {
+        if (count < kHeaderCount + kLampValueCount) return false;
+        if ((count - kHeaderCount) % kLampValueCount != 0) return false;
+        return (count - kHeaderCount) / kLampValueCount <= kMaxLamps;
+    }
+
+    /** How many values to_values() writes for this lighting. */
+    [[nodiscard]] std::size_t value_count() const noexcept
+    {
+        return kHeaderCount + lamps.size() * kLampValueCount;
+    }
 
     /** Refuses a wrong count or a value that is not a number. */
     [[nodiscard]] bool from_values(const float* values, std::size_t count);
     void to_values(float* values) const;
 };
+
+/**
+ * A colour with its chroma scaled about its luminance, in integer arithmetic:
+ * gray = (2126 r + 7152 g + 722 b + 5000) / 10000, then each channel
+ * clamp(gray + ((c - gray) * percent + 50) / 100). At 100 percent every
+ * channel comes back unchanged, and a grey stays a grey at any percent.
+ */
+[[nodiscard]] Color saturate(const Color& color, int percent) noexcept;
 
 /** The lighting every frame is drawn under unless a palette asks for none. */
 [[nodiscard]] const Lighting& default_lighting();

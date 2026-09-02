@@ -359,6 +359,22 @@ bool ThorVGSoftwareRenderer::rebuild_canvas(
     // stands on it.
     if (scene.shadow && !draw_shadow(*scene.shadow)) return false;
 
+    // The cubies' bodies: each slab's silhouette in the body colour, over the
+    // shadow and under the stickers. That is what shows through the seams
+    // between stickers -- the same plastic as a cut face -- and what keeps
+    // the shadow out of the cube's own outline, at the price of a few
+    // polygons rather than a mask. Drawn whether or not there is a shadow.
+    for (const auto& hull : scene.bodies) {
+        auto* shape = add_shape(*canvas_);
+        if (!shape) return false;
+        if (!append_polygon(*shape, hull)) return false;
+        if (shape->fill(graphics::kBodyColor.r, graphics::kBodyColor.g,
+                        graphics::kBodyColor.b, graphics::kBodyColor.a) !=
+            tvg::Result::Success) {
+            return false;
+        }
+    }
+
     for (const auto& face : scene.faces) {
         auto* shape = add_shape(*canvas_);
         if (!shape) return false;
@@ -563,21 +579,6 @@ bool ThorVGSoftwareRenderer::draw_shadow(
     // beside it.
     if (!clipper_for(*body, shadow.clip)) return false;
 
-    // The cubies' bodies: each slab's silhouette, painted in the seam colour
-    // over the shadow and under the stickers. That is what shows through the
-    // seams between stickers -- dark plastic, not the ground or whatever is
-    // behind the cube -- and what keeps the shadow out of the cube's own
-    // outline, at the price of a few polygons rather than a mask.
-    for (const auto& hull : shadow.occluders) {
-        auto* shape = add_shape(*canvas_);
-        if (!shape) return false;
-        if (!append_polygon(*shape, hull)) return false;
-        if (shape->fill(graphics::kSeamColor.r, graphics::kSeamColor.g,
-                        graphics::kSeamColor.b, graphics::kSeamColor.a) !=
-            tvg::Result::Success) {
-            return false;
-        }
-    }
     return true;
 }
 

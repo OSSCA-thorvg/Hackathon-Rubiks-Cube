@@ -50,13 +50,6 @@ std::optional<ShadowGroup<To>> map_shadow(
         result.polygons.push_back(std::move(mapped));
     }
 
-    result.occluders.reserve(shadow->occluders.size());
-    for (const auto& box : shadow->occluders) {
-        std::array<To, 8> mapped{};
-        for (std::size_t i = 0; i < box.size(); ++i) mapped[i] = map(box[i]);
-        result.occluders.push_back(mapped);
-    }
-
     result.contact.reserve(shadow->contact.size());
     for (const auto& point : shadow->contact) result.contact.push_back(map(point));
     return result;
@@ -70,9 +63,6 @@ bool shadow_in_front(const ShadowGroup<math::Vec3>& shadow, float near_plane)
     };
     for (const auto& polygon : shadow.polygons) {
         if (!std::all_of(polygon.begin(), polygon.end(), in_front)) return false;
-    }
-    for (const auto& box : shadow.occluders) {
-        if (!std::all_of(box.begin(), box.end(), in_front)) return false;
     }
     if (!std::all_of(shadow.contact.begin(), shadow.contact.end(), in_front)) {
         return false;
@@ -123,6 +113,16 @@ ViewScene ViewPass::operator()(const WorldScene& scene) const
     }
 
     result.shadow = map_shadow<math::Vec3, math::Vec3>(scene.shadow, to_view);
+
+    // The casters come along to become the bodies drawn under the stickers.
+    result.casters.reserve(scene.casters.size());
+    for (const auto& caster : scene.casters) {
+        std::array<math::Vec3, 8> corners{};
+        for (std::size_t i = 0; i < corners.size(); ++i) {
+            corners[i] = to_view(caster.corners[i]);
+        }
+        result.casters.push_back(corners);
+    }
     return result;
 }
 
@@ -184,6 +184,18 @@ ClipScene ProjectPass::operator()(const ViewScene& scene) const
     // be dropped on its own without tearing the outline, so it goes whole.
     if (scene.shadow && shadow_in_front(*scene.shadow, near_plane)) {
         result.shadow = map_shadow<math::Vec3, math::Vec2>(scene.shadow, to_ndc);
+    }
+
+    // A caster with a corner at the near plane goes whole, like a face.
+    const float limit = -near_plane;
+    for (const auto& caster : scene.casters) {
+        const bool in_front = std::all_of(
+            caster.begin(), caster.end(),
+            [limit](const math::Vec3& corner) { return corner.z < limit; });
+        if (!in_front) continue;
+        std::array<math::Vec2, 8> corners{};
+        for (std::size_t i = 0; i < corners.size(); ++i) corners[i] = to_ndc(caster[i]);
+        result.casters.push_back(corners);
     }
     return result;
 }
@@ -263,15 +275,16 @@ RenderScene ViewportPass::operator()(const ClipScene& scene) const
         shadow.opacity = mapped->opacity;
         shadow.blur_sigma = kShadowBlurShare * rect.width;
         shadow.clip = clip;
-
-        // A convex box's outline on screen is the hull of its corners, which
-        // is all the renderer needs to keep the shadow out of the cube.
-        shadow.occluders.reserve(mapped->occluders.size());
-        for (const auto& box : mapped->occluders) {
-            shadow.occluders.push_back(
-                convex_hull(std::vector<math::Vec2>(box.begin(), box.end())));
-        }
         result.shadow = std::move(shadow);
+    }
+
+    // The bodies: a convex box's outline on screen is the hull of its corners.
+    result.bodies.reserve(scene.casters.size());
+    for (const auto& caster : scene.casters) {
+        std::vector<math::Vec2> corners;
+        corners.reserve(caster.size());
+        for (const auto& corner : caster) corners.push_back(to_pixels(corner));
+        result.bodies.push_back(convex_hull(std::move(corners)));
     }
     return result;
 }

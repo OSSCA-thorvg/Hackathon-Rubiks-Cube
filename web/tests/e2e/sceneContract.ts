@@ -14,10 +14,11 @@ export const BLUE = [0, 70, 173, 255]; // -Z back
 export const RED = [183, 18, 52, 255]; // +X right
 export const ORANGE = [255, 88, 0, 255]; // -X left
 
-/** Fill of a cut surface, only ever visible while a layer is turning. */
+/**
+ * The cubie body: the cut surfaces a turn opens, and what shows between the
+ * stickers, painted under them as each slab's silhouette.
+ */
 export const BODY = [70, 74, 82, 255];
-/** The body where it shows between stickers: darker, and never a lit BODY. */
-export const SEAM = [34, 36, 40, 255];
 
 // The brightness of each plane of the cube under the light, a byte out of
 // 255, worked out by hand in docs/tasks/04-rubiks-cube-domain.md (contract
@@ -44,11 +45,31 @@ export function lit(color: readonly number[], brightness: number): number[] {
   return [channel(color[0]!), channel(color[1]!), channel(color[2]!), color[3]!];
 }
 
+/**
+ * A sticker's colour with its chroma raised, as the engine does before it
+ * lights it: gray = (2126 r + 7152 g + 722 b + 5000) / 10000, each channel
+ * gray + ((c - gray) * 115 + 50) / 100 rounded away from grey, clamped.
+ */
+export function saturated(color: readonly number[]): number[] {
+  const gray = Math.floor(
+    (2126 * color[0]! + 7152 * color[1]! + 722 * color[2]! + 5000) / 10000,
+  );
+  const channel = (value: number): number => {
+    const offset = (value - gray) * 115;
+    const rounded =
+      offset >= 0
+        ? Math.floor((offset + 50) / 100)
+        : -Math.floor((-offset + 50) / 100);
+    return Math.min(255, Math.max(0, gray + rounded));
+  };
+  return [channel(color[0]!), channel(color[1]!), channel(color[2]!), color[3]!];
+}
+
 /** The six faces as the lit 3D view shows them on a solved cube. */
-export const UP_LIT = lit(WHITE, LIT_UP);
-export const FRONT_LIT = lit(GREEN, LIT_FRONT);
-export const RIGHT_LIT = lit(RED, LIT_RIGHT);
-export const BACK_LIT = lit(BLUE, LIT_AWAY);
+export const UP_LIT = lit(saturated(WHITE), LIT_UP);
+export const FRONT_LIT = lit(saturated(GREEN), LIT_FRONT);
+export const RIGHT_LIT = lit(saturated(RED), LIT_RIGHT);
+export const BACK_LIT = lit(saturated(BLUE), LIT_AWAY);
 
 /**
  * Whether a pixel is a colour to within `slack` per channel.
@@ -71,20 +92,26 @@ export function near(
 }
 
 /**
- * Whether a pixel is a cut surface at any brightness it can have.
- *
- * A cut face is shaded from its near end to its far end like any other, so
- * the six plane references are the middles of six runs, each this wide.
+ * Whether a pixel is the cubie body at any brightness it can have: the body
+ * in a seam as it is, or a cut face lit by its plane. Read at one of the cut
+ * probes it says whether a layer is part way round.
  */
-export const CUT_SPREAD = 24;
-
 export function isBody(pixel: readonly number[]): boolean {
-  return LIT_CUTS.some((reference) => {
-    for (let b = reference - CUT_SPREAD; b <= reference + CUT_SPREAD; b += 1) {
-      if (near(pixel, lit(BODY, b))) return true;
-    }
-    return false;
-  });
+  for (let b = 190; b <= 300; b += 1) {
+    if (near(pixel, lit(BODY, b), 2)) return true;
+  }
+  return false;
+}
+
+/**
+ * How many cells of the coarse 3D sweep show the body.
+ *
+ * The seams show it at rest, a few cells' worth; a cut face opened by a turn
+ * shows it over many more. The count, against the resting count, is what
+ * says a layer is part way round.
+ */
+export function bodyCells(probe: CanvasProbe): number {
+  return probe.cubeGrid.filter(isBody).length;
 }
 
 // Sample points as fractions of the square 3D region, derived from the
@@ -104,7 +131,7 @@ export const RIGHT_SAMPLE = [0.69, 0.61] as const;
 export const FRONT_RIGHT_COLUMN = [0.433, 0.694] as const;
 
 // Gaps between neighbouring stickers. The cubie body shows there, painted
-// under the stickers, so they read as SEAM — but only once the gap is
+// under the stickers, so they read as BODY — but only once the gap is
 // comfortably wider than the anti-aliased edges around it.
 export const SEAM_SAMPLES = [
   [0.377, 0.645],
@@ -112,6 +139,16 @@ export const SEAM_SAMPLES = [
   [0.564, 0.321],
 ] as const;
 export const SEAM_MIN_SIZE = 1024;
+
+/**
+ * Where a cut face shows part way through a turn, as fractions of the 3D
+ * region: a point on the still layers' cut, clear of the turned layer, that
+ * at rest lies behind a front-face sticker. The world points and the
+ * ray-casting behind them are in docs/tasks/04-rubiks-cube-domain.md; the
+ * fractions are their projection from the home viewpoint.
+ */
+export const CUT_R_SAMPLE = [0.3927, 0.474] as const; // (1/3, 0.70, 0.85)
+export const CUT_U_SAMPLE = [0.4688, 0.6059] as const; // (0.70, 1/3, 0.85)
 
 // The solved net, written out by hand rather than derived from the engine's
 // own cell mapping, in the order the probe reads it.
@@ -165,6 +202,9 @@ export type CanvasProbe = {
   readonly left: number[];
   readonly right: number[];
   readonly seams: number[][];
+  /** The two cut-face probes: a lit body mid-turn, a sticker at rest. */
+  readonly cutR: number[];
+  readonly cutU: number[];
   readonly net: number[][];
   readonly corners: number[][];
   /** A coarse sweep of the 3D region, for comparing two frames. */
@@ -252,6 +292,8 @@ export async function probeCanvas(
         left: inCube(config.leftSample),
         right: inCube(config.rightSample),
         seams: config.seamSamples.map(inCube),
+        cutR: inCube(config.cutRSample),
+        cutU: inCube(config.cutUSample),
         net,
         corners: [
           read(0, 0),
@@ -267,6 +309,8 @@ export async function probeCanvas(
       leftSample: LEFT_SAMPLE,
       rightSample: RIGHT_SAMPLE,
       seamSamples: SEAM_SAMPLES,
+      cutRSample: CUT_R_SAMPLE,
+      cutUSample: CUT_U_SAMPLE,
       netBlocks: NET_BLOCKS,
       cubeSize: size,
       cubeRegionSide: CUBE_REGION_SIDE,
@@ -399,7 +443,7 @@ export function assertFacesAndCorners(probe: CanvasProbe): void {
   // reaches the sample point and the check is not meaningful.
   if (Math.min(probe.width, probe.height) >= SEAM_MIN_SIZE) {
     for (const seam of probe.seams) {
-      expect(seam).toEqual(SEAM);
+      expect(seam).toEqual(BODY);
     }
   }
 }

@@ -229,7 +229,7 @@ TEST_CASE("the cube's body shows through its seams and keeps the shadow out")
 
     RenderScene scene;
     scene.shadow = band();
-    scene.shadow->occluders.push_back(rectangle(100.0f, 90.0f, 156.0f, 166.0f));
+    scene.bodies.push_back(rectangle(100.0f, 90.0f, 156.0f, 166.0f));
     // Two stickers inside the silhouette with a seam between them.
     scene.faces.push_back(quad(104.0f, 96.0f, 126.0f, 160.0f, Color{200, 0, 0, 255}));
     scene.faces.push_back(quad(130.0f, 96.0f, 152.0f, 160.0f, Color{0, 200, 0, 255}));
@@ -237,8 +237,8 @@ TEST_CASE("the cube's body shows through its seams and keeps the shadow out")
 
     // The seam shows the cubie body and only the body, though the shadow
     // polygon runs straight under it: dark plastic, not the ground.
-    const auto& seam = rubiks::graphics::kSeamColor;
-    REQUIRE(same_rgb(frame.at(128, 128), Rgba{seam.r, seam.g, seam.b, 255}));
+    const auto& body = rubiks::graphics::kBodyColor;
+    REQUIRE(same_rgb(frame.at(128, 128), Rgba{body.r, body.g, body.b, 255}));
     // Either side of the silhouette the shadow is there.
     REQUIRE(frame.luminance(80, 128) < 32 * 3);
     REQUIRE(frame.luminance(176, 128) < 32 * 3);

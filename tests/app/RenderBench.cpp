@@ -142,16 +142,12 @@ int main(int argc, char** argv)
         v.shadow->blur_sigma = 0.01f;
         time_variant("shadow, blur ~0", v);
         v = scene;
-        v.shadow->occluders.clear();
-        time_variant("shadow, no occluder mask", v);
-        v = scene;
         v.shadow->contact.clear();
         time_variant("shadow, no contact patch", v);
         v = scene;
-        v.shadow->occluders.clear();
         v.shadow->contact.clear();
         v.shadow->blur_sigma = 0.01f;
-        time_variant("shadow, bare (fade+clip+mul)", v);
+        time_variant("shadow, bare (fade+clip)", v);
     }
 #endif
 

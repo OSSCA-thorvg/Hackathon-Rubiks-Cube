@@ -10,15 +10,9 @@ Lighting Lighting::standard()
     Lighting lighting;
     // The key: high, in front and a little to the left of the home eye, so
     // the top face is brightest and the front brighter than the right, and
-    // the shadow it casts stays near the cube's footprint.
-    // Its glint is kept tight so a lamp this far away does not glaze a whole
-    // face: a distant lamp's half-vector barely turns across two units.
-    lighting.lamps.push_back(Light{{2.6f, 7.0f, 4.0f}, 0.38f, 0.40f, 24.0f});
-    // The kicker: close above the cube, so its reflection is a spot rather
-    // than a glaze, landing just off the top face's corner nearest the home
-    // eye. Specular only -- it is there to be seen in the surface, not to
-    // light it, and so the render contract's bytes are the key's alone.
-    lighting.lamps.push_back(Light{{0.0f, 2.4f, 0.0f}, 0.0f, 0.55f, 40.0f});
+    // the shadow it casts stays near the cube's footprint. No glint: none of
+    // the arrangements tried read as a cube (see the phase document).
+    lighting.lamps.push_back(Light{{2.6f, 7.0f, 4.0f}, 0.38f, 0.0f, 24.0f});
     return lighting;
 }
 
@@ -26,6 +20,9 @@ Lighting Lighting::unlit(const Lighting& base)
 {
     Lighting lighting = base;
     lighting.ambient = 1.0f;
+    // Saturation off as well: the high-contrast palette's six shades were
+    // measured for a purpose, and this must hand them back untouched.
+    lighting.saturation = 1.0f;
     for (auto& lamp : lighting.lamps) {
         lamp.diffuse = 0.0f;
         lamp.specular = 0.0f;
@@ -35,16 +32,18 @@ Lighting Lighting::unlit(const Lighting& base)
 
 bool Lighting::from_values(const float* values, std::size_t count)
 {
-    if (!values || count != kValueCount) return false;
+    if (!values || !valid_count(count)) return false;
     for (std::size_t i = 0; i < count; ++i) {
         if (!std::isfinite(values[i])) return false;
     }
 
     ambient = values[0];
     attenuation = values[1];
+    saturation = values[2];
     lamps.clear();
-    for (std::size_t i = 0; i < kLampCount; ++i) {
-        const float* v = values + 2 + i * 6;
+    const std::size_t lamp_count = (count - kHeaderCount) / kLampValueCount;
+    for (std::size_t i = 0; i < lamp_count; ++i) {
+        const float* v = values + kHeaderCount + i * kLampValueCount;
         lamps.push_back(Light{{v[0], v[1], v[2]}, v[3], v[4], v[5]});
     }
     return true;
@@ -54,9 +53,10 @@ void Lighting::to_values(float* values) const
 {
     values[0] = ambient;
     values[1] = attenuation;
-    for (std::size_t i = 0; i < kLampCount; ++i) {
-        float* v = values + 2 + i * 6;
-        const Light lamp = i < lamps.size() ? lamps[i] : Light{};
+    values[2] = saturation;
+    for (std::size_t i = 0; i < lamps.size(); ++i) {
+        float* v = values + kHeaderCount + i * kLampValueCount;
+        const Light& lamp = lamps[i];
         v[0] = lamp.position.x;
         v[1] = lamp.position.y;
         v[2] = lamp.position.z;
@@ -64,6 +64,19 @@ void Lighting::to_values(float* values) const
         v[4] = lamp.specular;
         v[5] = lamp.shininess;
     }
+}
+
+Color saturate(const Color& color, int percent) noexcept
+{
+    const int gray = (2126 * color.r + 7152 * color.g + 722 * color.b + 5000) / 10000;
+    const auto channel = [gray, percent](std::uint8_t value) {
+        // Rounded towards the nearest, in the direction of the difference,
+        // so a channel above grey and one below move symmetrically.
+        const int offset = (int{value} - gray) * percent;
+        const int rounded = offset >= 0 ? (offset + 50) / 100 : -((-offset + 50) / 100);
+        return static_cast<std::uint8_t>(std::clamp(gray + rounded, 0, 255));
+    };
+    return Color{channel(color.r), channel(color.g), channel(color.b), color.a};
 }
 
 const Lighting& default_lighting()

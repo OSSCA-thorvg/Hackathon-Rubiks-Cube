@@ -2,7 +2,7 @@
 
 ## Status
 
-`Planned` — 설계만 있고 코드는 아직 없습니다.
+`Completed` — Step 0부터 7까지 들어왔습니다. 구현하면서 계획이 틀렸던 자리는 지우지 않고 **"구현 개정"** 표시와 함께 무엇이 왜 틀렸는지를 남겼습니다. 다섯 군데입니다: 광원 위치(반올림 경계), diffuse를 읽는 점(스티커 중심 → 평면의 한 점), 홈 시점의 하이라이트(없다), 시점을 돌린 뒤의 픽셀 비교(글린트 허용), 그리고 그림자 합성을 레이어 넷에서 하나로(측정이 강제한 것).
 
 초안에 외부 리뷰를 받아 한 차례 개정했습니다. 개정된 자리는 지우지 않고 **"개정"** 표시와 함께 무엇이 왜 틀렸는지를 남겼습니다. 리뷰가 지적한 것은 방향이 아니라 계약의 빈 곳이었습니다 — 광원의 좌표계, 그림자 그룹의 속성이 다각형에 붙어 있던 것, 바닥 아래로 내려가는 카메라, 그리고 상수가 정해지기 전에는 v4 계약 숫자를 낼 수 없다는 순서입니다.
 
@@ -52,13 +52,13 @@ vendored [`subprojects/thorvg`](../../subprojects/thorvg/meson.build)는 1.0.0�
 
 | API | 이 phase에서의 역할 |
 |---|---|
-| `Scene::opacity()` | 겹치는 그림자 조각을 평탄화한 뒤 한 번만 반투명하게 |
-| `Scene::add(SceneEffect::GaussianBlur, double sigma, int direction, int border, int quality)` | 반그림자(penumbra) |
-| `Paint::blend(BlendMethod::Multiply / Screen)` | 그림자는 바닥을 어둡게, 하이라이트는 스티커를 밝게 |
-| `RadialGradient::radial(cx, cy, r, fx, fy, fr)` | 스페큘러 하이라이트의 형태, 접촉 그림자, 퇴화한 fade |
-| `LinearGradient` + `Paint::mask(MaskMethod::Alpha)` | 큐브에서 멀어질수록 옅어지는 그림자 |
-| `Paint::mask(MaskMethod::InvAlpha)` | 큐브 실루엣 안쪽(틈 포함)에서 그림자를 지움 |
+| `Shape::fillRule(FillRule::NonZero)` | 여러 caster의 다각형을 한 Shape의 subpath로 넣어 합집합으로 — 겹친 곳이 두 번 어두워지지 않음 |
+| `Scene::add(SceneEffect::GaussianBlur, double sigma, int direction, int border, int quality)` | 반그림자(penumbra) — 이 phase의 유일한 합성 레이어 |
+| `LinearGradient` / `RadialGradient` (fill) | 그림자의 fade(멀어질수록 옅어짐), 접촉 그림자, 스페큘러 하이라이트의 형태 |
+| `Paint::blend(BlendMethod::Screen)` | 하이라이트가 스티커를 흰색 쪽으로 밝게 |
 | `Paint::clip()` | 그림자가 큐브 뷰포트 밖 넷 뷰를 침범하지 않게 |
+
+초안의 표에는 `Scene::opacity()`, `mask(Alpha)`, `mask(InvAlpha)`, `blend(Multiply)`도 있었습니다. 넷 다 동작했지만 **각각이 그림자 발자국 전체를 한 번씩 더 훑는 합성 레이어**였고, 측정하니 3×3에서 프레임 시간이 1.2ms에서 6.5ms가 됐습니다. 같은 그림을 레이어 하나로 내는 방법으로 바꿨습니다(결정 7의 구현 개정).
 
 `SceneEffect::add`는 **variadic**이라 인자 개수와 타입이 헤더 주석과 정확히 같아야 합니다. GaussianBlur는 `(double, int, int, int)` 넷이고, `float`을 넘기면 undefined behavior입니다. 렌더러는 이 호출을 인자 타입이 고정된 함수 하나로 감쌉니다.
 
@@ -115,6 +115,8 @@ color' = (color * round(I * 255) + 127) / 255     // 채널별 정수 연산, 25
 
 정수 반올림을 공식에 박아 두는 이유는 렌더 계약 v4가 byte 단위 일치를 요구하기 때문입니다(결정 9). `I`는 `ambient + diffuse ≤ 1`이 되게 상수를 잡아 clamp가 실제로는 일어나지 않게 합니다.
 
+**구현 개정 — 어디서 읽는가.** 초안은 "면 중심에서 한 번 계산"이었고 그대로 구현했더니 같은 큐브 면의 스티커 아홉 장이 **여덟 가지 byte**로 나왔습니다. 점광원이라 스티커마다 L이 조금씩 다르고, 그 차이가 눈에는 안 보여도 반올림에는 보입니다. 아홉 색인 면은 계약이 이름을 붙일 수 없으므로, diffuse는 **면의 평면이 큐브 중심에 가장 가까운 점**(바깥 스티커라면 큐브 면의 한가운데)에서 한 번 읽습니다. 같은 평면의 스티커는 같은 byte가 되고, 회전 중 단면도 한 층 안쪽 자기 평면의 값 하나를 갖습니다. `LightPass`가 카메라에서 큐브 중심을 뷰 공간으로 옮겨 들고 있는 이유입니다.
+
 **ambient는 낮출 수 없습니다.** 스티커 색은 상태를 나타내는 정체(빨강·주황·흰·노랑·초록·파랑)이고, 특히 Phase 18에서 사용자는 실물과 화면을 대조합니다. 어두운 쪽 면에서 빨강과 주황이 섞이면 조명이 아니라 결함입니다. `kAmbient`는 0.55 이상으로 두고, **여섯 색이 명암의 양 끝에서도 서로 구별된다는 것을 test로 고정합니다.**
 
 **개정 — High contrast palette에서 조명을 끄는 값.** 초안은 `ambient = 1, specular = 0`을 권했는데, 그러면 diffuse 항이 남아 `I > 1`이 되어 오히려 더 밝아집니다. 조명을 무력화하는 값은 `ambient = 1, diffuse = 0, specular = 0`입니다. 이 값에서 `color' == color`가 byte 단위로 성립하는지도 test합니다.
@@ -132,6 +134,8 @@ color' = (color * round(I * 255) + 127) / 255     // 채널별 정수 연산, 25
 - 기울어진 면 위의 원은 화면에서 타원이 되는데, **원으로 근사하는 것은 의도**입니다. 스티커 한 장 위의 하이라이트는 작아 타원과 원의 차이가 보이지 않고, 두 축을 실으면 세 단계 타입에 필드가 둘 더 늘어납니다. 근사임을 여기 적어 둡니다.
 
 **개정 — 그리는 순서.** 초안은 스티커를 전부 그린 뒤 하이라이트를 전부 그리기로 했습니다. 회전 중 큐브는 볼록하지 않아, 뒤에 있는 면의 하이라이트가 앞면 위로 샙니다. 렌더러는 depth_sort된 순서로 **면 하나를 그리고 바로 그 면의 하이라이트를 그립니다.** 하이라이트는 `RenderFace::highlight`에 붙어 있으므로 순서를 따로 관리할 것이 없습니다.
+
+**구현 개정 — 홈 시점에는 하이라이트가 없습니다.** 초안은 "첫 화면에서 그림자와 하이라이트가 둘 다 보인다"고 적었는데 기하학적으로 불가능합니다. 눈이 (3, 3, 3) 대각선에 있을 때 보이는 세 면 위에 반사점이 놓이려면 광원이 큐브 **뒤**(눈의 반대편)에 있어야 하고, 그러면 보이는 세 면은 ambient만 받아 평평해집니다. 거울 앞에 서서 조명을 등지고 있으면 거울에 조명이 안 비치는 것과 같습니다. 그래서 첫 화면은 확산광과 그림자로 입체감을 내고, 하이라이트는 **카메라를 돌려 면이 광원과 눈 사이에 놓일 때**와 **레이어가 회전하며 기울어질 때** 나타납니다. 계약(결정 9)에는 오히려 좋은 소식입니다 — 홈 시점의 sample 면에 하이라이트가 없다는 제약이 저절로 성립하고, test가 그것을 고정합니다.
 
 alpha가 문턱값(`kHighlightMinAlpha`) 아래인 면은 Highlight를 달지 않습니다. 하이라이트를 받는 스티커 수는 lobe가 덮는 큐브 면의 비율에 비례하므로 **N²에 비례하되 기본 비용(스티커 6N²)에 대한 비율은 N과 무관**합니다. 이 주장은 Step 6에서 28×28로 잽니다.
 
@@ -172,7 +176,9 @@ P' = L + (P - L) * t          // 박스의 어느 꼭짓점이든 P.y >= L.y 이
 
 **개정 — 직상부 광원의 그림자는 발자국이 아닙니다.** 초안의 test "광원이 바로 위일 때 그림자는 발자국과 일치"는 이 공식과 모순됩니다. 유한 높이의 점광원은 직상부에서도 그림자를 확대합니다. 높이 `Py`의 꼭짓점은 수평으로 `(L.y − ground_y) / (L.y − Py)` 배 늘어나므로, `L.y = 4.5`, `ground_y = −1.5`, 윗면 `Py = 1`이면 배율은 `6 / 3.5 ≈ 1.71`입니다. test는 "중심과 축은 일치하고, 각 꼭짓점이 계산된 배율만큼 확대된다"로 씁니다. 발자국과 같아지는 것은 방향광의 극한뿐입니다.
 
-광원 위치는 월드 좌표로 `ApplicationState`가 하나 들고, `light()`와 `shadow()`가 같은 값을 받습니다(결정 1). 기본값은 카메라 홈 시점 기준 위쪽 앞이라 첫 화면에서 그림자와 하이라이트가 둘 다 보입니다. 정확한 값은 Step 0에서 결정 9의 제약(계약 sample 지점이 하이라이트 밖)을 만족하도록 확정합니다.
+광원 위치는 월드 좌표로 `ApplicationState`가 하나 들고, `light()`와 `shadow()`가 같은 값을 받습니다(결정 1). 기본값은 카메라 홈 시점 기준 위쪽 앞, 조금 왼쪽입니다.
+
+**구현 개정 — 광원 위치는 (2.0, 4.5, 3.5)가 아니라 (2.5, 4.7, 4.2)입니다.** 출발값에서 +Z 평면의 밝기가 `199.56`으로 반올림 경계에 0.06 차이로 걸렸습니다. float 연산 순서 하나로 199가 200이 되는 값은 계약이 적을 수 없습니다. 스티커 평면(N=2~9, 28)과 N=3의 단면 평면 여섯 개의 밝기가 모두 경계에서 0.3 이상 떨어지는 위치를 격자 탐색으로 골랐고, 덤으로 **2×2부터 9×9까지 보이는 세 면의 byte가 같아졌습니다**(215 / 206 / 177). 이것을 test로 고정했습니다.
 
 ### 6. 바닥은 보이지 않고, 큐브는 떠 있다
 
@@ -227,13 +233,26 @@ struct RenderShadowGroup {                     // ThorVG 타입 없음
 
 그리고 **접촉 그림자**: `contact` 타원에 radial gradient를 `Multiply`로 깝니다. 광원이 어디 있든 큐브 아래에 있어서, 투영 그림자가 극단적으로 늘어났을 때 큐브가 붕 떠 보이는 것을 잡아 줍니다. 이것도 occluder mask와 clip을 받습니다.
 
-그리는 순서는 접촉 그림자 → 투영 그림자 Scene → (스티커, 그 스티커의 하이라이트)를 depth 순으로 → 축 기즈모입니다. 렌더러가 여기서 처음 갖게 되는 "면 여러 개를 `tvg::Scene` 하나로 묶어 효과를 거는" 기능은 [Phase 19.5](./19.5-net-lift-shadow.md)가 넷의 들림 그림자에 재사용합니다.
+그리는 순서는 접촉 그림자 → 투영 그림자 Scene → 큐브 실루엣 → (스티커, 그 스티커의 하이라이트)를 depth 순으로 → 축 기즈모입니다. 렌더러가 여기서 처음 갖게 되는 "도형을 `tvg::Scene` 하나로 묶어 효과를 거는" 기능은 [Phase 19.5](./19.5-net-lift-shadow.md)가 넷의 들림 그림자에 재사용합니다.
+
+**구현 개정 — 합성 레이어는 하나입니다.** 위 여섯 단계를 그대로 구현한 첫 판은 맞게 그렸지만 느렸습니다. `Scene::opacity()`, fade mask, occluder mask, `Multiply` blend가 각각 합성 레이어를 만들고, 레이어마다 그림자 발자국(뷰포트의 절반 가까이) 전체를 한 번 더 훑습니다. 1024² native에서 3×3 프레임이 1.2ms → 6.5ms, 28×28이 6.3ms → 13ms였습니다. WASM은 이보다 2~3배 느리므로 60fps 예산을 그림자 하나가 다 써 버리는 값입니다. 각 단계를 빼 가며 측정한 뒤([`RenderBench.cpp`](../../tests/app/RenderBench.cpp)) 같은 그림을 다음처럼 냅니다.
+
+1. **평탄화는 fill rule로.** caster마다 Scene에 도형을 하나씩 넣고 `opacity()`로 눌렀던 것을, **한 Shape에 subpath 여러 개**로 넣고 `FillRule::NonZero`로 채웁니다. 겹친 영역은 winding이 2여도 "안"이라 한 번만 칠해집니다. 합성 레이어가 없고, 불투명도는 fill 색의 alpha가 됩니다.
+2. **fade는 mask가 아니라 fill입니다.** 그 Shape의 fill이 `fade_start`(alpha = opacity)에서 `fade_end`(alpha = opacity × floor)로 가는 linear gradient(퇴화하면 radial)입니다. 1에서 도형이 하나가 됐기 때문에 가능해진 일입니다 — 도형이 여럿이면 gradient alpha가 겹치는 곳에서 두 번 쌓입니다.
+3. **블러는 남습니다.** 이 Shape를 담은 Scene에 `GaussianBlur`를 겁니다. 이것이 유일한 합성 레이어이고, 블러는 외곽선 전체를 한 번에 봐야 하므로 없앨 수 없습니다. 품질은 60(2패스)에서 **30(1패스)**으로 내렸습니다. 그림자 가장자리에서 박스 1패스와 2패스의 차이는 보이지 않고 비용은 절반입니다.
+4. **Multiply는 미리 곱합니다.** 바닥은 단색이므로 `Multiply(바닥, 그림자색)`은 `바닥 × 그림자색 / 255`라는 색 하나와 같고, 그 색을 Normal로 그리면 결과가 픽셀 단위로 같습니다. 렌더러가 배경색을 알고 있으므로 프레임마다 한 번 곱합니다. 블렌드 레이어 하나(약 1.3ms)가 사라집니다. Light/Dark 두 theme에서 한 상수로 성립한다는 성질은 그대로입니다.
+5. **실루엣은 mask가 아니라 덧칠입니다.** `InvAlpha` mask 대신, 큐브의 화면 실루엣(occluder hull)을 **배경색으로 채운 도형**을 그림자 위에, 스티커 아래에 그립니다. 실물이 바닥을 가리는 것과 같은 일이고, seam은 배경색 도형 위의 틈이라 계약대로 배경색입니다. 바닥이 단색이라는 같은 전제 위에 서 있습니다.
+6. **clip은 그대로**입니다. Shape/Scene의 clip은 레이어를 만들지 않습니다.
+
+결과는 1024² native에서 3×3 3.9ms, 9×9 5.5ms, 28×28 10.6ms입니다(아래 측정 표). 접촉 그림자는 radial gradient 도형 하나로 남았고 clip만 받습니다. 두 mask와 opacity, Multiply가 빠졌으므로 위 API 표도 그에 맞게 줄였습니다.
 
 ### 8. 그림자색은 배경에서 유도한다
 
-회색 그림자는 싸 보입니다. 그림자색은 배경보다 어둡고 차가운 색을 `Multiply`로 얹어 만듭니다. Light 배경에서는 푸른 기가 도는 그림자, Dark 배경에서는 더 깊은 자리가 됩니다. Dark에서 농도가 모자라면 opacity를 theme별로 달리 받되, 값이 두 개 이상 필요해지기 전까지는 상수 하나로 시작합니다.
+회색 그림자는 싸 보입니다. 그림자색은 배경보다 어둡고 차가운 색을 배경에 **곱해서** 만듭니다. Light 배경에서는 푸른 기가 도는 그림자, Dark 배경에서는 더 깊은 자리가 됩니다. 곱셈은 처음에 `Multiply` blend였고 지금은 렌더러가 배경색과 `kShadowColor`를 직접 곱한 색입니다(결정 7의 구현 개정 4) — 결과는 같고 레이어 하나가 적습니다. Dark에서 농도가 모자라면 opacity를 theme별로 달리 받되, 값이 두 개 이상 필요해지기 전까지는 상수 하나로 시작합니다.
 
 ### 9. 렌더 계약은 v4로 개정하고, 조명이 계약을 더 세게 만든다
+
+**구현 개정 — 시점을 돌린 뒤의 비교.** 홈 시점의 sample은 byte 일치로 검사하지만, 궤도로 시점을 돌린 뒤 "어느 면이 어디 있나"를 묻는 기존 test([`PointerInteractionTest.cpp`](../../tests/app/PointerInteractionTest.cpp))는 뒤에서 본 시점에서 윗면에 **실제 하이라이트**를 만났습니다(255 대신 250). 물리적으로 맞는 결과이므로 하이라이트를 없애지 않고, 그 test의 비교를 "그 색, 또는 그 색에 흰색 Screen이 같은 비율로 얹힌 것"으로 바꿨습니다(`require_pixel_reads`). 세 채널이 하나의 비율로 설명되어야 하므로 다른 색은 여전히 통과하지 못합니다. v4 계약 자체(홈 시점)는 정확한 byte입니다.
 
 계약의 목적은 winding, culling, 채널 순서 실수가 "그럴싸한 그림"이 아니라 "틀린 색"으로 드러나게 하는 것입니다. 조명은 이 목적에 어긋나지 않고 오히려 보탭니다 — 보이는 세 면은 광원과의 각도가 다르므로 세 가지 다른 밝기를 갖고, **노멀 부호가 뒤집히면 색이 아니라 밝기가 틀리게 나옵니다.** 이것은 v3가 잡지 못하던 종류의 실수입니다.
 
@@ -247,13 +266,13 @@ struct RenderShadowGroup {                     // ThorVG 타입 없음
 
 개정은 계획의 원칙대로 Phase 4 문서의 계약 절에 v4로 기록하고, 이 phase가 그 이유입니다.
 
-## 상수 (Step 0에서 확정)
+## 상수 (확정)
 
-리뷰가 지적한 대로 값이 비어 있으면 v4 계약도, 성능·시각 acceptance도 검증할 수 없습니다. 아래는 **출발점**이고 Step 0에서 결정 9의 제약과 결정 2의 색 구별 test를 통과하는 값으로 확정한 뒤 이 표를 갱신합니다.
+리뷰가 지적한 대로 값이 비어 있으면 v4 계약도, 성능·시각 acceptance도 검증할 수 없습니다. 아래가 [`Light.hpp`](../../engine/src/graphics/Light.hpp)에 들어간 값입니다. 광원 위치만 출발값(`{2.0, 4.5, 3.5}`)에서 바뀌었고 이유는 결정 5에 있습니다.
 
-| 상수 | 출발값 | 뜻 |
+| 상수 | 값 | 뜻 |
 |---|---|---|
-| `Light::position` | `{2.0, 4.5, 3.5}` (월드) | 홈 시점에서 +Y가 가장 밝고 +Z, +X 순 — 세 면이 서로 다른 밝기 |
+| `Light::position` | `{2.5, 4.7, 4.2}` (월드) | 홈 시점에서 +Y가 가장 밝고 +Z, +X 순 — 세 면이 서로 다른 밝기; 모든 평면 밝기가 반올림 경계에서 0.3 이상 |
 | `kAmbient` / `kDiffuse` | 0.60 / 0.40 | 합이 1이라 clamp가 일어나지 않음; I ∈ [0.60, 1.00] |
 | `kSpecular` / `kShininess` | 0.60 / 32 | 하이라이트 최대 alpha 153, 반치폭 약 12° |
 | `kHighlightRadius` | 0.45 (큐브 반폭 단위) | 월드 상수, N 무관 |
@@ -262,13 +281,25 @@ struct RenderShadowGroup {                     // ThorVG 타입 없음
 | 그림자색 | `{40, 48, 64}` | Multiply용, 배경보다 어둡고 차가움 |
 | `kShadowOpacity` | 96 | 눈 높이 계수를 곱하기 전 값 |
 | `kShadowBlur` | 0.012 × 뷰포트 한 변 (픽셀) | sigma; 뷰포트 512px에서 약 6px |
-| `kBlurQuality` | 60 | GaussianBlur quality |
+| `kShadowBlurQuality` | 30 | GaussianBlur quality — 박스 1패스(결정 7 구현 개정 3) |
 | `kShadowFadeFloor` | 0.25 | fade_end에서의 alpha 배율 |
 | `kFadeMinLength` | 4px | 이 아래면 radial fade로 대체 |
 | `kShadowFadeBand` | 1.0 (월드) | 눈이 바닥 위 이 높이부터 그림자가 옅어짐 |
 | 접촉 그림자 | 반지름 발자국의 0.55배, alpha 64 | 앵커 중심 radial, Multiply |
 
-홈 시점의 세 면 밝기(출발값 기준, 면 중심에서 계산): +Y ≈ 0.86, +Z ≈ 0.78, +X ≈ 0.67. 정확한 byte 값은 Step 7에서 공식으로 냅니다.
+홈 시점의 세 평면 밝기는 byte로 +Y 215, +Z 206, +X 177이고, 광원을 등진 세 평면은 153(ambient)입니다. 단면 평면 여섯 개를 포함한 전체 표는 [Phase 4 문서의 contract v4](./04-rubiks-cube-domain.md#rendered-scene-contract-v4)에 있습니다.
+
+**측정 (Step 6).** 1024×1024 native, 3D 뷰만(뷰포트 한 변 860px), R을 45°까지 돌린 프레임, 40프레임의 `render()` median / p95. 조명 전은 이 phase 직전 커밋을 같은 도구로 잰 값입니다. 백그라운드에 다른 빌드가 도는 동안 잰 첫 측정은 두 배 넘게 부풀려져 있어서 버렸습니다 — 벤치는 혼자 돌려야 합니다.
+
+| 크기 | 조명 전 | 첫 구현(레이어 4개) | 최종(레이어 1개) | 하이라이트 도형 |
+|---|---|---|---|---|
+| 3×3 | 0.9 / 1.2 ms | 6.5 / 7.3 ms | 3.9 / 4.2 ms | 33면 중 2 |
+| 9×9 | 1.8 / 2.0 ms | — | 5.5 / 6.3 ms | 315면 중 5 |
+| 28×28 | 6.3 / 7.4 ms | 13.0 / 15.2 ms | 10.6 / 11.2 ms | 3,108면 중 14 (0.5%) |
+
+그림자는 크기와 무관한 **약 2.7ms의 고정 비용**으로 남았고, 그중 블러가 대부분입니다(블러를 빼면 3×3에서 약 1.6ms). 하이라이트를 받는 스티커는 28×28에서도 전체의 0.5%라, 결정 3의 "비율은 N과 무관하게 작다"는 주장이 측정으로 확인됐습니다. 그림자 caster는 세 크기 모두 2개(정지 slab, 회전 slab)입니다.
+
+초안의 acceptance "median 증가 15% 이하"는 3×3에서 0.14ms를 뜻하므로 합성 레이어를 하나라도 쓰는 효과에는 성립할 수 없는 기준이었습니다. **절대 예산으로 바꿉니다**: 그림자와 하이라이트의 고정 비용이 1024² native에서 3ms 이하. WASM이 2~3배 느리다고 보면 16ms 프레임의 절반 안쪽입니다.
 
 ## Scope
 
@@ -292,52 +323,52 @@ struct RenderShadowGroup {                     // ThorVG 타입 없음
 
 ## Implementation steps
 
-### 0. 상수 확정과 타입
+### 0. 상수 확정과 타입 — **끝났습니다**
 
 - 위 표의 값을 놓고 (a) 홈 시점 세 sample 면의 하이라이트 alpha가 `kHighlightMinAlpha` 아래인지, (b) 여섯 palette 색이 `I = kAmbient`와 `I = 1`에서 pairwise 구별되는지(Classic, High contrast 둘 다)를 계산으로 확인해 확정합니다. 둘 중 하나라도 어긋나면 광원 위치나 ambient를 조정하고 표를 갱신합니다.
 - `graphics/Light.hpp`: `struct Light { math::Vec3 position; float ambient, diffuse, specular, shininess; }`, `kGroundY`, 조명 무력화 값 `Light::unlit()`(`ambient = 1, diffuse = 0, specular = 0`).
 - `Scene.hpp`: `Highlight{center, rim, alpha}`(월드/뷰는 `Vec3`, clip 이후는 `Vec2`), `WorldScene::casters`(박스 = 꼭짓점 8개), 각 단계 scene의 그림자 그룹.
 - `RenderScene.hpp`: `RenderShadowGroup`, `RenderFace::highlight`.
 
-### 1. Builder — casters
+### 1. Builder — casters — **끝났습니다**
 
 - `build_cube_scene`이 쉬는 큐브에서 박스 하나, 회전 중에는 `layers`의 연속 구간과 정지 구간마다 박스 하나를 냅니다. 스티커에 쓰는 회전을 그대로 적용합니다.
 - Test: 쉬는 큐브의 casters는 정확히 큐브 껍질 하나. `R`·`Rw`·`2-3Rw` 회전 중 casters의 층 구간이 겹치지 않고 합치면 N층 전부이며 개수가 3 이하. 회전 0°의 casters의 **합집합**이 쉬는 큐브와 같음.
 
-### 2. 통과 규칙
+### 2. 통과 규칙 — **끝났습니다**
 
 - `TransformPass`가 casters를, `ViewPass`·`ProjectPass`·`ViewportPass`가 그림자 그룹의 점들과 `highlight.center`·`rim`을 꼭짓점과 같은 식으로 변환합니다. `ViewportPass`는 `clip = rect`를 적습니다. `CullPass`, `DepthSortPass`는 그룹을 건드리지 않습니다.
 - Test: 같은 점을 face 꼭짓점과 그룹의 점으로 넣었을 때 결과가 같음. identity가 아닌 model에서 스티커와 casters가 함께 움직임. cull이 그룹을 지우지 않음. viewport 결과의 `clip`이 입력 rect와 같음.
 
-### 3. `light()` 패스
+### 3. `light()` 패스 — **끝났습니다**
 
 - 생성 시 광원을 `camera.view()`로 뷰 공간에 옮깁니다. 노멀 부호를 cull의 반시계 규약에서 유도합니다. 면 중심에서 L, V, H를 구해 결정 2의 정수 공식으로 색을, 결정 3의 반사점으로 highlight를 계산합니다.
 - Test: 광원을 마주 보는 면이 등을 돌린 면보다 밝고, 등을 돌린 면은 정확히 ambient. 카메라를 궤도로 돌려도 월드에서 같은 면이 가장 밝음(광원이 카메라에 붙지 않음). 하이라이트 중심은 반사점 공식으로 면 안에 있거나 면 위로 당겨져 있고 `rim`이 `center`에서 `kHighlightRadius`만큼 떨어져 있음. 홈 시점의 세 sample 면은 highlight 없음. `Light::unlit()`에서 `color' == color`. **여섯 palette 색이 `I = kAmbient`와 `I = 1` 양쪽에서 pairwise로 구별됨**(Classic과 High contrast 둘 다).
 
-### 4. `shadow()` 패스
+### 4. `shadow()` 패스 — **끝났습니다**
 
 - casters의 꼭짓점 8개를 결정 5의 식으로 투영하고 2D convex hull을 잡아 박스마다 다각형 하나를, 화면 실루엣용으로 박스마다 occluder 하나를 냅니다. `fade_start`(큐브 중심의 수직 투영), `fade_end`(큐브 중심의 광원 투영), `contact`, 눈 높이 계수를 곱한 `opacity`를 적습니다. 광원보다 높은 꼭짓점이 있는 박스는 버립니다.
 - Test: 투영점이 전부 `y == kGroundY`. 쉬는 큐브의 그림자는 다각형 하나이고 볼록함. 직상부 광원에서 그림자는 발자국과 중심·축이 같고 각 꼭짓점이 `(L.y − ground_y)/(L.y − P.y)`배 확대됨. 광원을 옆으로 옮기면 `fade_end`가 반대쪽으로 이동. 광원보다 높은 큐브는 그림자가 없음. 눈이 `kGroundY + kShadowFadeBand` 위면 opacity 계수 1, 바닥 아래면 그룹 없음.
 
-### 5. 렌더러와 픽셀 test
+### 5. 렌더러와 픽셀 test — **끝났습니다**
 
-- 결정 7의 여섯 단계와 접촉 그림자, 결정 3의 하이라이트를 면 직후에 그리기. 효과 호출은 인자 타입을 고정한 함수 하나로 감쌉니다. 실패 경로는 기존과 같이 `false`를 돌려주는 fail-stop입니다.
-- 렌더 계약 test와 같은 방식으로 `SwCanvas` 버퍼를 읽는 native test를 둡니다. 다음을 픽셀로 단언합니다.
+- 결정 7(구현 개정 뒤의 여섯 항목)과 접촉 그림자, 결정 3의 하이라이트를 면 직후에 그리기. 효과 호출은 인자 타입을 고정한 함수 하나로 감쌉니다. 실패 경로는 기존과 같이 `false`를 돌려주는 fail-stop입니다.
+- 렌더 계약 test와 같은 방식으로 `SwCanvas` 버퍼를 읽는 native test([`LightingRenderTest.cpp`](../../tests/app/LightingRenderTest.cpp))를 둡니다. 렌더러를 직접 만들어 손으로 짠 RenderScene을 그리므로, 아래 항목이 각각 하나의 test case입니다.
   - 두 slab이 겹치는 자리와 slab 하나만 있는 자리의 RGB가 같음(평탄화).
   - 블러 가장자리와 fade 방향을 따라 luminance가 단조.
   - `clip` 밖은 정확히 배경색. 큐브 실루엣 안쪽(seam 포함)도 정확히 배경 또는 스티커 색(occluder).
   - 회전 중 뒤쪽 면의 하이라이트가 앞면 픽셀을 밝히지 않음.
   - Light/Dark 두 배경에서 그림자 자리가 배경보다 어두움.
-- WASM 빌드 뒤 브라우저에서 DPR 1과 2, 두 theme, 홈 시점과 낮은 시점, 쉬는 큐브와 회전 중 큐브를 확인합니다. 이것은 픽셀 test의 보조입니다.
+- WASM 빌드 뒤 브라우저 e2e가 홈 시점과 궤도 시점, 회전 중 프레임의 픽셀을 확인합니다(`sceneContract.ts`가 v4 밝기와 여섯 단면 밝기를 압니다).
 
-### 6. Application과 성능
+### 6. Application과 성능 — **끝났습니다**
 
 - 체인에 `shadow`와 `light`를 삽입하고 `ApplicationState`에 `Light` 하나를 둡니다. High contrast palette가 선택되면 `Light::unlit()`을 넘깁니다(값만 바뀌고 분기는 없음).
-- **28×28, 45° 회전 중** 프레임의 median과 p95를 조명 전후로 재고, 그 프레임의 하이라이트 도형 수를 기록합니다. 기준은 median 증가 15% 이하, 하이라이트 수가 전체 스티커의 15% 이하입니다. 어긋나면 `kHighlightMinAlpha`를 올립니다.
+- **28×28, 45° 회전 중** 프레임의 median과 p95를 조명 전후로 재고, 그 프레임의 하이라이트 도형 수를 기록합니다. 기준은 고정 비용 3ms 이하(초안의 "15% 이하"는 성립할 수 없는 기준이라 개정), 하이라이트 수가 전체 스티커의 15% 이하입니다. 측정 도구는 [`RenderBench.cpp`](../../tests/app/RenderBench.cpp)(`build/native/tests/app/render-bench <size>`)이고, 결과는 위 상수 절의 표에 있습니다.
 
-### 7. 계약 개정과 문서
+### 7. 계약 개정과 문서 — **끝났습니다**
 
-- 세 면의 byte 값을 결정 2의 공식으로 계산해 [Phase 4 문서](./04-rubiks-cube-domain.md)에 **Rendered scene contract v4**로 적고, [`RenderContractTest.cpp`](../../tests/app/RenderContractTest.cpp)와 [`sceneContract.ts`](../../web/tests/e2e/sceneContract.ts)의 기대 색을 그 숫자로 바꿉니다. Step 3의 패스 test가 초록이 된 뒤에 합니다 — 계약 숫자를 구현에서 베끼는 것이 아니라 공식에서 내야 합니다.
+- 세 면의 byte 값을 결정 2의 공식으로 계산해 [Phase 4 문서](./04-rubiks-cube-domain.md#rendered-scene-contract-v4)에 **Rendered scene contract v4**로 적고, [`RenderContractTest.cpp`](../../tests/app/RenderContractTest.cpp)와 [`sceneContract.ts`](../../web/tests/e2e/sceneContract.ts)의 기대 색을 그 숫자로 바꿉니다. Step 3의 패스 test가 초록이 된 뒤에 합니다 — 계약 숫자를 구현에서 베끼는 것이 아니라 공식에서 내야 합니다.
 - 이 문서의 Status와 상수 표, [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md), [DESIGN.md](../DESIGN.md)의 파이프라인 예시에 두 패스 추가.
 
 ## Acceptance criteria
@@ -346,11 +377,11 @@ struct RenderShadowGroup {                     // ThorVG 타입 없음
 - 카메라를 궤도로 돌려도 가장 밝은 면은 월드에서 같은 면입니다(test).
 - 하이라이트는 문턱값을 넘는 면에만 맺히고, 면 직후에 그려져 회전 중 뒤쪽 면의 하이라이트가 앞면 픽셀을 바꾸지 않습니다(픽셀 test).
 - 바닥 그림자는 큐브 아래에 눕고, 레이어를 돌리면 튀어나온 slab의 그림자가 함께 돌아가며, 어떤 레이어 회전에서도 큐브가 바닥을 뚫지 않습니다.
-- 겹친 slab과 단일 slab 자리의 그림자 RGB가 같고, 블러 가장자리와 fade 방향의 luminance가 단조이며, `clip` 밖과 큐브 실루엣 안쪽은 정확히 배경 또는 스티커 색입니다(픽셀 test).
+- 겹친 slab과 단일 slab 자리의 그림자 RGB가 같고, 블러 가장자리와 fade 방향의 luminance가 단조이며, `clip` 밖과 큐브 실루엣 안쪽은 정확히 배경 또는 스티커 색입니다(픽셀 test, [`LightingRenderTest.cpp`](../../tests/app/LightingRenderTest.cpp)).
 - 눈이 바닥 아래로 내려가면 그림자가 사라지고, 다시 올라오면 돌아옵니다.
 - Light와 Dark theme 모두에서 그림자 자리가 배경보다 어둡습니다(픽셀 test).
 - 현재 mask 생성 경로에서 caster는 3개 이하이고, 비연속 mask에서도 `구간 수 × 2 + 1` 이하입니다(test).
-- 28×28 45° 회전 중 median 프레임 시간 증가 15% 이하, 하이라이트 도형 수는 스티커의 15% 이하입니다(측정 기록).
+- 조명과 그림자의 고정 비용이 1024² native에서 3ms 이하이고(28×28 45° 회전 중 median 기준 조명 전후 차이), 하이라이트 도형 수는 스티커의 15% 이하입니다(측정 기록). 초안의 "15% 이하"를 절대 예산으로 바꾼 이유는 상수 절에 있습니다.
 - 전개도와 링 다이어그램은 픽셀 하나도 바뀌지 않습니다.
 - Rendered scene contract가 v4로 개정되어 Phase 4 문서, native test, e2e가 같은 숫자를 보고, 노멀 부호를 뒤집으면 v4 test가 실패하며, seam 세 지점은 배경색 그대로입니다.
 - Native test, WASM 빌드, TypeScript unit, e2e, production build가 모두 통과합니다.
@@ -379,6 +410,8 @@ npm --prefix web run build
 
 ## 먼저 답이 필요한 것
 
-- **High contrast palette에서 조명을 끌 것인가.** 그 palette는 색 구별이 목적이라 명암을 얹으면 취지에 어긋납니다. 추천은 `Light::unlit()`(`ambient = 1, diffuse = 0, specular = 0`)을 넘기는 것입니다 — 패스는 그대로 돌고 값만 바뀌므로 분기가 생기지 않습니다. 이 경우 v4 계약은 Classic palette 기준입니다.
-- **Ambient mode에서 광원을 천천히 돌릴 것인가.** 화면 보호기 성격의 관람 모드라 광원이 움직이면 그림자와 하이라이트가 살아 보입니다. 다만 Phase 10은 관람을 "큐브가 스스로 도는 것"으로 규정하고 카메라 자동 궤도도 out of scope로 두었으므로, 광원 움직임을 더하는 것은 그 규정의 확장입니다.
-- **광원 기본 위치의 좌우.** 표의 출발값은 홈 시점 기준 왼쪽 위입니다. 오른쪽 위로 바꾸면 +X와 +Z의 밝기가 뒤바뀝니다. 어느 쪽이든 결정 9의 제약(세 sample 면에 하이라이트 없음)은 Step 0에서 다시 확인합니다.
+세 질문 모두 추천값으로 진행하기로 했습니다(2026-09-03). 남는 것은 두 번째의 후속 여부뿐입니다.
+
+- ~~**High contrast palette에서 조명을 끌 것인가.**~~ **끕니다.** `Light::unlit()`을 넘기고, v4 계약은 Classic 기준입니다. 그 palette는 색 구별이 목적이라 명암을 얹으면 취지에 어긋납니다. 추천은 `Light::unlit()`(`ambient = 1, diffuse = 0, specular = 0`)을 넘기는 것입니다 — 패스는 그대로 돌고 값만 바뀌므로 분기가 생기지 않습니다. 이 경우 v4 계약은 Classic palette 기준입니다.
+- **Ambient mode에서 광원을 천천히 돌릴 것인가.** 이 phase에서는 하지 않았습니다. 화면 보호기 성격의 관람 모드라 광원이 움직이면 그림자와 하이라이트가 살아 보입니다. 다만 Phase 10은 관람을 "큐브가 스스로 도는 것"으로 규정하고 카메라 자동 궤도도 out of scope로 두었으므로, 광원 움직임을 더하는 것은 그 규정의 확장입니다.
+- ~~**광원 기본 위치의 좌우.**~~ **왼쪽 위입니다.** 홈 시점에서 +Z(앞, 화면 왼쪽)가 +X(오른쪽)보다 밝습니다. 정확한 위치는 결정 5의 구현 개정대로 반올림 경계를 피해 골랐습니다.

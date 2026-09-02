@@ -1,18 +1,62 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <iterator>
+#include <optional>
+#include <utility>
 #include <vector>
 
 #include "graphics/Color.hpp"
+#include "graphics/Rect.hpp"
 #include "math/Types.hpp"
 
 namespace rubiks::graphics {
+
+/**
+ * The glint on one face, in pixels.
+ *
+ * Drawn over the face it belongs to and nowhere else: the renderer lays it
+ * down straight after that face, so a highlight on a face at the back cannot
+ * land on a face drawn later in front of it. Rendered as a radial falloff from
+ * `centre` to the distance of `rim`, screened onto the face.
+ */
+struct RenderHighlight {
+    math::Vec2 centre{};
+    math::Vec2 rim{};
+    std::uint8_t alpha = 0;
+};
 
 /** Screen-space quad ready to be filled by a renderer. */
 struct RenderFace {
     std::array<math::Vec2, 4> points{};
     Color color{};
+    std::optional<RenderHighlight> highlight;
+};
+
+/**
+ * The ground shadow, ready for the renderer to compose.
+ *
+ * The pipeline has decided where it lies; what is left is how it is made to
+ * look like a shadow -- flattened so overlapping polygons do not darken twice,
+ * blurred at the edge, thinned from `fade_start` towards `fade_end`, kept out
+ * of the cube's own silhouette, and cut to `clip` so it cannot reach into the
+ * drawing beside it. All of that is the renderer's, and all of the numbers it
+ * needs are here without a renderer type among them.
+ */
+struct RenderShadow {
+    std::vector<std::vector<math::Vec2>> polygons;
+    /** Convex screen silhouettes of the casters, where the shadow is hidden. */
+    std::vector<std::vector<math::Vec2>> occluders;
+    math::Vec2 fade_start{};
+    math::Vec2 fade_end{};
+    /** Points round the soft patch directly under the cube. */
+    std::vector<math::Vec2> contact;
+    std::uint8_t opacity = 0;
+    /** Gaussian sigma of the edge, in pixels. */
+    float blur_sigma = 0.0f;
+    /** The region the shadow may be drawn in. */
+    Rect clip;
 };
 
 /** One cubic section of a path, continuing from the point before it. */
@@ -56,6 +100,8 @@ struct RenderScene {
      * across them.
      */
     std::vector<RenderStroke> underlays;
+    /** Drawn after the underlays and before the faces: it lies on the ground. */
+    std::optional<RenderShadow> shadow;
     std::vector<RenderFace> faces;
     /** Drawn after the faces, so guide lines read on top of the stickers. */
     std::vector<RenderStroke> strokes;
@@ -73,6 +119,8 @@ inline void append_scene(RenderScene& target, RenderScene&& source)
     target.strokes.insert(target.strokes.end(),
                           std::make_move_iterator(source.strokes.begin()),
                           std::make_move_iterator(source.strokes.end()));
+    // Only the 3D view casts one, so there is never a second to merge with.
+    if (!target.shadow && source.shadow) target.shadow = std::move(source.shadow);
 }
 
 }  // namespace rubiks::graphics

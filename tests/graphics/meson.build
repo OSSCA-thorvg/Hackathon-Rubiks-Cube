@@ -53,3 +53,11 @@ canvas_theme_test = executable(
 )
 
 test('canvas theme', canvas_theme_test)
+
+lighting_test = executable(
+  'lighting-test',
+  files('LightingTest.cpp'),
+  dependencies: [graphics_dep, catch2_dep],
+)
+
+test('lighting and shadow', lighting_test)

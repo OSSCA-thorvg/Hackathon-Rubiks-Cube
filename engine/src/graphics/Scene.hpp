@@ -1,6 +1,8 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "graphics/Color.hpp"
@@ -14,6 +16,58 @@
  */
 namespace rubiks::graphics {
 
+/**
+ * A box that casts a shadow but is never drawn.
+ *
+ * The stickers cannot cast the shadow themselves: they have seams between
+ * them and no body behind them, so their shadow would be a grid. A caster is
+ * a whole run of layers -- the whole cube at rest -- and its eight corners are
+ * enough, because the shadow of a convex box is the convex hull of the shadows
+ * of its corners.
+ */
+struct Caster {
+    std::array<math::Vec3, 8> corners{};
+};
+
+/**
+ * The shadow as one thing, carried through the passes beside the faces.
+ *
+ * Fade, opacity and the occluding silhouettes belong to the shadow as a
+ * whole rather than to any one polygon of it, which is why this is a group
+ * with a few points of its own and not a list of shadow faces. Every point in
+ * it goes through the same transforms as a face corner.
+ */
+template <typename Point>
+struct ShadowGroup {
+    /** One convex polygon on the ground per caster. */
+    std::vector<std::vector<Point>> polygons;
+    /** The casters again, whose silhouettes the shadow must not show through. */
+    std::vector<std::array<Point, 8>> occluders;
+    /** Where the shadow is darkest: the cube's centre dropped onto the ground. */
+    Point fade_start{};
+    /** Where it has thinned to its floor: the centre cast from the light. */
+    Point fade_end{};
+    /** Points round the ambient patch directly under the cube. */
+    std::vector<Point> contact;
+    /** Strength before the renderer's own fade and blur, 0 meaning none. */
+    std::uint8_t opacity = 0;
+};
+
+/**
+ * The glint on one face, as geometry rather than as a colour.
+ *
+ * `centre` is where the light reflects straight into the eye, pulled onto the
+ * face if it falls outside; `rim` is one radius away from it along the face,
+ * so that projecting both gives the renderer a screen radius that shrinks with
+ * distance the way the face does. Peak strength is `alpha`.
+ */
+template <typename Point>
+struct HighlightOf {
+    Point centre{};
+    Point rim{};
+    std::uint8_t alpha = 0;
+};
+
 /** Quad in world space. */
 struct WorldFace {
     std::array<math::Vec3, 4> points{};
@@ -22,16 +76,23 @@ struct WorldFace {
 
 struct WorldScene {
     std::vector<WorldFace> faces;
+    /** Shadow casters, read by the shadow pass and drawn by nobody. */
+    std::vector<Caster> casters;
+    /** Filled in by the shadow pass; empty until then and when there is none. */
+    std::optional<ShadowGroup<math::Vec3>> shadow;
 };
 
 /** Quad in view space, where the camera sits at the origin looking down -Z. */
 struct ViewFace {
     std::array<math::Vec3, 4> points{};
     Color color{};
+    /** Set by the lighting pass on the faces bright enough to carry one. */
+    std::optional<HighlightOf<math::Vec3>> highlight;
 };
 
 struct ViewScene {
     std::vector<ViewFace> faces;
+    std::optional<ShadowGroup<math::Vec3>> shadow;
 };
 
 /**
@@ -45,10 +106,12 @@ struct ClipFace {
     std::array<math::Vec2, 4> ndc{};
     float depth = 0.0f;
     Color color{};
+    std::optional<HighlightOf<math::Vec2>> highlight;
 };
 
 struct ClipScene {
     std::vector<ClipFace> faces;
+    std::optional<ShadowGroup<math::Vec2>> shadow;
 };
 
 }  // namespace rubiks::graphics

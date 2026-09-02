@@ -1,6 +1,7 @@
 #pragma once
 
 #include "graphics/Camera.hpp"
+#include "graphics/Light.hpp"
 #include "graphics/Rect.hpp"
 #include "graphics/RenderScene.hpp"
 #include "graphics/Scene.hpp"
@@ -16,7 +17,7 @@
  */
 namespace rubiks::graphics {
 
-/** Applies the model transform, staying in world space. */
+/** Applies the model transform to faces and casters, staying in world space. */
 struct TransformPass {
     math::Mat4 model_matrix;
 
@@ -25,7 +26,29 @@ struct TransformPass {
 
 [[nodiscard]] TransformPass transform(const math::Transform& model) noexcept;
 
-/** World space to view space. */
+/**
+ * Casts the casters onto the ground from the light, in world space.
+ *
+ * Fills `WorldScene::shadow` with one convex polygon per caster, the fade
+ * anchors, the contact patch and an opacity already thinned by how close the
+ * eye is to the ground. Leaves it empty when there is nothing to cast, when
+ * the light is not above the cube, or when the eye is at or below the ground.
+ *
+ * Runs before `view` because the ground is a world-space plane. Reads the
+ * camera only for the height of the eye.
+ */
+struct ShadowPass {
+    Light light;
+    float ground_y;
+    math::Vec3 eye;
+
+    [[nodiscard]] WorldScene operator()(WorldScene scene) const;
+};
+
+[[nodiscard]] ShadowPass shadow(const Light& light, const Camera& camera,
+                                float ground_y = kGroundY) noexcept;
+
+/** World space to view space, faces and shadow alike. */
 struct ViewPass {
     math::Mat4 view_matrix;
 
@@ -33,6 +56,37 @@ struct ViewPass {
 };
 
 [[nodiscard]] ViewPass view(const Camera& camera) noexcept;
+
+/**
+ * Blinn-Phong on every face, in view space.
+ *
+ * Diffuse is one value per plane: a face is flat, so its normal is one vector,
+ * and the direction to the light is read at one point of the plane -- the
+ * point nearest the cube's centre -- so that the stickers sharing a plane
+ * share a shade. Specular is carried as a highlight -- where on the face the light
+ * reflects into the eye and how brightly -- for the renderer to draw as a
+ * falloff, because a single value across the face would not read as a glint.
+ *
+ * The light arrives in world space and is carried into view space here, once,
+ * at construction; that is what keeps it fixed in the world when the camera
+ * orbits rather than riding along with the eye.
+ */
+struct LightPass {
+    Light light;
+    math::Vec3 light_in_view;
+    /**
+     * The cube's centre in view space. Diffuse is evaluated at the point of
+     * each face's plane nearest this, so every sticker on one plane shades to
+     * one byte value -- evaluated at each sticker's own centre they came out a
+     * few units apart, and a face that is nine slightly different colours is
+     * one the render contract cannot name.
+     */
+    math::Vec3 anchor_in_view;
+
+    [[nodiscard]] ViewScene operator()(ViewScene scene) const;
+};
+
+[[nodiscard]] LightPass light(const Light& light, const Camera& camera) noexcept;
 
 /**
  * View space to normalized device coordinates, carrying the depth key.
@@ -83,6 +137,11 @@ struct DepthSortPass {
  * The target is a sub-rectangle rather than the whole buffer, because the 3D
  * cube shares the canvas with the net view. Keeping that rectangle square is
  * also what frees the camera aspect from the canvas aspect.
+ *
+ * The shadow gets the rectangle as its clip and a blur width sized to it,
+ * and its casters become the convex silhouettes the renderer hides it behind.
+ * This is the one pass that knows the rectangle, so it is the one that writes
+ * them.
  */
 struct ViewportPass {
     Rect rect;

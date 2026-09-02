@@ -129,6 +129,40 @@ constexpr float kH = 1.0f;
     return (layers & cube::layer(index)) != 0;
 }
 
+/**
+ * The box spanning [low, high] along `axis` and the whole cube across it.
+ *
+ * At rest that is the cube itself. During a turn it is one run of layers, and
+ * a run is all the shadow needs: the union of the runs is the cube, so the
+ * union of their shadows is the cube's shadow, whatever N is.
+ */
+[[nodiscard]] Caster slab(Axis axis, float low, float high) noexcept
+{
+    Caster caster;
+    std::size_t index = 0;
+    for (const float sx : {-1.0f, 1.0f}) {
+        for (const float sy : {-1.0f, 1.0f}) {
+            for (const float sz : {-1.0f, 1.0f}) {
+                Vec3 corner{sx * kCubeHalfExtent, sy * kCubeHalfExtent,
+                            sz * kCubeHalfExtent};
+                switch (axis) {
+                    case Axis::X:
+                        corner.x = sx < 0.0f ? low : high;
+                        break;
+                    case Axis::Y:
+                        corner.y = sy < 0.0f ? low : high;
+                        break;
+                    case Axis::Z:
+                        corner.z = sz < 0.0f ? low : high;
+                        break;
+                }
+                caster.corners[index++] = corner;
+            }
+        }
+    }
+    return caster;
+}
+
 }  // namespace
 
 float sticker_half_extent(int size) noexcept
@@ -176,6 +210,8 @@ WorldScene build_cube_scene(const cube::CubeState& state, Palette palette)
     WorldScene scene;
     // Six faces of an N x N sheet: 54 at N = 3.
     scene.faces.reserve(static_cast<std::size_t>(6 * size * size));
+    // At rest the whole cube is one box, and one box is one shadow.
+    scene.casters.push_back(slab(Axis::X, -kCubeHalfExtent, kCubeHalfExtent));
 
     for (int x = 0; x < size; ++x) {
         for (int y = 0; y < size; ++y) {
@@ -263,6 +299,31 @@ WorldScene build_cube_scene(const cube::CubeState& state,
                 }
             }
         }
+    }
+
+    // One caster per unbroken run of layers along the turning axis, the
+    // turning runs carried round with their stickers. Only this axis is cut:
+    // the other two do not move in this turn, so there is nothing to split.
+    // A run mask makes three at most -- still, turning, still -- and a mask
+    // with gaps in it, which nothing here produces, makes one more per gap.
+    const float half_pitch = kCubeHalfExtent / static_cast<float>(size);
+    int run_start = 0;
+    for (int index = 1; index <= size; ++index) {
+        const bool run_turning = in_layers(active->layers, run_start);
+        if (index < size && in_layers(active->layers, index) == run_turning) {
+            continue;
+        }
+
+        Caster caster =
+            slab(active->axis, cubie_center(run_start, size) - half_pitch,
+                 cubie_center(index - 1, size) + half_pitch);
+        if (run_turning) {
+            for (auto& corner : caster.corners) {
+                corner = math::quaternion_rotate(turn, corner);
+            }
+        }
+        scene.casters.push_back(caster);
+        run_start = index;
     }
     return scene;
 }

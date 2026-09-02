@@ -66,6 +66,9 @@ inline constexpr Color kBodyColor{70, 74, 82, 255};
  * Only stickers on the outside of the cube are emitted: a cubie's face is
  * visible exactly when that cubie sits in the outermost layer along the
  * face's axis. At N = 3 that is 54 quads, of which the fixed camera keeps 27.
+ *
+ * Beside them goes one shadow caster, the box of the whole cube, for the
+ * shadow pass to project; it is not drawn.
  */
 [[nodiscard]] WorldScene build_cube_scene(const cube::CubeState& state,
                                           Palette palette = Palette::Classic);
@@ -80,6 +83,11 @@ inline constexpr Color kBodyColor{70, 74, 82, 255};
  * With a turn, the stickers of the selected layers rotate about the cube
  * center, and the cut surfaces revealed at the boundary between turning and
  * still layers are filled with kBodyColor.
+ *
+ * The casters are cut along the turning axis into one box per unbroken run of
+ * layers, the turning runs rotated with their stickers. Their union is the
+ * cube at this angle, which is what makes the shadow of the union theirs; at
+ * an angle of zero it is the same solid as the resting cube in more pieces.
  */
 [[nodiscard]] WorldScene build_cube_scene(
     const cube::CubeState& state,

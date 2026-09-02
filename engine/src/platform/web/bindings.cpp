@@ -575,6 +575,33 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_canvas_theme() noexcept
  * past its end still meant the end -- so a zero comes back only from a value
  * that is not a number or from there being no engine.
  */
+/**
+ * Takes the buffer a lighting setup is written into, and its address.
+ *
+ * The same arrangement the shared record uses: the engine owns the memory and
+ * the caller writes floats into it through a view, then set_lighting() reads
+ * them. The order is the one Lighting::from_values documents: ambient,
+ * attenuation, then x, y, z, diffuse, specular, shininess per lamp.
+ *
+ * @return zero for a count the engine does not accept.
+ */
+EMSCRIPTEN_KEEPALIVE std::uintptr_t thorvg_rubiks_lighting_buffer(
+    std::uint32_t count) noexcept
+{
+    return rubiks::app::lighting_buffer(count);
+}
+
+/**
+ * Reads the buffer back as the lighting every following frame is drawn under.
+ *
+ * @return one when accepted; zero for a wrong count or a value that is not a
+ *         number, in which case the lighting is unchanged.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_lighting(std::uint32_t count) noexcept
+{
+    return rubiks::app::set_lighting(count) ? 1 : 0;
+}
+
 EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_speed_scale(float scale) noexcept
 {
     return rubiks::app::set_speed_scale(scale) ? 1 : 0;

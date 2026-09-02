@@ -42,6 +42,7 @@ export type EngineLike = PointerTarget &
     advance(elapsedMs: number): boolean;
     /** The ground the cube is drawn against, which the page decides. */
     setCanvasTheme(theme: CubeCanvasTheme): void;
+    setLighting(values: readonly number[]): boolean;
     /** @returns false when the engine would not take the shared record. */
     restoreSession(
       size: number,
@@ -140,6 +141,26 @@ export type AppController = {
 };
 
 /**
+ * The `lighting` query parameter as a list of numbers, or null without one.
+ *
+ * `?lighting=a,b,c,...` in the engine's own order (see CubeEngine.setLighting).
+ * Anything that is not a finite number makes the whole list null rather than
+ * a partly applied setup.
+ */
+export function readLightingQuery(href: string): number[] | null {
+  let raw: string | null;
+  try {
+    raw = new URL(href).searchParams.get('lighting');
+  } catch {
+    return null;
+  }
+  if (raw === null || raw.trim() === '') return null;
+
+  const values = raw.split(',').map((item) => Number(item.trim()));
+  return values.every((value) => Number.isFinite(value)) ? values : null;
+}
+
+/**
  * Opens whatever state the address carries, if it carries any.
  *
  * The fragment is taken off the address whether or not it could be read: one
@@ -230,6 +251,13 @@ export async function startApp(
     // rectangle on a light page for exactly as long as it takes the first
     // theme change to arrive, which on a light machine is forever.
     if (theme !== null) engine.setCanvasTheme(canvasThemeOf(theme.effective()));
+    // A lighting setup in the address, for tuning the lamps by eye without a
+    // rebuild. Ahead of the first render like the theme, and never fatal: a
+    // list the engine refuses simply leaves the default lights on.
+    const lighting = readLightingQuery(loc.href);
+    if (lighting !== null && !engine.setLighting(lighting)) {
+      console.warn('Ignoring a lighting query the engine refused.', lighting);
+    }
     // Ahead of the first render, which is the point of the order. Nothing is
     // animating after a restore, so no frame loop starts on its own -- a
     // restore behind this line would leave the logical cube shared and the

@@ -251,7 +251,8 @@ TEST_CASE("a highlight brightens its own face and never a face in front")
     RenderScene scene;
     // A face at the back with a glint spread across all of it.
     RenderFace behind = quad(40.0f, 40.0f, 216.0f, 216.0f, Color{40, 90, 160, 255});
-    behind.highlight = RenderHighlight{Vec2{128.0f, 128.0f}, Vec2{228.0f, 128.0f}, 255};
+    behind.highlights.push_back(
+        RenderHighlight{Vec2{128.0f, 128.0f}, Vec2{228.0f, 128.0f}, 255, 200});
     scene.faces.push_back(behind);
     // A face drawn after it, covering its right half.
     scene.faces.push_back(quad(128.0f, 40.0f, 216.0f, 216.0f, Color{60, 60, 60, 255}));

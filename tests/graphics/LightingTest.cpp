@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <limits>
 #include <optional>
 #include <set>
 #include <tuple>
@@ -52,6 +53,21 @@ Camera home_camera()
     return default_camera(1.0f);
 }
 
+/**
+ * One lamp on its own, with the standard ambient and attenuation off, so a
+ * test's arithmetic is Lambert's cosine and nothing else.
+ */
+Lighting one_lamp(const Vec3& position, float diffuse = 0.4f,
+                  float specular = 0.6f, float shininess = 16.0f,
+                  float ambient = 0.6f)
+{
+    Lighting lighting;
+    lighting.ambient = ambient;
+    lighting.attenuation = 0.0f;
+    lighting.lamps.push_back(Light{position, diffuse, specular, shininess});
+    return lighting;
+}
+
 /** A face at z = -depth facing the camera at the origin, or away from it. */
 ViewFace facing_face(float depth, bool towards_eye)
 {
@@ -91,7 +107,7 @@ std::set<std::tuple<int, int, int>> lit_colors(const Camera& camera)
 {
     const ViewScene scene = build_cube_scene(CubeState(3))  //
                             | view(camera)                  //
-                            | light(kDefaultLight, camera);
+                            | light(default_lighting(), camera);
     std::set<std::tuple<int, int, int>> colors;
     for (const auto& face : scene.faces) {
         colors.insert({face.color.r, face.color.g, face.color.b});
@@ -105,7 +121,8 @@ TEST_CASE("shade scales a colour in integer arithmetic and leaves it at 1")
 {
     const Color color{183, 18, 52, 255};
     REQUIRE(shade(color, 1.0f) == color);
-    REQUIRE(shade(color, 2.0f) == color);  // clamped, not brightened
+    // Past 1 it brightens, each channel stopping at 255.
+    REQUIRE(shade(color, 2.0f) == Color{255, 36, 104, 255});
 
     // (value * 153 + 127) / 255 at an intensity of 0.6.
     const Color dim = shade(color, 0.6f);
@@ -117,15 +134,56 @@ TEST_CASE("shade scales a colour in integer arithmetic and leaves it at 1")
     REQUIRE(shade(color, 0.0f) == Color{0, 0, 0, 255});
 }
 
-TEST_CASE("the unlit light hands every colour back byte for byte")
+TEST_CASE("the unlit lighting hands every colour back byte for byte")
 {
-    const Light none = Light::unlit();
+    const Lighting none = Lighting::unlit(default_lighting());
+    REQUIRE(none.ambient == 1.0f);
+    REQUIRE(none.lamps.size() == default_lighting().lamps.size());
+    for (const auto& lamp : none.lamps) {
+        REQUIRE(lamp.diffuse == 0.0f);
+        REQUIRE(lamp.specular == 0.0f);
+    }
+    // The key is still where it was, so the shadow is still cast.
+    REQUIRE(none.lamps[0].position.y == default_lighting().lamps[0].position.y);
+
     for (const auto palette : {Palette::Classic, Palette::HighContrast}) {
         for (int i = 0; i < 6; ++i) {
             const Color color = to_color(static_cast<FaceColor>(i), palette);
-            REQUIRE(shade(color, none.ambient + none.diffuse) == color);
+            REQUIRE(shade(color, none.ambient) == color);
         }
     }
+}
+
+TEST_CASE("a brightness past one lifts a colour and stops at white")
+{
+    // The palette colour is a well-lit face, not the brightest: a face nearer
+    // the lamp goes brighter than the palette, channel by channel to 255.
+    const Color red{183, 18, 52, 255};
+    const Color brighter = shade(red, 290.0f / 255.0f);
+    REQUIRE(brighter.r == std::min(255U, (183U * 290U + 127U) / 255U));
+    REQUIRE(brighter.g == (18U * 290U + 127U) / 255U);
+    REQUIRE(shade(Color{255, 255, 255, 255}, 1.2f) == Color{255, 255, 255, 255});
+}
+
+TEST_CASE("a lighting setup round-trips through its flat list of values")
+{
+    const Lighting standard = default_lighting();
+    float values[Lighting::kValueCount];
+    standard.to_values(values);
+
+    Lighting read;
+    REQUIRE(read.from_values(values, Lighting::kValueCount));
+    REQUIRE(read.ambient == standard.ambient);
+    REQUIRE(read.attenuation == standard.attenuation);
+    REQUIRE(read.lamps.size() == 2);
+    REQUIRE(read.lamps[1].position.z == standard.lamps[1].position.z);
+    REQUIRE(read.lamps[1].shininess == standard.lamps[1].shininess);
+
+    // A wrong count or a value that is not a number is refused whole.
+    REQUIRE_FALSE(read.from_values(values, Lighting::kValueCount - 1));
+    values[3] = std::numeric_limits<float>::quiet_NaN();
+    REQUIRE_FALSE(read.from_values(values, Lighting::kValueCount));
+    REQUIRE(read.lamps.size() == 2);
 }
 
 TEST_CASE("convex hull of a box's corners drops the inside and orders the rim")
@@ -339,8 +397,7 @@ TEST_CASE("the shadow's points travel through the passes like face corners")
 TEST_CASE("a face towards the light is lit and a face away from it is ambient")
 {
     const Camera camera = identity_camera();
-    Light lamp = kDefaultLight;
-    lamp.position = Vec3{0.0f, 0.0f, 0.0f};  // at the eye
+    const Lighting lamp = one_lamp(Vec3{0.0f, 0.0f, 0.0f});  // at the eye
 
     ViewScene scene;
     scene.faces.push_back(facing_face(3.0f, true));
@@ -352,12 +409,44 @@ TEST_CASE("a face towards the light is lit and a face away from it is ambient")
     // Facing away: exactly the ambient floor.
     REQUIRE(lit.faces[1].color == shade(Color{200, 100, 50, 255}, lamp.ambient));
 
-    SECTION("the unlit light changes nothing")
+    SECTION("the unlit lighting changes nothing")
     {
-        const ViewScene plain = light(Light::unlit(), camera)(scene);
+        const ViewScene plain = light(Lighting::unlit(lamp), camera)(scene);
         REQUIRE(plain.faces[0].color == Color{200, 100, 50, 255});
         REQUIRE(plain.faces[1].color == Color{200, 100, 50, 255});
-        REQUIRE_FALSE(plain.faces[0].highlight.has_value());
+        REQUIRE(plain.faces[0].highlights.empty());
+        REQUIRE_FALSE(plain.faces[0].shading.has_value());
+    }
+}
+
+TEST_CASE("a lamp's diffuse falls off with distance from the cube's centre")
+{
+    // Two faces straight ahead at different depths, the lamp at the eye and
+    // the cube's centre two units in: with attenuation on, the nearer face
+    // is brighter than the palette and the farther one darker.
+    Camera camera = Camera{Vec3{0.0f, 0.0f, 2.0f}, Vec3{0.0f, 0.0f, 0.0f},
+                           Vec3{0.0f, 1.0f, 0.0f}, kPi / 2.0f, 1.0f, 1.0f, 10.0f};
+    Lighting lamp = one_lamp(Vec3{0.0f, 0.0f, 2.0f});
+    lamp.attenuation = 1.0f;
+
+    ViewScene scene;
+    scene.faces.push_back(facing_face(1.0f, true));   // one unit from the lamp
+    scene.faces.push_back(facing_face(2.0f, true));   // at the centre's distance
+    scene.faces.push_back(facing_face(4.0f, true));   // twice as far
+    const ViewScene lit = light(lamp, camera)(scene);
+
+    const auto luminance = [](const Color& c) { return int{c.r} + int{c.g} + int{c.b}; };
+    REQUIRE(lit.faces[1].color == Color{200, 100, 50, 255});
+    REQUIRE(luminance(lit.faces[0].color) > luminance(lit.faces[1].color));
+    REQUIRE(luminance(lit.faces[2].color) < luminance(lit.faces[1].color));
+    // At twice the distance the diffuse term is half: 0.6 + 0.4 * 0.5.
+    REQUIRE(lit.faces[2].color == shade(Color{200, 100, 50, 255}, 0.8f));
+
+    SECTION("with attenuation off, distance does not matter")
+    {
+        lamp.attenuation = 0.0f;
+        const ViewScene flat = light(lamp, camera)(scene);
+        REQUIRE(flat.faces[0].color == flat.faces[2].color);
     }
 }
 
@@ -377,7 +466,7 @@ TEST_CASE("the light stays in the world when the camera orbits")
     // what lets the render contract tell a flipped normal from a right one.
     const ViewScene scene = build_cube_scene(CubeState(3))     //
                             | view(home_camera())              //
-                            | light(kDefaultLight, home_camera());
+                            | light(default_lighting(), home_camera());
     std::set<std::tuple<int, int, int>> whites;
     for (const auto& face : scene.faces) {
         // Every white sticker is on the +Y face, so all nine shade alike --
@@ -399,7 +488,7 @@ TEST_CASE("the home viewpoint's sample stickers carry no highlight")
     // each -- are plain shaded colour with no glint to reproduce. A glint
     // reaching a corner sticker is allowed; the contract does not look there.
     const WorldScene world = build_cube_scene(CubeState(3));
-    const ViewScene scene = world | view(home_camera()) | light(kDefaultLight, home_camera());
+    const ViewScene scene = world | view(home_camera()) | light(default_lighting(), home_camera());
     REQUIRE(scene.faces.size() == world.faces.size());
 
     int samples = 0;
@@ -415,16 +504,31 @@ TEST_CASE("the home viewpoint's sample stickers carry no highlight")
 
         ++samples;
         INFO("sample sticker " << i);
-        REQUIRE_FALSE(scene.faces[i].highlight.has_value());
+        REQUIRE(scene.faces[i].highlights.empty());
     }
     REQUIRE(samples == 3);
+
+    SECTION("and the kicker's glint does reach the top face's near corner")
+    {
+        // The kicker is behind the cube for exactly this: its reflection
+        // lands just off the corner of the top face nearest the eye.
+        bool glint_on_top = false;
+        for (std::size_t i = 0; i < world.faces.size(); ++i) {
+            Vec3 centre{0.0f, 0.0f, 0.0f};
+            for (const auto& point : world.faces[i].points) centre += point;
+            centre /= 4.0f;
+            if (centre.y > 0.9f && !scene.faces[i].highlights.empty()) glint_on_top = true;
+        }
+        REQUIRE(glint_on_top);
+    }
 }
 
 TEST_CASE("a lit face shades from its near end to its far end")
 {
     const Camera camera = identity_camera();
-    Light lamp = kDefaultLight;
-    lamp.position = Vec3{2.0f, 0.0f, 0.0f};  // level with the eye, off to the right
+    // Level with the eye, off to the right; no distance falloff, so the ends
+    // are Lambert's cosine alone.
+    const Lighting lamp = one_lamp(Vec3{2.0f, 0.0f, 0.0f});
 
     ViewScene scene;
     scene.faces.push_back(facing_face(3.0f, true));
@@ -444,7 +548,7 @@ TEST_CASE("a lit face shades from its near end to its far end")
     // with h = 3 and rho = 1 at the near end, 3 at the far end.
     const auto expected = [&](float rho) {
         return shade(Color{200, 100, 50, 255},
-                     lamp.ambient + lamp.diffuse * 3.0f / std::sqrt(9.0f + rho * rho));
+                     lamp.ambient + lamp.lamps[0].diffuse * 3.0f / std::sqrt(9.0f + rho * rho));
     };
     REQUIRE(face.shading->from_color == expected(1.0f));
     REQUIRE(face.shading->to_color == expected(3.0f));
@@ -461,25 +565,25 @@ TEST_CASE("a lit face shades from its near end to its far end")
         REQUIRE(dim.faces[0].color == shade(Color{200, 100, 50, 255}, lamp.ambient));
     }
 
-    SECTION("the unlit light draws no shading either")
+    SECTION("the unlit lighting draws no shading either")
     {
-        REQUIRE_FALSE(light(Light::unlit(), camera)(scene).faces[0].shading.has_value());
+        REQUIRE_FALSE(light(Lighting::unlit(lamp), camera)(scene).faces[0].shading.has_value());
     }
 }
 
 TEST_CASE("the shading of one plane runs on across its stickers")
 {
     const WorldScene world = build_cube_scene(CubeState(3));
-    const ViewScene scene = world | view(home_camera()) | light(kDefaultLight, home_camera());
+    const ViewScene scene = world | view(home_camera()) | light(default_lighting(), home_camera());
 
-    // The nine +Y stickers: every one shaded, every end on the same plane,
-    // and the middle one's ends averaging to the plane's reference byte.
+    // The nine +Z stickers (green: the white top clamps and shows nothing):
+    // every one shaded and every end on the same plane.
     int counted = 0;
     for (std::size_t i = 0; i < world.faces.size(); ++i) {
         Vec3 centre{0.0f, 0.0f, 0.0f};
         for (const auto& point : world.faces[i].points) centre += point;
         centre /= 4.0f;
-        if (centre.y < 0.9f) continue;
+        if (centre.z < 0.9f) continue;
 
         ++counted;
         const auto& face = scene.faces[i];
@@ -492,28 +596,25 @@ TEST_CASE("the shading of one plane runs on across its stickers")
         REQUIRE(rubiks::math::dot(face.shading->from - face.points[0], normal) == Approx(0.0f).margin(1e-3));
         REQUIRE(rubiks::math::dot(face.shading->to - face.points[0], normal) == Approx(0.0f).margin(1e-3));
 
-        if (std::abs(centre.x) < 1e-3f && std::abs(centre.z) < 1e-3f) {
-            const int from = face.shading->from_color.r;
-            const int to = face.shading->to_color.r;
-            REQUIRE(std::abs((from + to) / 2 - int{face.color.r}) <= 1);
-            REQUIRE(from != to);
+        if (std::abs(centre.x) < 1e-3f && std::abs(centre.y) < 1e-3f) {
+            // The middle sticker: its ends differ and its middle is the
+            // plane's reference byte, which is what the contract reads.
+            REQUIRE(face.shading->from_color != face.shading->to_color);
+            REQUIRE(face.shading->mid_color == face.color);
         }
     }
     REQUIRE(counted == 9);
 
-    SECTION("a sticker too small to change a byte across is drawn flat")
+    SECTION("a sticker whose ends shade alike is drawn flat")
     {
-        // At 28x28 a sticker is a fortieth of the face; the function moves a
-        // channel by a unit at most over it, and a flat fill is the same
-        // picture to within the contract's tolerance for less.
+        // On the white top face the clamp makes both ends 255 wherever the
+        // brightness passes 1, and those stickers carry no gradient.
         const ViewScene fine = build_cube_scene(CubeState(28))  //
                                | view(home_camera())            //
-                               | light(kDefaultLight, home_camera());
-        std::size_t shaded = 0;
+                               | light(default_lighting(), home_camera());
         for (const auto& face : fine.faces) {
-            if (face.shading) ++shaded;
+            if (face.shading) REQUIRE(face.shading->from_color != face.shading->to_color);
         }
-        REQUIRE(shaded < fine.faces.size() / 8);
     }
 }
 
@@ -525,19 +626,18 @@ TEST_CASE("a highlight sits where the light reflects into the eye")
 
     SECTION("inside the face, at the mirror point")
     {
-        Light lamp = kDefaultLight;
-        lamp.position = Vec3{0.5f, 0.5f, 0.0f};
+        const Lighting lamp = one_lamp(Vec3{0.5f, 0.5f, 0.0f});
         const ViewScene lit = light(lamp, camera)(scene);
 
-        REQUIRE(lit.faces[0].highlight.has_value());
-        const auto& glint = *lit.faces[0].highlight;
+        REQUIRE(lit.faces[0].highlights.size() == 1);
+        const auto& glint = lit.faces[0].highlights[0];
         // Mirrored to (0.5, 0.5, -4); half way back to the eye is z = -2.
         REQUIRE(glint.centre.x == Approx(0.25f).margin(1e-4));
         REQUIRE(glint.centre.y == Approx(0.25f).margin(1e-4));
         REQUIRE(glint.centre.z == Approx(-2.0f).margin(1e-4));
         // A perfect reflection: the whole specular strength, falling off to
         // the threshold at the rim, with the half-way value in between.
-        REQUIRE(glint.alpha == std::lround(lamp.specular * 255.0f));
+        REQUIRE(glint.alpha == std::lround(lamp.lamps[0].specular * 255.0f));
         REQUIRE(glint.mid < glint.alpha);
         REQUIRE(glint.mid >= kHighlightMinAlpha);
         const Vec3 span = glint.rim - glint.centre;
@@ -550,15 +650,24 @@ TEST_CASE("a highlight sits where the light reflects into the eye")
         // The peak is the plane's, not the sticker's: it stays at (2.5, 0, -2)
         // beyond the face's edge, and the face carries it because the lobe
         // reaches in. Every sticker on this plane would see the same peak.
-        Light lamp = kDefaultLight;
-        lamp.position = Vec3{5.0f, 0.0f, 0.0f};
+        const Lighting lamp = one_lamp(Vec3{5.0f, 0.0f, 0.0f});
         const ViewScene lit = light(lamp, camera)(scene);
 
-        REQUIRE(lit.faces[0].highlight.has_value());
-        REQUIRE(lit.faces[0].highlight->centre.x == Approx(2.5f).margin(1e-4));
-        REQUIRE(lit.faces[0].highlight->alpha == std::lround(lamp.specular * 255.0f));
-        REQUIRE(rubiks::math::length(lit.faces[0].highlight->rim -
-                                     lit.faces[0].highlight->centre) > 1.5f);
+        REQUIRE(lit.faces[0].highlights.size() == 1);
+        const auto& glint = lit.faces[0].highlights[0];
+        REQUIRE(glint.centre.x == Approx(2.5f).margin(1e-4));
+        REQUIRE(glint.alpha == std::lround(lamp.lamps[0].specular * 255.0f));
+        REQUIRE(rubiks::math::length(glint.rim - glint.centre) > 1.5f);
+    }
+
+    SECTION("two lamps, two glints, each where its own mirror point is")
+    {
+        Lighting pair = one_lamp(Vec3{0.5f, 0.5f, 0.0f});
+        pair.lamps.push_back(Light{Vec3{-0.5f, -0.5f, 0.0f}, 0.0f, 0.6f, 16.0f});
+        const ViewScene lit = light(pair, camera)(scene);
+        REQUIRE(lit.faces[0].highlights.size() == 2);
+        REQUIRE(lit.faces[0].highlights[0].centre.x == Approx(0.25f).margin(1e-4));
+        REQUIRE(lit.faces[0].highlights[1].centre.x == Approx(-0.25f).margin(1e-4));
     }
 
     SECTION("and gone when a tight lobe's mirror point is far away")
@@ -566,24 +675,21 @@ TEST_CASE("a highlight sits where the light reflects into the eye")
         // A soft lobe reaches a long way -- a grazing light puts a faint sheen
         // on most of a plane, which is what a satin plastic does. Tighten it
         // and the glint stays where the mirror point is.
-        Light lamp = kDefaultLight;
-        lamp.position = Vec3{40.0f, 0.0f, 0.0f};
-        lamp.shininess = 128.0f;
-        REQUIRE_FALSE(light(lamp, camera)(scene).faces[0].highlight.has_value());
+        const Lighting lamp = one_lamp(Vec3{40.0f, 0.0f, 0.0f}, 0.4f, 0.6f, 128.0f);
+        REQUIRE(light(lamp, camera)(scene).faces[0].highlights.empty());
     }
 
     SECTION("a face lit from behind carries none")
     {
-        Light lamp = kDefaultLight;
-        lamp.position = Vec3{0.0f, 0.0f, -5.0f};
-        REQUIRE_FALSE(light(lamp, camera)(scene).faces[0].highlight.has_value());
+        const Lighting lamp = one_lamp(Vec3{0.0f, 0.0f, -5.0f});
+        REQUIRE(light(lamp, camera)(scene).faces[0].highlights.empty());
     }
 }
 
 TEST_CASE("the six sticker colours stay apart at both ends of the shading")
 {
     for (const auto palette : {Palette::Classic, Palette::HighContrast}) {
-        for (const float intensity : {kDefaultLight.ambient, 1.0f}) {
+        for (const float intensity : {default_lighting().ambient, 1.0f}) {
             std::vector<Color> shaded;
             for (int i = 0; i < 6; ++i) {
                 shaded.push_back(shade(
@@ -604,7 +710,7 @@ TEST_CASE("the six sticker colours stay apart at both ends of the shading")
 TEST_CASE("a resting cube casts one convex shadow onto the ground")
 {
     const WorldScene scene =
-        build_cube_scene(CubeState(3)) | shadow(kDefaultLight, home_camera());
+        build_cube_scene(CubeState(3)) | shadow(default_lighting(), home_camera());
 
     REQUIRE(scene.shadow.has_value());
     const auto& cast = *scene.shadow;
@@ -624,7 +730,7 @@ TEST_CASE("a resting cube casts one convex shadow onto the ground")
     for (const auto& point : cast.contact) REQUIRE(point.y == Approx(kGroundY));
 
     // The anchor is the cube's centre dropped straight down; the far anchor
-    // is away from the light, which sits at +X +Z of the cube.
+    // is away from the key light, which sits at +X +Z of the cube.
     REQUIRE(cast.fade_start.x == Approx(0.0f).margin(1e-5));
     REQUIRE(cast.fade_start.z == Approx(0.0f).margin(1e-5));
     REQUIRE(cast.fade_end.x < cast.fade_start.x);
@@ -644,8 +750,7 @@ TEST_CASE("a resting cube casts one convex shadow onto the ground")
 
 TEST_CASE("a light straight overhead widens the shadow by its height")
 {
-    Light lamp = kDefaultLight;
-    lamp.position = Vec3{0.0f, 4.5f, 0.0f};
+    const Lighting lamp = one_lamp(Vec3{0.0f, 4.5f, 0.0f});
     const WorldScene scene =
         build_cube_scene(CubeState(3)) | shadow(lamp, home_camera());
     REQUIRE(scene.shadow.has_value());
@@ -653,7 +758,7 @@ TEST_CASE("a light straight overhead widens the shadow by its height")
     // A point light at a finite height does not trace the footprint: the top
     // corners at y = 1 are pushed out by (4.5 + 1.5) / (4.5 - 1) and are the
     // whole outline. The centre and axes are the cube's own.
-    const float scale = (lamp.position.y - kGroundY) / (lamp.position.y - 1.0f);
+    const float scale = (lamp.lamps[0].position.y - kGroundY) / (lamp.lamps[0].position.y - 1.0f);
     float reach = 0.0f;
     for (const auto& point : scene.shadow->polygons[0]) {
         reach = std::max({reach, std::abs(point.x), std::abs(point.z)});
@@ -670,11 +775,25 @@ TEST_CASE("a light straight overhead widens the shadow by its height")
 
 TEST_CASE("a light no higher than the cube casts nothing onto the ground")
 {
-    Light lamp = kDefaultLight;
-    lamp.position = Vec3{2.0f, 0.5f, 2.0f};
-    const WorldScene scene =
-        build_cube_scene(CubeState(3)) | shadow(lamp, home_camera());
+    const WorldScene scene = build_cube_scene(CubeState(3)) |
+                             shadow(one_lamp(Vec3{2.0f, 0.5f, 2.0f}), home_camera());
     REQUIRE_FALSE(scene.shadow.has_value());
+
+    SECTION("nor does a lighting with no lamps at all")
+    {
+        Lighting dark;
+        REQUIRE_FALSE((build_cube_scene(CubeState(3)) | shadow(dark, home_camera())).shadow.has_value());
+    }
+
+    SECTION("only the key casts: the kicker behind the cube adds no second shadow")
+    {
+        const WorldScene lit = build_cube_scene(CubeState(3)) |
+                               shadow(default_lighting(), home_camera());
+        REQUIRE(lit.shadow.has_value());
+        REQUIRE(lit.shadow->polygons.size() == 1);
+        // Thrown away from the key at +X +Z, not towards it from the kicker.
+        REQUIRE(lit.shadow->fade_end.x < lit.shadow->fade_start.x);
+    }
 }
 
 TEST_CASE("the shadow thins as the eye nears the ground and is gone below it")
@@ -685,23 +804,23 @@ TEST_CASE("the shadow thins as the eye nears the ground and is gone below it")
     };
     const WorldScene world = build_cube_scene(CubeState(3));
 
-    REQUIRE((world | shadow(kDefaultLight, camera_at(3.0f))).shadow->opacity ==
+    REQUIRE((world | shadow(default_lighting(), camera_at(3.0f))).shadow->opacity ==
             kShadowOpacity);
 
-    const auto half = world | shadow(kDefaultLight,
+    const auto half = world | shadow(default_lighting(),
                                      camera_at(kGroundY + 0.5f * kShadowFadeBand));
     REQUIRE(half.shadow.has_value());
     REQUIRE(half.shadow->opacity == std::lround(kShadowOpacity * 0.5f));
 
-    REQUIRE_FALSE((world | shadow(kDefaultLight, camera_at(kGroundY))).shadow.has_value());
-    REQUIRE_FALSE((world | shadow(kDefaultLight, camera_at(-3.0f))).shadow.has_value());
+    REQUIRE_FALSE((world | shadow(default_lighting(), camera_at(kGroundY))).shadow.has_value());
+    REQUIRE_FALSE((world | shadow(default_lighting(), camera_at(-3.0f))).shadow.has_value());
 }
 
 TEST_CASE("a turning layer's shadow turns with it")
 {
     const ActiveRotation turn{Axis::X, rubiks::cube::layer(2), 45.0f};
     const WorldScene scene = build_cube_scene(CubeState(3), turn) |
-                             shadow(kDefaultLight, home_camera());
+                             shadow(default_lighting(), home_camera());
 
     REQUIRE(scene.shadow.has_value());
     REQUIRE(scene.shadow->polygons.size() == 2);
@@ -711,7 +830,7 @@ TEST_CASE("a turning layer's shadow turns with it")
     // the turning slab's is not.
     const ActiveRotation settled{Axis::X, rubiks::cube::layer(2), 0.0f};
     const WorldScene rest = build_cube_scene(CubeState(3), settled) |
-                            shadow(kDefaultLight, home_camera());
+                            shadow(default_lighting(), home_camera());
     REQUIRE(rest.shadow->polygons.size() == 2);
 
     const auto same_outline = [](const std::vector<Vec3>& a,
@@ -738,9 +857,9 @@ TEST_CASE("the whole chain puts the shadow below the cube inside its region")
     const Camera camera = default_camera(placement.cube.width / placement.cube.height);
     const RenderScene scene = build_cube_scene(CubeState(3))  //
                               | transform({})                 //
-                              | shadow(kDefaultLight, camera) //
+                              | shadow(default_lighting(), camera) //
                               | view(camera)                  //
-                              | light(kDefaultLight, camera)  //
+                              | light(default_lighting(), camera)  //
                               | project(camera)               //
                               | cull()                        //
                               | depth_sort()                  //
@@ -771,7 +890,7 @@ TEST_CASE("the home viewpoint's planes shade to the bytes the contract names")
     // numbers are worked out there by hand; this is the engine agreeing.
     const ViewScene scene = build_cube_scene(CubeState(3))     //
                             | view(home_camera())              //
-                            | light(kDefaultLight, home_camera());
+                            | light(default_lighting(), home_camera());
 
     std::optional<Color> white, green, red;
     for (const auto& face : scene.faces) {
@@ -795,24 +914,25 @@ TEST_CASE("the home viewpoint's planes shade to the bytes the contract names")
     REQUIRE(green.has_value());
     REQUIRE(red.has_value());
 
-    REQUIRE(int{white->r} == 239);
-    REQUIRE(int{green->g} == (155 * 189 + 127) / 255);
-    REQUIRE(int{green->b} == (72 * 189 + 127) / 255);
-    REQUIRE(int{red->r} == (183 * 164 + 127) / 255);
-    REQUIRE(int{red->b} == (52 * 164 + 127) / 255);
+    // +Y at 290 out of 255: white clamps; +Z at 230 and +X at 211.
+    REQUIRE(int{white->r} == 255);
+    REQUIRE(int{green->g} == (155 * 230 + 127) / 255);
+    REQUIRE(int{green->b} == (72 * 230 + 127) / 255);
+    REQUIRE(int{red->r} == (183 * 211 + 127) / 255);
+    REQUIRE(int{red->b} == (52 * 211 + 127) / 255);
 
     SECTION("and the same bytes for every size a person can pick")
     {
-        // The sticker plane sits a little further out on a bigger cube, and
-        // the light was placed so that never tips a byte between 2 and 9.
+        // The top face is past full brightness at every size, so white
+        // clamps to white whatever the sticker plane's exact height.
         for (const int size : {2, 4, 5, 7, 9}) {
             const ViewScene bigger = build_cube_scene(CubeState(size))  //
                                      | view(home_camera())               //
-                                     | light(kDefaultLight, home_camera());
+                                     | light(default_lighting(), home_camera());
             for (const auto& face : bigger.faces) {
                 if (face.color.r == face.color.g && face.color.g == face.color.b &&
                     face.color.r > 128) {
-                    REQUIRE(int{face.color.r} == 239);
+                    REQUIRE(int{face.color.r} == 255);
                 }
             }
         }

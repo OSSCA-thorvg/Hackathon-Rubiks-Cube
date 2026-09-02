@@ -138,6 +138,13 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_palette(): number;
   /** Returns 1 when taken; out-of-range values are clamped, not refused. */
   _thorvg_rubiks_set_speed_scale(scale: number): number;
+  /**
+   * Address of an engine-owned float buffer for a lighting setup of `count`
+   * values, or 0 for a count the engine does not accept.
+   */
+  _thorvg_rubiks_lighting_buffer(count: number): number;
+  /** Reads the lighting buffer back; 1 when accepted, 0 when refused. */
+  _thorvg_rubiks_set_lighting(count: number): number;
   /** The current animation speed multiplier. */
   _thorvg_rubiks_speed_scale(): number;
   /** Restores the turntable camera and nothing else. */

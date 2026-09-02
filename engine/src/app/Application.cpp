@@ -191,9 +191,15 @@ struct ApplicationState {
     // it, so it is the one setting a turn in progress can be changed under.
     graphics::Palette palette = graphics::Palette::Classic;
 
-    // The light the 3D view is drawn under, in world space. A constant for
-    // now, kept as state so that moving it later is a matter of writing here.
-    graphics::Light light = graphics::kDefaultLight;
+    // The lights the 3D view is drawn under, in world space. The studio setup
+    // by default; set_lighting() replaces it so the lamps can be tuned by eye
+    // from the page, and the values that tuning settles on go back into
+    // Lighting::standard().
+    graphics::Lighting lighting = graphics::default_lighting();
+
+    // Where a lighting setup is written before set_lighting() reads it; the
+    // same arrangement as `restore`.
+    std::vector<float> lighting_values;
 
     // The ground behind the cube. Kept here rather than only on the renderer
     // so that a query has an answer without reaching through the rendering
@@ -1018,10 +1024,10 @@ bool render() noexcept
         // that would otherwise merge them; shading those shades would undo
         // that, so it is drawn under a light that leaves every colour as it
         // is. The passes run either way -- it is a value, not a branch.
-        const graphics::Light lamp =
+        const graphics::Lighting lamp =
             state->palette == graphics::Palette::HighContrast
-                ? graphics::Light::unlit()
-                : state->light;
+                ? graphics::Lighting::unlit(state->lighting)
+                : state->lighting;
 
         scene = graphics::build_cube_scene(state->cube_state,
                                            state->interaction.active_rotation(),
@@ -1822,6 +1828,28 @@ bool set_palette(graphics::Palette palette) noexcept
 graphics::Palette palette() noexcept
 {
     return state ? state->palette : graphics::Palette::Classic;
+}
+
+std::uintptr_t lighting_buffer(std::uint32_t count) noexcept
+{
+    if (!state) return 0;
+    if (count != graphics::Lighting::kValueCount) return 0;
+
+    state->lighting_values.assign(count, 0.0f);
+    return reinterpret_cast<std::uintptr_t>(state->lighting_values.data());
+}
+
+bool set_lighting(std::uint32_t count) noexcept
+{
+    if (!state) return false;
+    if (count != state->lighting_values.size()) return false;
+
+    // Read into a copy and swap only when the whole list is good, so a
+    // refused list leaves the lights exactly as they were.
+    graphics::Lighting next = state->lighting;
+    if (!next.from_values(state->lighting_values.data(), count)) return false;
+    state->lighting = std::move(next);
+    return true;
 }
 
 bool set_canvas_theme(graphics::CanvasTheme theme) noexcept

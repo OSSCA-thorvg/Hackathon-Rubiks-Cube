@@ -1,75 +1,87 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <vector>
 
 #include "graphics/Color.hpp"
 #include "math/Types.hpp"
 
 /**
- * The one light over the cube, and the ground its shadow falls on.
+ * The lights over the cube, and the ground its shadow falls on.
  *
  * Blinn-Phong with its three terms and nothing more: ambient so that no face
  * ever goes black, diffuse for the face-by-face brightness, specular for the
- * glint a face throws when it sits between the light and the eye. There is no
+ * glint a face throws when it sits between a light and the eye. There is no
  * reflection term because Blinn-Phong has none.
  *
- * The light is a point rather than a direction on purpose. A direction only
- * ever slides a shadow sideways; a point stretches and leans it as it moves,
- * and slides a highlight across a face, which is what makes a light visible
- * as a light rather than as a colour adjustment.
+ * Two lamps rather than one, the way a product is photographed: a key light
+ * high in front for the diffuse shading, and a kicker behind for the glint.
+ * One lamp cannot do both -- for the eye to see a reflection on the top face
+ * the lamp has to be on the far side of the cube, and from there it leaves
+ * the faces the eye is looking at in the dark.
+ *
+ * The lamps are points rather than directions on purpose. A direction only
+ * ever slides a shadow sideways and lights a flat face evenly; a point
+ * stretches and leans the shadow, and lights the near end of a face more than
+ * the far end, which is what makes a light visible as a light.
  */
 namespace rubiks::graphics {
 
+/** One lamp. World space; each pass carries it into its own space itself. */
 struct Light {
-    /**
-     * World space; each pass carries it into its own space itself.
-     *
-     * High above and a little in front of the home viewpoint, to its left, so
-     * the top face is brightest and the front brighter than the right. High
-     * rather than close so the shadow stays near the cube's footprint (1.34
-     * times it) instead of trailing off the stage. The exact numbers were
-     * chosen so that every plane's brightness lands well clear of a rounding
-     * boundary (docs/tasks/04-rubiks-cube-domain.md, contract v4): a byte
-     * that could tip either way with the compiler's arithmetic is not a byte
-     * a contract can name.
-     */
-    math::Vec3 position{2.0f, 8.3f, 4.2f};
+    math::Vec3 position{0.0f, 0.0f, 0.0f};
+    /** Strength of its diffuse term at the cube's centre. */
+    float diffuse = 0.0f;
+    /** Peak strength of its glint and how tightly the glint is focused. */
+    float specular = 0.0f;
+    float shininess = 16.0f;
+};
 
+struct Lighting {
     /**
      * Floor of the brightness. Kept high because a sticker's colour is its
      * identity: a red that shades into an orange is not lighting but a
-     * mistake, and ambient + diffuse is held at 1 so nothing ever clips.
+     * mistake. The palette colour is the colour of a well-lit face, so the
+     * sum of ambient and a lamp's diffuse may pass 1; shade() clamps.
      */
-    float ambient = 0.60f;
-    float diffuse = 0.40f;
+    float ambient = 0.75f;
 
     /**
-     * Peak strength of the glint and how tightly it is focused. A softer lobe
-     * than the textbook 32: a narrow glint reads as a hard-edged spot on a
-     * flat face, a wider one as the sheen of a plastic that a cube is.
+     * Exponent on the distance falloff of every lamp's diffuse term:
+     * (distance to the cube's centre / distance to the point) to this power,
+     * so a point at the centre's distance is lit at full strength and the
+     * near end of a face is lit more than the far end. Zero switches it off.
      */
-    float specular = 0.60f;
-    float shininess = 16.0f;
+    float attenuation = 1.0f;
+
+    /** The key light first: it alone casts the shadow. */
+    std::vector<Light> lamps;
+
+    /** The studio arrangement the app is drawn under. */
+    [[nodiscard]] static Lighting standard();
 
     /**
-     * The light that changes nothing.
-     *
-     * Ambient 1 alone would leave the diffuse term on top of it and make
-     * every lit face brighter than its sticker; all three have to be set for
-     * the shading formula to hand a colour back untouched, byte for byte.
+     * The same lamps with every term switched off but the ambient at 1, so
+     * every colour comes back as it is, byte for byte, while the key still
+     * casts its shadow. What the high-contrast palette is drawn under.
      */
-    [[nodiscard]] static constexpr Light unlit() noexcept
-    {
-        Light light;
-        light.ambient = 1.0f;
-        light.diffuse = 0.0f;
-        light.specular = 0.0f;
-        return light;
-    }
+    [[nodiscard]] static Lighting unlit(const Lighting& base);
+
+    /**
+     * Flat list form for tuning by eye: ambient, attenuation, then for each
+     * of the two lamps x, y, z, diffuse, specular, shininess.
+     */
+    static constexpr std::size_t kLampCount = 2;
+    static constexpr std::size_t kValueCount = 2 + kLampCount * 6;
+
+    /** Refuses a wrong count or a value that is not a number. */
+    [[nodiscard]] bool from_values(const float* values, std::size_t count);
+    void to_values(float* values) const;
 };
 
-/** The light every frame is drawn under unless a palette asks for none. */
-inline constexpr Light kDefaultLight{};
+/** The lighting every frame is drawn under unless a palette asks for none. */
+[[nodiscard]] const Lighting& default_lighting();
 
 /**
  * Height of the ground plane the shadow lies on.
@@ -86,7 +98,7 @@ inline constexpr float kGroundY = -1.5f;
  *
  * Also what fixes a highlight's radius: the distance along the plane from
  * the reflection point at which the lobe has fallen to this. The radius is a
- * property of the plane and the light, not of the sticker, so one glint spans
+ * property of the plane and the lamp, not of the sticker, so one glint spans
  * as many stickers as it reaches and reads as one.
  */
 inline constexpr std::uint8_t kHighlightMinAlpha = 8;
@@ -143,9 +155,10 @@ inline constexpr std::uint8_t kContactAlpha = 64;
  * A colour at a brightness, in the integer arithmetic the render contract is
  * written in.
  *
- * `intensity` is clamped to [0, 1] and scaled to a byte first, so the whole
- * computation after that is integer and the contract can state exact bytes.
- * At an intensity of 1 every channel comes back unchanged.
+ * `intensity` is scaled to a byte first -- it may pass 255, since the
+ * palette colour is the colour of a well-lit face rather than the brightest
+ * one -- and each channel is min(255, (value * scale + 127) / 255). At an
+ * intensity of 1 every channel comes back unchanged.
  */
 [[nodiscard]] Color shade(const Color& color, float intensity) noexcept;
 

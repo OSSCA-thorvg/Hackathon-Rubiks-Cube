@@ -69,6 +69,24 @@ int main(int argc, char** argv)
     std::printf("size %d, %d frames at 45 degrees: median %.2f ms, p95 %.2f ms\n",
                 size, frames, median(samples), percentile95(samples));
 
+    // Optionally write the resting frame out as a binary PPM, for looking at
+    // the pixels the numbers above were made of.
+    if (argc > 3) {
+        rubiks::app::reset_cube();
+        while (rubiks::app::advance(16.0)) {
+        }
+        if (!rubiks::app::render()) return 1;
+        const auto* pixels =
+            reinterpret_cast<const std::uint8_t*>(rubiks::app::pixel_buffer());
+        if (FILE* out = std::fopen(argv[3], "wb")) {
+            std::fprintf(out, "P6\n%u %u\n255\n", kCanvas, kCanvas);
+            for (std::uint32_t i = 0; i < kCanvas * kCanvas; ++i) {
+                std::fwrite(pixels + i * 4, 1, 3, out);
+            }
+            std::fclose(out);
+        }
+    }
+
 #ifdef RUBIKS_LIGHTING
     using namespace rubiks::graphics;
     const auto placement = layout(kCanvas, kCanvas, ViewMode::Cube3D);
@@ -77,16 +95,16 @@ int main(int argc, char** argv)
                               rubiks::cube::layer(size - 1), 45.0f};
     const RenderScene scene = build_cube_scene(rubiks::cube::CubeState(size), turn)  //
                               | transform({})                                        //
-                              | shadow(kDefaultLight, camera)                        //
+                              | shadow(default_lighting(), camera)                        //
                               | view(camera)                                         //
-                              | light(kDefaultLight, camera)                         //
+                              | light(default_lighting(), camera)                         //
                               | project(camera)                                      //
                               | cull()                                               //
                               | depth_sort()                                         //
                               | viewport(placement.cube);
     std::size_t glints = 0;
     for (const auto& face : scene.faces) {
-        if (face.highlight) ++glints;
+        glints += face.highlights.size();
     }
     std::printf("faces drawn %zu, with a highlight %zu (%.1f%%), shadow casters %zu\n",
                 scene.faces.size(), glints,
@@ -116,7 +134,7 @@ int main(int argc, char** argv)
     }
     {
         RenderScene v = scene;
-        for (auto& face : v.faces) face.highlight.reset();
+        for (auto& face : v.faces) face.highlights.clear();
         time_variant("no highlights", v);
     }
     if (scene.shadow) {

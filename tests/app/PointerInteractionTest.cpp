@@ -40,19 +40,24 @@ constexpr Rgba kBody{70, 74, 82, 255};
 // The 3D view is lit (render contract v4): one brightness per plane of the
 // cube, from docs/tasks/04-rubiks-cube-domain.md. The three planes turned
 // away from the light are at the ambient floor.
-constexpr unsigned kLitUp = 239;
-constexpr unsigned kLitFront = 189;
-constexpr unsigned kLitRight = 164;
-constexpr unsigned kLitAway = 153;
+constexpr unsigned kLitUp = 275;
+constexpr unsigned kLitFront = 230;
+constexpr unsigned kLitRight = 211;
+/** -X and -Z: the ambient floor; the kicker lights nothing, it only glints. */
+constexpr unsigned kLitAway = 191;
 /** The +Y cut a U turn opens, one layer down from the top. */
-constexpr unsigned kLitCutUp = 241;
+constexpr unsigned kLitCutUp = 273;
+
+constexpr std::uint8_t lit_channel(unsigned value, unsigned brightness)
+{
+    const unsigned scaled = (value * brightness + 127) / 255;
+    return static_cast<std::uint8_t>(scaled > 255 ? 255 : scaled);
+}
 
 constexpr Rgba lit(const Rgba& color, unsigned brightness)
 {
-    return Rgba{static_cast<std::uint8_t>((color[0] * brightness + 127) / 255),
-                static_cast<std::uint8_t>((color[1] * brightness + 127) / 255),
-                static_cast<std::uint8_t>((color[2] * brightness + 127) / 255),
-                color[3]};
+    return Rgba{lit_channel(color[0], brightness), lit_channel(color[1], brightness),
+                lit_channel(color[2], brightness), color[3]};
 }
 
 // The six faces as the 3D view shows them: a sticker's colour at its plane's
@@ -254,8 +259,13 @@ void require_solved_net()
     }
 }
 
-/** Whether a coarse sweep of the 3D region finds a color anywhere in it. */
-bool cube_region_shows(const Rgba& color)
+/**
+ * Whether a coarse sweep of the 3D region finds `color` at some brightness
+ * within `spread` of `brightness`, a unit per channel: a cut face is shaded
+ * from its near end to its far end like any other face.
+ */
+bool cube_region_shows_shade(const Rgba& color, unsigned brightness,
+                             unsigned spread)
 {
     constexpr int kSteps = 24;
     const auto rect = cube_rect(kCanvas, kCanvas);
@@ -267,12 +277,14 @@ bool cube_region_shows(const Rgba& color)
             const auto* pixel =
                 pixel_at(rect.x + fx * rect.width, rect.y + fy * rect.height,
                          kCanvas);
-            // Within a unit per channel: the lit faces are gradients.
-            if (std::abs(int{pixel[0]} - int{color[0]}) <= 1 &&
-                std::abs(int{pixel[1]} - int{color[1]}) <= 1 &&
-                std::abs(int{pixel[2]} - int{color[2]}) <= 1 &&
-                pixel[3] == color[3]) {
-                return true;
+            if (pixel[3] != color[3]) continue;
+            for (unsigned b = brightness - spread; b <= brightness + spread; ++b) {
+                const Rgba shade = lit(color, b);
+                if (std::abs(int{pixel[0]} - int{shade[0]}) <= 1 &&
+                    std::abs(int{pixel[1]} - int{shade[1]}) <= 1 &&
+                    std::abs(int{pixel[2]} - int{shade[2]}) <= 1) {
+                    return true;
+                }
             }
         }
     }
@@ -650,20 +662,20 @@ TEST_CASE("a net drag turns the 3D view with it")
     const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
     REQUIRE(rubiks::app::render());
-    REQUIRE_FALSE(cube_region_shows(lit(kBody, kLitCutUp)));
+    REQUIRE_FALSE(cube_region_shows_shade(kBody, kLitCutUp, 24));
 
     drag_net_top_row_left();
     REQUIRE(rubiks::app::render());
 
     // One rotation drives both views, so a layer swung away in the net has
     // swung away in the cube too, leaving the cut surface on show -- lit as
-    // the +Y plane one layer down.
-    REQUIRE(cube_region_shows(lit(kBody, kLitCutUp)));
+    // the +Y plane one layer down, brighter at one end than the other.
+    REQUIRE(cube_region_shows_shade(kBody, kLitCutUp, 24));
 
     rubiks::app::pointer_up();
     settle();
     REQUIRE(rubiks::app::render());
-    REQUIRE_FALSE(cube_region_shows(lit(kBody, kLitCutUp)));
+    REQUIRE_FALSE(cube_region_shows_shade(kBody, kLitCutUp, 24));
 
 }
 

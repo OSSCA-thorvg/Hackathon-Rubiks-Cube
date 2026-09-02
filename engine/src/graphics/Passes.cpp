@@ -165,16 +165,18 @@ ClipScene ProjectPass::operator()(const ViewScene& scene) const
         if (face.shading) {
             projected.shading = ShadingOf<math::Vec2>{
                 to_ndc(face.shading->from), to_ndc(face.shading->to),
-                face.shading->from_color, face.shading->to_color};
+                face.shading->from_color, face.shading->mid_color,
+                face.shading->to_color};
         }
-        // The highlight lies on the face's plane; its centre may sit off the
+        // A highlight lies on the face's plane; its centre may sit off the
         // face but still in front of the eye, as the mirror image of a light
         // above the plane always is when the eye is above it too.
-        if (face.highlight && face.highlight->centre.z < -near_plane &&
-            face.highlight->rim.z < -near_plane) {
-            projected.highlight = HighlightOf<math::Vec2>{
-                to_ndc(face.highlight->centre), to_ndc(face.highlight->rim),
-                face.highlight->alpha, face.highlight->mid};
+        for (const auto& glint : face.highlights) {
+            if (glint.centre.z < -near_plane && glint.rim.z < -near_plane) {
+                projected.highlights.push_back(HighlightOf<math::Vec2>{
+                    to_ndc(glint.centre), to_ndc(glint.rim), glint.alpha,
+                    glint.mid});
+            }
         }
         result.faces.push_back(projected);
     }
@@ -243,12 +245,13 @@ RenderScene ViewportPass::operator()(const ClipScene& scene) const
             mapped.shading = RenderShading{to_pixels(face.shading->from),
                                            to_pixels(face.shading->to),
                                            face.shading->from_color,
+                                           face.shading->mid_color,
                                            face.shading->to_color};
         }
-        if (face.highlight) {
-            mapped.highlight = RenderHighlight{
-                to_pixels(face.highlight->centre), to_pixels(face.highlight->rim),
-                face.highlight->alpha, face.highlight->mid};
+        for (const auto& glint : face.highlights) {
+            mapped.highlights.push_back(RenderHighlight{
+                to_pixels(glint.centre), to_pixels(glint.rim), glint.alpha,
+                glint.mid});
         }
         result.faces.push_back(mapped);
     }

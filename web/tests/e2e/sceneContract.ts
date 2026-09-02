@@ -20,26 +20,26 @@ export const BODY = [70, 74, 82, 255];
 // The brightness of each plane of the cube under the light, a byte out of
 // 255, worked out by hand in docs/tasks/04-rubiks-cube-domain.md (contract
 // v4). The three planes turned away from the light sit at the ambient floor.
-export const LIT_UP = 239; // +Y
-export const LIT_FRONT = 189; // +Z
-export const LIT_RIGHT = 164; // +X
-export const LIT_AWAY = 153; // -Y, -X, -Z
+export const LIT_UP = 275; // +Y (white clamps to 255)
+export const LIT_FRONT = 230; // +Z
+export const LIT_RIGHT = 211; // +X
+export const LIT_AWAY = 191; // -Y, -X, -Z: the ambient floor
 
 /**
  * The cut faces a turn opens lie one layer in, on planes of their own: at
  * x, y or z = +1/3 or -1/3, facing +X, +Y or +Z. During a scramble any of the
  * six may be the one on show.
  */
-export const LIT_CUTS = [171, 178, 241, 243, 195, 201];
+export const LIT_CUTS = [218, 224, 273, 270, 235, 239];
 
-/** A colour at a brightness, in the integer arithmetic the engine uses. */
+/**
+ * A colour at a brightness, in the integer arithmetic the engine uses. The
+ * brightness may pass 255 and each channel stops there.
+ */
 export function lit(color: readonly number[], brightness: number): number[] {
-  return [
-    Math.floor((color[0]! * brightness + 127) / 255),
-    Math.floor((color[1]! * brightness + 127) / 255),
-    Math.floor((color[2]! * brightness + 127) / 255),
-    color[3]!,
-  ];
+  const channel = (value: number): number =>
+    Math.min(255, Math.floor((value * brightness + 127) / 255));
+  return [channel(color[0]!), channel(color[1]!), channel(color[2]!), color[3]!];
 }
 
 /** The six faces as the lit 3D view shows them on a solved cube. */
@@ -68,9 +68,21 @@ export function near(
   );
 }
 
-/** Whether a pixel is a cut surface at any of the brightnesses it can have. */
+/**
+ * Whether a pixel is a cut surface at any brightness it can have.
+ *
+ * A cut face is shaded from its near end to its far end like any other, so
+ * the six plane references are the middles of six runs, each this wide.
+ */
+export const CUT_SPREAD = 24;
+
 export function isBody(pixel: readonly number[]): boolean {
-  return LIT_CUTS.some((brightness) => near(pixel, lit(BODY, brightness)));
+  return LIT_CUTS.some((reference) => {
+    for (let b = reference - CUT_SPREAD; b <= reference + CUT_SPREAD; b += 1) {
+      if (near(pixel, lit(BODY, b))) return true;
+    }
+    return false;
+  });
 }
 
 // Sample points as fractions of the square 3D region, derived from the

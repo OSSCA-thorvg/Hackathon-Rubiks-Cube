@@ -667,6 +667,30 @@ void cancel_painting() noexcept;
 /** Returns the current multiplier, defaulting to 1 outside a lifecycle. */
 [[nodiscard]] float speed_scale() noexcept;
 
+/**
+ * Takes the buffer a lighting setup is written into, and its address.
+ *
+ * The same arrangement restore_buffer() uses: the engine owns the memory and
+ * the caller writes into it through a view, then set_lighting() reads it. The
+ * count has to be graphics::Lighting::kValueCount and the order is the one
+ * Lighting::from_values documents. Here so the lights can be tuned by eye
+ * from the page without a rebuild; the values that come out of that tuning
+ * are baked into Lighting::standard().
+ *
+ * Nothing else may be called on the engine between this and set_lighting().
+ *
+ * @return zero for a wrong count and before initialization.
+ */
+[[nodiscard]] std::uintptr_t lighting_buffer(std::uint32_t count) noexcept;
+
+/**
+ * Reads the buffer back as the lighting every following frame is drawn under.
+ *
+ * @return false for a wrong count or a value that is not a number, leaving
+ *         the lighting as it was.
+ */
+[[nodiscard]] bool set_lighting(std::uint32_t count) noexcept;
+
 /** Restores the home camera without changing cube or view mode. */
 void reset_view() noexcept;
 

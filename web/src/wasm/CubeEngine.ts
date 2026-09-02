@@ -874,6 +874,34 @@ export class CubeEngine {
     }
   }
 
+  /**
+   * Replaces the lights the 3D view is drawn under.
+   *
+   * A flat list in the engine's order -- ambient, attenuation, then x, y, z,
+   * diffuse, specular, shininess for the key light and again for the kicker
+   * -- written into a buffer the engine owns, the way a shared record is. For
+   * tuning by eye from the address bar; the values that tuning settles on are
+   * baked into the engine's defaults.
+   *
+   * @returns false when the engine refused the list (a wrong count, or a value
+   *   that is not a number), leaving the lights as they were.
+   */
+  setLighting(values: readonly number[]): boolean {
+    this.assertUsable();
+    const pointer = this.module._thorvg_rubiks_lighting_buffer(values.length);
+    if (pointer === 0) return false;
+    if (!this.heapRegionUsable(pointer, values.length * 4)) {
+      throw new Error(
+        `Engine returned an invalid lighting buffer for ${values.length} ` +
+          `values: pointer ${pointer}.`,
+      );
+    }
+    new Float32Array(this.module.HEAPU8.buffer, pointer, values.length).set(
+      values,
+    );
+    return this.module._thorvg_rubiks_set_lighting(values.length) !== 0;
+  }
+
   /** Returns the multiplier the engine settled on, after its own clamp. */
   speedScale(): number {
     this.assertUsable();

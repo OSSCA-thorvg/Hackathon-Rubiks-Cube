@@ -45,21 +45,30 @@ constexpr Rgba kOrange{255, 88, 0, 255};     // -X left
 // Contract v4: the 3D view is lit. Each plane of the cube has one brightness,
 // a byte out of 255, worked out by hand in docs/tasks/04-rubiks-cube-domain.md
 // from the light's resting place; the net is a diagram and stays unlit.
-constexpr unsigned kLitUp = 239;     // +Y, the plane nearest the light
-constexpr unsigned kLitFront = 189;  // +Z
-constexpr unsigned kLitRight = 164;  // +X
+constexpr unsigned kLitUp = 275;     // +Y, the plane nearest the key light
+constexpr unsigned kLitFront = 230;  // +Z
+constexpr unsigned kLitRight = 211;  // +X
 // The cut faces a turn opens lie one layer in, so their planes are their own:
 // the +Y cut at y = +1/3 of a U turn and the +X cut at x = +1/3 of an R turn.
-constexpr unsigned kLitCutUp = 241;
-constexpr unsigned kLitCutRight = 171;
+constexpr unsigned kLitCutUp = 273;
+constexpr unsigned kLitCutRight = 218;
 
-/** A colour at a brightness, in the integer arithmetic the engine uses. */
+/**
+ * A colour at a brightness, in the integer arithmetic the engine uses.
+ *
+ * The brightness may pass 255 -- the palette colour is a well-lit face, not
+ * the brightest -- and each channel stops at 255.
+ */
+constexpr std::uint8_t lit_channel(unsigned value, unsigned brightness)
+{
+    const unsigned scaled = (value * brightness + 127) / 255;
+    return static_cast<std::uint8_t>(scaled > 255 ? 255 : scaled);
+}
+
 constexpr Rgba lit(const Rgba& color, unsigned brightness)
 {
-    return Rgba{static_cast<std::uint8_t>((color[0] * brightness + 127) / 255),
-                static_cast<std::uint8_t>((color[1] * brightness + 127) / 255),
-                static_cast<std::uint8_t>((color[2] * brightness + 127) / 255),
-                color[3]};
+    return Rgba{lit_channel(color[0], brightness), lit_channel(color[1], brightness),
+                lit_channel(color[2], brightness), color[3]};
 }
 
 struct Region {
@@ -237,9 +246,15 @@ const std::uint8_t* pixel_in_net(float column, float row, std::uint32_t width,
                     height);
 }
 
-/** Whether a coarse sweep of the 3D region finds a color anywhere in it. */
-bool cube_region_shows(const Rgba& color, std::uint32_t width,
-                       std::uint32_t height)
+/**
+ * Whether a coarse sweep of the 3D region finds `color` at some brightness
+ * near `brightness` -- within `spread` of it, and a unit per channel of the
+ * shade that brightness makes. A cut face is shaded like any other, running
+ * from its near end to its far end, so no one byte is the whole of it.
+ */
+bool cube_region_shows_shade(const Rgba& color, unsigned brightness,
+                             unsigned spread, std::uint32_t width,
+                             std::uint32_t height)
 {
     constexpr int kSteps = 32;
     const Region region = cube_region(width, height);
@@ -252,18 +267,22 @@ bool cube_region_shows(const Rgba& color, std::uint32_t width,
                 region.y + (static_cast<float>(row) + 0.5f) / kSteps *
                                region.side,
                 width, height);
-            // Within a unit per channel: a cut face is shaded like any
-            // other, so its exact byte depends on where the sweep lands.
-            if (std::abs(int{pixel[0]} - int{color[0]}) <= 1 &&
-                std::abs(int{pixel[1]} - int{color[1]}) <= 1 &&
-                std::abs(int{pixel[2]} - int{color[2]}) <= 1 &&
-                pixel[3] == color[3]) {
-                return true;
+            if (pixel[3] != color[3]) continue;
+            for (unsigned b = brightness - spread; b <= brightness + spread; ++b) {
+                const Rgba shade = lit(color, b);
+                if (std::abs(int{pixel[0]} - int{shade[0]}) <= 1 &&
+                    std::abs(int{pixel[1]} - int{shade[1]}) <= 1 &&
+                    std::abs(int{pixel[2]} - int{shade[2]}) <= 1) {
+                    return true;
+                }
             }
         }
     }
     return false;
 }
+
+/** How far a cut face's brightness runs either side of its plane's reference. */
+constexpr unsigned kCutSpread = 24;
 
 void require_corners(std::uint32_t width, std::uint32_t height)
 {
@@ -448,14 +467,14 @@ TEST_CASE("a sliding turn half way through rasterizes in both views")
 
     // Meanwhile the 3D view is turning the same layer, which opens the cut:
     // the still middle layer's top, lit as the +Y plane one layer down.
-    REQUIRE(cube_region_shows(lit(kBody, kLitCutUp), kSize, kSize));
+    REQUIRE(cube_region_shows_shade(kBody, kLitCutUp, kCutSpread, kSize, kSize));
 
     // Both views come back to rest together, and undoing the turn puts the
     // whole resting contract back exactly as it was.
     while (rubiks::app::advance(16.0)) {
     }
     REQUIRE(rubiks::app::render());
-    REQUIRE_FALSE(cube_region_shows(lit(kBody, kLitCutUp), kSize, kSize));
+    REQUIRE_FALSE(cube_region_shows_shade(kBody, kLitCutUp, kCutSpread, kSize, kSize));
 
     REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Up, 1, 1, -1));
     while (rubiks::app::advance(16.0)) {
@@ -489,7 +508,7 @@ TEST_CASE("a turn across a cut band half way through rasterizes in both views")
     require_pixel(pixel_in_net(7.5f, 4.5f, kSize, kSize), kRed);
 
     // The cut this turn opens faces +X, one layer in from the right face.
-    REQUIRE(cube_region_shows(lit(kBody, kLitCutRight), kSize, kSize));
+    REQUIRE(cube_region_shows_shade(kBody, kLitCutRight, kCutSpread, kSize, kSize));
 
     // And the turn arrives exactly where the commit puts the cube, so the
     // frame after it is the same picture.

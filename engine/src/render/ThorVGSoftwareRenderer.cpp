@@ -136,13 +136,18 @@ bool fill_face(tvg::Shape& shape, const graphics::RenderFace& face) noexcept
         delete gradient;
         return false;
     }
+    // Three stops, the middle one the true value there, so the gradient bends
+    // with the brightness rather than cutting a chord across it -- and the
+    // middle of the middle sticker is the byte the render contract names.
     const tvg::Fill::ColorStop stops[]{
         {0.0f, shading.from_color.r, shading.from_color.g, shading.from_color.b,
          shading.from_color.a},
+        {0.5f, shading.mid_color.r, shading.mid_color.g, shading.mid_color.b,
+         shading.mid_color.a},
         {1.0f, shading.to_color.r, shading.to_color.g, shading.to_color.b,
          shading.to_color.a},
     };
-    if (gradient->colorStops(stops, 2) != tvg::Result::Success ||
+    if (gradient->colorStops(stops, 3) != tvg::Result::Success ||
         gradient->spread(tvg::FillSpread::Pad) != tvg::Result::Success) {
         delete gradient;
         return false;
@@ -356,9 +361,11 @@ bool ThorVGSoftwareRenderer::rebuild_canvas(
         if (!append_polygon(*shape, face.points)) return false;
         if (!fill_face(*shape, face)) return false;
 
-        // The glint straight after its own face, so that whatever is drawn
-        // over this face later is drawn over the glint too.
-        if (face.highlight && !draw_highlight(face, *face.highlight)) return false;
+        // The glints straight after their own face, so that whatever is drawn
+        // over this face later is drawn over them too.
+        for (const auto& glint : face.highlights) {
+            if (!draw_highlight(face, glint)) return false;
+        }
     }
 
     // Strokes last, so a guide line reads on top of the stickers it crosses.

@@ -69,6 +69,8 @@ if host_machine.system() == 'emscripten'
     '_thorvg_rubiks_set_canvas_theme',
     '_thorvg_rubiks_canvas_theme',
     '_thorvg_rubiks_set_speed_scale',
+    '_thorvg_rubiks_lighting_buffer',
+    '_thorvg_rubiks_set_lighting',
     '_thorvg_rubiks_speed_scale',
     '_thorvg_rubiks_reset_view',
     '_thorvg_rubiks_is_busy',

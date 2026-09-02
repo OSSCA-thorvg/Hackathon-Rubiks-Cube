@@ -85,6 +85,8 @@ struct ShadingOf {
     Point from{};
     Point to{};
     Color from_color{};
+    /** The true value half way, so the curve is followed rather than chorded. */
+    Color mid_color{};
     Color to_color{};
 };
 
@@ -107,10 +109,10 @@ struct ViewFace {
     std::array<math::Vec3, 4> points{};
     /** After lighting: the plane's colour where it comes nearest the cube's centre. */
     Color color{};
-    /** Set by the lighting pass; absent for a face the light does not reach. */
+    /** Set by the lighting pass; absent for a face no lamp reaches. */
     std::optional<ShadingOf<math::Vec3>> shading;
-    /** Set by the lighting pass on the faces the glint reaches. */
-    std::optional<HighlightOf<math::Vec3>> highlight;
+    /** Set by the lighting pass: one per lamp whose glint reaches this face. */
+    std::vector<HighlightOf<math::Vec3>> highlights;
 };
 
 struct ViewScene {
@@ -130,7 +132,7 @@ struct ClipFace {
     float depth = 0.0f;
     Color color{};
     std::optional<ShadingOf<math::Vec2>> shading;
-    std::optional<HighlightOf<math::Vec2>> highlight;
+    std::vector<HighlightOf<math::Vec2>> highlights;
 };
 
 struct ClipScene {

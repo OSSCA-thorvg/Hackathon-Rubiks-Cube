@@ -1,5 +1,8 @@
 #pragma once
 
+#include <optional>
+#include <vector>
+
 #include "graphics/Camera.hpp"
 #include "graphics/Light.hpp"
 #include "graphics/Rect.hpp"
@@ -38,14 +41,15 @@ struct TransformPass {
  * camera only for the height of the eye.
  */
 struct ShadowPass {
-    Light light;
+    /** The key light, which alone casts the shadow; absent when there is none. */
+    std::optional<Light> key;
     float ground_y;
     math::Vec3 eye;
 
     [[nodiscard]] WorldScene operator()(WorldScene scene) const;
 };
 
-[[nodiscard]] ShadowPass shadow(const Light& light, const Camera& camera,
+[[nodiscard]] ShadowPass shadow(const Lighting& lighting, const Camera& camera,
                                 float ground_y = kGroundY) noexcept;
 
 /** World space to view space, faces and shadow alike. */
@@ -72,8 +76,9 @@ struct ViewPass {
  * orbits rather than riding along with the eye.
  */
 struct LightPass {
-    Light light;
-    math::Vec3 light_in_view;
+    Lighting lighting;
+    /** The lamps' positions in view space, in the lighting's order. */
+    std::vector<math::Vec3> lamps_in_view;
     /**
      * The cube's centre in view space. Diffuse is evaluated at the point of
      * each face's plane nearest this, so every sticker on one plane shades to
@@ -86,7 +91,7 @@ struct LightPass {
     [[nodiscard]] ViewScene operator()(ViewScene scene) const;
 };
 
-[[nodiscard]] LightPass light(const Light& light, const Camera& camera) noexcept;
+[[nodiscard]] LightPass light(const Lighting& lighting, const Camera& camera) noexcept;
 
 /**
  * View space to normalized device coordinates, carrying the depth key.

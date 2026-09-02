@@ -40,6 +40,7 @@ struct RenderShading {
     math::Vec2 from{};
     math::Vec2 to{};
     Color from_color{};
+    Color mid_color{};
     Color to_color{};
 };
 
@@ -49,7 +50,8 @@ struct RenderFace {
     /** The fill when there is no shading; the reference shade when there is. */
     Color color{};
     std::optional<RenderShading> shading;
-    std::optional<RenderHighlight> highlight;
+    /** One per lamp whose glint reaches this face; drawn straight after it. */
+    std::vector<RenderHighlight> highlights;
 };
 
 /**

@@ -1,14 +1,20 @@
 #include "render/ThorVGSoftwareRenderer.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <limits>
 #include <new>
 #include <vector>
 
+#include "graphics/Light.hpp"
+
 namespace rubiks::render {
 namespace {
 
 constexpr std::uint32_t kBytesPerPixel = 4;
+
+using rubiks::math::Vec2;
 
 tvg::Shape* add_shape(tvg::SwCanvas& canvas) noexcept
 {
@@ -22,6 +28,94 @@ tvg::Shape* add_shape(tvg::SwCanvas& canvas) noexcept
     }
 
     return shape;
+}
+
+/** A shape added to a scene, which owns it from then on. */
+tvg::Shape* add_shape(tvg::Scene& scene) noexcept
+{
+    auto* shape = tvg::Shape::gen();
+    if (!shape) return nullptr;
+
+    if (scene.add(shape) != tvg::Result::Success) {
+        static_cast<void>(shape->unref());
+        return nullptr;
+    }
+    return shape;
+}
+
+/** A scene added to a canvas, which owns it from then on. */
+tvg::Scene* add_scene(tvg::SwCanvas& canvas) noexcept
+{
+    auto* scene = tvg::Scene::gen();
+    if (!scene) return nullptr;
+
+    if (canvas.add(scene) != tvg::Result::Success) {
+        static_cast<void>(scene->unref());
+        return nullptr;
+    }
+    return scene;
+}
+
+/** Appends a closed polygon to a shape. */
+bool append_polygon(tvg::Shape& shape, const std::vector<Vec2>& points) noexcept
+{
+    if (points.size() < 3) return true;  // nothing to draw, nothing wrong
+
+    if (shape.moveTo(points[0].x, points[0].y) != tvg::Result::Success) {
+        return false;
+    }
+    for (std::size_t i = 1; i < points.size(); ++i) {
+        if (shape.lineTo(points[i].x, points[i].y) != tvg::Result::Success) {
+            return false;
+        }
+    }
+    return shape.close() == tvg::Result::Success;
+}
+
+template <std::size_t N>
+bool append_polygon(tvg::Shape& shape, const std::array<Vec2, N>& points) noexcept
+{
+    return append_polygon(shape, std::vector<Vec2>(points.begin(), points.end()));
+}
+
+/**
+ * The one place the variadic effect call is made.
+ *
+ * SceneEffect::add reads its arguments by the types the header documents --
+ * a double and three ints for a Gaussian blur -- and a float or a bool where
+ * one of those was expected is undefined behaviour rather than a compile
+ * error. Pinning the types here keeps that from being written twice.
+ */
+bool add_gaussian_blur(tvg::Scene& scene, float sigma, int quality) noexcept
+{
+    const double sigma_arg = std::max(static_cast<double>(sigma), 0.01);
+    const int direction = 0;  // both axes
+    const int border = 0;     // duplicate the edge
+    return scene.add(tvg::SceneEffect::GaussianBlur, sigma_arg, direction,
+                     border, quality) == tvg::Result::Success;
+}
+
+/** White at `alpha` in the middle falling to nothing at the edge. */
+bool fill_glow(tvg::Shape& shape, const Vec2& centre, float radius,
+               const graphics::Color& color, std::uint8_t alpha) noexcept
+{
+    auto* gradient = tvg::RadialGradient::gen();
+    if (!gradient) return false;
+
+    if (gradient->radial(centre.x, centre.y, radius, centre.x, centre.y, 0.0f) !=
+        tvg::Result::Success) {
+        delete gradient;
+        return false;
+    }
+    const tvg::Fill::ColorStop stops[]{
+        {0.0f, color.r, color.g, color.b, alpha},
+        {1.0f, color.r, color.g, color.b, 0},
+    };
+    if (gradient->colorStops(stops, 2) != tvg::Result::Success) {
+        delete gradient;
+        return false;
+    }
+    return shape.fill(gradient) == tvg::Result::Success;
 }
 
 }  // namespace
@@ -219,31 +313,224 @@ bool ThorVGSoftwareRenderer::rebuild_canvas(
     // stickers are strung on rather than as lines ruled across them.
     if (!stroke_paths(scene.underlays)) return false;
 
+    // The shadow lies on the ground, so it goes down before anything that
+    // stands on it.
+    if (scene.shadow && !draw_shadow(*scene.shadow)) return false;
+
     for (const auto& face : scene.faces) {
         auto* shape = add_shape(*canvas_);
         if (!shape) return false;
 
-        if (shape->moveTo(face.points[0].x, face.points[0].y) !=
-            tvg::Result::Success) {
-            return false;
-        }
-        for (std::size_t i = 1; i < face.points.size(); ++i) {
-            if (shape->lineTo(face.points[i].x, face.points[i].y) !=
-                tvg::Result::Success) {
-                return false;
-            }
-        }
-        if (shape->close() != tvg::Result::Success) return false;
+        if (!append_polygon(*shape, face.points)) return false;
 
         if (shape->fill(face.color.r, face.color.g, face.color.b,
                         face.color.a) != tvg::Result::Success) {
             return false;
         }
+
+        // The glint straight after its own face, so that whatever is drawn
+        // over this face later is drawn over the glint too.
+        if (face.highlight && !draw_highlight(face, *face.highlight)) return false;
     }
 
     // Strokes last, so a guide line reads on top of the stickers it crosses.
     if (!stroke_paths(scene.strokes)) return false;
 
+    return true;
+}
+
+bool ThorVGSoftwareRenderer::draw_highlight(
+    const graphics::RenderFace& face,
+    const graphics::RenderHighlight& highlight) noexcept
+{
+    auto* shape = add_shape(*canvas_);
+    if (!shape) return false;
+
+    // The same outline as the face, so the glow is cut to the sticker.
+    if (!append_polygon(*shape, face.points)) return false;
+
+    const float radius = std::max(
+        std::hypot(highlight.rim.x - highlight.centre.x,
+                   highlight.rim.y - highlight.centre.y),
+        0.5f);
+    if (!fill_glow(*shape, highlight.centre, radius,
+                   graphics::Color{255, 255, 255, 255}, highlight.alpha)) {
+        return false;
+    }
+    // Screen rather than paint over: white screened onto a sticker brightens
+    // it towards white without ever hiding which colour it was.
+    return shape->blend(tvg::BlendMethod::Screen) == tvg::Result::Success;
+}
+
+bool ThorVGSoftwareRenderer::draw_shadow(
+    const graphics::RenderShadow& shadow) noexcept
+{
+    if (shadow.opacity == 0 || shadow.polygons.empty()) return true;
+
+    // The shadow colour multiplied into the ground, worked out here once
+    // rather than composed with a multiply blend: the ground is one flat
+    // colour, so the two are the same picture, and the blend was measured at
+    // more than a millisecond a frame for a layer it had to composite.
+    const graphics::Color tint{
+        static_cast<std::uint8_t>(background_.r * graphics::kShadowColor.r / 255),
+        static_cast<std::uint8_t>(background_.g * graphics::kShadowColor.g / 255),
+        static_cast<std::uint8_t>(background_.b * graphics::kShadowColor.b / 255),
+        255};
+
+    // Every composition layer is a pass over the shadow's whole footprint, so
+    // there is exactly one: the scene the blur needs. Everything else -- the
+    // flattening, the fade, the clip -- is done on the shape or on that one
+    // scene, and the cube's silhouette is painted rather than masked.
+    const auto clipper_for = [](tvg::Paint& paint, const graphics::Rect& clip) {
+        auto* clipper = tvg::Shape::gen();
+        if (!clipper) return false;
+        if (clipper->appendRect(clip.x, clip.y, clip.width, clip.height) !=
+                tvg::Result::Success ||
+            paint.clip(clipper) != tvg::Result::Success) {
+            static_cast<void>(clipper->unref());
+            return false;
+        }
+        return true;
+    };
+
+    // The soft patch straight under the cube, first because it is furthest
+    // from anything and the cast shadow may fall across it.
+    if (shadow.contact.size() >= 3) {
+        float min_x = shadow.contact[0].x, max_x = min_x;
+        float min_y = shadow.contact[0].y, max_y = min_y;
+        for (const auto& point : shadow.contact) {
+            min_x = std::min(min_x, point.x);
+            max_x = std::max(max_x, point.x);
+            min_y = std::min(min_y, point.y);
+            max_y = std::max(max_y, point.y);
+        }
+        const Vec2 centre{(min_x + max_x) * 0.5f, (min_y + max_y) * 0.5f};
+        const float rx = std::max((max_x - min_x) * 0.5f, 0.5f);
+        const float ry = std::max((max_y - min_y) * 0.5f, 0.5f);
+
+        auto* patch = add_shape(*canvas_);
+        if (!patch) return false;
+        if (patch->appendCircle(centre.x, centre.y, rx, ry) !=
+            tvg::Result::Success) {
+            return false;
+        }
+
+        // A unit radial falloff stretched into the ellipse, so the patch
+        // fades to nothing exactly at its own edge.
+        auto* gradient = tvg::RadialGradient::gen();
+        if (!gradient) return false;
+        if (gradient->radial(0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f) !=
+                tvg::Result::Success ||
+            gradient->transform(tvg::Matrix{rx, 0.0f, centre.x, 0.0f, ry,
+                                            centre.y, 0.0f, 0.0f, 1.0f}) !=
+                tvg::Result::Success) {
+            delete gradient;
+            return false;
+        }
+        const tvg::Fill::ColorStop stops[]{
+            {0.0f, tint.r, tint.g, tint.b, graphics::kContactAlpha},
+            {1.0f, tint.r, tint.g, tint.b, 0},
+        };
+        if (gradient->colorStops(stops, 2) != tvg::Result::Success) {
+            delete gradient;
+            return false;
+        }
+        if (patch->fill(gradient) != tvg::Result::Success) return false;
+        if (!clipper_for(*patch, shadow.clip)) return false;
+    }
+
+    // The cast shadow is one shape: every caster's polygon as a subpath of
+    // it, filled non-zero, so where two casters overlap is inside the outline
+    // once and no darker than where one is. That is the flattening, and it
+    // costs no composition layer. The fade is the fill itself -- a gradient
+    // from the anchor under the cube out to the far anchor -- so it costs
+    // none either.
+    auto* body = add_scene(*canvas_);
+    if (!body) return false;
+
+    auto* cast = add_shape(*body);
+    if (!cast) return false;
+    for (const auto& polygon : shadow.polygons) {
+        if (!append_polygon(*cast, polygon)) return false;
+    }
+    if (cast->fillRule(tvg::FillRule::NonZero) != tvg::Result::Success) {
+        return false;
+    }
+
+    {
+        const auto floor = static_cast<std::uint8_t>(std::lround(
+            static_cast<float>(shadow.opacity) * graphics::kShadowFadeFloor));
+        const tvg::Fill::ColorStop stops[]{
+            {0.0f, tint.r, tint.g, tint.b, shadow.opacity},
+            {1.0f, tint.r, tint.g, tint.b, floor},
+        };
+
+        tvg::Fill* gradient = nullptr;
+        const float run = std::hypot(shadow.fade_end.x - shadow.fade_start.x,
+                                     shadow.fade_end.y - shadow.fade_start.y);
+        if (run < graphics::kShadowFadeMinLength) {
+            // Light straight overhead: no direction to fade along, so it thins
+            // evenly outwards from under the cube instead.
+            float reach = 1.0f;
+            for (const auto& polygon : shadow.polygons) {
+                for (const auto& point : polygon) {
+                    reach = std::max(
+                        reach, std::hypot(point.x - shadow.fade_start.x,
+                                          point.y - shadow.fade_start.y));
+                }
+            }
+            auto* radial = tvg::RadialGradient::gen();
+            if (radial &&
+                radial->radial(shadow.fade_start.x, shadow.fade_start.y, reach,
+                               shadow.fade_start.x, shadow.fade_start.y,
+                               0.0f) != tvg::Result::Success) {
+                delete radial;
+                radial = nullptr;
+            }
+            gradient = radial;
+        } else {
+            auto* linear = tvg::LinearGradient::gen();
+            if (linear &&
+                linear->linear(shadow.fade_start.x, shadow.fade_start.y,
+                               shadow.fade_end.x, shadow.fade_end.y) !=
+                    tvg::Result::Success) {
+                delete linear;
+                linear = nullptr;
+            }
+            gradient = linear;
+        }
+        if (!gradient) return false;
+        if (gradient->colorStops(stops, 2) != tvg::Result::Success ||
+            gradient->spread(tvg::FillSpread::Pad) != tvg::Result::Success) {
+            delete gradient;
+            return false;
+        }
+        if (cast->fill(gradient) != tvg::Result::Success) return false;
+    }
+
+    // The one layer: the blur has to see the whole outline at once.
+    if (!add_gaussian_blur(*body, shadow.blur_sigma,
+                           graphics::kShadowBlurQuality)) {
+        return false;
+    }
+    // Cut to the cube's own region, so a long shadow cannot reach the drawing
+    // beside it.
+    if (!clipper_for(*body, shadow.clip)) return false;
+
+    // Where the cube itself is, there is no ground to see a shadow on -- and
+    // the seams between stickers are still the cube, not windows onto it. The
+    // cube's silhouette is painted back in the ground's own colour over the
+    // shadow, before the stickers go on top of it: what a solid body does to
+    // the ground behind it, at the price of a few polygons rather than a mask.
+    for (const auto& hull : shadow.occluders) {
+        auto* shape = add_shape(*canvas_);
+        if (!shape) return false;
+        if (!append_polygon(*shape, hull)) return false;
+        if (shape->fill(background_.r, background_.g, background_.b,
+                        background_.a) != tvg::Result::Success) {
+            return false;
+        }
+    }
     return true;
 }
 

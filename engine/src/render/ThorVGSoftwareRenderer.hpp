@@ -90,6 +90,25 @@ private:
     [[nodiscard]] bool rebuild_canvas(
         const graphics::RenderScene& scene) noexcept;
 
+    /**
+     * Composes the ground shadow out of ThorVG's own machinery.
+     *
+     * One shape holding every caster's polygon, filled non-zero so overlaps
+     * are inside once and no darker; a gradient fill that is the fade, in the
+     * shadow colour already multiplied into the ground's; a Gaussian blur on
+     * the scene round it for the edge; a clip to the region; and the cube's
+     * silhouette painted back in the ground colour over it, so no shadow
+     * shows through a seam. The pipeline decided where the shadow lies; this
+     * is only how it is made to look like one, in the one composition layer
+     * the blur needs.
+     */
+    [[nodiscard]] bool draw_shadow(const graphics::RenderShadow& shadow) noexcept;
+
+    /** The glint on one face: a radial falloff screened onto its outline. */
+    [[nodiscard]] bool draw_highlight(
+        const graphics::RenderFace& face,
+        const graphics::RenderHighlight& highlight) noexcept;
+
     // Dark by default, which is the ground the renderer has always had and
     // the one the native build with no UI in front of it still wants.
     graphics::Color background_{32, 32, 32, 255};

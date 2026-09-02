@@ -60,6 +60,12 @@ painting_test = executable(
   dependencies: [application_dep, catch2_dep],
 )
 
+lighting_render_test = executable(
+  'lighting-render-test',
+  files('LightingRenderTest.cpp'),
+  dependencies: [application_dep, catch2_dep],
+)
+
 share_restore_test = executable(
   'share-restore-test',
   files('ShareRestoreTest.cpp'),
@@ -74,5 +80,15 @@ test('painting a cube', painting_test)
 test('shared state restore', share_restore_test)
 test('pointer interaction wiring', pointer_interaction_test)
 test('rendered scene contract', render_contract_test)
+test('lit scene composition', lighting_render_test)
 test('canvas theme ground', canvas_theme_test)
 test('input validation', input_validation_test)
+
+# A measurement rather than a test: frame time at the largest cube, half way
+# through a turn. Run by hand for docs/tasks/19-lighting-and-shadow.md.
+executable(
+  'render-bench',
+  files('RenderBench.cpp'),
+  dependencies: [application_dep],
+  cpp_args: ['-DRUBIKS_LIGHTING'],
+)

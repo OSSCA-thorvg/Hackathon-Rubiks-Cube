@@ -24,6 +24,7 @@
 #include "graphics/Camera.hpp"
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
+#include "graphics/Light.hpp"
 #include "graphics/NetGeometry.hpp"
 #include "graphics/RingsGeometry.hpp"
 #include "graphics/OrbitCamera.hpp"
@@ -189,6 +190,10 @@ struct ApplicationState {
     // Which six shades the stickers are drawn in. Nothing but drawing reads
     // it, so it is the one setting a turn in progress can be changed under.
     graphics::Palette palette = graphics::Palette::Classic;
+
+    // The light the 3D view is drawn under, in world space. A constant for
+    // now, kept as state so that moving it later is a matter of writing here.
+    graphics::Light light = graphics::kDefaultLight;
 
     // The ground behind the cube. Kept here rather than only on the renderer
     // so that a query has an answer without reaching through the rendering
@@ -996,11 +1001,22 @@ bool render() noexcept
 
     graphics::RenderScene scene;
     if (shown.cube) {
+        // The high-contrast palette exists to keep six shades apart for eyes
+        // that would otherwise merge them; shading those shades would undo
+        // that, so it is drawn under a light that leaves every colour as it
+        // is. The passes run either way -- it is a value, not a branch.
+        const graphics::Light lamp =
+            state->palette == graphics::Palette::HighContrast
+                ? graphics::Light::unlit()
+                : state->light;
+
         scene = graphics::build_cube_scene(state->cube_state,
                                            state->interaction.active_rotation(),
                                            state->palette)  //
                 | graphics::transform(model)                                  //
+                | graphics::shadow(lamp, camera)                              //
                 | graphics::view(camera)                                      //
+                | graphics::light(lamp, camera)                               //
                 | graphics::project(camera)                                   //
                 | graphics::cull()                                            //
                 | graphics::depth_sort()                                      //

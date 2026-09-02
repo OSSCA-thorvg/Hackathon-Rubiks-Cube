@@ -45,13 +45,13 @@ constexpr Rgba kOrange{255, 88, 0, 255};     // -X left
 // Contract v4: the 3D view is lit. Each plane of the cube has one brightness,
 // a byte out of 255, worked out by hand in docs/tasks/04-rubiks-cube-domain.md
 // from the light's resting place; the net is a diagram and stays unlit.
-constexpr unsigned kLitUp = 215;     // +Y, the plane nearest the light
-constexpr unsigned kLitFront = 206;  // +Z
-constexpr unsigned kLitRight = 177;  // +X
+constexpr unsigned kLitUp = 239;     // +Y, the plane nearest the light
+constexpr unsigned kLitFront = 189;  // +Z
+constexpr unsigned kLitRight = 164;  // +X
 // The cut faces a turn opens lie one layer in, so their planes are their own:
 // the +Y cut at y = +1/3 of a U turn and the +X cut at x = +1/3 of an R turn.
-constexpr unsigned kLitCutUp = 221;
-constexpr unsigned kLitCutRight = 186;
+constexpr unsigned kLitCutUp = 241;
+constexpr unsigned kLitCutRight = 171;
 
 /** A colour at a brightness, in the integer arithmetic the engine uses. */
 constexpr Rgba lit(const Rgba& color, unsigned brightness)
@@ -175,15 +175,32 @@ void require_pixel(const std::uint8_t* pixel, const Rgba& color)
     REQUIRE(int{pixel[3]} == int{color[3]});
 }
 
+/**
+ * Within one unit per channel of a colour.
+ *
+ * The lit stickers are gradients following the plane's brightness, and the
+ * middle of the middle sticker is the plane's reference byte in theory; the
+ * gradient's own rounding is what the one unit is for. A normal the wrong
+ * way round is tens of units off, so the check still bites.
+ */
+void require_pixel_near(const std::uint8_t* pixel, const Rgba& color)
+{
+    for (int i = 0; i < 3; ++i) {
+        INFO("channel " << i);
+        REQUIRE(std::abs(int{pixel[i]} - int{color[i]}) <= 1);
+    }
+    REQUIRE(int{pixel[3]} == int{color[3]});
+}
+
 void require_cube_faces(std::uint32_t width, std::uint32_t height)
 {
     // Three faces at three brightnesses: a normal the wrong way round now
     // shows up as the wrong shade as well as the wrong colour.
-    require_pixel(pixel_in_cube(kUpSample, width, height), lit(kWhite, kLitUp));
-    require_pixel(pixel_in_cube(kFrontSample, width, height),
-                  lit(kGreen, kLitFront));
-    require_pixel(pixel_in_cube(kRightSample, width, height),
-                  lit(kRed, kLitRight));
+    require_pixel_near(pixel_in_cube(kUpSample, width, height), lit(kWhite, kLitUp));
+    require_pixel_near(pixel_in_cube(kFrontSample, width, height),
+                       lit(kGreen, kLitFront));
+    require_pixel_near(pixel_in_cube(kRightSample, width, height),
+                       lit(kRed, kLitRight));
 }
 
 /** Reads the center of all 54 net cells and compares the whole grid. */
@@ -235,8 +252,12 @@ bool cube_region_shows(const Rgba& color, std::uint32_t width,
                 region.y + (static_cast<float>(row) + 0.5f) / kSteps *
                                region.side,
                 width, height);
-            if (pixel[0] == color[0] && pixel[1] == color[1] &&
-                pixel[2] == color[2] && pixel[3] == color[3]) {
+            // Within a unit per channel: a cut face is shaded like any
+            // other, so its exact byte depends on where the sweep lands.
+            if (std::abs(int{pixel[0]} - int{color[0]}) <= 1 &&
+                std::abs(int{pixel[1]} - int{color[1]}) <= 1 &&
+                std::abs(int{pixel[2]} - int{color[2]}) <= 1 &&
+                pixel[3] == color[3]) {
                 return true;
             }
         }

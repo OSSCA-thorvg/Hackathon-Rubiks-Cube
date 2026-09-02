@@ -63,9 +63,29 @@ struct ShadowGroup {
  */
 template <typename Point>
 struct HighlightOf {
+    /** On the plane; outside the face when the glint only reaches into it. */
     Point centre{};
     Point rim{};
+    /** Strength at the centre and half way to the rim, to shape the lobe. */
     std::uint8_t alpha = 0;
+    std::uint8_t mid = 0;
+};
+
+/**
+ * How a face's brightness runs across it.
+ *
+ * A point light's diffuse term on a plane depends only on the distance from
+ * the light's foot on that plane, so across one sticker it is very nearly a
+ * line: the colour at the sticker's near end and at its far end, along the
+ * direction away from the foot. Neighbouring stickers on the same plane get
+ * the same function, so the shading runs on across the seams.
+ */
+template <typename Point>
+struct ShadingOf {
+    Point from{};
+    Point to{};
+    Color from_color{};
+    Color to_color{};
 };
 
 /** Quad in world space. */
@@ -85,8 +105,11 @@ struct WorldScene {
 /** Quad in view space, where the camera sits at the origin looking down -Z. */
 struct ViewFace {
     std::array<math::Vec3, 4> points{};
+    /** After lighting: the plane's colour where it comes nearest the cube's centre. */
     Color color{};
-    /** Set by the lighting pass on the faces bright enough to carry one. */
+    /** Set by the lighting pass; absent for a face the light does not reach. */
+    std::optional<ShadingOf<math::Vec3>> shading;
+    /** Set by the lighting pass on the faces the glint reaches. */
     std::optional<HighlightOf<math::Vec3>> highlight;
 };
 
@@ -106,6 +129,7 @@ struct ClipFace {
     std::array<math::Vec2, 4> ndc{};
     float depth = 0.0f;
     Color color{};
+    std::optional<ShadingOf<math::Vec2>> shading;
     std::optional<HighlightOf<math::Vec2>> highlight;
 };
 

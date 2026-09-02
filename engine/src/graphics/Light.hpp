@@ -24,14 +24,16 @@ struct Light {
     /**
      * World space; each pass carries it into its own space itself.
      *
-     * Above and in front of the home viewpoint, a little to its left, so the
-     * top face is brightest and the front brighter than the right. The exact
-     * numbers were chosen so that every plane's brightness lands well clear
-     * of a rounding boundary (docs/tasks/04-rubiks-cube-domain.md, contract
-     * v4): a byte that could tip either way with the compiler's arithmetic
-     * is not a byte a contract can name.
+     * High above and a little in front of the home viewpoint, to its left, so
+     * the top face is brightest and the front brighter than the right. High
+     * rather than close so the shadow stays near the cube's footprint (1.34
+     * times it) instead of trailing off the stage. The exact numbers were
+     * chosen so that every plane's brightness lands well clear of a rounding
+     * boundary (docs/tasks/04-rubiks-cube-domain.md, contract v4): a byte
+     * that could tip either way with the compiler's arithmetic is not a byte
+     * a contract can name.
      */
-    math::Vec3 position{2.5f, 4.7f, 4.2f};
+    math::Vec3 position{2.0f, 8.3f, 4.2f};
 
     /**
      * Floor of the brightness. Kept high because a sticker's colour is its
@@ -41,9 +43,13 @@ struct Light {
     float ambient = 0.60f;
     float diffuse = 0.40f;
 
-    /** Peak strength of the glint and how tightly it is focused. */
+    /**
+     * Peak strength of the glint and how tightly it is focused. A softer lobe
+     * than the textbook 32: a narrow glint reads as a hard-edged spot on a
+     * flat face, a wider one as the sheen of a plastic that a cube is.
+     */
     float specular = 0.60f;
-    float shininess = 32.0f;
+    float shininess = 16.0f;
 
     /**
      * The light that changes nothing.
@@ -76,15 +82,13 @@ inline constexpr Light kDefaultLight{};
 inline constexpr float kGroundY = -1.5f;
 
 /**
- * Radius of a specular highlight, in world units.
+ * Below this alpha a highlight is not worth drawing.
  *
- * A property of the plane the light reflects off, not of the sticker on it,
- * so it does not shrink as N grows; a small sticker simply shows less of the
- * same glint.
+ * Also what fixes a highlight's radius: the distance along the plane from
+ * the reflection point at which the lobe has fallen to this. The radius is a
+ * property of the plane and the light, not of the sticker, so one glint spans
+ * as many stickers as it reaches and reads as one.
  */
-inline constexpr float kHighlightRadius = 0.45f;
-
-/** Below this peak alpha a face carries no highlight at all. */
 inline constexpr std::uint8_t kHighlightMinAlpha = 8;
 
 /**
@@ -94,18 +98,24 @@ inline constexpr std::uint8_t kHighlightMinAlpha = 8;
  * dark one. The renderer does the multiplication itself, once per frame.
  */
 inline constexpr Color kShadowColor{40, 48, 64, 255};
-inline constexpr std::uint8_t kShadowOpacity = 96;
+inline constexpr std::uint8_t kShadowOpacity = 80;
 
 /**
  * Softness of the shadow edge, as a share of the cube region's side, and the
  * blur's quality. Quality here is how many box passes approximate the
  * Gaussian; one pass reads as a soft edge on a shadow and costs half of two.
  */
-inline constexpr float kShadowBlurShare = 0.012f;
+inline constexpr float kShadowBlurShare = 0.018f;
 inline constexpr int kShadowBlurQuality = 30;
 
-/** How much of the shadow is left at the far end of its fade. */
-inline constexpr float kShadowFadeFloor = 0.25f;
+/**
+ * How much of the shadow is left at its far tip. Nothing: a shadow that still
+ * has a quarter of its strength where the clip cuts it shows the cut.
+ */
+inline constexpr float kShadowFadeFloor = 0.0f;
+
+/** How much is left half way to the tip: the fade bends rather than runs straight. */
+inline constexpr float kShadowFadeMidway = 0.35f;
 
 /** A fade shorter than this in pixels has no direction and falls off radially. */
 inline constexpr float kShadowFadeMinLength = 4.0f;

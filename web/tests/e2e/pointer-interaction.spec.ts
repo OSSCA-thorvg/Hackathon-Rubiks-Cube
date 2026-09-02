@@ -8,6 +8,7 @@ import {
   BLUE,
   FRONT_LIT,
   isBody,
+  near,
   expectedNet,
   FRONT_BLOCK,
   FRONT_RIGHT_COLUMN,
@@ -356,8 +357,8 @@ test('dragging the background sweeps the viewpoint, not the cube', async ({
   await page.mouse.up();
 
   await expect
-    .poll(async () => (await probeCanvas(page)).left)
-    .toEqual(RIGHT_LIT);
+    .poll(async () => near((await probeCanvas(page)).left, RIGHT_LIT))
+    .toBe(true);
 
   const turned = await probeCanvas(page);
   assertVisibleFaces(turned, UP_LIT, RIGHT_LIT, BACK_LIT);
@@ -383,8 +384,8 @@ test('a layer still turns after the viewpoint comes back round', async ({
   await page.mouse.up();
 
   await expect
-    .poll(async () => (await probeCanvas(page)).left)
-    .toEqual(FRONT_LIT);
+    .poll(async () => near((await probeCanvas(page)).left, FRONT_LIT))
+    .toBe(true);
 
   const home = await probeCanvas(page);
   const grab = await grabRightColumn(page, home);

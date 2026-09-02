@@ -40,12 +40,12 @@ constexpr Rgba kBody{70, 74, 82, 255};
 // The 3D view is lit (render contract v4): one brightness per plane of the
 // cube, from docs/tasks/04-rubiks-cube-domain.md. The three planes turned
 // away from the light are at the ambient floor.
-constexpr unsigned kLitUp = 215;
-constexpr unsigned kLitFront = 206;
-constexpr unsigned kLitRight = 177;
+constexpr unsigned kLitUp = 239;
+constexpr unsigned kLitFront = 189;
+constexpr unsigned kLitRight = 164;
 constexpr unsigned kLitAway = 153;
 /** The +Y cut a U turn opens, one layer down from the top. */
-constexpr unsigned kLitCutUp = 221;
+constexpr unsigned kLitCutUp = 241;
 
 constexpr Rgba lit(const Rgba& color, unsigned brightness)
 {
@@ -217,9 +217,12 @@ void require_pixel_reads(const std::uint8_t* pixel, const Rgba& color)
         if (255 - color[i] > 255 - color[widest]) widest = i;
     }
     const int headroom = 255 - color[widest];
-    const double fraction =
+    double fraction =
         headroom > 0 ? double(int{pixel[widest]} - int{color[widest]}) / headroom
                      : 0.0;
+    // The lit faces are gradients, whose rounding can put a channel one unit
+    // under the reference; that is no glint, and reads as none.
+    if (fraction < 0.0 && fraction * headroom >= -1.5) fraction = 0.0;
     REQUIRE(fraction >= 0.0);
     REQUIRE(fraction <= 1.0);
 
@@ -264,8 +267,11 @@ bool cube_region_shows(const Rgba& color)
             const auto* pixel =
                 pixel_at(rect.x + fx * rect.width, rect.y + fy * rect.height,
                          kCanvas);
-            if (pixel[0] == color[0] && pixel[1] == color[1] &&
-                pixel[2] == color[2] && pixel[3] == color[3]) {
+            // Within a unit per channel: the lit faces are gradients.
+            if (std::abs(int{pixel[0]} - int{color[0]}) <= 1 &&
+                std::abs(int{pixel[1]} - int{color[1]}) <= 1 &&
+                std::abs(int{pixel[2]} - int{color[2]}) <= 1 &&
+                pixel[3] == color[3]) {
                 return true;
             }
         }

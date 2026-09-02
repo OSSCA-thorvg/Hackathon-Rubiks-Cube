@@ -25,12 +25,30 @@ struct RenderHighlight {
     math::Vec2 centre{};
     math::Vec2 rim{};
     std::uint8_t alpha = 0;
+    /** Strength half way from centre to rim, so the falloff has a shape. */
+    std::uint8_t mid = 0;
+};
+
+/**
+ * A face's colour running from one point to another.
+ *
+ * The lit 3D view fills a sticker with this rather than one colour: a point
+ * light shades a flat face brighter near its foot and darker away from it,
+ * and a sticker is a short enough piece of that for a line to draw it.
+ */
+struct RenderShading {
+    math::Vec2 from{};
+    math::Vec2 to{};
+    Color from_color{};
+    Color to_color{};
 };
 
 /** Screen-space quad ready to be filled by a renderer. */
 struct RenderFace {
     std::array<math::Vec2, 4> points{};
+    /** The fill when there is no shading; the reference shade when there is. */
     Color color{};
+    std::optional<RenderShading> shading;
     std::optional<RenderHighlight> highlight;
 };
 

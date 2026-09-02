@@ -145,10 +145,22 @@ struct DepthSortPass {
  */
 struct ViewportPass {
     Rect rect;
+    /** Where the shadow may be drawn; the viewport itself unless told otherwise. */
+    Rect clip;
 
     [[nodiscard]] RenderScene operator()(const ClipScene& scene) const;
 };
 
 [[nodiscard]] ViewportPass viewport(const Rect& rect) noexcept;
+
+/**
+ * The same, with the shadow allowed onto a stage wider than the viewport.
+ *
+ * The cube's viewport is a square, but the canvas round it is not, and the
+ * ground shadow leans out of the square into the margins. The stage is the
+ * canvas less whatever flat views share it, so the shadow can use the room
+ * that is there without reaching the drawing beside it.
+ */
+[[nodiscard]] ViewportPass viewport(const Rect& rect, const Rect& stage) noexcept;
 
 }  // namespace rubiks::graphics

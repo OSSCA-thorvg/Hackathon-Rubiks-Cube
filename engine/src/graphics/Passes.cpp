@@ -162,11 +162,19 @@ ClipScene ProjectPass::operator()(const ViewScene& scene) const
 
         projected.depth = depth_sum / static_cast<float>(kCorners);
 
-        // The highlight lies on the face, so it passed the same guard.
-        if (face.highlight) {
+        if (face.shading) {
+            projected.shading = ShadingOf<math::Vec2>{
+                to_ndc(face.shading->from), to_ndc(face.shading->to),
+                face.shading->from_color, face.shading->to_color};
+        }
+        // The highlight lies on the face's plane; its centre may sit off the
+        // face but still in front of the eye, as the mirror image of a light
+        // above the plane always is when the eye is above it too.
+        if (face.highlight && face.highlight->centre.z < -near_plane &&
+            face.highlight->rim.z < -near_plane) {
             projected.highlight = HighlightOf<math::Vec2>{
                 to_ndc(face.highlight->centre), to_ndc(face.highlight->rim),
-                face.highlight->alpha};
+                face.highlight->alpha, face.highlight->mid};
         }
         result.faces.push_back(projected);
     }
@@ -231,10 +239,16 @@ RenderScene ViewportPass::operator()(const ClipScene& scene) const
         for (std::size_t i = 0; i < kCorners; ++i) {
             mapped.points[i] = to_pixels(face.ndc[i]);
         }
+        if (face.shading) {
+            mapped.shading = RenderShading{to_pixels(face.shading->from),
+                                           to_pixels(face.shading->to),
+                                           face.shading->from_color,
+                                           face.shading->to_color};
+        }
         if (face.highlight) {
-            mapped.highlight = RenderHighlight{to_pixels(face.highlight->centre),
-                                               to_pixels(face.highlight->rim),
-                                               face.highlight->alpha};
+            mapped.highlight = RenderHighlight{
+                to_pixels(face.highlight->centre), to_pixels(face.highlight->rim),
+                face.highlight->alpha, face.highlight->mid};
         }
         result.faces.push_back(mapped);
     }
@@ -248,7 +262,7 @@ RenderScene ViewportPass::operator()(const ClipScene& scene) const
         shadow.contact = mapped->contact;
         shadow.opacity = mapped->opacity;
         shadow.blur_sigma = kShadowBlurShare * rect.width;
-        shadow.clip = rect;
+        shadow.clip = clip;
 
         // A convex box's outline on screen is the hull of its corners, which
         // is all the renderer needs to keep the shadow out of the cube.
@@ -264,7 +278,12 @@ RenderScene ViewportPass::operator()(const ClipScene& scene) const
 
 ViewportPass viewport(const Rect& rect) noexcept
 {
-    return ViewportPass{rect};
+    return ViewportPass{rect, rect};
+}
+
+ViewportPass viewport(const Rect& rect, const Rect& stage) noexcept
+{
+    return ViewportPass{rect, stage};
 }
 
 }  // namespace rubiks::graphics

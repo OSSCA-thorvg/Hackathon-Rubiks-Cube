@@ -999,8 +999,21 @@ bool render() noexcept
 
     const auto shown = visible_views(state->view_mode);
 
+    const auto flat = flat_parts();
+
     graphics::RenderScene scene;
     if (shown.cube) {
+        // The ground the shadow may lie on: the canvas, less whatever flat
+        // view shares it below. The cube's viewport is a square in the middle
+        // of that, and its shadow leans out of the square into the margins.
+        graphics::Rect stage{0.0f, 0.0f,
+                             static_cast<float>(state->surface_width),
+                             static_cast<float>(state->surface_height)};
+        if (flat.net) stage.height = std::min(stage.height, state->placement.net.y);
+        if (flat.rings) {
+            stage.height = std::min(stage.height, state->placement.rings.y);
+        }
+
         // The high-contrast palette exists to keep six shades apart for eyes
         // that would otherwise merge them; shading those shades would undo
         // that, so it is drawn under a light that leaves every colour as it
@@ -1020,7 +1033,7 @@ bool render() noexcept
                 | graphics::project(camera)                                   //
                 | graphics::cull()                                            //
                 | graphics::depth_sort()                                      //
-                | graphics::viewport(state->placement.cube);
+                | graphics::viewport(state->placement.cube, stage);
 
         // Which way each axis points from here, in the colors the net's guide
         // lines use, so a cyan loop over there and a cyan arm over here are
@@ -1028,8 +1041,6 @@ bool render() noexcept
         graphics::append_scene(
             scene, graphics::build_axis_gizmo(camera, state->placement.cube));
     }
-
-    const auto flat = flat_parts();
 
     if (flat.net && state->paint) {
         // A draft is drawn instead of the cube, because a draft is what is

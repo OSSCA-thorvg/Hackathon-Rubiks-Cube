@@ -95,9 +95,10 @@ bool add_gaussian_blur(tvg::Scene& scene, float sigma, int quality) noexcept
                      border, quality) == tvg::Result::Success;
 }
 
-/** White at `alpha` in the middle falling to nothing at the edge. */
+/** White at `alpha` in the middle, `mid` half way out, nothing at the edge. */
 bool fill_glow(tvg::Shape& shape, const Vec2& centre, float radius,
-               const graphics::Color& color, std::uint8_t alpha) noexcept
+               const graphics::Color& color, std::uint8_t alpha,
+               std::uint8_t mid) noexcept
 {
     auto* gradient = tvg::RadialGradient::gen();
     if (!gradient) return false;
@@ -109,9 +110,40 @@ bool fill_glow(tvg::Shape& shape, const Vec2& centre, float radius,
     }
     const tvg::Fill::ColorStop stops[]{
         {0.0f, color.r, color.g, color.b, alpha},
+        {0.5f, color.r, color.g, color.b, mid},
         {1.0f, color.r, color.g, color.b, 0},
     };
-    if (gradient->colorStops(stops, 2) != tvg::Result::Success) {
+    if (gradient->colorStops(stops, 3) != tvg::Result::Success) {
+        delete gradient;
+        return false;
+    }
+    return shape.fill(gradient) == tvg::Result::Success;
+}
+
+/** A face's colour running from one point to another, or flat without shading. */
+bool fill_face(tvg::Shape& shape, const graphics::RenderFace& face) noexcept
+{
+    if (!face.shading) {
+        return shape.fill(face.color.r, face.color.g, face.color.b,
+                          face.color.a) == tvg::Result::Success;
+    }
+
+    const auto& shading = *face.shading;
+    auto* gradient = tvg::LinearGradient::gen();
+    if (!gradient) return false;
+    if (gradient->linear(shading.from.x, shading.from.y, shading.to.x,
+                         shading.to.y) != tvg::Result::Success) {
+        delete gradient;
+        return false;
+    }
+    const tvg::Fill::ColorStop stops[]{
+        {0.0f, shading.from_color.r, shading.from_color.g, shading.from_color.b,
+         shading.from_color.a},
+        {1.0f, shading.to_color.r, shading.to_color.g, shading.to_color.b,
+         shading.to_color.a},
+    };
+    if (gradient->colorStops(stops, 2) != tvg::Result::Success ||
+        gradient->spread(tvg::FillSpread::Pad) != tvg::Result::Success) {
         delete gradient;
         return false;
     }
@@ -322,11 +354,7 @@ bool ThorVGSoftwareRenderer::rebuild_canvas(
         if (!shape) return false;
 
         if (!append_polygon(*shape, face.points)) return false;
-
-        if (shape->fill(face.color.r, face.color.g, face.color.b,
-                        face.color.a) != tvg::Result::Success) {
-            return false;
-        }
+        if (!fill_face(*shape, face)) return false;
 
         // The glint straight after its own face, so that whatever is drawn
         // over this face later is drawn over the glint too.
@@ -353,13 +381,13 @@ bool ThorVGSoftwareRenderer::draw_highlight(
         std::hypot(highlight.rim.x - highlight.centre.x,
                    highlight.rim.y - highlight.centre.y),
         0.5f);
-    if (!fill_glow(*shape, highlight.centre, radius,
-                   graphics::Color{255, 255, 255, 255}, highlight.alpha)) {
-        return false;
-    }
-    // Screen rather than paint over: white screened onto a sticker brightens
-    // it towards white without ever hiding which colour it was.
-    return shape->blend(tvg::BlendMethod::Screen) == tvg::Result::Success;
+    // White laid over at the glint's alpha. This is the same arithmetic as a
+    // screen blend of white -- c + a(255 - c) either way -- so it brightens a
+    // sticker towards white without hiding which colour it was, and without
+    // the composition layer a blend mode would ask for on every glint.
+    return fill_glow(*shape, highlight.centre, radius,
+                     graphics::Color{255, 255, 255, 255}, highlight.alpha,
+                     highlight.mid);
 }
 
 bool ThorVGSoftwareRenderer::draw_shadow(
@@ -458,10 +486,16 @@ bool ThorVGSoftwareRenderer::draw_shadow(
     }
 
     {
+        // Strongest under the cube, most of the way gone half way to the tip,
+        // gone at it: a shadow thins faster than a straight line as it leaves
+        // the thing that casts it.
         const auto floor = static_cast<std::uint8_t>(std::lround(
             static_cast<float>(shadow.opacity) * graphics::kShadowFadeFloor));
+        const auto midway = static_cast<std::uint8_t>(std::lround(
+            static_cast<float>(shadow.opacity) * graphics::kShadowFadeMidway));
         const tvg::Fill::ColorStop stops[]{
             {0.0f, tint.r, tint.g, tint.b, shadow.opacity},
+            {0.5f, tint.r, tint.g, tint.b, midway},
             {1.0f, tint.r, tint.g, tint.b, floor},
         };
 
@@ -500,7 +534,7 @@ bool ThorVGSoftwareRenderer::draw_shadow(
             gradient = linear;
         }
         if (!gradient) return false;
-        if (gradient->colorStops(stops, 2) != tvg::Result::Success ||
+        if (gradient->colorStops(stops, 3) != tvg::Result::Success ||
             gradient->spread(tvg::FillSpread::Pad) != tvg::Result::Success) {
             delete gradient;
             return false;

@@ -20,9 +20,9 @@ export const BODY = [70, 74, 82, 255];
 // The brightness of each plane of the cube under the light, a byte out of
 // 255, worked out by hand in docs/tasks/04-rubiks-cube-domain.md (contract
 // v4). The three planes turned away from the light sit at the ambient floor.
-export const LIT_UP = 215; // +Y
-export const LIT_FRONT = 206; // +Z
-export const LIT_RIGHT = 177; // +X
+export const LIT_UP = 239; // +Y
+export const LIT_FRONT = 189; // +Z
+export const LIT_RIGHT = 164; // +X
 export const LIT_AWAY = 153; // -Y, -X, -Z
 
 /**
@@ -30,7 +30,7 @@ export const LIT_AWAY = 153; // -Y, -X, -Z
  * x, y or z = +1/3 or -1/3, facing +X, +Y or +Z. During a scramble any of the
  * six may be the one on show.
  */
-export const LIT_CUTS = [186, 195, 221, 226, 213, 219];
+export const LIT_CUTS = [171, 178, 241, 243, 195, 201];
 
 /** A colour at a brightness, in the integer arithmetic the engine uses. */
 export function lit(color: readonly number[], brightness: number): number[] {
@@ -48,14 +48,29 @@ export const FRONT_LIT = lit(GREEN, LIT_FRONT);
 export const RIGHT_LIT = lit(RED, LIT_RIGHT);
 export const BACK_LIT = lit(BLUE, LIT_AWAY);
 
+/**
+ * Whether a pixel is a colour to within `slack` per channel.
+ *
+ * The lit stickers are gradients following their plane's brightness, and
+ * the gradient's rounding can move a byte by one; a wrong face or a flipped
+ * normal is tens of units away.
+ */
+export function near(
+  pixel: readonly number[],
+  color: readonly number[],
+  slack = 1,
+): boolean {
+  return (
+    Math.abs(pixel[0]! - color[0]!) <= slack &&
+    Math.abs(pixel[1]! - color[1]!) <= slack &&
+    Math.abs(pixel[2]! - color[2]!) <= slack &&
+    pixel[3] === color[3]
+  );
+}
+
 /** Whether a pixel is a cut surface at any of the brightnesses it can have. */
 export function isBody(pixel: readonly number[]): boolean {
-  return LIT_CUTS.some((brightness) => {
-    const shade = lit(BODY, brightness);
-    return (
-      pixel[0] === shade[0] && pixel[1] === shade[1] && pixel[2] === shade[2]
-    );
-  });
+  return LIT_CUTS.some((brightness) => near(pixel, lit(BODY, brightness)));
 }
 
 // Sample points as fractions of the square 3D region, derived from the
@@ -347,9 +362,12 @@ export function assertVisibleFaces(
   left: number[],
   right: number[],
 ): void {
-  expect(probe.top).toEqual(top);
-  expect(probe.left).toEqual(left);
-  expect(probe.right).toEqual(right);
+  // Within one unit per channel (contract v4): the samples read a gradient.
+  expect(near(probe.top, top), `top ${probe.top} vs ${top}`).toBe(true);
+  expect(near(probe.left, left), `left ${probe.left} vs ${left}`).toBe(true);
+  expect(near(probe.right, right), `right ${probe.right} vs ${right}`).toBe(
+    true,
+  );
 }
 
 export function assertFacesAndCorners(probe: CanvasProbe): void {

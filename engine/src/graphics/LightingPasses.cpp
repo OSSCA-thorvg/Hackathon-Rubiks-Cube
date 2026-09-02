@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <vector>
 
 #include "graphics/ConvexHull.hpp"
@@ -59,54 +60,166 @@ std::uint8_t specular_alpha(const Light& light, const math::Vec3& light_pos,
 
 }  // namespace
 
+/** Lambert's cosine at in-plane distance `rho` from the foot of a light `height` above the plane. */
+float lambert_at(float height, float rho) noexcept
+{
+    return height / std::sqrt(height * height + rho * rho);
+}
+
+/**
+ * The glint of one plane: its peak on the plane, how far it reaches and how
+ * strong it is. Worked out once per plane and shared by every face on it --
+ * the reach is found by bisection, which is not something to do four
+ * thousand times a frame on a big cube.
+ */
+struct PlaneGlint {
+    math::Vec3 normal;
+    float offset;
+    std::optional<HighlightOf<math::Vec3>> glint;  // rim is peak + along * radius
+    math::Vec3 along;
+    float radius;
+};
+
 ViewScene LightPass::operator()(ViewScene scene) const
 {
+    std::vector<PlaneGlint> planes;
+
     for (auto& face : scene.faces) {
         const auto normal = outward_normal(face.points);
         if (!normal) continue;
 
-        // Diffuse: one value for the whole plane, read where the plane comes
-        // nearest the cube's centre -- the middle of the cube face, for a
-        // sticker on the outside.
-        const math::Vec3 foot =
-            anchor_in_view -
-            *normal * math::dot(anchor_in_view - face.points[0], *normal);
-        const math::Vec3 to_light = math::normalize(light_in_view - foot);
-        const float lambert = std::max(math::dot(*normal, to_light), 0.0f);
-        face.color = shade(face.color, light.ambient + light.diffuse * lambert);
+        const auto& origin = face.points[0];
+        const float light_height = math::dot(light_in_view - origin, *normal);
+
+        // Diffuse. On a plane, a point light's cosine depends only on how far
+        // along the plane a point is from the light's foot -- so it is one
+        // function for every sticker on that plane, read here at two points
+        // of each sticker and at the plane's point nearest the cube's centre.
+        const math::Vec3 anchor_foot =
+            anchor_in_view - *normal * math::dot(anchor_in_view - origin, *normal);
+        const Color base = face.color;
+
+        if (!(light_height > 0.0f)) {
+            // Lit from behind or edge-on: ambient everywhere, flat.
+            face.color = shade(base, light.ambient);
+            continue;
+        }
+
+        const math::Vec3 light_foot = light_in_view - *normal * light_height;
+        const auto brightness = [&](float rho) {
+            return light.ambient + light.diffuse * lambert_at(light_height, rho);
+        };
+        face.color = shade(base, brightness(math::length(anchor_foot - light_foot)));
+
+        math::Vec3 centre{0.0f, 0.0f, 0.0f};
+        for (const auto& point : face.points) centre += point;
+        centre /= static_cast<float>(kCorners);
+
+        const math::Vec3 away = centre - light_foot;
+        const float away_length = math::length(away);
+        if (away_length > 1e-4f && light.diffuse > 0.0f) {
+            const math::Vec3 direction = away / away_length;
+            float near = 1e9f, far = -1e9f;
+            for (const auto& point : face.points) {
+                const float t = math::dot(point - light_foot, direction);
+                near = std::min(near, t);
+                far = std::max(far, t);
+            }
+            const Color near_color = shade(base, brightness(std::abs(near)));
+            const Color far_color = shade(base, brightness(std::abs(far)));
+            // A sticker too small for the function to move a channel by more
+            // than one across it is drawn flat: within the contract's
+            // tolerance and indistinguishable by eye, for a fraction of the
+            // cost -- which matters on a 28x28 with three thousand of them.
+            const auto apart = [](std::uint8_t a, std::uint8_t b) {
+                return std::abs(int{a} - int{b}) > 1;
+            };
+            if (apart(near_color.r, far_color.r) || apart(near_color.g, far_color.g) ||
+                apart(near_color.b, far_color.b)) {
+                face.shading = ShadingOf<math::Vec3>{
+                    light_foot + direction * near, light_foot + direction * far,
+                    near_color, far_color};
+            }
+        }
 
         // Specular: where the mirror image of the light, seen from the eye,
         // lands on this plane. Both have to be on the outer side of the face
         // for there to be anything to see.
-        const auto& origin = face.points[0];
-        const float light_height = math::dot(light_in_view - origin, *normal);
         const float eye_height = math::dot(-origin, *normal);
-        if (!(light_height > 0.0f) || !(eye_height > 0.0f)) continue;
+        if (!(eye_height > 0.0f) || !(light.specular > 0.0f)) continue;
 
-        const math::Vec3 mirrored = light_in_view - *normal * (2.0f * light_height);
-        // The segment from the mirrored light to the eye (the origin) crosses
-        // the plane at this fraction of its length.
-        const float t = light_height / (light_height + eye_height);
-        const math::Vec3 on_plane = mirrored * (1.0f - t);
-
-        // Pulled onto the face if it fell outside, then re-evaluated there,
-        // so a glint just off a face's edge shows faintly at that edge and a
-        // glint far from it shows nothing.
         const math::Vec3 u = face.points[1] - origin;
-        const math::Vec3 v = face.points[3] - origin;
         const float uu = math::dot(u, u);
+        const math::Vec3 v = face.points[3] - origin;
         const float vv = math::dot(v, v);
         if (!(uu > 0.0f) || !(vv > 0.0f)) continue;
 
-        const float a = std::clamp(math::dot(on_plane - origin, u) / uu, 0.0f, 1.0f);
-        const float b = std::clamp(math::dot(on_plane - origin, v) / vv, 0.0f, 1.0f);
-        const math::Vec3 on_face = origin + u * a + v * b;
+        // The plane this face lies on, looked up among the ones already seen.
+        const float offset = math::dot(origin, *normal);
+        PlaneGlint* plane = nullptr;
+        for (auto& seen : planes) {
+            if (std::abs(seen.offset - offset) < 1e-4f &&
+                math::length(seen.normal - *normal) < 1e-4f) {
+                plane = &seen;
+                break;
+            }
+        }
+        if (!plane) {
+            planes.push_back(PlaneGlint{*normal, offset, std::nullopt,
+                                        u / std::sqrt(uu), 0.0f});
+            plane = &planes.back();
 
-        const auto alpha = specular_alpha(light, light_in_view, on_face, *normal);
-        if (alpha < kHighlightMinAlpha) continue;
+            const math::Vec3 mirrored =
+                light_in_view - *normal * (2.0f * light_height);
+            // The segment from the mirrored light to the eye (the origin)
+            // crosses the plane at this fraction of its length.
+            const float t = light_height / (light_height + eye_height);
+            const math::Vec3 peak = mirrored * (1.0f - t);
 
-        face.highlight = HighlightOf<math::Vec3>{
-            on_face, on_face + u * (kHighlightRadius / std::sqrt(uu)), alpha};
+            const auto peak_alpha =
+                specular_alpha(light, light_in_view, peak, *normal);
+            if (peak_alpha >= kHighlightMinAlpha) {
+                // The glint's radius is where the lobe has fallen to the
+                // threshold, found along the plane by bisection.
+                constexpr float kFarthest = 40.0f;
+                float inside = 0.0f, outside = kFarthest;
+                if (specular_alpha(light, light_in_view,
+                                   peak + plane->along * kFarthest,
+                                   *normal) >= kHighlightMinAlpha) {
+                    inside = kFarthest;
+                } else {
+                    for (int i = 0; i < 24; ++i) {
+                        const float probe = 0.5f * (inside + outside);
+                        if (specular_alpha(light, light_in_view,
+                                           peak + plane->along * probe,
+                                           *normal) >= kHighlightMinAlpha) {
+                            inside = probe;
+                        } else {
+                            outside = probe;
+                        }
+                    }
+                }
+                if (inside > 0.0f) {
+                    plane->radius = inside;
+                    plane->glint = HighlightOf<math::Vec3>{
+                        peak, peak + plane->along * inside, peak_alpha,
+                        specular_alpha(light, light_in_view,
+                                       peak + plane->along * (0.5f * inside),
+                                       *normal)};
+                }
+            }
+        }
+        if (!plane->glint) continue;
+
+        // Only stickers the glint reaches carry it: the nearest point of the
+        // sticker to the peak is within the radius.
+        const math::Vec3& peak = plane->glint->centre;
+        const float a = std::clamp(math::dot(peak - origin, u) / uu, 0.0f, 1.0f);
+        const float b = std::clamp(math::dot(peak - origin, v) / vv, 0.0f, 1.0f);
+        const math::Vec3 nearest = origin + u * a + v * b;
+        if (math::length(nearest - peak) >= plane->radius) continue;
+
+        face.highlight = plane->glint;
     }
     return scene;
 }
@@ -179,8 +292,26 @@ WorldScene ShadowPass::operator()(WorldScene scene) const
     }
 
     shadow.fade_start = math::Vec3{centre.x, ground_y, centre.z};
-    shadow.fade_end =
-        centre.y < light.position.y ? cast(centre) : shadow.fade_start;
+    shadow.fade_end = shadow.fade_start;
+
+    // The fade runs from under the cube to the shadow's own tip: the point of
+    // the outline furthest along the direction the light throws it. At the tip
+    // it is gone, so wherever a clip cuts it there is nothing left to cut.
+    if (centre.y < light.position.y) {
+        const math::Vec3 thrown = cast(centre) - shadow.fade_start;
+        const float thrown_length = math::length(thrown);
+        if (thrown_length > 1e-4f) {
+            const math::Vec3 direction = thrown / thrown_length;
+            float reach = 0.0f;
+            for (const auto& polygon : shadow.polygons) {
+                for (const auto& point : polygon) {
+                    reach = std::max(
+                        reach, math::dot(point - shadow.fade_start, direction));
+                }
+            }
+            shadow.fade_end = shadow.fade_start + direction * reach;
+        }
+    }
 
     const float radius = kContactRadiusShare * half_extent;
     shadow.contact.reserve(kContactPoints);

@@ -79,11 +79,11 @@ constexpr Rgba lit(const Rgba& color, unsigned brightness)
 /**
  * A sticker's colour with its chroma raised before it is lit (contract v4,
  * fifth revision): gray = (2126 r + 7152 g + 722 b + 5000) / 10000, and each
- * channel gray + ((c - gray) * 115 + 50) / 100, rounded away from grey.
+ * channel gray + ((c - gray) * 125 + 50) / 100, rounded away from grey.
  */
 constexpr std::uint8_t saturated_channel(int value, int gray)
 {
-    const int offset = (value - gray) * 115;
+    const int offset = (value - gray) * 125;
     const int rounded = offset >= 0 ? (offset + 50) / 100 : -((-offset + 50) / 100);
     const int result = gray + rounded;
     return static_cast<std::uint8_t>(result < 0 ? 0 : result > 255 ? 255 : result);
@@ -222,25 +222,33 @@ void require_pixel(const std::uint8_t* pixel, const Rgba& color)
  * it. A normal the wrong way round is tens of units off, so the check still
  * bites.
  */
-void require_pixel_near(const std::uint8_t* pixel, const Rgba& color)
+void require_pixel_near(const std::uint8_t* pixel, const Rgba& color, int slack)
 {
+    INFO("pixel " << int{pixel[0]} << "," << int{pixel[1]} << "," << int{pixel[2]}
+                  << " vs " << int{color[0]} << "," << int{color[1]} << ","
+                  << int{color[2]});
     for (int i = 0; i < 3; ++i) {
         INFO("channel " << i);
-        REQUIRE(std::abs(int{pixel[i]} - int{color[i]}) <= 2);
+        REQUIRE(std::abs(int{pixel[i]} - int{color[i]}) <= slack);
     }
     REQUIRE(int{pixel[3]} == int{color[3]});
 }
 
 void require_cube_faces(std::uint32_t width, std::uint32_t height)
 {
+    // Two units per channel, or four on a buffer so small that a face's
+    // five-stop gradient is squeezed into a few dozen pixels and its
+    // interpolation coarsens; a wrong face is still tens of units away.
+    const int slack = std::min(width, height) < 256 ? 4 : 2;
+
     // Three faces at three brightnesses: a normal the wrong way round now
     // shows up as the wrong shade as well as the wrong colour.
     require_pixel_near(pixel_in_cube(kUpSample, width, height),
-                       lit(saturated(kWhite), kLitUp));
+                       lit(saturated(kWhite), kLitUp), slack);
     require_pixel_near(pixel_in_cube(kFrontSample, width, height),
-                       lit(saturated(kGreen), kLitFront));
+                       lit(saturated(kGreen), kLitFront), slack);
     require_pixel_near(pixel_in_cube(kRightSample, width, height),
-                       lit(saturated(kRed), kLitRight));
+                       lit(saturated(kRed), kLitRight), slack);
 }
 
 /** Reads the center of all 54 net cells and compares the whole grid. */

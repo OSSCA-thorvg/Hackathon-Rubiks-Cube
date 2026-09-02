@@ -63,7 +63,7 @@ constexpr Rgba lit(const Rgba& color, unsigned brightness)
 /** The sticker's chroma raised before it is lit, as the contract writes it. */
 constexpr std::uint8_t saturated_channel(int value, int gray)
 {
-    const int offset = (value - gray) * 115;
+    const int offset = (value - gray) * 125;
     const int rounded = offset >= 0 ? (offset + 50) / 100 : -((-offset + 50) / 100);
     const int result = gray + rounded;
     return static_cast<std::uint8_t>(result < 0 ? 0 : result > 255 ? 255 : result);

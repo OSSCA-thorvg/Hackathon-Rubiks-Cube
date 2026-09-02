@@ -214,24 +214,25 @@ TEST_CASE("saturation scales a colour's chroma about its grey and leaves grey al
 {
     REQUIRE(saturate(Color{183, 18, 52, 255}, 100) == Color{183, 18, 52, 255});
     REQUIRE(saturate(Color{200, 200, 200, 255}, 150) == Color{200, 200, 200, 255});
-    REQUIRE(saturate(Color{255, 255, 255, 255}, 115) == Color{255, 255, 255, 255});
+    REQUIRE(saturate(Color{255, 255, 255, 255}, 125) == Color{255, 255, 255, 255});
 
     // gray = (2126*0 + 7152*155 + 722*72 + 5000) / 10000 = 116;
-    // r = 116 + ((0 - 116) * 115 + 50) / 100 -> clamped at 0, g -> 161, b -> 65.
-    REQUIRE(saturate(Color{0, 155, 72, 255}, 115) == Color{0, 161, 65, 255});
-    // gray = 56; r = 56 + 146 = 202, g = 56 - 44 = 12, b = 56 - 5 = 51.
-    REQUIRE(saturate(Color{183, 18, 52, 255}, 115) == Color{202, 12, 51, 255});
+    // r = 116 + ((0 - 116) * 125 + 50) / 100 -> clamped at 0, g -> 165, b -> 61.
+    REQUIRE(saturate(Color{0, 155, 72, 255}, 125) == Color{0, 165, 61, 255});
+    // gray = 56; r = 56 + 159 = 215, g = 56 - 48 = 8, b = 56 - 5 = 51.
+    REQUIRE(saturate(Color{183, 18, 52, 255}, 125) == Color{215, 8, 51, 255});
 
     // The lighting applies it to stickers and not to the body.
     const Camera camera = identity_camera();
     Lighting lamp = one_lamp(Vec3{0.0f, 0.0f, 0.0f});
-    lamp.saturation = 1.15f;
+    lamp.saturation = 1.25f;
     ViewScene scene;
     scene.faces.push_back(facing_face(3.0f, true));
     scene.faces.push_back(facing_face(3.0f, true));
     scene.faces[1].color = kBodyColor;
     const ViewScene lit = light(lamp, camera)(scene);
-    REQUIRE(lit.faces[0].color == saturate(Color{200, 100, 50, 255}, 115));
+    REQUIRE(lit.faces[0].color == saturate(Color{200, 100, 50, 255}, 125));
+    REQUIRE(lit.faces[0].color != Color{200, 100, 50, 255});
     REQUIRE(lit.faces[1].color == kBodyColor);
 }
 
@@ -568,11 +569,6 @@ TEST_CASE("the home viewpoint's sample stickers carry no highlight")
     }
     REQUIRE(samples == 3);
 
-    SECTION("with no specular on the key, no face anywhere carries one")
-    {
-        REQUIRE(default_lighting().lamps[0].specular == 0.0f);
-        for (const auto& face : scene.faces) REQUIRE(face.highlights.empty());
-    }
 }
 
 TEST_CASE("a lit face shades from its near end to its far end")
@@ -1006,9 +1002,9 @@ TEST_CASE("the home viewpoint's planes shade to the bytes the contract names")
     // +Y at 275 out of 255: white clamps; +Z at 230 and +X at 211, on the
     // stickers' colours with their saturation raised first.
     REQUIRE(int{white->r} == 255);
-    REQUIRE(int{green->g} == (161 * 230 + 127) / 255);
-    REQUIRE(int{green->b} == (65 * 230 + 127) / 255);
-    REQUIRE(int{red->r} == (202 * 211 + 127) / 255);
+    REQUIRE(int{green->g} == (165 * 230 + 127) / 255);
+    REQUIRE(int{green->b} == (61 * 230 + 127) / 255);
+    REQUIRE(int{red->r} == (215 * 211 + 127) / 255);
     REQUIRE(int{red->b} == (51 * 211 + 127) / 255);
 
     SECTION("and the same bytes for every size a person can pick")

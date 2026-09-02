@@ -10,9 +10,10 @@ Lighting Lighting::standard()
     Lighting lighting;
     // The key: high, in front and a little to the left of the home eye, so
     // the top face is brightest and the front brighter than the right, and
-    // the shadow it casts stays near the cube's footprint. No glint: none of
-    // the arrangements tried read as a cube (see the phase document).
-    lighting.lamps.push_back(Light{{2.6f, 7.0f, 4.0f}, 0.38f, 0.0f, 24.0f});
+    // the shadow it casts stays near the cube's footprint. Its glint is kept
+    // tight so a lamp this far away does not glaze a whole face: a distant
+    // lamp's half-vector barely turns across two units.
+    lighting.lamps.push_back(Light{{2.6f, 7.0f, 4.0f}, 0.38f, 0.40f, 24.0f});
     return lighting;
 }
 

@@ -48,14 +48,14 @@ export function lit(color: readonly number[], brightness: number): number[] {
 /**
  * A sticker's colour with its chroma raised, as the engine does before it
  * lights it: gray = (2126 r + 7152 g + 722 b + 5000) / 10000, each channel
- * gray + ((c - gray) * 115 + 50) / 100 rounded away from grey, clamped.
+ * gray + ((c - gray) * 125 + 50) / 100 rounded away from grey, clamped.
  */
 export function saturated(color: readonly number[]): number[] {
   const gray = Math.floor(
     (2126 * color[0]! + 7152 * color[1]! + 722 * color[2]! + 5000) / 10000,
   );
   const channel = (value: number): number => {
-    const offset = (value - gray) * 115;
+    const offset = (value - gray) * 125;
     const rounded =
       offset >= 0
         ? Math.floor((offset + 50) / 100)

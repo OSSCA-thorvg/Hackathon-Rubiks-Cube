@@ -15,10 +15,10 @@
  * glint a face throws when it sits between a light and the eye. There is no
  * reflection term because Blinn-Phong has none.
  *
- * One lamp by default, the key: high in front for the diffuse shading. A
- * kicker for the glint was tried and taken out -- a distant lamp glazes a
- * whole face, a near one puts a spot on one face and nothing on the others,
- * and neither read as a cube. The specular code stays for the knob.
+ * One lamp by default, the key: high in front for the diffuse shading and a
+ * tight glint. A second lamp, a kicker for the glint alone, was tried and
+ * taken out -- a distant one glazes a whole face, a near one puts a spot on
+ * one face and nothing on the others, and neither read as a cube.
  *
  * The lamps are points rather than directions on purpose. A direction only
  * ever slides a shadow sideways and lights a flat face evenly; a point
@@ -60,7 +60,7 @@ struct Lighting {
      * which the eye reads as washing out, and a little more chroma up front
      * gives that back. Not applied to the cubie body, which is plastic.
      */
-    float saturation = 1.15f;
+    float saturation = 1.25f;
 
     /** The key light first: it alone casts the shadow. */
     std::vector<Light> lamps;

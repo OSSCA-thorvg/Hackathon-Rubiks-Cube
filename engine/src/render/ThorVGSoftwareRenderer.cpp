@@ -7,6 +7,7 @@
 #include <new>
 #include <vector>
 
+#include "graphics/CubeGeometry.hpp"
 #include "graphics/Light.hpp"
 
 namespace rubiks::render {
@@ -136,18 +137,22 @@ bool fill_face(tvg::Shape& shape, const graphics::RenderFace& face) noexcept
         delete gradient;
         return false;
     }
-    // Three stops, the middle one the true value there, so the gradient bends
-    // with the brightness rather than cutting a chord across it -- and the
-    // middle of the middle sticker is the byte the render contract names.
-    const tvg::Fill::ColorStop stops[]{
-        {0.0f, shading.from_color.r, shading.from_color.g, shading.from_color.b,
-         shading.from_color.a},
-        {0.5f, shading.mid_color.r, shading.mid_color.g, shading.mid_color.b,
-         shading.mid_color.a},
-        {1.0f, shading.to_color.r, shading.to_color.g, shading.to_color.b,
-         shading.to_color.a},
-    };
-    if (gradient->colorStops(stops, 3) != tvg::Result::Success ||
+    // The plane's stops with this sticker's colour at each: the same axis and
+    // spacing as every sticker beside it, so the shading runs on across the
+    // seams, following the brightness curve stop by stop.
+    std::vector<tvg::Fill::ColorStop> stops;
+    stops.reserve(shading.colors.size());
+    for (std::size_t i = 0; i < shading.colors.size(); ++i) {
+        const auto& color = shading.colors[i];
+        const float offset = shading.colors.size() > 1
+                                 ? static_cast<float>(i) /
+                                       static_cast<float>(shading.colors.size() - 1)
+                                 : 0.0f;
+        stops.push_back({offset, color.r, color.g, color.b, color.a});
+    }
+    if (stops.empty() ||
+        gradient->colorStops(stops.data(), static_cast<uint32_t>(stops.size())) !=
+            tvg::Result::Success ||
         gradient->spread(tvg::FillSpread::Pad) != tvg::Result::Success) {
         delete gradient;
         return false;
@@ -558,17 +563,18 @@ bool ThorVGSoftwareRenderer::draw_shadow(
     // beside it.
     if (!clipper_for(*body, shadow.clip)) return false;
 
-    // Where the cube itself is, there is no ground to see a shadow on -- and
-    // the seams between stickers are still the cube, not windows onto it. The
-    // cube's silhouette is painted back in the ground's own colour over the
-    // shadow, before the stickers go on top of it: what a solid body does to
-    // the ground behind it, at the price of a few polygons rather than a mask.
+    // The cubies' bodies: each slab's silhouette, painted in the seam colour
+    // over the shadow and under the stickers. That is what shows through the
+    // seams between stickers -- dark plastic, not the ground or whatever is
+    // behind the cube -- and what keeps the shadow out of the cube's own
+    // outline, at the price of a few polygons rather than a mask.
     for (const auto& hull : shadow.occluders) {
         auto* shape = add_shape(*canvas_);
         if (!shape) return false;
         if (!append_polygon(*shape, hull)) return false;
-        if (shape->fill(background_.r, background_.g, background_.b,
-                        background_.a) != tvg::Result::Success) {
+        if (shape->fill(graphics::kSeamColor.r, graphics::kSeamColor.g,
+                        graphics::kSeamColor.b, graphics::kSeamColor.a) !=
+            tvg::Result::Success) {
             return false;
         }
     }

@@ -8,6 +8,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "EngineLifecycle.hpp"
+#include "graphics/CubeGeometry.hpp"
 #include "graphics/Light.hpp"
 #include "graphics/RenderScene.hpp"
 #include "render/ThorVGSoftwareRenderer.hpp"
@@ -222,7 +223,7 @@ TEST_CASE("the clip keeps the shadow inside its region")
     REQUIRE(frame.luminance(100, 128) < 32 * 3);
 }
 
-TEST_CASE("the cube's silhouette keeps the shadow out of its own seams")
+TEST_CASE("the cube's body shows through its seams and keeps the shadow out")
 {
     const rubiks::test::EngineLifecycle engine(16, 16);
 
@@ -234,9 +235,10 @@ TEST_CASE("the cube's silhouette keeps the shadow out of its own seams")
     scene.faces.push_back(quad(130.0f, 96.0f, 152.0f, 160.0f, Color{0, 200, 0, 255}));
     const Frame frame = draw(scene);
 
-    // The seam shows the ground and only the ground, though the shadow
-    // polygon runs straight under it.
-    REQUIRE(same_rgb(frame.at(128, 128), Rgba{32, 32, 32, 255}));
+    // The seam shows the cubie body and only the body, though the shadow
+    // polygon runs straight under it: dark plastic, not the ground.
+    const auto& seam = rubiks::graphics::kSeamColor;
+    REQUIRE(same_rgb(frame.at(128, 128), Rgba{seam.r, seam.g, seam.b, 255}));
     // Either side of the silhouette the shadow is there.
     REQUIRE(frame.luminance(80, 128) < 32 * 3);
     REQUIRE(frame.luminance(176, 128) < 32 * 3);

@@ -33,15 +33,14 @@ struct RenderHighlight {
  * A face's colour running from one point to another.
  *
  * The lit 3D view fills a sticker with this rather than one colour: a point
- * light shades a flat face brighter near its foot and darker away from it,
- * and a sticker is a short enough piece of that for a line to draw it.
+ * light shades a flat face brighter near its foot and darker away from it.
+ * The axis and the stop spacing are the plane's, shared by every sticker on
+ * it; the colours are this sticker's own at each stop.
  */
 struct RenderShading {
     math::Vec2 from{};
     math::Vec2 to{};
-    Color from_color{};
-    Color mid_color{};
-    Color to_color{};
+    std::vector<Color> colors;
 };
 
 /** Screen-space quad ready to be filled by a renderer. */

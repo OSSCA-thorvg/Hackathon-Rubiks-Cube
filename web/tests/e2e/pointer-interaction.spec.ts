@@ -357,7 +357,7 @@ test('dragging the background sweeps the viewpoint, not the cube', async ({
   await page.mouse.up();
 
   await expect
-    .poll(async () => near((await probeCanvas(page)).left, RIGHT_LIT))
+    .poll(async () => near((await probeCanvas(page)).left, RIGHT_LIT, 2))
     .toBe(true);
 
   const turned = await probeCanvas(page);
@@ -384,7 +384,7 @@ test('a layer still turns after the viewpoint comes back round', async ({
   await page.mouse.up();
 
   await expect
-    .poll(async () => near((await probeCanvas(page)).left, FRONT_LIT))
+    .poll(async () => near((await probeCanvas(page)).left, FRONT_LIT, 2))
     .toBe(true);
 
   const home = await probeCanvas(page);

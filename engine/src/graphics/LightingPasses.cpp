@@ -15,6 +15,8 @@ namespace {
 constexpr std::size_t kCorners = 4;
 constexpr float kPi = 3.14159265358979323846f;
 constexpr int kContactPoints = 16;
+/** Stops of a plane's shading gradient, the true brightness at each. */
+constexpr std::size_t kShadingStops = 5;
 
 math::Vec3 to_vec3(const math::Vec4& v) noexcept
 {
@@ -73,15 +75,104 @@ struct PlaneGlint {
 
 }  // namespace
 
+/**
+ * The brightness function of one plane: an axis from the key light's foot
+ * through the plane's point nearest the cube's centre, the span of every face
+ * on the plane along it, and the brightness at evenly spaced stops. Worked
+ * out once per plane so every sticker on it shades with the same function.
+ */
+struct PlaneShading {
+    math::Vec3 normal;
+    float offset;
+    math::Vec3 foot;       // the key light's foot on the plane
+    math::Vec3 direction;  // in-plane, away from the foot
+    float near = 1e9f;
+    float far = -1e9f;
+    std::array<float, kShadingStops> brightness{};
+    bool usable = false;
+};
+
 ViewScene LightPass::operator()(ViewScene scene) const
 {
     std::vector<PlaneGlint> planes;
+    std::vector<PlaneShading> shadings;
 
     // Distance from each lamp to the cube's centre: the distance at which its
     // diffuse term is at full strength.
     std::vector<float> reference;
     for (const auto& lamp_pos : lamps_in_view) {
         reference.push_back(math::length(lamp_pos - anchor_in_view));
+    }
+
+    // The sum over the lamps of Lambert's cosine, each falling off with
+    // distance from its lamp, at a point of a plane with the given normal.
+    const auto brightness = [&](const math::Vec3& point, const math::Vec3& normal) {
+        float total = lighting.ambient;
+        for (std::size_t i = 0; i < lamps_in_view.size(); ++i) {
+            const auto& lamp = lighting.lamps[i];
+            if (!(lamp.diffuse > 0.0f)) continue;
+            const math::Vec3 to_lamp = lamps_in_view[i] - point;
+            const float distance = math::length(to_lamp);
+            if (!(distance > 0.0f)) continue;
+            const float cosine = math::dot(normal, to_lamp) / distance;
+            if (!(cosine > 0.0f)) continue;
+            const float falloff =
+                lighting.attenuation > 0.0f && reference[i] > 0.0f
+                    ? std::pow(reference[i] / distance, lighting.attenuation)
+                    : 1.0f;
+            total += lamp.diffuse * cosine * falloff;
+        }
+        return total;
+    };
+
+    const bool shaded = !lamps_in_view.empty() && lighting.lamps[0].diffuse > 0.0f;
+
+    // First, the planes: which faces share one, and how far each plane's
+    // faces reach along its shading axis.
+    for (const auto& face : scene.faces) {
+        if (!shaded) break;
+        const auto normal = outward_normal(face.points);
+        if (!normal) continue;
+        const float offset = math::dot(face.points[0], *normal);
+
+        PlaneShading* plane = nullptr;
+        for (auto& seen : shadings) {
+            if (std::abs(seen.offset - offset) < 1e-4f &&
+                math::length(seen.normal - *normal) < 1e-4f) {
+                plane = &seen;
+                break;
+            }
+        }
+        if (!plane) {
+            PlaneShading fresh;
+            fresh.normal = *normal;
+            fresh.offset = offset;
+            const math::Vec3& key = lamps_in_view[0];
+            fresh.foot = key - *normal * math::dot(key - face.points[0], *normal);
+            const math::Vec3 anchor_foot =
+                anchor_in_view - *normal * math::dot(anchor_in_view - face.points[0], *normal);
+            const math::Vec3 away = anchor_foot - fresh.foot;
+            const float away_length = math::length(away);
+            fresh.usable = away_length > 1e-4f;
+            if (fresh.usable) fresh.direction = away / away_length;
+            shadings.push_back(fresh);
+            plane = &shadings.back();
+        }
+        if (!plane->usable) continue;
+        for (const auto& point : face.points) {
+            const float t = math::dot(point - plane->foot, plane->direction);
+            plane->near = std::min(plane->near, t);
+            plane->far = std::max(plane->far, t);
+        }
+    }
+    for (auto& plane : shadings) {
+        if (!plane.usable) continue;
+        for (std::size_t k = 0; k < kShadingStops; ++k) {
+            const float t = plane.near + (plane.far - plane.near) *
+                                             static_cast<float>(k) /
+                                             static_cast<float>(kShadingStops - 1);
+            plane.brightness[k] = brightness(plane.foot + plane.direction * t, plane.normal);
+        }
     }
 
     for (auto& face : scene.faces) {
@@ -95,66 +186,58 @@ ViewScene LightPass::operator()(ViewScene scene) const
         const math::Vec3 v = face.points[3] - origin;
         const float vv = math::dot(v, v);
         if (!(uu > 0.0f) || !(vv > 0.0f)) continue;
-
-        // Diffuse: the sum over the lamps of Lambert's cosine, each falling
-        // off with distance from its lamp, read at a point of the plane.
-        const auto brightness = [&](const math::Vec3& point) {
-            float total = lighting.ambient;
-            for (std::size_t i = 0; i < lamps_in_view.size(); ++i) {
-                const auto& lamp = lighting.lamps[i];
-                if (!(lamp.diffuse > 0.0f)) continue;
-                const math::Vec3 to_lamp = lamps_in_view[i] - point;
-                const float distance = math::length(to_lamp);
-                if (!(distance > 0.0f)) continue;
-                const float cosine = math::dot(*normal, to_lamp) / distance;
-                if (!(cosine > 0.0f)) continue;
-                const float falloff =
-                    lighting.attenuation > 0.0f && reference[i] > 0.0f
-                        ? std::pow(reference[i] / distance, lighting.attenuation)
-                        : 1.0f;
-                total += lamp.diffuse * cosine * falloff;
-            }
-            return total;
-        };
+        const float offset = math::dot(origin, *normal);
 
         // The reference shade: where the plane comes nearest the cube's
         // centre, the middle of the cube face for a sticker on the outside.
         const math::Vec3 anchor_foot =
             anchor_in_view - *normal * math::dot(anchor_in_view - origin, *normal);
-        face.color = shade(base, brightness(anchor_foot));
+        face.color = shade(base, brightness(anchor_foot, *normal));
 
-        // Shading across the face, along the direction away from the key
-        // light's foot on the plane, with the true brightness at both ends.
-        // Neighbouring stickers on the plane share the function, so it runs
-        // on across the seams.
-        if (!lamps_in_view.empty() && lighting.lamps[0].diffuse > 0.0f) {
-            const math::Vec3& key = lamps_in_view[0];
-            const math::Vec3 key_foot =
-                key - *normal * math::dot(key - origin, *normal);
-            math::Vec3 centre{0.0f, 0.0f, 0.0f};
-            for (const auto& point : face.points) centre += point;
-            centre /= static_cast<float>(kCorners);
-
-            const math::Vec3 away = centre - key_foot;
-            const float away_length = math::length(away);
-            if (away_length > 1e-4f) {
-                const math::Vec3 direction = away / away_length;
-                float near = 1e9f, far = -1e9f;
+        // Shading: the plane's axis and stops, this sticker's colour.
+        if (shaded) {
+            for (const auto& plane : shadings) {
+                if (!plane.usable || std::abs(plane.offset - offset) >= 1e-4f ||
+                    math::length(plane.normal - *normal) >= 1e-4f) {
+                    continue;
+                }
+                // The plane's brightness at a point along its axis, read off
+                // the stops the way the gradient itself will read it.
+                const auto along_axis = [&](float t) {
+                    const float span = plane.far - plane.near;
+                    const float f = span > 0.0f ? std::clamp((t - plane.near) / span, 0.0f, 1.0f) : 0.0f;
+                    const float scaled = f * static_cast<float>(kShadingStops - 1);
+                    const auto low = static_cast<std::size_t>(scaled);
+                    const auto high = std::min(low + 1, kShadingStops - 1);
+                    const float mix = scaled - static_cast<float>(low);
+                    return plane.brightness[low] * (1.0f - mix) + plane.brightness[high] * mix;
+                };
+                float face_near = 1e9f, face_far = -1e9f;
                 for (const auto& point : face.points) {
-                    const float t = math::dot(point - key_foot, direction);
-                    near = std::min(near, t);
-                    far = std::max(far, t);
+                    const float t = math::dot(point - plane.foot, plane.direction);
+                    face_near = std::min(face_near, t);
+                    face_far = std::max(face_far, t);
                 }
-                const math::Vec3 from = key_foot + direction * near;
-                const math::Vec3 to = key_foot + direction * far;
-                const Color from_color = shade(base, brightness(from));
-                const Color mid_color = shade(base, brightness((from + to) * 0.5f));
-                const Color to_color = shade(base, brightness(to));
-                // Flat only when it really is flat.
-                if (from_color != to_color || from_color != mid_color) {
-                    face.shading = ShadingOf<math::Vec3>{from, to, from_color,
-                                                         mid_color, to_color};
+
+                // A sticker the function does not move a byte across is drawn
+                // flat at its own middle: the same picture as the gradient
+                // would make, for a fraction of the cost -- which matters on a
+                // 28x28 with three thousand of them.
+                const Color at_near = shade(base, along_axis(face_near));
+                const Color at_far = shade(base, along_axis(face_far));
+                if (at_near == at_far) {
+                    face.color = shade(base, along_axis(0.5f * (face_near + face_far)));
+                    break;
                 }
+
+                ShadingOf<math::Vec3> shading;
+                shading.from = plane.foot + plane.direction * plane.near;
+                shading.to = plane.foot + plane.direction * plane.far;
+                for (const float b : plane.brightness) {
+                    shading.colors.push_back(shade(base, b));
+                }
+                face.shading = std::move(shading);
+                break;
             }
         }
 
@@ -163,7 +246,6 @@ ViewScene LightPass::operator()(ViewScene scene) const
         // of the face for there to be anything to see.
         const float eye_height = math::dot(-origin, *normal);
         if (!(eye_height > 0.0f)) continue;
-        const float offset = math::dot(origin, *normal);
 
         for (std::size_t i = 0; i < lamps_in_view.size(); ++i) {
             const auto& lamp = lighting.lamps[i];

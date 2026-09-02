@@ -541,17 +541,19 @@ TEST_CASE("a lit face shades from its near end to its far end")
     REQUIRE(face.shading->from.x == Approx(1.0f).margin(1e-4));
     REQUIRE(face.shading->to.x == Approx(-1.0f).margin(1e-4));
     REQUIRE(face.shading->from.z == Approx(-3.0f).margin(1e-4));
+    REQUIRE(face.shading->colors.size() == 5);
     const auto luminance = [](const Color& c) { return int{c.r} + int{c.g} + int{c.b}; };
-    REQUIRE(luminance(face.shading->from_color) > luminance(face.shading->to_color));
+    REQUIRE(luminance(face.shading->colors.front()) > luminance(face.shading->colors.back()));
 
-    // The two ends are the function's true values: cos = h / sqrt(h^2 + rho^2)
-    // with h = 3 and rho = 1 at the near end, 3 at the far end.
+    // The stops are the function's true values: cos = h / sqrt(h^2 + rho^2)
+    // with h = 3 and rho = 1 at the near end, 2 in the middle, 3 at the far.
     const auto expected = [&](float rho) {
         return shade(Color{200, 100, 50, 255},
                      lamp.ambient + lamp.lamps[0].diffuse * 3.0f / std::sqrt(9.0f + rho * rho));
     };
-    REQUIRE(face.shading->from_color == expected(1.0f));
-    REQUIRE(face.shading->to_color == expected(3.0f));
+    REQUIRE(face.shading->colors[0] == expected(1.0f));
+    REQUIRE(face.shading->colors[2] == expected(2.0f));
+    REQUIRE(face.shading->colors[4] == expected(3.0f));
     // And the reference colour is read where the plane comes nearest the
     // cube's centre -- the origin here -- which is rho = 2 from the foot.
     REQUIRE(face.color == expected(2.0f));
@@ -577,8 +579,9 @@ TEST_CASE("the shading of one plane runs on across its stickers")
     const ViewScene scene = world | view(home_camera()) | light(default_lighting(), home_camera());
 
     // The nine +Z stickers (green: the white top clamps and shows nothing):
-    // every one shaded and every end on the same plane.
+    // every one shaded, all with the plane's one axis, every end on the plane.
     int counted = 0;
+    std::optional<Vec3> axis_from, axis_to;
     for (std::size_t i = 0; i < world.faces.size(); ++i) {
         Vec3 centre{0.0f, 0.0f, 0.0f};
         for (const auto& point : world.faces[i].points) centre += point;
@@ -589,6 +592,15 @@ TEST_CASE("the shading of one plane runs on across its stickers")
         const auto& face = scene.faces[i];
         REQUIRE(face.shading.has_value());
 
+        // One function for the plane: the same axis under every sticker.
+        if (!axis_from) {
+            axis_from = face.shading->from;
+            axis_to = face.shading->to;
+        }
+        REQUIRE(rubiks::math::length(face.shading->from - *axis_from) < 1e-4f);
+        REQUIRE(rubiks::math::length(face.shading->to - *axis_to) < 1e-4f);
+        REQUIRE(face.shading->colors.size() == 5);
+
         // Both ends lie on the face's plane: the same view-space height above
         // it as the corners, which is zero.
         const Vec3 normal = rubiks::math::normalize(rubiks::math::cross(
@@ -597,13 +609,38 @@ TEST_CASE("the shading of one plane runs on across its stickers")
         REQUIRE(rubiks::math::dot(face.shading->to - face.points[0], normal) == Approx(0.0f).margin(1e-3));
 
         if (std::abs(centre.x) < 1e-3f && std::abs(centre.y) < 1e-3f) {
-            // The middle sticker: its ends differ and its middle is the
-            // plane's reference byte, which is what the contract reads.
-            REQUIRE(face.shading->from_color != face.shading->to_color);
-            REQUIRE(face.shading->mid_color == face.color);
+            // The middle sticker: the axis runs through the middle of the
+            // face, so the middle stop is the plane's reference byte, which
+            // is what the contract reads.
+            REQUIRE(face.shading->colors.front() != face.shading->colors.back());
+            REQUIRE(face.shading->colors[2] == face.color);
         }
     }
     REQUIRE(counted == 9);
+
+    SECTION("a mixed cube shares the axis too, each sticker in its own colour")
+    {
+        CubeState mixed(3);
+        mixed.apply(rubiks::cube::moves::U(3));
+        mixed.apply(rubiks::cube::moves::R(3));
+        const WorldScene mixed_world = build_cube_scene(mixed);
+        const ViewScene lit = mixed_world | view(home_camera()) | light(default_lighting(), home_camera());
+
+        std::optional<Vec3> from;
+        std::set<std::tuple<int, int, int>> colors;
+        for (std::size_t i = 0; i < mixed_world.faces.size(); ++i) {
+            Vec3 centre{0.0f, 0.0f, 0.0f};
+            for (const auto& point : mixed_world.faces[i].points) centre += point;
+            centre /= 4.0f;
+            if (centre.z < 0.9f || !lit.faces[i].shading) continue;
+            if (!from) from = lit.faces[i].shading->from;
+            REQUIRE(rubiks::math::length(lit.faces[i].shading->from - *from) < 1e-4f);
+            const auto& c = lit.faces[i].shading->colors[2];
+            colors.insert({c.r, c.g, c.b});
+        }
+        // More than one colour on the front face now, all on one axis.
+        REQUIRE(colors.size() > 1);
+    }
 
     SECTION("a sticker whose ends shade alike is drawn flat")
     {
@@ -613,7 +650,9 @@ TEST_CASE("the shading of one plane runs on across its stickers")
                                | view(home_camera())            //
                                | light(default_lighting(), home_camera());
         for (const auto& face : fine.faces) {
-            if (face.shading) REQUIRE(face.shading->from_color != face.shading->to_color);
+            if (face.shading) {
+                REQUIRE(face.shading->colors.front() != face.shading->colors.back());
+            }
         }
     }
 }

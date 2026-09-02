@@ -165,8 +165,7 @@ ClipScene ProjectPass::operator()(const ViewScene& scene) const
         if (face.shading) {
             projected.shading = ShadingOf<math::Vec2>{
                 to_ndc(face.shading->from), to_ndc(face.shading->to),
-                face.shading->from_color, face.shading->mid_color,
-                face.shading->to_color};
+                face.shading->colors};
         }
         // A highlight lies on the face's plane; its centre may sit off the
         // face but still in front of the eye, as the mirror image of a light
@@ -244,9 +243,7 @@ RenderScene ViewportPass::operator()(const ClipScene& scene) const
         if (face.shading) {
             mapped.shading = RenderShading{to_pixels(face.shading->from),
                                            to_pixels(face.shading->to),
-                                           face.shading->from_color,
-                                           face.shading->mid_color,
-                                           face.shading->to_color};
+                                           face.shading->colors};
         }
         for (const auto& glint : face.highlights) {
             mapped.highlights.push_back(RenderHighlight{

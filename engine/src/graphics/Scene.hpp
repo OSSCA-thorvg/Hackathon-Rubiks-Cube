@@ -74,20 +74,20 @@ struct HighlightOf {
 /**
  * How a face's brightness runs across it.
  *
- * A point light's diffuse term on a plane depends only on the distance from
- * the light's foot on that plane, so across one sticker it is very nearly a
- * line: the colour at the sticker's near end and at its far end, along the
- * direction away from the foot. Neighbouring stickers on the same plane get
- * the same function, so the shading runs on across the seams.
+ * The brightness function belongs to the plane: one axis from the key
+ * light's foot through the middle of the cube face, spanning every face on
+ * the plane, and one set of evenly spaced stops with the true brightness at
+ * each. Every sticker on the plane carries that same axis and those same
+ * stops; only the colours differ, each sticker's own colour at each stop's
+ * brightness. That is what makes the shading run on across the seams -- the
+ * same function under a red sticker and the green one beside it.
  */
 template <typename Point>
 struct ShadingOf {
     Point from{};
     Point to{};
-    Color from_color{};
-    /** The true value half way, so the curve is followed rather than chorded. */
-    Color mid_color{};
-    Color to_color{};
+    /** This face's colour at each stop, evenly spaced from `from` to `to`. */
+    std::vector<Color> colors;
 };
 
 /** Quad in world space. */

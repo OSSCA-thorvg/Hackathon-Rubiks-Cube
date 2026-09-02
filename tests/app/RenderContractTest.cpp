@@ -90,8 +90,8 @@ constexpr Sample kUpSample{0.50f, 0.29f};
 constexpr Sample kFrontSample{0.31f, 0.61f};
 constexpr Sample kRightSample{0.69f, 0.61f};
 
-// Gaps between neighbouring stickers. Nothing is drawn there, so they must be
-// exactly the background color.
+// Gaps between neighbouring stickers. The cubie body shows there -- painted
+// under the stickers as each slab's silhouette -- so they are exactly kSeam.
 constexpr Sample kSeamSamples[]{
     {0.377f, 0.645f},  // +Z, between the center and right stickers
     {0.313f, 0.534f},  // +Z, between the center and top stickers
@@ -117,6 +117,8 @@ constexpr int kCubeSize = 3;
 
 /** Fill of a cut surface, only ever visible while a layer is turning. */
 constexpr Rgba kBody{70, 74, 82, 255};
+/** The body where it shows between stickers: darker, and never a lit kBody. */
+constexpr Rgba kSeam{34, 36, 40, 255};
 
 /**
  * Half of the snap animation, which is half of the turn.
@@ -185,18 +187,20 @@ void require_pixel(const std::uint8_t* pixel, const Rgba& color)
 }
 
 /**
- * Within one unit per channel of a colour.
+ * Within two units per channel of a colour.
  *
  * The lit stickers are gradients following the plane's brightness, and the
- * middle of the middle sticker is the plane's reference byte in theory; the
- * gradient's own rounding is what the one unit is for. A normal the wrong
- * way round is tens of units off, so the check still bites.
+ * middle of the middle sticker is the plane's reference byte. The sample
+ * point sits up to a few dozen pixels off that middle, and the brightness
+ * runs at about a byte per fifteen pixels across a face, so two units cover
+ * it. A normal the wrong way round is tens of units off, so the check still
+ * bites.
  */
 void require_pixel_near(const std::uint8_t* pixel, const Rgba& color)
 {
     for (int i = 0; i < 3; ++i) {
         INFO("channel " << i);
-        REQUIRE(std::abs(int{pixel[i]} - int{color[i]}) <= 1);
+        REQUIRE(std::abs(int{pixel[i]} - int{color[i]}) <= 2);
     }
     REQUIRE(int{pixel[3]} == int{color[3]});
 }
@@ -413,7 +417,7 @@ TEST_CASE("the contract holds on non-square buffers")
 
 }
 
-TEST_CASE("the seams between stickers show the background")
+TEST_CASE("the seams between stickers show the cubie body")
 {
     // A seam is about 5.5 pixels wide at this size. Below roughly 1024 the
     // gap is thin enough that anti-aliasing reaches the sample point, so the
@@ -423,8 +427,10 @@ TEST_CASE("the seams between stickers show the background")
     const rubiks::test::EngineLifecycle engine(kSize, kSize);
     require_scene(kSize, kSize);
 
+    // Contract v4: the seam colour, unlit and exact, not the background --
+    // and not any sticker colour either, which is what makes a seam decisive.
     for (const auto& seam : kSeamSamples) {
-        require_pixel(pixel_in_cube(seam, kSize, kSize), kBackground);
+        require_pixel(pixel_in_cube(seam, kSize, kSize), kSeam);
     }
 
 }

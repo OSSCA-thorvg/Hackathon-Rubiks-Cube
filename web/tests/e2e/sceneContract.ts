@@ -1,10 +1,11 @@
 import { expect, type Page } from '@playwright/test';
 
-// Rendered scene contract v3 as RGBA tuples: the canvas holds a square 3D
-// region showing three differently colored faces of a cube, and below it a net
-// showing all six faces flat, over a solid background. A winding, culling,
-// channel-order, or domain regression shows up as the wrong color here rather
-// than as a plausible picture.
+// Rendered scene contract v4 as RGBA tuples: the canvas holds a square 3D
+// region showing three differently colored faces of a cube under one light,
+// and below it a net showing all six faces flat and unlit, over a solid
+// background. A winding, culling, channel-order, or domain regression shows up
+// as the wrong color here rather than as a plausible picture -- and since v4
+// a normal the wrong way round shows up as the wrong brightness too.
 export const BACKGROUND = [32, 32, 32, 255];
 export const WHITE = [255, 255, 255, 255]; // +Y up
 export const YELLOW = [255, 213, 0, 255]; // -Y down
@@ -15,6 +16,47 @@ export const ORANGE = [255, 88, 0, 255]; // -X left
 
 /** Fill of a cut surface, only ever visible while a layer is turning. */
 export const BODY = [70, 74, 82, 255];
+
+// The brightness of each plane of the cube under the light, a byte out of
+// 255, worked out by hand in docs/tasks/04-rubiks-cube-domain.md (contract
+// v4). The three planes turned away from the light sit at the ambient floor.
+export const LIT_UP = 215; // +Y
+export const LIT_FRONT = 206; // +Z
+export const LIT_RIGHT = 177; // +X
+export const LIT_AWAY = 153; // -Y, -X, -Z
+
+/**
+ * The cut faces a turn opens lie one layer in, on planes of their own: at
+ * x, y or z = +1/3 or -1/3, facing +X, +Y or +Z. During a scramble any of the
+ * six may be the one on show.
+ */
+export const LIT_CUTS = [186, 195, 221, 226, 213, 219];
+
+/** A colour at a brightness, in the integer arithmetic the engine uses. */
+export function lit(color: readonly number[], brightness: number): number[] {
+  return [
+    Math.floor((color[0]! * brightness + 127) / 255),
+    Math.floor((color[1]! * brightness + 127) / 255),
+    Math.floor((color[2]! * brightness + 127) / 255),
+    color[3]!,
+  ];
+}
+
+/** The six faces as the lit 3D view shows them on a solved cube. */
+export const UP_LIT = lit(WHITE, LIT_UP);
+export const FRONT_LIT = lit(GREEN, LIT_FRONT);
+export const RIGHT_LIT = lit(RED, LIT_RIGHT);
+export const BACK_LIT = lit(BLUE, LIT_AWAY);
+
+/** Whether a pixel is a cut surface at any of the brightnesses it can have. */
+export function isBody(pixel: readonly number[]): boolean {
+  return LIT_CUTS.some((brightness) => {
+    const shade = lit(BODY, brightness);
+    return (
+      pixel[0] === shade[0] && pixel[1] === shade[1] && pixel[2] === shade[2]
+    );
+  });
+}
 
 // Sample points as fractions of the square 3D region, derived from the
 // projected centroid of each visible face. They are region-relative rather
@@ -311,8 +353,9 @@ export function assertVisibleFaces(
 }
 
 export function assertFacesAndCorners(probe: CanvasProbe): void {
-  // The home viewpoint, looking down the (1, 1, 1) diagonal.
-  assertVisibleFaces(probe, WHITE, GREEN, RED);
+  // The home viewpoint, looking down the (1, 1, 1) diagonal, each face at
+  // its plane's brightness. No glint reaches these three from here.
+  assertVisibleFaces(probe, UP_LIT, FRONT_LIT, RIGHT_LIT);
 
   for (const corner of probe.corners) {
     expect(corner).toEqual(BACKGROUND);

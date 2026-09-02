@@ -4,8 +4,10 @@ import {
   assertFacesAndCorners,
   assertSceneContract,
   assertVisibleFaces,
+  BACK_LIT,
   BLUE,
-  BODY,
+  FRONT_LIT,
+  isBody,
   expectedNet,
   FRONT_BLOCK,
   FRONT_RIGHT_COLUMN,
@@ -17,6 +19,8 @@ import {
   probeCanvas,
   QUARTER_TURN_DRAG,
   RED,
+  RIGHT_LIT,
+  UP_LIT,
   WHITE,
   YELLOW,
   type CanvasProbe,
@@ -136,9 +140,7 @@ function sameGrid(a: number[][], b: number[][]): boolean {
 
 /** Whether a cut surface is showing, which only happens mid-turn. */
 function showsBody(probe: CanvasProbe): boolean {
-  return probe.cubeGrid.some(
-    (cell) => JSON.stringify(cell) === JSON.stringify(BODY),
-  );
+  return probe.cubeGrid.some(isBody);
 }
 
 /** Presses the front face's right column, ready to drag. */
@@ -191,7 +193,7 @@ test('dragging the right column turns the cube and the net follows', async ({
 
   // The layer has swung away from the rest of the cube, so the cut it leaves
   // behind has to be filled rather than showing the background through it.
-  expect(midDrag.cubeGrid).toContainEqual(BODY);
+  expect(showsBody(midDrag)).toBe(true);
 
   await page.mouse.up();
 
@@ -285,7 +287,7 @@ test('dragging a net cell turns the cube', async ({ page }) => {
   // The gesture started in the net, but the turn is the cube's: the 3D view
   // shows it too, and comes back to rest along with the drawing below it.
   const turned = await probeCanvas(page);
-  expect(turned.cubeGrid).not.toContainEqual(BODY);
+  expect(showsBody(turned)).toBe(false);
   expect(sameGrid(turned.cubeGrid, atRest.cubeGrid)).toBe(false);
 
   expect(pageErrors).toEqual([]);
@@ -355,10 +357,10 @@ test('dragging the background sweeps the viewpoint, not the cube', async ({
 
   await expect
     .poll(async () => (await probeCanvas(page)).left)
-    .toEqual(RED);
+    .toEqual(RIGHT_LIT);
 
   const turned = await probeCanvas(page);
-  assertVisibleFaces(turned, WHITE, RED, BLUE);
+  assertVisibleFaces(turned, UP_LIT, RIGHT_LIT, BACK_LIT);
 
   // The viewpoint moved; the cube did not.
   expect(turned.net).toEqual(expectedNet());
@@ -382,7 +384,7 @@ test('a layer still turns after the viewpoint comes back round', async ({
 
   await expect
     .poll(async () => (await probeCanvas(page)).left)
-    .toEqual(GREEN);
+    .toEqual(FRONT_LIT);
 
   const home = await probeCanvas(page);
   const grab = await grabRightColumn(page, home);

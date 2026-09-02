@@ -42,6 +42,26 @@ constexpr Rgba kBlue{0, 70, 173, 255};       // -Z back
 constexpr Rgba kRed{183, 18, 52, 255};       // +X right
 constexpr Rgba kOrange{255, 88, 0, 255};     // -X left
 
+// Contract v4: the 3D view is lit. Each plane of the cube has one brightness,
+// a byte out of 255, worked out by hand in docs/tasks/04-rubiks-cube-domain.md
+// from the light's resting place; the net is a diagram and stays unlit.
+constexpr unsigned kLitUp = 215;     // +Y, the plane nearest the light
+constexpr unsigned kLitFront = 206;  // +Z
+constexpr unsigned kLitRight = 177;  // +X
+// The cut faces a turn opens lie one layer in, so their planes are their own:
+// the +Y cut at y = +1/3 of a U turn and the +X cut at x = +1/3 of an R turn.
+constexpr unsigned kLitCutUp = 221;
+constexpr unsigned kLitCutRight = 186;
+
+/** A colour at a brightness, in the integer arithmetic the engine uses. */
+constexpr Rgba lit(const Rgba& color, unsigned brightness)
+{
+    return Rgba{static_cast<std::uint8_t>((color[0] * brightness + 127) / 255),
+                static_cast<std::uint8_t>((color[1] * brightness + 127) / 255),
+                static_cast<std::uint8_t>((color[2] * brightness + 127) / 255),
+                color[3]};
+}
+
 struct Region {
     float x;
     float y;
@@ -148,17 +168,22 @@ const std::uint8_t* pixel_in_cube(const Sample& sample, std::uint32_t width,
 void require_pixel(const std::uint8_t* pixel, const Rgba& color)
 {
     // Channel-by-channel exact match; a byte-order mistake cannot slip past.
-    REQUIRE(pixel[0] == color[0]);
-    REQUIRE(pixel[1] == color[1]);
-    REQUIRE(pixel[2] == color[2]);
-    REQUIRE(pixel[3] == color[3]);
+    // Compared as integers so a failure prints numbers rather than bytes.
+    REQUIRE(int{pixel[0]} == int{color[0]});
+    REQUIRE(int{pixel[1]} == int{color[1]});
+    REQUIRE(int{pixel[2]} == int{color[2]});
+    REQUIRE(int{pixel[3]} == int{color[3]});
 }
 
 void require_cube_faces(std::uint32_t width, std::uint32_t height)
 {
-    require_pixel(pixel_in_cube(kUpSample, width, height), kWhite);
-    require_pixel(pixel_in_cube(kFrontSample, width, height), kGreen);
-    require_pixel(pixel_in_cube(kRightSample, width, height), kRed);
+    // Three faces at three brightnesses: a normal the wrong way round now
+    // shows up as the wrong shade as well as the wrong colour.
+    require_pixel(pixel_in_cube(kUpSample, width, height), lit(kWhite, kLitUp));
+    require_pixel(pixel_in_cube(kFrontSample, width, height),
+                  lit(kGreen, kLitFront));
+    require_pixel(pixel_in_cube(kRightSample, width, height),
+                  lit(kRed, kLitRight));
 }
 
 /** Reads the center of all 54 net cells and compares the whole grid. */
@@ -400,15 +425,16 @@ TEST_CASE("a sliding turn half way through rasterizes in both views")
     // it does not move, and neither does the color of a solved face.
     require_pixel(pixel_in_net(4.5f, 1.5f, kSize, kSize), kWhite);
 
-    // Meanwhile the 3D view is turning the same layer, which opens the cut.
-    REQUIRE(cube_region_shows(kBody, kSize, kSize));
+    // Meanwhile the 3D view is turning the same layer, which opens the cut:
+    // the still middle layer's top, lit as the +Y plane one layer down.
+    REQUIRE(cube_region_shows(lit(kBody, kLitCutUp), kSize, kSize));
 
     // Both views come back to rest together, and undoing the turn puts the
     // whole resting contract back exactly as it was.
     while (rubiks::app::advance(16.0)) {
     }
     REQUIRE(rubiks::app::render());
-    REQUIRE_FALSE(cube_region_shows(kBody, kSize, kSize));
+    REQUIRE_FALSE(cube_region_shows(lit(kBody, kLitCutUp), kSize, kSize));
 
     REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Up, 1, 1, -1));
     while (rubiks::app::advance(16.0)) {
@@ -441,7 +467,8 @@ TEST_CASE("a turn across a cut band half way through rasterizes in both views")
     // face stays one color through it, and its middle never moves.
     require_pixel(pixel_in_net(7.5f, 4.5f, kSize, kSize), kRed);
 
-    REQUIRE(cube_region_shows(kBody, kSize, kSize));
+    // The cut this turn opens faces +X, one layer in from the right face.
+    REQUIRE(cube_region_shows(lit(kBody, kLitCutRight), kSize, kSize));
 
     // And the turn arrives exactly where the commit puts the cube, so the
     // frame after it is the same picture.

@@ -254,6 +254,42 @@ Native pipeline 검증 (pixel이 아니라 `RenderScene` 수준):
 - 3D sample은 각 면 중앙 sticker 다각형 내부, seam sample은 어떤 sticker에도 속하지 않음
 - Move 적용 후 두 scene 모두에 색 변화가 반영됨
 
+## Rendered scene contract v4
+
+[Phase 19](./19-lighting-and-shadow.md)가 3D 뷰에 조명을 넣으면서 개정되었습니다. **검증 지점과 배경색, 전개도 54칸, 모서리는 v3 그대로**이고, 바뀐 것은 3D sample 세 지점의 기대 색입니다. 전개도는 도식이라 조명을 받지 않으므로 palette 색 그대로입니다.
+
+**3D sample의 기대 색은 palette 색에 그 면이 놓인 평면의 밝기를 곱한 값**입니다. 밝기는 Blinn–Phong의 ambient + diffuse 항을 평면마다 하나씩 계산한 byte이고, 곱셈은 정수로 고정되어 있습니다.
+
+```text
+lit(c, b) = (c * b + 127) / 255        채널마다, 정수 나눗셈
+```
+
+밝기 `b`는 광원 `(2.5, 4.7, 4.2)`, ambient 0.60, diffuse 0.40에서 각 평면의 "큐브 중심에 가장 가까운 점"에서 계산한 `round(255 * (0.60 + 0.40 * max(N·L, 0)))`입니다. 스티커 평면은 큐브 면에서 seam만큼 안쪽(`N = 3`에서 0.9733)에 있고, 광원 위치는 아래 모든 값이 반올림 경계에서 0.3 이상 떨어지도록 골랐습니다. 그 덕에 2×2부터 9×9까지 보이는 세 면의 byte가 같습니다.
+
+| 평면 | 밝기 `b` | solved cube의 sample 색 |
+|---|---|---|
+| +Y (위) | 215 | white → `(215, 215, 215)` |
+| +Z (앞) | 206 | green → `(0, 125, 58)` |
+| +X (오른쪽) | 177 | red → `(127, 12, 36)` |
+| −Y, −X, −Z | 153 | ambient만; 광원을 등지고 있음 |
+
+회전 중 드러나는 단면(`kBodyColor`)은 한 층 안쪽 평면에 있어 자기 밝기를 갖습니다. `N = 3`에서 `±1/3` 평면의 값입니다.
+
+| 단면 평면 | 밝기 | 어느 회전에서 보이나 |
+|---|---|---|
+| x = +1/3, +X | 186 | R |
+| x = −1/3, +X | 195 | L |
+| y = +1/3, +Y | 221 | U |
+| y = −1/3, +Y | 226 | D |
+| z = +1/3, +Z | 213 | F |
+| z = −1/3, +Z | 219 | B |
+
+**하이라이트와 그림자는 sample에 닿지 않습니다.** 홈 시점에서는 보이는 세 면 어디에도 스페큘러 반사점이 놓이지 않으므로 세 sample은 순수한 `lit()` 값이고, 이것은 Phase 19의 패스 test가 고정합니다. 그림자는 큐브 실루엣을 InvAlpha mask로 지워 큐브 안쪽(seam 포함)에 나타나지 않으므로 seam sample은 배경색 그대로입니다. **다른 시점**(궤도 카메라)에서는 면에 하이라이트가 맺힐 수 있어 byte 일치가 성립하지 않습니다. 시점을 돌린 뒤 "어느 면이 어디 있나"를 묻는 test는 색 위에 흰색 Screen이 같은 비율로 얹힌 것을 허용하는 비교(`require_pixel_reads`)를 씁니다.
+
+High contrast palette는 `Light::unlit()`(ambient 1, diffuse 0, specular 0) 아래 그려지므로 v3와 같이 palette 색 그대로입니다.
+
+이 계약의 숫자는 test가 엔진에서 읽는 것이 아니라 여기 적힌 것을 옮겨 쓴 것입니다. 광원 위치, ambient, diffuse, 반올림 공식, `kStickerScale` 중 하나라도 바꾸면 이 표를 다시 유도하고 [`RenderContractTest.cpp`](../../tests/app/RenderContractTest.cpp), [`PointerInteractionTest.cpp`](../../tests/app/PointerInteractionTest.cpp), [`sceneContract.ts`](../../web/tests/e2e/sceneContract.ts)를 함께 고쳐야 합니다.
+
 ## Implementation steps
 
 ### 1. Cube domain

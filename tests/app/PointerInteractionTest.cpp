@@ -1,6 +1,7 @@
 #include "app/Application.hpp"
 
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -35,6 +36,32 @@ constexpr Rgba kBackground{32, 32, 32, 255};
 
 /** The cut surface, only ever on show while a layer is turning. */
 constexpr Rgba kBody{70, 74, 82, 255};
+
+// The 3D view is lit (render contract v4): one brightness per plane of the
+// cube, from docs/tasks/04-rubiks-cube-domain.md. The three planes turned
+// away from the light are at the ambient floor.
+constexpr unsigned kLitUp = 215;
+constexpr unsigned kLitFront = 206;
+constexpr unsigned kLitRight = 177;
+constexpr unsigned kLitAway = 153;
+/** The +Y cut a U turn opens, one layer down from the top. */
+constexpr unsigned kLitCutUp = 221;
+
+constexpr Rgba lit(const Rgba& color, unsigned brightness)
+{
+    return Rgba{static_cast<std::uint8_t>((color[0] * brightness + 127) / 255),
+                static_cast<std::uint8_t>((color[1] * brightness + 127) / 255),
+                static_cast<std::uint8_t>((color[2] * brightness + 127) / 255),
+                color[3]};
+}
+
+// The six faces as the 3D view shows them: a sticker's colour at its plane's
+// brightness. Named by the face so an orbit test reads as which face is where.
+constexpr Rgba kUpLit = lit(kWhite, kLitUp);
+constexpr Rgba kFrontLit = lit(kGreen, kLitFront);
+constexpr Rgba kRightLit = lit(kRed, kLitRight);
+constexpr Rgba kBackLit = lit(kBlue, kLitAway);
+constexpr Rgba kLeftLit = lit(kOrange, kLitAway);
 
 // The three face centers of the rendered scene contract, as fractions of the
 // square 3D region. Which colors they read depends on the viewpoint, which is
@@ -129,10 +156,11 @@ const std::uint8_t* up_face_cell(int column, int row)
 
 void require_pixel(const std::uint8_t* pixel, const Rgba& color)
 {
-    REQUIRE(pixel[0] == color[0]);
-    REQUIRE(pixel[1] == color[1]);
-    REQUIRE(pixel[2] == color[2]);
-    REQUIRE(pixel[3] == color[3]);
+    // Compared as integers so a failure prints numbers rather than bytes.
+    REQUIRE(int{pixel[0]} == int{color[0]});
+    REQUIRE(int{pixel[1]} == int{color[1]});
+    REQUIRE(int{pixel[2]} == int{color[2]});
+    REQUIRE(int{pixel[3]} == int{color[3]});
 }
 
 /** One column of the net's top face, all three cells. */
@@ -170,14 +198,46 @@ const std::uint8_t* cube_sample(const float (&sample)[2], std::uint32_t width,
                     rect.y + sample[1] * rect.height, width);
 }
 
+/**
+ * Whether a pixel is a colour, or that colour with a glint on it.
+ *
+ * From some viewpoints the light reflects off a face straight into the eye,
+ * and the renderer screens white onto it there: every channel moves the same
+ * fraction of the way to 255. The faces these tests name are the ones at the
+ * sample points whatever the glint, so a pixel counts when one such fraction
+ * explains all three channels.
+ */
+void require_pixel_reads(const std::uint8_t* pixel, const Rgba& color)
+{
+    REQUIRE(int{pixel[3]} == int{color[3]});
+
+    // The channel with the most headroom fixes the fraction most precisely.
+    int widest = 0;
+    for (int i = 1; i < 3; ++i) {
+        if (255 - color[i] > 255 - color[widest]) widest = i;
+    }
+    const int headroom = 255 - color[widest];
+    const double fraction =
+        headroom > 0 ? double(int{pixel[widest]} - int{color[widest]}) / headroom
+                     : 0.0;
+    REQUIRE(fraction >= 0.0);
+    REQUIRE(fraction <= 1.0);
+
+    for (int i = 0; i < 3; ++i) {
+        const double expected = color[i] + fraction * (255 - color[i]);
+        INFO("channel " << i << " with a glint of " << fraction);
+        REQUIRE(std::abs(int{pixel[i]} - expected) <= 2.0);
+    }
+}
+
 /** The three visible face centers, in screen order. */
 void require_visible_faces(const Rgba& top, const Rgba& left,
                            const Rgba& right)
 {
     REQUIRE(rubiks::app::render());
-    require_pixel(cube_sample(kUpSample, kCanvas, kCanvas), top);
-    require_pixel(cube_sample(kLeftSample, kCanvas, kCanvas), left);
-    require_pixel(cube_sample(kRightSample, kCanvas, kCanvas), right);
+    require_pixel_reads(cube_sample(kUpSample, kCanvas, kCanvas), top);
+    require_pixel_reads(cube_sample(kLeftSample, kCanvas, kCanvas), left);
+    require_pixel_reads(cube_sample(kRightSample, kCanvas, kCanvas), right);
 }
 
 /** The whole solved net, which no viewpoint change may disturb. */
@@ -584,19 +644,20 @@ TEST_CASE("a net drag turns the 3D view with it")
     const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
     REQUIRE(rubiks::app::render());
-    REQUIRE_FALSE(cube_region_shows(kBody));
+    REQUIRE_FALSE(cube_region_shows(lit(kBody, kLitCutUp)));
 
     drag_net_top_row_left();
     REQUIRE(rubiks::app::render());
 
     // One rotation drives both views, so a layer swung away in the net has
-    // swung away in the cube too, leaving the cut surface on show.
-    REQUIRE(cube_region_shows(kBody));
+    // swung away in the cube too, leaving the cut surface on show -- lit as
+    // the +Y plane one layer down.
+    REQUIRE(cube_region_shows(lit(kBody, kLitCutUp)));
 
     rubiks::app::pointer_up();
     settle();
     REQUIRE(rubiks::app::render());
-    REQUIRE_FALSE(cube_region_shows(kBody));
+    REQUIRE_FALSE(cube_region_shows(lit(kBody, kLitCutUp)));
 
 }
 
@@ -801,7 +862,7 @@ TEST_CASE("dragging the background sweeps the viewpoint")
     const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
     // Home shows the +Z, +X and +Y faces around the (1, 1, 1) diagonal.
-    require_visible_faces(kWhite, kGreen, kRed);
+    require_visible_faces(kUpLit, kFrontLit, kRightLit);
 
     // A quarter turn brings the next corner round, so the face that was on
     // the right moves to the left and the back face takes its place.
@@ -809,7 +870,7 @@ TEST_CASE("dragging the background sweeps the viewpoint")
     rubiks::app::pointer_up();
     settle();
 
-    require_visible_faces(kWhite, kRed, kBlue);
+    require_visible_faces(kUpLit, kRightLit, kBackLit);
 
     // The cube itself never moved.
     require_solved_net();
@@ -826,7 +887,7 @@ TEST_CASE("sweeping the other way brings the opposite corner round")
     rubiks::app::pointer_up();
     settle();
 
-    require_visible_faces(kWhite, kOrange, kGreen);
+    require_visible_faces(kUpLit, kLeftLit, kFrontLit);
     require_solved_net();
 
 }
@@ -847,7 +908,7 @@ TEST_CASE("a press between two frames sees the viewpoint it was aimed at")
     rubiks::app::pointer_up();
     settle();
 
-    require_visible_faces(kWhite, kRed, kBlue);
+    require_visible_faces(kUpLit, kRightLit, kBackLit);
 
 }
 
@@ -863,7 +924,7 @@ TEST_CASE("a resize keeps the viewpoint and applies the last sweep")
     REQUIRE(rubiks::app::resize(kCanvas, kCanvas));
     settle();
 
-    require_visible_faces(kWhite, kRed, kBlue);
+    require_visible_faces(kUpLit, kRightLit, kBackLit);
 
 }
 
@@ -880,14 +941,14 @@ TEST_CASE("scramble and reset keep the viewpoint the drag left behind")
 
     // Face centers never move under outer-face turns, so a scrambled cube
     // still names the faces around the viewpoint by the same three colors.
-    require_visible_faces(kWhite, kRed, kBlue);
+    require_visible_faces(kUpLit, kRightLit, kBackLit);
 
     orbit_left(1.0f);
     rubiks::app::pointer_up();
     rubiks::app::reset_cube();
     settle();
 
-    require_visible_faces(kWhite, kBlue, kOrange);
+    require_visible_faces(kUpLit, kBackLit, kLeftLit);
     require_solved_net();
 
 }
@@ -898,13 +959,13 @@ TEST_CASE("shutdown returns the viewpoint home")
     orbit_left(1.0f);
     rubiks::app::pointer_up();
     settle();
-    require_visible_faces(kWhite, kRed, kBlue);
+    require_visible_faces(kUpLit, kRightLit, kBackLit);
 
     rubiks::app::shutdown();
     REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
 
     // Back to the viewpoint the rendered scene contract was derived from.
-    require_visible_faces(kWhite, kGreen, kRed);
+    require_visible_faces(kUpLit, kFrontLit, kRightLit);
 
     rubiks::app::shutdown();
 }
@@ -918,7 +979,7 @@ TEST_CASE("a layer still turns correctly after the viewpoint moves")
     orbit_left(4.0f);
     rubiks::app::pointer_up();
     settle();
-    require_visible_faces(kWhite, kGreen, kRed);
+    require_visible_faces(kUpLit, kFrontLit, kRightLit);
 
     drag_upward(kQuarterTurnDrag);
     rubiks::app::pointer_up();
@@ -1083,7 +1144,7 @@ TEST_CASE("a press over the cube while a sequence plays only looks around it")
 {
     const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
-    require_visible_faces(kWhite, kGreen, kRed);
+    require_visible_faces(kUpLit, kFrontLit, kRightLit);
     REQUIRE(rubiks::app::scramble(21U, 6U));
 
     // Straight onto a sticker, which at any other moment takes hold of the
@@ -1101,7 +1162,7 @@ TEST_CASE("a press over the cube while a sequence plays only looks around it")
     settle();
 
     // A quarter turn round, and the sequence still owns every move made.
-    require_visible_faces(kWhite, kRed, kBlue);
+    require_visible_faces(kUpLit, kRightLit, kBackLit);
     REQUIRE(rubiks::app::committed_move_count() == 0);
     REQUIRE_FALSE(rubiks::app::is_solved());
 }
@@ -1125,7 +1186,7 @@ TEST_CASE("a sequence plays on while the viewpoint is being swept")
     rubiks::app::pointer_up();
     settle();
 
-    require_visible_faces(kWhite, kRed, kBlue);
+    require_visible_faces(kUpLit, kRightLit, kBackLit);
     REQUIRE(rubiks::app::committed_move_count() == 0);
     REQUIRE_FALSE(rubiks::app::is_solved());
 }
@@ -1168,5 +1229,6 @@ TEST_CASE("a press while a sequence plays in the flat view starts nothing")
     // that had gone NaN could not draw the cube at all.
     REQUIRE(rubiks::app::set_view_mode(rubiks::graphics::ViewMode::Both));
     REQUIRE(rubiks::app::set_flat_style(rubiks::graphics::FlatStyle::Net));
-    require_visible_faces(kWhite, kGreen, kRed);
+    require_visible_faces(kUpLit, kFrontLit, kRightLit);
 }
+

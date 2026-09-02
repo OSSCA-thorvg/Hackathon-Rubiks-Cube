@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import {
   assertSceneContract,
-  BODY,
+  isBody,
   FRONT_RIGHT_COLUMN,
   pagePointInCube,
   probeCanvas,
@@ -199,9 +199,7 @@ test('a scramble is turned into the cube where it can be watched', async ({
     .poll(
       async () => {
         const probe = await probeCanvas(page);
-        return probe.cubeGrid.some(
-          (pixel) => pixel.join() === BODY.join(),
-        );
+        return probe.cubeGrid.some(isBody);
       },
       { timeout: 5000 },
     )

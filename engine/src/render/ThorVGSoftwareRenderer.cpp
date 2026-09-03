@@ -97,7 +97,42 @@ bool add_gaussian_blur(tvg::Scene& scene, float sigma, int quality) noexcept
                      border, quality) == tvg::Result::Success;
 }
 
-/** White at `alpha` in the middle, `mid` half way out, nothing at the edge. */
+/**
+ * The other effect call, pinned the same way: four ints for the colour, three
+ * doubles for angle, distance and blur, an int for quality.
+ */
+bool add_drop_shadow(tvg::Scene& scene, const graphics::Color& tint,
+                     std::uint8_t alpha, float angle_degrees, float distance,
+                     float sigma, int quality) noexcept
+{
+    const int r = tint.r;
+    const int g = tint.g;
+    const int b = tint.b;
+    const int opacity = alpha;
+    const double angle_arg = angle_degrees;
+    const double distance_arg = distance;
+    const double sigma_arg = std::max(static_cast<double>(sigma), 0.01);
+    return scene.add(tvg::SceneEffect::DropShadow, r, g, b, opacity, angle_arg,
+                     distance_arg, sigma_arg, quality) == tvg::Result::Success;
+}
+
+/**
+ * The shadow colour multiplied into the ground, worked out once rather than
+ * composed with a multiply blend: the ground is one flat colour, so the two
+ * are the same picture, and the blend was measured at more than a millisecond
+ * a frame for a layer it had to composite. Both shadows -- the one the cube
+ * casts on the ground and the one under a piece lifted off the net -- are
+ * this colour, so they read as the same material.
+ */
+graphics::Color shadow_tint(const graphics::Color& background) noexcept
+{
+    return graphics::Color{
+        static_cast<std::uint8_t>(background.r * graphics::kShadowColor.r / 255),
+        static_cast<std::uint8_t>(background.g * graphics::kShadowColor.g / 255),
+        static_cast<std::uint8_t>(background.b * graphics::kShadowColor.b / 255),
+        255};
+}
+
 /**
  * A glow over an ellipse: the unit radial falloff carried onto the screen by
  * an affine map whose columns are the ellipse's semi-axes and whose
@@ -403,21 +438,26 @@ bool ThorVGSoftwareRenderer::rebuild_canvas(
         }
     }
 
+    // Whatever is lifted off the drawing goes over everything at rest, lowest
+    // storey first, each storey with its own shadow.
+    for (const auto& group : scene.groups) {
+        if (!draw_group(group)) return false;
+    }
+
     // Strokes last, so a guide line reads on top of the stickers it crosses.
     if (!stroke_paths(scene.strokes)) return false;
 
     return true;
 }
 
-bool ThorVGSoftwareRenderer::draw_highlight(
-    const graphics::RenderFace& face,
-    const graphics::RenderHighlight& highlight) noexcept
-{
-    auto* shape = add_shape(*canvas_);
-    if (!shape) return false;
+namespace {
 
+/** The glint on one face, drawn into a shape already placed where the face is. */
+bool glow_face(tvg::Shape& shape, const graphics::RenderFace& face,
+               const graphics::RenderHighlight& highlight) noexcept
+{
     // The same outline as the face, so the glow is cut to the sticker.
-    if (!append_polygon(*shape, face.points)) return false;
+    if (!append_polygon(shape, face.points)) return false;
 
     // The ellipse through the four projected rim points: its centre is their
     // mean and its semi-axes half the distance between each opposite pair.
@@ -434,8 +474,51 @@ bool ThorVGSoftwareRenderer::draw_highlight(
     // screen blend of white -- c + a(255 - c) either way -- so it brightens a
     // sticker towards white without hiding which colour it was, and without
     // the composition layer a blend mode would ask for on every glint.
-    return fill_glow(*shape, centre, axis_a, axis_b,
+    return fill_glow(shape, centre, axis_a, axis_b,
                      graphics::Color{255, 255, 255, 255}, highlight.stops);
+}
+
+}  // namespace
+
+bool ThorVGSoftwareRenderer::draw_highlight(
+    const graphics::RenderFace& face,
+    const graphics::RenderHighlight& highlight) noexcept
+{
+    auto* shape = add_shape(*canvas_);
+    if (!shape) return false;
+    return glow_face(*shape, face, highlight);
+}
+
+bool ThorVGSoftwareRenderer::draw_group(
+    const graphics::RenderGroup& group) noexcept
+{
+    if (group.faces.empty()) return true;
+
+    // One scene for the storey: the drop shadow is of the scene's silhouette,
+    // which is the pieces' combined outline, so joined pieces cast one shadow
+    // between them and none on each other. This is the composition layer the
+    // effect needs, and the only one the group costs.
+    auto* storey = add_scene(*canvas_);
+    if (!storey) return false;
+
+    for (const auto& face : group.faces) {
+        auto* shape = add_shape(*storey);
+        if (!shape) return false;
+        if (!append_polygon(*shape, face.points)) return false;
+        if (!fill_face(*shape, face)) return false;
+        for (const auto& glint : face.highlights) {
+            auto* glow = add_shape(*storey);
+            if (!glow) return false;
+            if (!glow_face(*glow, face, glint)) return false;
+        }
+    }
+
+    // Down and to the right, in the ground shadow's colour, as far and as soft
+    // as the geometry said. Nothing here knows what a storey or a net is.
+    return add_drop_shadow(*storey, shadow_tint(background_), group.shadow.alpha,
+                           graphics::kLiftShadowAngleDegrees,
+                           group.shadow.distance, group.shadow.sigma,
+                           graphics::kShadowBlurQuality);
 }
 
 bool ThorVGSoftwareRenderer::draw_shadow(
@@ -443,15 +526,7 @@ bool ThorVGSoftwareRenderer::draw_shadow(
 {
     if (shadow.opacity == 0 || shadow.polygons.empty()) return true;
 
-    // The shadow colour multiplied into the ground, worked out here once
-    // rather than composed with a multiply blend: the ground is one flat
-    // colour, so the two are the same picture, and the blend was measured at
-    // more than a millisecond a frame for a layer it had to composite.
-    const graphics::Color tint{
-        static_cast<std::uint8_t>(background_.r * graphics::kShadowColor.r / 255),
-        static_cast<std::uint8_t>(background_.g * graphics::kShadowColor.g / 255),
-        static_cast<std::uint8_t>(background_.b * graphics::kShadowColor.b / 255),
-        255};
+    const graphics::Color tint = shadow_tint(background_);
 
     // Every composition layer is a pass over the shadow's whole footprint, so
     // there is exactly one: the scene the blur needs. Everything else -- the

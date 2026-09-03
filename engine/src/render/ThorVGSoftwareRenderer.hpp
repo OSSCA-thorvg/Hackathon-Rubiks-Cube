@@ -104,6 +104,15 @@ private:
      */
     [[nodiscard]] bool draw_shadow(const graphics::RenderShadow& shadow) noexcept;
 
+    /**
+     * A storey of lifted pieces as one scene with a drop shadow.
+     *
+     * The one place the renderer uses ThorVG's DropShadow: a screen-space
+     * shadow of a silhouette, which is wrong for a cube standing on a floor
+     * and exactly right for a piece held up off a flat drawing.
+     */
+    [[nodiscard]] bool draw_group(const graphics::RenderGroup& group) noexcept;
+
     /** The glint on one face: a radial falloff screened onto its outline. */
     [[nodiscard]] bool draw_highlight(
         const graphics::RenderFace& face,

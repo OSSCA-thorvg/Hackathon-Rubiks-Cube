@@ -668,26 +668,40 @@ RenderScene build_net_scene(const cube::CubeState& state, const Rect& rect,
         }
     }
 
-    // A storey at a time, from the ground up: its shadows all together and
-    // then the pieces themselves. Shadows first within a storey, so all of the
-    // shadow falls on what is below and none of it on what it belongs to --
-    // drawn one over the last, a piece would shade the piece it is joined to.
-    // Storey by storey, so what is higher shades what is lower and covers it.
+    // A storey at a time, from the ground up. A lifted storey is one group
+    // with one shadow -- of the pieces' combined outline, so a piece does not
+    // shade the piece it is joined to, and all of the shadow falls on what is
+    // below. The renderer draws every group over every resting face, and the
+    // groups in this order, so what is higher shades what is lower and covers
+    // it. A storey that is not lifted is not a group: its pieces go in with
+    // the resting faces, and the frame is the same frame it always was.
     const auto raise = [&](std::vector<RenderFace>& pieces, float storey) {
-        const float offset = kNetLiftCells * metrics.cell * opening * storey;
+        if (pieces.empty()) return;
+
         const auto shade = static_cast<std::uint8_t>(
             std::lround(kNetShadowAlpha * opening));
-
         for (auto& quad : pieces) {
             scale_quad(quad, 1.0f + kNetLiftScale * opening * storey);
-
-            if (shade == 0) continue;
-            RenderFace shadow = quad;
-            translate_quad(shadow, offset, offset);
-            shadow.color = Color{0, 0, 0, shade};
-            scene.faces.push_back(shadow);
         }
-        scene.faces.insert(scene.faces.end(), pieces.begin(), pieces.end());
+
+        if (shade == 0) {
+            scene.faces.insert(scene.faces.end(), pieces.begin(), pieces.end());
+            return;
+        }
+
+        // So far right and so far down, in cells but never under a pixel a
+        // storey: the renderer moves the shadow by whole pixels, and the band
+        // has to fall further than the face at the largest cube as well as at
+        // the smallest. The shadow's distance is along the diagonal.
+        const float along_axis =
+            storey * opening *
+            std::max(kNetLiftCells * metrics.cell, kNetLiftMinPixels);
+        const float distance = along_axis * kNetLiftDiagonal;
+
+        RenderGroup group;
+        group.faces = std::move(pieces);
+        group.shadow = LiftShadow{distance, shade, kNetShadowSigmaShare * distance};
+        scene.groups.push_back(std::move(group));
     };
 
     raise(turning, kNetFaceStorey);

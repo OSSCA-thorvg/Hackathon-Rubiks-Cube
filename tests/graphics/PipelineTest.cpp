@@ -511,3 +511,59 @@ TEST_CASE("the axis gizmo reports which way each axis points from here")
     // A region with no extent is a view mode that is not being shown.
     REQUIRE(build_axis_gizmo(default_camera(1.0f), Rect{}).strokes.empty());
 }
+
+TEST_CASE("composing scenes carries every list across, in order")
+{
+    // Every view builds its own scene and the application appends them into
+    // one. A list the append forgets vanishes without a word -- the strokes
+    // once did -- so each of them is checked here, the target's first.
+    const auto face_of = [](Color color) {
+        RenderFace face;
+        face.color = color;
+        return face;
+    };
+    const auto stroke_of = [](float width) {
+        RenderStroke stroke;
+        stroke.width = width;
+        return stroke;
+    };
+
+    RenderScene target;
+    target.underlays.push_back(stroke_of(1.0f));
+    target.faces.push_back(face_of(Color{255, 0, 0, 255}));
+    target.strokes.push_back(stroke_of(3.0f));
+    target.bodies.push_back({Vec2{0.0f, 0.0f}, Vec2{1.0f, 0.0f}, Vec2{0.0f, 1.0f}});
+
+    RenderScene source;
+    source.underlays.push_back(stroke_of(2.0f));
+    source.faces.push_back(face_of(Color{0, 255, 0, 255}));
+    source.strokes.push_back(stroke_of(4.0f));
+    RenderShadow shadow;
+    shadow.opacity = 80;
+    source.shadow = shadow;
+    RenderGroup lower;
+    lower.faces.push_back(face_of(Color{0, 0, 255, 255}));
+    lower.shadow = LiftShadow{3.0f, 100, 1.5f};
+    RenderGroup upper;
+    upper.faces.push_back(face_of(Color{255, 255, 0, 255}));
+    upper.shadow = LiftShadow{6.0f, 100, 3.0f};
+    source.groups.push_back(lower);
+    source.groups.push_back(upper);
+
+    append_scene(target, std::move(source));
+
+    REQUIRE(target.underlays.size() == 2);
+    REQUIRE(target.underlays[1].width == Approx(2.0f));
+    REQUIRE(target.faces.size() == 2);
+    REQUIRE(target.faces[0].color == Color{255, 0, 0, 255});
+    REQUIRE(target.faces[1].color == Color{0, 255, 0, 255});
+    REQUIRE(target.strokes.size() == 2);
+    REQUIRE(target.strokes[1].width == Approx(4.0f));
+    REQUIRE(target.bodies.size() == 1);
+    REQUIRE(target.shadow);
+    REQUIRE(target.shadow->opacity == 80);
+    REQUIRE(target.groups.size() == 2);
+    REQUIRE(target.groups[0].shadow.distance == Approx(3.0f));
+    REQUIRE(target.groups[1].shadow.distance == Approx(6.0f));
+    REQUIRE(target.groups[1].faces[0].color == Color{255, 255, 0, 255});
+}

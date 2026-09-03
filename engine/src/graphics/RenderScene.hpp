@@ -77,6 +77,43 @@ struct RenderShadow {
     Rect clip;
 };
 
+/**
+ * The shadow under a piece lifted off the flat drawing, in pixels.
+ *
+ * Not a lit shadow: the net is a diagram, and this says "this is held up"
+ * rather than "the light is over there". So it has a distance and a softness
+ * but no direction of its own -- every lift shadow falls the same way, down
+ * and to the right, by `kLiftShadowAngleDegrees`.
+ */
+struct LiftShadow {
+    /** How far the silhouette is pushed, in pixels. */
+    float distance = 0.0f;
+    std::uint8_t alpha = 0;
+    /** Gaussian sigma of the edge, in pixels. */
+    float sigma = 0.0f;
+};
+
+/**
+ * Where a lift shadow falls: straight down and to the right.
+ *
+ * ThorVG's convention for a drop shadow's angle, which is the one the renderer
+ * has to speak -- 0 degrees is up and the angle grows clockwise.
+ */
+inline constexpr float kLiftShadowAngleDegrees = 135.0f;
+
+/**
+ * Faces held together off the drawing, casting one shadow between them.
+ *
+ * The pieces a turn carries are drawn as a group rather than one by one, so
+ * the shadow is of their combined silhouette: joined pieces do not shade each
+ * other, and the shadow falls only on what lies below the group. A group
+ * exists only while it is lifted; a piece at rest is an ordinary face.
+ */
+struct RenderGroup {
+    std::vector<RenderFace> faces;
+    LiftShadow shadow;
+};
+
 /** One cubic section of a path, continuing from the point before it. */
 struct RenderSegment {
     math::Vec2 control_a{};
@@ -127,6 +164,13 @@ struct RenderScene {
      */
     std::vector<std::vector<math::Vec2>> bodies;
     std::vector<RenderFace> faces;
+    /**
+     * Drawn after the faces and before the strokes: pieces lifted off the
+     * drawing, each group with its shadow, lowest storey first. Whatever is
+     * lifted is over everything at rest, by construction rather than by the
+     * order the geometry happened to produce.
+     */
+    std::vector<RenderGroup> groups;
     /** Drawn after the faces, so guide lines read on top of the stickers. */
     std::vector<RenderStroke> strokes;
 };
@@ -140,6 +184,9 @@ inline void append_scene(RenderScene& target, RenderScene&& source)
     target.faces.insert(target.faces.end(),
                         std::make_move_iterator(source.faces.begin()),
                         std::make_move_iterator(source.faces.end()));
+    target.groups.insert(target.groups.end(),
+                         std::make_move_iterator(source.groups.begin()),
+                         std::make_move_iterator(source.groups.end()));
     target.strokes.insert(target.strokes.end(),
                           std::make_move_iterator(source.strokes.begin()),
                           std::make_move_iterator(source.strokes.end()));

@@ -303,7 +303,7 @@ auto scene =
 renderer.render(scene);
 ```
 
-`Shadow`와 `Light`는 [Phase 19](./tasks/19-lighting-and-shadow.md)에서 들어왔습니다. 조명은 renderer가 아니라 pass입니다 — RenderScene은 여전히 ThorVG를 모르고, 그림자 그룹·몸체 실루엣·평면 음영·광택 타원을 기하와 색으로만 넘기며, 그것을 gradient fill·fill rule·Scene 합성·GaussianBlur·clip으로 옮기는 것은 renderer의 일입니다.
+`Shadow`와 `Light`는 [Phase 19](./tasks/19-lighting-and-shadow.md)에서 들어왔습니다. 조명은 renderer가 아니라 pass입니다 — RenderScene은 여전히 ThorVG를 모르고, 그림자 그룹·몸체 실루엣·평면 음영·광택 타원을 기하와 색으로만 넘기며, 그것을 gradient fill·fill rule·Scene 합성·GaussianBlur·clip으로 옮기는 것은 renderer의 일입니다. 전개도에서 들린 조각의 그림자는 [Phase 19.5](./tasks/19.5-net-lift-shadow.md)에서 `RenderGroup`(층 하나의 조각 묶음 + `LiftShadow`)으로 넘어가고, renderer가 Scene 하나에 `SceneEffect::DropShadow`를 걸어 그립니다 — 3D 바닥에는 맞지 않아 기각한 효과가 종이에서 들린 조각에는 맞는 자리입니다.
 
 꼭 `operator|`를 실제로 구현할 필요는 없습니다. 중요한 건:
 

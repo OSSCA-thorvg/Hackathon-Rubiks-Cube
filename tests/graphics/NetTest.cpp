@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <optional>
 #include <set>
@@ -174,13 +175,16 @@ rubiks::math::Vec2 center_of(const RenderFace& face)
 }
 
 /**
- * Whether a quad is a sticker rather than the shadow a moving one casts.
- *
- * No sticker is black, so the shadows can be told from them by color alone.
+ * Every face in the order the renderer lays them down: the drawing at rest,
+ * then whatever a turn is holding off it, lowest storey first.
  */
-bool is_sticker(const RenderFace& face)
+std::vector<RenderFace> drawn_faces(const RenderScene& scene)
 {
-    return !(face.color.r == 0 && face.color.g == 0 && face.color.b == 0);
+    std::vector<RenderFace> faces = scene.faces;
+    for (const auto& group : scene.groups) {
+        faces.insert(faces.end(), group.faces.begin(), group.faces.end());
+    }
+    return faces;
 }
 
 /**
@@ -193,9 +197,8 @@ std::optional<RenderFace> quad_at(const RenderScene& scene, float x, float y)
 {
     const float limit = 0.15f * cell_side();
 
-    for (auto face = scene.faces.rbegin(); face != scene.faces.rend(); ++face) {
-        if (!is_sticker(*face)) continue;
-
+    const auto faces = drawn_faces(scene);
+    for (auto face = faces.rbegin(); face != faces.rend(); ++face) {
         const auto center = center_of(*face);
         if (std::abs(center.x - x) < limit && std::abs(center.y - y) < limit) {
             return *face;
@@ -667,35 +670,41 @@ TEST_CASE("a piece on the move is drawn over the cells it passes")
     const RenderScene scene = build_net_scene(
         state, rect, ActiveRotation{Axis::Z, layer(kLast), 45.0f, kHeldOpen});
 
-    // Every one of them after every resting cell, so nothing a piece crosses
-    // can be drawn back over it.
-    std::size_t stickers = 0;
-    std::size_t resting_after_a_shadow = 0;
-    bool shadowed = false;
+    // Every resting cell is an ordinary face, and every moving one is held
+    // off the drawing in a group -- one a storey -- which the renderer draws
+    // after all of the faces, so nothing a piece crosses can be drawn back
+    // over it. The face that spins in place is the lower storey.
+    REQUIRE(scene.faces.size() == 6 * kSize * kSize - kMoving);
+    REQUIRE(scene.groups.size() == 2);
+    REQUIRE(scene.groups[0].faces.size() == kSize * kSize);
+    REQUIRE(scene.groups[1].faces.size() == 4 * kSize);
 
-    for (const auto& face : scene.faces) {
-        if (!is_sticker(face)) {
-            shadowed = true;
-            continue;
-        }
-        ++stickers;
-        if (shadowed) ++resting_after_a_shadow;
+    // No shadow is a face any more: the shadow is the group's, and nothing
+    // drawn is anything but a sticker at full strength.
+    for (const auto& face : drawn_faces(scene)) {
+        REQUIRE(face.color.a == 255);
+        REQUIRE_FALSE((face.color.r == 0 && face.color.g == 0 &&
+                       face.color.b == 0));
     }
 
-    REQUIRE(stickers == 6 * kSize * kSize);
-    REQUIRE(resting_after_a_shadow == kMoving);
+    // The band is held a storey above the face, so its shadow falls twice as
+    // far, and each shadow's edge is as soft as its distance says.
+    const LiftShadow& under_face = scene.groups[0].shadow;
+    const LiftShadow& under_band = scene.groups[1].shadow;
+    REQUIRE(under_face.distance == Approx(kNetLiftCells * cell_side() *
+                                          kNetFaceStorey * kNetLiftDiagonal));
+    REQUIRE(under_band.distance == Approx(2.0f * under_face.distance));
+    REQUIRE(under_face.alpha == static_cast<std::uint8_t>(kNetShadowAlpha));
+    REQUIRE(under_band.alpha == under_face.alpha);
+    REQUIRE(under_face.sigma ==
+            Approx(kNetShadowSigmaShare * under_face.distance));
+    REQUIRE(under_band.sigma ==
+            Approx(kNetShadowSigmaShare * under_band.distance));
 
-    // Each of them over its own shadow, and a little larger than it rests --
-    // the three together are what say it is off the page. The last drawn is a
-    // piece of the band, which is held a storey higher than the face and so
-    // drawn that much larger again.
-    std::size_t shadows = 0;
-    for (const auto& face : scene.faces) {
-        if (!is_sticker(face)) ++shadows;
-    }
-    REQUIRE(shadows == kMoving);
-
-    const auto lifted = scene.faces.back();
+    // And a piece is drawn a little larger than it rests -- the size and the
+    // shadow together are what say it is off the page. A piece of the band
+    // is a storey higher than the face and so that much larger again.
+    const auto lifted = scene.groups[1].faces.back();
     const float side = std::sqrt(
         (lifted.points[1].x - lifted.points[0].x) *
             (lifted.points[1].x - lifted.points[0].x) +
@@ -705,38 +714,81 @@ TEST_CASE("a piece on the move is drawn over the cells it passes")
                            kNetStickerScale * cell_side())
                         .epsilon(0.01));
 
-    // And the storeys are in that order: on a solved cube the face turning in
-    // place is nine green, and the band around it is the four other colors, so
-    // which nine come before which twelve is plain to read.
+    // The storeys are in that order: on a solved cube the face turning in
+    // place is nine green, and the band around it is the four other colors.
     const RenderScene solved = build_net_scene(
         CubeState(kSize), rect,
         ActiveRotation{Axis::Z, layer(kLast), 45.0f, kHeldOpen});
-
-    std::vector<Color> order;
-    for (const auto& face : solved.faces) {
-        if (is_sticker(face)) order.push_back(face.color);
+    REQUIRE(solved.groups.size() == 2);
+    for (const auto& face : solved.groups[0].faces) {
+        REQUIRE(same_color(face.color, FaceColor::Green));
     }
-    REQUIRE(order.size() == 6 * kSize * kSize);
-
-    for (std::size_t i = order.size() - kMoving; i < order.size(); ++i) {
-        const bool on_the_face = i < order.size() - 4 * kSize;
-
-        INFO("piece " << i - (order.size() - kMoving) << " of the last "
-                      << kMoving);
-        REQUIRE(same_color(order[i], FaceColor::Green) == on_the_face);
+    for (const auto& face : solved.groups[1].faces) {
+        REQUIRE_FALSE(same_color(face.color, FaceColor::Green));
     }
 
-    // And gone at both ends of the turn, so the settled net is untouched.
+    // And gone at both ends of the turn, so the settled net is untouched: no
+    // group at all, every cell an ordinary face.
     for (const float angle : {0.0f, 90.0f}) {
         const RenderScene ends = build_net_scene(
             state, rect, ActiveRotation{Axis::Z, layer(kLast), angle, 0.0f});
 
         INFO("angle " << angle);
+        REQUIRE(ends.groups.empty());
         REQUIRE(ends.faces.size() == 6 * kSize * kSize);
-        for (const auto& face : ends.faces) {
-            REQUIRE(is_sticker(face));
-        }
     }
+}
+
+TEST_CASE("the lift follows the opening, and never by less than a pixel a storey")
+{
+    using rubiks::cube::Axis;
+    using rubiks::cube::layer;
+
+    const CubeState state = mixed_state();
+    const auto turn = [](float opening) {
+        return ActiveRotation{Axis::Z, layer(kLast), 45.0f, opening};
+    };
+
+    // Half open is half the distance, half the darkness, half the growth.
+    const RenderScene full = build_net_scene(state, test_rect(), turn(1.0f));
+    const RenderScene half = build_net_scene(state, test_rect(), turn(0.5f));
+    REQUIRE(half.groups.size() == 2);
+    for (std::size_t storey = 0; storey < 2; ++storey) {
+        INFO("storey " << storey);
+        REQUIRE(half.groups[storey].shadow.distance ==
+                Approx(0.5f * full.groups[storey].shadow.distance));
+        REQUIRE(half.groups[storey].shadow.alpha ==
+                static_cast<std::uint8_t>(std::lround(0.5f * kNetShadowAlpha)));
+        REQUIRE(half.groups[storey].shadow.sigma ==
+                Approx(kNetShadowSigmaShare *
+                       half.groups[storey].shadow.distance));
+    }
+
+    // The renderer moves a shadow by whole pixels. Where a cell is a pixel
+    // across, a distance in cells alone would round to nothing for both
+    // storeys and the band would fall no further than the face; the floor
+    // keeps them a pixel apart, so the higher storey is still the further.
+    const Rect tiny{0.0f, 0.0f, 12.0f, 9.0f};
+    REQUIRE(net_cell_side(tiny, kSize) == Approx(1.0f));
+    const RenderScene small = build_net_scene(state, tiny, turn(1.0f));
+    REQUIRE(small.groups.size() == 2);
+    REQUIRE(small.groups[0].shadow.distance ==
+            Approx(kNetLiftMinPixels * kNetFaceStorey * kNetLiftDiagonal));
+    REQUIRE(small.groups[1].shadow.distance ==
+            Approx(kNetLiftMinPixels * kNetBandStorey * kNetLiftDiagonal));
+
+    // What the renderer will do with them: the push along each axis, cut to
+    // whole pixels, is one for the face and two for the band.
+    const auto pixels = [](const LiftShadow& lift) {
+        return static_cast<int>(lift.distance / kNetLiftDiagonal);
+    };
+    REQUIRE(pixels(small.groups[0].shadow) == 1);
+    REQUIRE(pixels(small.groups[1].shadow) == 2);
+
+    // At the usual size the floor is far below the cell distance and changes
+    // nothing.
+    REQUIRE(full.groups[0].shadow.distance >
+            kNetLiftMinPixels * kNetLiftDiagonal * 2.0f);
 }
 
 TEST_CASE("the front ring stays inside the net rectangle")
@@ -758,7 +810,7 @@ TEST_CASE("the front ring stays inside the net rectangle")
             ActiveRotation{Axis::Z, layer(2), angle, kHeldOpen});
 
         INFO("angle " << angle);
-        for (const auto& face : scene.faces) {
+        for (const auto& face : drawn_faces(scene)) {
             for (const auto& point : face.points) {
                 REQUIRE(point.x >= rect.x - room);
                 REQUIRE(point.x <= rect.x + rect.width + room);
@@ -793,8 +845,7 @@ TEST_CASE("a turning cell keeps the color of its sticker, whole")
                              << " angle " << angle);
 
                 std::size_t stickers = 0;
-                for (const auto& face : scene.faces) {
-                    if (!is_sticker(face)) continue;
+                for (const auto& face : drawn_faces(scene)) {
                     ++stickers;
                     REQUIRE(face.color.a == 255);
 

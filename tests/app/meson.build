@@ -66,6 +66,12 @@ lighting_render_test = executable(
   dependencies: [application_dep, catch2_dep],
 )
 
+net_lift_render_test = executable(
+  'net-lift-render-test',
+  files('NetLiftRenderTest.cpp'),
+  dependencies: [application_dep, catch2_dep],
+)
+
 share_restore_test = executable(
   'share-restore-test',
   files('ShareRestoreTest.cpp'),
@@ -81,6 +87,7 @@ test('shared state restore', share_restore_test)
 test('pointer interaction wiring', pointer_interaction_test)
 test('rendered scene contract', render_contract_test)
 test('lit scene composition', lighting_render_test)
+test('net lift composition', net_lift_render_test)
 test('canvas theme ground', canvas_theme_test)
 test('input validation', input_validation_test)
 

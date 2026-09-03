@@ -148,10 +148,33 @@ inline constexpr float kNetGuideWidthCells = 0.14f;
  * the turn is being made and gone by the time it lands.
  */
 inline constexpr float kNetLiftCells = 0.08f;
+/**
+ * The least a storey pushes its shadow along each axis, in pixels.
+ *
+ * The renderer's drop shadow moves by whole pixels, and at the largest cubes a
+ * cell is a few pixels across, so a distance in cells alone would round to
+ * nothing there and the band would fall no further than the face. A pixel a
+ * storey keeps the storeys apart at any size -- a quarter over, so that the
+ * renderer's angle arithmetic in float cannot bring exactly one down to zero.
+ * At ordinary sizes the cell distance is well above this and it never applies.
+ */
+inline constexpr float kNetLiftMinPixels = 1.25f;
+/**
+ * The shadow falls diagonally, and its distance is measured along the
+ * diagonal: a push of one pixel right and one down is this far.
+ */
+inline constexpr float kNetLiftDiagonal = 1.41421356f;
 /** How much larger a piece is drawn while it is off the page. */
 inline constexpr float kNetLiftScale = 0.035f;
 /** How dark the shadow goes under a piece. */
 inline constexpr float kNetShadowAlpha = 100.0f;
+/**
+ * The softness of the shadow's edge, as a share of its distance.
+ *
+ * Half: the blur is of the same order as the offset, so the shadow reads as
+ * pushed out and softened rather than as a second, sharp copy of the piece.
+ */
+inline constexpr float kNetShadowSigmaShare = 0.5f;
 
 /**
  * Which storey of the drawing each part of a turn is held on.

@@ -79,7 +79,7 @@
 
 **층은 셋입니다** — 아래에서부터 정지 전개도 / 제자리에서 도는 면(3×3) / 그 위를 지나는 밴드 조각(1×3). 밴드 조각은 한 면의 한 줄이 다른 면의 블록을 가로지르는 것이라 눈은 줄이 위로 지나간다고 읽습니다. 그림자 거리와 확대 비율이 층수(`kNetFaceStorey` 1 · `kNetBandStorey` 2)의 배수입니다.
 
-그리는 순서는 **층 안에서 그림자를 먼저 다 그리고 조각들**, 그다음 위층입니다. 층 안에서 하나씩 자기 뒤에 깔면 강체로 묶인 옆 칸에 그림자를 드리워 한 덩어리가 계단처럼 보이고, 층끼리는 위층이 아래층에 그림자를 지고 그 위를 덮어야 합니다.
+그리는 순서는 **층 하나가 묶음(`RenderGroup`) 하나**이고, 묶음은 모든 정지 셀 뒤에 아래층부터 그려집니다. 묶음의 그림자는 조각들의 합집합 실루엣에 ThorVG `DropShadow`로 한 번 지므로, 강체로 묶인 옆 칸에 그림자가 끼어 한 덩어리가 계단처럼 보이는 일이 없고, 층끼리는 위층이 아래층에 그림자를 지고 그 위를 덮습니다. 처음에는 조각마다 검은 사각형을 복제해 층 안에서 먼저 깔았는데, [Phase 19.5](./19.5-net-lift-shadow.md)에서 이렇게 바뀌었습니다(개정 기록 10).
 
 셋 다 `ActiveRotation::opening`을 따르므로 회전이 만들어지는 동안 유지되고 착지할 때 사라집니다. **어떤 셀도 흐려지지 않습니다** — 그려지는 스티커는 전부 큐브가 말하는 색 그대로, 알파 255입니다.
 
@@ -159,7 +159,7 @@ struct RenderScene {
 
 ### 합성과 bounds
 
-- **합성**: `faces`와 `strokes`를 함께 옮기는 `append_scene()`을 두고 모든 합성이 그것을 지나게 합니다. 그러지 않으면 `strokes`가 조용히 사라집니다.
+- **합성**: `faces`와 `strokes`(그 뒤 `groups`까지)를 함께 옮기는 `append_scene()`을 두고 모든 합성이 그것을 지나게 합니다. 그러지 않으면 `strokes`가 조용히 사라집니다 — 실제로 한 번 그랬고, Phase 19.5부터는 test가 붙잡습니다.
 - **안내선의 bounds**: 링의 경로는 **net rect와 그 얇은 배경 여백 안**에 둡니다. Both mode에서 안내선이 3D cube 위를 가로지르면 "3D view 안내선은 범위 밖" 계약과 충돌하기 때문입니다. 안내선이 전개도의 다른 면 위를 지나는 것은 허용입니다 — 그것이 이 표현의 의도입니다.
 - **좁은 쪽은 좌우가 아니라 위입니다.** Both mode에서 cube는 net 위에 있고 여유는 약 **0.75칸**입니다. 그 예산을 노리는 곡선이 둘 있습니다: X 고리의 U-top → B-top 연결 arc와, Z 바깥 고리의 모서리 arc.
 - 이 정책은 raster test로 고정합니다: **Both mode에서 안내선을 표시하기 전후로 cube rect의 버퍼가 byte 단위로 같아야** 합니다. stroke 색과 정확히 일치하는 픽셀을 찾는 검사는 anti-aliasing으로 배경과 섞인 침범 픽셀을 놓칩니다.
@@ -256,9 +256,12 @@ npm --prefix web run build
 | `kNetStickerScale` | 0.88 | 셀 중 스티커가 차지하는 비율 |
 | `kNetBreakReachCells` | 0.30 | 밴드가 잘린 곳에서 고리가 전개도 밖으로 나가는 거리 |
 | `kNetGuideWidthCells` | 0.14 | 안내선 굵기 |
-| `kNetLiftCells` | 0.08 | 한 층당 그림자가 지는 거리 |
+| `kNetLiftCells` | 0.08 | 한 층당 그림자가 축마다 밀리는 거리(셀) |
+| `kNetLiftMinPixels` | 1.25 | 그 거리의 하한(픽셀) — 큰 N에서 정수 절삭이 층 순서를 지키게 |
 | `kNetLiftScale` | 0.035 | 한 층당 커지는 비율 |
 | `kNetShadowAlpha` | 100 | 그림자 농도 |
+| `kNetShadowSigmaShare` | 0.5 | 그림자 가장자리 블러 sigma, 거리에 대한 비율 |
+| `kLiftShadowAngleDegrees` | 135 | 그림자 방향(오른쪽 아래), `RenderScene.hpp` |
 | `kNetFaceStorey` / `kNetBandStorey` | 1 / 2 | 도는 면과 밴드 조각이 놓이는 층 |
 | `kOpeningMs` | 120 | 조각이 들리는 데, 그리고 끝에서 내려놓는 데 걸리는 시간 (`InteractionController.hpp`) |
 | `kAxisGizmoArmShare` 외 | — | 축 표시의 길이·위치·굵기 (`AxisGizmo.hpp`) |
@@ -314,6 +317,10 @@ npm --prefix web run build
 ### 9. 90° 제한 해제
 
 전개도 드래그의 각도 cap과 `net_progress`의 clamp를 없앴습니다. cap이 있던 이유("전개도가 한 칸만 그리는데 snap은 120°부터 두 칸으로 settle해서 둘이 어긋난다")가 사라졌습니다 — 링은 원래 감기므로 전개도가 실제 각도를 그대로 그립니다.
+
+### 10. 그림자 사각형 → DropShadow (Phase 19.5, 2026-09-04)
+
+들린 조각의 그림자가 스티커마다 복제한 검은 사각형에서 층당 `DropShadow` 하나로 바뀌었습니다. `raise`는 조각을 키워 `RenderGroup`에 넣고 `LiftShadow{거리, 농도, sigma}`를 적을 뿐이고, 그림자를 만들고 순서를 맞추는 일은 렌더러가 Scene 하나와 효과 하나로 합니다. 색은 검정이 아니라 3D 바닥 그림자와 같은 tint(배경 × `kShadowColor`)이고, 거리는 층당 1.25px 아래로 내려가지 않아 28×28에서도 밴드가 면보다 멀리 떨어집니다. opening 0이면 묶음을 만들지 않아 쉬는 프레임은 그대로입니다. 경위와 측정은 [Phase 19.5 문서](./19.5-net-lift-shadow.md)에 있습니다.
 
 ### 구현 중 드러난 것
 

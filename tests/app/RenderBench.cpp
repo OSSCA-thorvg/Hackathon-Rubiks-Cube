@@ -25,7 +25,11 @@
 
 // Phase 19, step 6: frame time of the 3D view at the largest cube the app
 // supports, half way through a turn, with and without the lighting passes.
-// Not a test -- a measurement, printed for the phase document.
+// Phase 19.5 adds `--net` and `--both`: the flat drawing (or both views) at
+// rest and then half way through a turn with its pieces lifted, so the lift
+// shadows' cost is the difference. Not a test -- a measurement, printed for the phase documents.
+//
+//   render-bench [size] [frames] [dump.ppm] [--net | --both]
 
 namespace {
 
@@ -47,37 +51,76 @@ double percentile95(std::vector<double> samples)
 
 int main(int argc, char** argv)
 {
-    const int size = argc > 1 ? std::atoi(argv[1]) : 28;
-    const int frames = argc > 2 ? std::atoi(argv[2]) : 40;
+    std::vector<const char*> positional;
+    auto mode = rubiks::graphics::ViewMode::Cube3D;
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "--net") {
+            mode = rubiks::graphics::ViewMode::Flat;
+        } else if (arg == "--both") {
+            mode = rubiks::graphics::ViewMode::Both;
+        } else {
+            positional.push_back(argv[i]);
+        }
+    }
+    const int size = positional.size() > 0 ? std::atoi(positional[0]) : 28;
+    const int frames = positional.size() > 1 ? std::atoi(positional[1]) : 40;
+    const char* dump = positional.size() > 2 ? positional[2] : nullptr;
+    const bool cube_only = mode == rubiks::graphics::ViewMode::Cube3D;
 
     if (!rubiks::app::initialize(kCanvas, kCanvas)) return 1;
-    if (!rubiks::app::set_view_mode(rubiks::graphics::ViewMode::Cube3D)) return 1;
+    if (!rubiks::app::set_view_mode(mode)) return 1;
     if (!rubiks::app::set_cube_size(size)) return 1;
 
-    // Half a turn's worth of animation puts the layer at 45 degrees.
-    if (!rubiks::app::turn_face(rubiks::cube::Face::Right, 1, 1, 1)) return 1;
-    static_cast<void>(rubiks::app::advance(100.0));
+    const auto time_frames = [&](std::vector<double>& samples) {
+        // A few frames first, so the caches and the allocator are warm.
+        for (int i = 0; i < 5; ++i) {
+            if (!rubiks::app::render()) return false;
+        }
+        for (int i = 0; i < frames; ++i) {
+            const auto start = std::chrono::steady_clock::now();
+            if (!rubiks::app::render()) return false;
+            const auto end = std::chrono::steady_clock::now();
+            samples.push_back(
+                std::chrono::duration<double, std::milli>(end - start).count());
+        }
+        return true;
+    };
 
-    std::vector<double> samples;
-    for (int i = 0; i < frames; ++i) {
-        const auto start = std::chrono::steady_clock::now();
-        if (!rubiks::app::render()) return 1;
-        const auto end = std::chrono::steady_clock::now();
-        samples.push_back(
-            std::chrono::duration<double, std::milli>(end - start).count());
+    if (!cube_only) {
+        // The drawing at rest first, so the lift's cost is a difference.
+        std::vector<double> resting;
+        if (!time_frames(resting)) return 1;
+        std::printf("size %d, %d frames at rest: median %.2f ms, p95 %.2f ms\n",
+                    size, frames, median(resting), percentile95(resting));
+
+        // A named turn is a 200ms quarter turn, so 100ms in the layer is at
+        // 45 degrees and the lift is as high as that turn takes it: the 120ms
+        // rise and the settle's 120ms fall overlap, and opening peaks at
+        // (100/120)^2, about 0.69 -- the same frame the render contract sees.
+        if (!rubiks::app::turn_face(rubiks::cube::Face::Up, 1, 1, 1)) return 1;
+        static_cast<void>(rubiks::app::advance(100.0));
+    } else {
+        // Half a turn's worth of animation puts the layer at 45 degrees.
+        if (!rubiks::app::turn_face(rubiks::cube::Face::Right, 1, 1, 1)) return 1;
+        static_cast<void>(rubiks::app::advance(100.0));
     }
 
-    std::printf("size %d, %d frames at 45 degrees: median %.2f ms, p95 %.2f ms\n",
-                size, frames, median(samples), percentile95(samples));
+    std::vector<double> samples;
+    if (!time_frames(samples)) return 1;
+
+    std::printf("size %d, %d frames at 45 degrees%s: median %.2f ms, p95 %.2f ms\n",
+                size, frames, cube_only ? "" : ", lifted", median(samples),
+                percentile95(samples));
 
     // Optionally write the frame out as a binary PPM, for looking at the
     // pixels the numbers above were made of -- the layer still at 45 degrees,
     // since that is where the lighting has something to show.
-    if (argc > 3) {
+    if (dump) {
         if (!rubiks::app::render()) return 1;
         const auto* pixels =
             reinterpret_cast<const std::uint8_t*>(rubiks::app::pixel_buffer());
-        if (FILE* out = std::fopen(argv[3], "wb")) {
+        if (FILE* out = std::fopen(dump, "wb")) {
             std::fprintf(out, "P6\n%u %u\n255\n", kCanvas, kCanvas);
             for (std::uint32_t i = 0; i < kCanvas * kCanvas; ++i) {
                 std::fwrite(pixels + i * 4, 1, 3, out);
@@ -87,6 +130,7 @@ int main(int argc, char** argv)
     }
 
 #ifdef RUBIKS_LIGHTING
+    if (cube_only) {
     using namespace rubiks::graphics;
     const auto placement = layout(kCanvas, kCanvas, ViewMode::Cube3D);
     const Camera camera = default_camera(1.0f);
@@ -146,8 +190,8 @@ int main(int argc, char** argv)
                 max_diff = std::max(max_diff, d);
             }
             std::printf("highlights change %zu pixels, max channel diff %d\n", changed, max_diff);
-            if (argc > 3) {
-                std::string path = std::string(argv[3]) + ".glint.ppm";
+            if (dump) {
+                std::string path = std::string(dump) + ".glint.ppm";
                 if (FILE* out = std::fopen(path.c_str(), "wb")) {
                     std::fprintf(out, "P6\n%u %u\n255\n", kCanvas, kCanvas);
                     for (std::uint32_t i = 0; i < kCanvas * kCanvas; ++i) {
@@ -176,6 +220,7 @@ int main(int argc, char** argv)
         RenderScene v = scene;
         v.shadow->blur_sigma = 0.01f;
         time_variant("shadow, blur ~0 (fade+clip)", v);
+    }
     }
 #endif
 

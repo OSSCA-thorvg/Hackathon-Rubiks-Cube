@@ -12,7 +12,14 @@ Color classic(cube::FaceColor color) noexcept
         case cube::FaceColor::Orange:
             return Color{255, 88, 0, 255};
         case cube::FaceColor::White:
-            return Color{255, 255, 255, 255};
+            // Paper white rather than 255: the lit view multiplies a face's
+            // colour by a brightness that passes 1 on the face towards the
+            // key, and a 255 white clamps there -- flat, and with no room for
+            // a glint to be brighter than the sticker it lands on. At 216 the
+            // top face shades like the others (220 to 246 across it) and a
+            // reflection still has somewhere to go. The net draws this value
+            // as it is.
+            return Color{216, 216, 216, 255};
         case cube::FaceColor::Yellow:
             return Color{255, 213, 0, 255};
         case cube::FaceColor::Green:

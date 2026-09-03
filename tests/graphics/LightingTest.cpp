@@ -1007,9 +1007,10 @@ TEST_CASE("the home viewpoint's planes shade to the bytes the contract names")
     REQUIRE(green.has_value());
     REQUIRE(red.has_value());
 
-    // +Y at 275 out of 255: white clamps; +Z at 230 and +X at 211, on the
-    // stickers' colours with their saturation raised first.
-    REQUIRE(int{white->r} == 255);
+    // +Y at 275 out of 255 on the paper white (216 -> 233, no clamp); +Z at
+    // 230 and +X at 211, on the stickers' colours with their saturation
+    // raised first.
+    REQUIRE(int{white->r} == (216 * 275 + 127) / 255);
     REQUIRE(int{green->g} == (165 * 230 + 127) / 255);
     REQUIRE(int{green->b} == (61 * 230 + 127) / 255);
     REQUIRE(int{red->r} == (215 * 211 + 127) / 255);
@@ -1017,8 +1018,9 @@ TEST_CASE("the home viewpoint's planes shade to the bytes the contract names")
 
     SECTION("and the same bytes for every size a person can pick")
     {
-        // The top face is past full brightness at every size, so white
-        // clamps to white whatever the sticker plane's exact height.
+        // The top face reads the same byte at every size: the sticker plane's
+        // exact height moves its brightness by less than a unit of the paper
+        // white's 216.
         for (const int size : {2, 4, 5, 7, 9}) {
             const ViewScene bigger = build_cube_scene(CubeState(size))  //
                                      | view(home_camera())               //
@@ -1026,7 +1028,7 @@ TEST_CASE("the home viewpoint's planes shade to the bytes the contract names")
             for (const auto& face : bigger.faces) {
                 if (face.color.r == face.color.g && face.color.g == face.color.b &&
                     face.color.r > 128) {
-                    REQUIRE(int{face.color.r} == 255);
+                    REQUIRE(std::abs(int{face.color.r} - (216 * 275 + 127) / 255) <= 1);
                 }
             }
         }

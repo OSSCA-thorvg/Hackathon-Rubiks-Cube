@@ -38,7 +38,7 @@ namespace {
 using Rgba = std::array<std::uint8_t, 4>;
 
 constexpr Rgba kBackground{32, 32, 32, 255};
-constexpr Rgba kWhite{255, 255, 255, 255};   // +Y up
+constexpr Rgba kWhite{216, 216, 216, 255};   // +Y up, paper white
 constexpr Rgba kYellow{255, 213, 0, 255};    // -Y down
 constexpr Rgba kGreen{0, 155, 72, 255};      // +Z front
 constexpr Rgba kBlue{0, 70, 173, 255};       // -Z back

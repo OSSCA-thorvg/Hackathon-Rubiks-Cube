@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import {
   assertSceneContract,
-  bodyCells,
+  CUT_SHARE_MARGIN,
   FRONT_RIGHT_COLUMN,
   pagePointInCube,
   probeCanvas,
@@ -192,16 +192,17 @@ test('a scramble is turned into the cube where it can be watched', async ({
 
   // The cut face of a cubie is only ever drawn while a layer is part way
   // round, so finding it is finding the cube mid-turn rather than merely
-  // changed. Nothing can be turned by hand for as long as that lasts.
+  // changed. Nothing can be turned by hand for as long as that lasts. The
+  // cut is wide for a fraction of each turn, so the frames are read often.
   await expect(moveButtons.first()).toBeDisabled();
   await expect(page.locator('#timer')).toHaveText('00:00.00');
   await expect
     .poll(
       async () => {
         const probe = await probeCanvas(page);
-        return bodyCells(probe) > bodyCells(solved) + 2;
+        return probe.bodyShare > solved.bodyShare + CUT_SHARE_MARGIN;
       },
-      { timeout: 5000 },
+      { timeout: 5000, intervals: [60] },
     )
     .toBe(true);
 

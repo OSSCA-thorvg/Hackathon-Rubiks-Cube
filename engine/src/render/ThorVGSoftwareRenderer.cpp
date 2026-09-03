@@ -149,15 +149,19 @@ bool fill_face(tvg::Shape& shape, const graphics::RenderFace& face) noexcept
     }
     // The plane's stops with this sticker's colour at each: the same axis and
     // spacing as every sticker beside it, so the shading runs on across the
-    // seams, following the brightness curve stop by stop.
+    // seams, following the brightness curve stop by stop. The spacing is the
+    // projected one when the pipeline supplied it -- perspective does not keep
+    // the plane's even spacing -- and even otherwise.
     std::vector<tvg::Fill::ColorStop> stops;
     stops.reserve(shading.colors.size());
+    const bool placed = shading.offsets.size() == shading.colors.size();
     for (std::size_t i = 0; i < shading.colors.size(); ++i) {
         const auto& color = shading.colors[i];
-        const float offset = shading.colors.size() > 1
-                                 ? static_cast<float>(i) /
-                                       static_cast<float>(shading.colors.size() - 1)
-                                 : 0.0f;
+        const float even = shading.colors.size() > 1
+                               ? static_cast<float>(i) /
+                                     static_cast<float>(shading.colors.size() - 1)
+                               : 0.0f;
+        const float offset = placed ? shading.offsets[i] : even;
         stops.push_back({offset, color.r, color.g, color.b, color.a});
     }
     if (stops.empty() ||

@@ -42,6 +42,8 @@ struct RenderShading {
     math::Vec2 from{};
     math::Vec2 to{};
     std::vector<Color> colors;
+    /** The stops' fractions along `from` to `to`; evenly spaced when empty. */
+    std::vector<float> offsets;
 };
 
 /** Screen-space quad ready to be filled by a renderer. */

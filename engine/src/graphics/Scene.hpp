@@ -106,6 +106,14 @@ struct ShadingOf {
     Point to{};
     /** This face's colour at each stop, evenly spaced from `from` to `to`. */
     std::vector<Color> colors;
+    /**
+     * Where each stop lies along `from` to `to` once on screen, as a
+     * fraction. Empty until the projection: the stops are evenly spaced on
+     * the plane, and perspective does not keep them evenly spaced on the
+     * screen, so a gradient that spaced them evenly there would put the
+     * plane's brightness at the wrong pixels.
+     */
+    std::vector<float> offsets;
 };
 
 /** Quad in world space. */

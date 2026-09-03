@@ -7,7 +7,7 @@ import { expect, type Page } from '@playwright/test';
 // as the wrong color here rather than as a plausible picture -- and since v4
 // a normal the wrong way round shows up as the wrong brightness too.
 export const BACKGROUND = [32, 32, 32, 255];
-export const WHITE = [255, 255, 255, 255]; // +Y up
+export const WHITE = [216, 216, 216, 255]; // +Y up, paper white
 export const YELLOW = [255, 213, 0, 255]; // -Y down
 export const GREEN = [0, 155, 72, 255]; // +Z front
 export const BLUE = [0, 70, 173, 255]; // -Z back
@@ -114,15 +114,15 @@ export function isBody(pixel: readonly number[]): boolean {
 }
 
 /**
- * How many cells of the coarse 3D sweep show the body.
+ * How much more of the 3D region shows the body than a resting cube does
+ * before a layer counts as part way round.
  *
- * The seams show it at rest, a few cells' worth; a cut face opened by a turn
- * shows it over many more. The count, against the resting count, is what
- * says a layer is part way round.
+ * The seams are a few percent of the region and move a little as the cube
+ * turns (about 0.3% either way, measured); a cut face opened by a turn is a
+ * solid patch worth about 1% of the region at 45 degrees. The margin sits
+ * between the two.
  */
-export function bodyCells(probe: CanvasProbe): number {
-  return probe.cubeGrid.filter(isBody).length;
-}
+export const CUT_SHARE_MARGIN = 0.005;
 
 // Sample points as fractions of the square 3D region, derived from the
 // projected centroid of each visible face. They are region-relative rather
@@ -219,6 +219,12 @@ export type CanvasProbe = {
   readonly corners: number[][];
   /** A coarse sweep of the 3D region, for comparing two frames. */
   readonly cubeGrid: number[][];
+  /**
+   * The share of the 3D region's pixels that show the body, by the same hue
+   * rule as isBody(). At rest that is the seams, a few percent; a cut face
+   * opened by a turn is a solid patch and lifts it well clear of them.
+   */
+  readonly bodyShare: number;
 };
 
 /**
@@ -272,6 +278,32 @@ export async function probeCanvas(
         }
       }
 
+      // Every third pixel of the region, so a cut face counts by its area
+      // rather than by whichever coarse cells happen to land on it.
+      const region = context.getImageData(
+        Math.round(cubeX),
+        Math.round(cubeY),
+        Math.round(cubeSide),
+        Math.round(cubeSide),
+      );
+      let bodyPixels = 0;
+      let sampled = 0;
+      for (let y = 0; y < region.height; y += 3) {
+        for (let x = 0; x < region.width; x += 3) {
+          const i = (y * region.width + x) * 4;
+          const r = region.data[i]!;
+          const g = region.data[i + 1]!;
+          const b = region.data[i + 2]!;
+          sampled += 1;
+          if (r > g || g > b) continue;
+          const spread = b - r;
+          if (spread < 2 || spread > 16) continue;
+          if (Math.abs(b - g - 2 * (g - r)) > 3) continue;
+          if (r >= 40 && r <= 220) bodyPixels += 1;
+        }
+      }
+      const bodyShare = sampled > 0 ? bodyPixels / sampled : 0;
+
       const cubeGrid: number[][] = [];
       for (let row = 0; row < config.signatureSteps; row += 1) {
         for (let col = 0; col < config.signatureSteps; col += 1) {
@@ -312,6 +344,7 @@ export async function probeCanvas(
           read(canvas.width - 1, canvas.height - 1),
         ],
         cubeGrid,
+        bodyShare,
       };
     },
     {

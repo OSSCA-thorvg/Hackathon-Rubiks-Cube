@@ -158,7 +158,7 @@ TEST_CASE("classic palette is the standard cube, channel for channel")
 {
     // Known answers rather than a property: the reason Classic exists is that
     // it is the cube people know, so the thing to fix is the exact shades.
-    REQUIRE(same(to_color(FaceColor::White), Color{255, 255, 255, 255}));
+    REQUIRE(same(to_color(FaceColor::White), Color{216, 216, 216, 255}));
     REQUIRE(same(to_color(FaceColor::Yellow), Color{255, 213, 0, 255}));
     REQUIRE(same(to_color(FaceColor::Green), Color{0, 155, 72, 255}));
     REQUIRE(same(to_color(FaceColor::Blue), Color{0, 70, 173, 255}));

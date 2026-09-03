@@ -158,9 +158,29 @@ ClipScene ProjectPass::operator()(const ViewScene& scene) const
         projected.depth = depth_sum / static_cast<float>(kCorners);
 
         if (face.shading) {
-            projected.shading = ShadingOf<math::Vec2>{
-                to_ndc(face.shading->from), to_ndc(face.shading->to),
-                face.shading->colors};
+            // The stops are evenly spaced along the axis on the plane; here
+            // each is projected and its place along the projected axis kept,
+            // so the brightness read at a stop is drawn at that stop's pixel
+            // rather than at an even share of the screen segment.
+            const auto& shading = *face.shading;
+            ShadingOf<math::Vec2> flat;
+            flat.from = to_ndc(shading.from);
+            flat.to = to_ndc(shading.to);
+            flat.colors = shading.colors;
+            const math::Vec2 axis{flat.to.x - flat.from.x, flat.to.y - flat.from.y};
+            const float axis_length = axis.x * axis.x + axis.y * axis.y;
+            const std::size_t count = shading.colors.size();
+            if (count > 1 && axis_length > 0.0f) {
+                flat.offsets.reserve(count);
+                for (std::size_t i = 0; i < count; ++i) {
+                    const float t = static_cast<float>(i) / static_cast<float>(count - 1);
+                    const math::Vec2 stop = to_ndc(shading.from + (shading.to - shading.from) * t);
+                    const float along = ((stop.x - flat.from.x) * axis.x +
+                                         (stop.y - flat.from.y) * axis.y) / axis_length;
+                    flat.offsets.push_back(std::clamp(along, 0.0f, 1.0f));
+                }
+            }
+            projected.shading = std::move(flat);
         }
         // A highlight lies on the face's plane, and its footprint can be far
         // wider than the face. Under perspective a footprint like that is not
@@ -276,7 +296,8 @@ RenderScene ViewportPass::operator()(const ClipScene& scene) const
         if (face.shading) {
             mapped.shading = RenderShading{to_pixels(face.shading->from),
                                            to_pixels(face.shading->to),
-                                           face.shading->colors};
+                                           face.shading->colors,
+                                           face.shading->offsets};
         }
         for (const auto& glint : face.highlights) {
             RenderHighlight pixels;

@@ -27,7 +27,7 @@ namespace {
 using Rgba = std::array<std::uint8_t, 4>;
 
 constexpr Rgba kGreen{0, 155, 72, 255};
-constexpr Rgba kWhite{255, 255, 255, 255};
+constexpr Rgba kWhite{216, 216, 216, 255};
 constexpr Rgba kRed{183, 18, 52, 255};
 constexpr Rgba kBlue{0, 70, 173, 255};
 constexpr Rgba kOrange{255, 88, 0, 255};

@@ -603,6 +603,24 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_lighting(std::uint32_t count) noexcep
     return rubiks::app::set_lighting(count) ? 1 : 0;
 }
 
+/** How many values describe the current lighting; zero outside a lifecycle. */
+EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_lighting_count() noexcept
+{
+    return rubiks::app::lighting_count();
+}
+
+/**
+ * Writes the current lighting into the buffer, in set_lighting()'s order, and
+ * returns its address.
+ *
+ * @return zero for a count other than thorvg_rubiks_lighting_count().
+ */
+EMSCRIPTEN_KEEPALIVE std::uintptr_t thorvg_rubiks_lighting_values(
+    std::uint32_t count) noexcept
+{
+    return rubiks::app::lighting_values(count);
+}
+
 EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_speed_scale(float scale) noexcept
 {
     return rubiks::app::set_speed_scale(scale) ? 1 : 0;

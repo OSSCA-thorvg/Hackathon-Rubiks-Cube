@@ -145,6 +145,13 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_lighting_buffer(count: number): number;
   /** Reads the lighting buffer back; 1 when accepted, 0 when refused. */
   _thorvg_rubiks_set_lighting(count: number): number;
+  /** How many values describe the current lighting; 0 outside a lifecycle. */
+  _thorvg_rubiks_lighting_count(): number;
+  /**
+   * Writes the current lighting into the buffer and returns its address, or
+   * 0 for a count other than _thorvg_rubiks_lighting_count().
+   */
+  _thorvg_rubiks_lighting_values(count: number): number;
   /** The current animation speed multiplier. */
   _thorvg_rubiks_speed_scale(): number;
   /** Restores the turntable camera and nothing else. */

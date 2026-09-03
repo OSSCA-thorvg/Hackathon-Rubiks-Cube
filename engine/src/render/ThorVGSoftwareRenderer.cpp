@@ -449,52 +449,6 @@ bool ThorVGSoftwareRenderer::draw_shadow(
         return true;
     };
 
-    // The soft patch straight under the cube, first because it is furthest
-    // from anything and the cast shadow may fall across it.
-    if (shadow.contact.size() >= 3) {
-        float min_x = shadow.contact[0].x, max_x = min_x;
-        float min_y = shadow.contact[0].y, max_y = min_y;
-        for (const auto& point : shadow.contact) {
-            min_x = std::min(min_x, point.x);
-            max_x = std::max(max_x, point.x);
-            min_y = std::min(min_y, point.y);
-            max_y = std::max(max_y, point.y);
-        }
-        const Vec2 centre{(min_x + max_x) * 0.5f, (min_y + max_y) * 0.5f};
-        const float rx = std::max((max_x - min_x) * 0.5f, 0.5f);
-        const float ry = std::max((max_y - min_y) * 0.5f, 0.5f);
-
-        auto* patch = add_shape(*canvas_);
-        if (!patch) return false;
-        if (patch->appendCircle(centre.x, centre.y, rx, ry) !=
-            tvg::Result::Success) {
-            return false;
-        }
-
-        // A unit radial falloff stretched into the ellipse, so the patch
-        // fades to nothing exactly at its own edge.
-        auto* gradient = tvg::RadialGradient::gen();
-        if (!gradient) return false;
-        if (gradient->radial(0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f) !=
-                tvg::Result::Success ||
-            gradient->transform(tvg::Matrix{rx, 0.0f, centre.x, 0.0f, ry,
-                                            centre.y, 0.0f, 0.0f, 1.0f}) !=
-                tvg::Result::Success) {
-            delete gradient;
-            return false;
-        }
-        const tvg::Fill::ColorStop stops[]{
-            {0.0f, tint.r, tint.g, tint.b, graphics::kContactAlpha},
-            {1.0f, tint.r, tint.g, tint.b, 0},
-        };
-        if (gradient->colorStops(stops, 2) != tvg::Result::Success) {
-            delete gradient;
-            return false;
-        }
-        if (patch->fill(gradient) != tvg::Result::Success) return false;
-        if (!clipper_for(*patch, shadow.clip)) return false;
-    }
-
     // The cast shadow is one shape: every caster's polygon as a subpath of
     // it, filled non-zero, so where two casters overlap is inside the outline
     // once and no darker than where one is. That is the flattening, and it

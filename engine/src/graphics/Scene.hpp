@@ -45,8 +45,6 @@ struct ShadowGroup {
     Point fade_start{};
     /** Where it has thinned to its floor: the centre cast from the light. */
     Point fade_end{};
-    /** Points round the ambient patch directly under the cube. */
-    std::vector<Point> contact;
     /** Strength before the renderer's own fade and blur, 0 meaning none. */
     std::uint8_t opacity = 0;
 };

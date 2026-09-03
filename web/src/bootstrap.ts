@@ -130,6 +130,15 @@ export function bootstrap(
   // not an engine ever arrives -- a browser that cannot run the cube can
   // still be read in the theme its owner chose.
   for (const control of gameplayControls(shell.ui)) control.disabled = true;
+  // The lighting sliders too: they write straight into the engine, so until
+  // there is one they have nothing to write to.
+  for (const control of [
+    ...shell.lightingUi.inputs,
+    shell.lightingUi.resetButton,
+    shell.lightingUi.copyButton,
+  ]) {
+    control.disabled = true;
+  }
 
   const setState = (state: AppState, message: string): void => {
     app.dataset.state = state;
@@ -180,6 +189,7 @@ export function bootstrap(
   return start({
     canvas: shell.ui.canvas,
     gameUi: shell.ui,
+    lightingUi: shell.lightingUi,
     setState,
     onError: fail,
     theme: theme ?? undefined,

@@ -10,10 +10,13 @@ Lighting Lighting::standard()
     Lighting lighting;
     // The key: high, in front and a little to the left of the home eye, so
     // the top face is brightest and the front brighter than the right, and
-    // the shadow it casts stays near the cube's footprint. Its glint is kept
-    // tight so a lamp this far away does not glaze a whole face: a distant
-    // lamp's half-vector barely turns across two units.
-    lighting.lamps.push_back(Light{{2.6f, 7.0f, 4.0f}, 0.38f, 0.40f, 24.0f});
+    // the shadow it casts stays near the cube's footprint. From the home eye
+    // no resting face can mirror it -- a face that reflects a view from above
+    // reflects it downwards -- so its glint lives on the tilted top of a
+    // turning layer. The lobe is wide enough to sweep across that face as it
+    // turns (peak alpha ~59 at R 45 degrees) and still under the highlight
+    // threshold on every face at rest, which keeps the contract samples pure.
+    lighting.lamps.push_back(Light{{2.6f, 7.0f, 4.0f}, 0.38f, 0.60f, 12.0f});
     return lighting;
 }
 

@@ -50,8 +50,6 @@ std::optional<ShadowGroup<To>> map_shadow(
         result.polygons.push_back(std::move(mapped));
     }
 
-    result.contact.reserve(shadow->contact.size());
-    for (const auto& point : shadow->contact) result.contact.push_back(map(point));
     return result;
 }
 
@@ -63,9 +61,6 @@ bool shadow_in_front(const ShadowGroup<math::Vec3>& shadow, float near_plane)
     };
     for (const auto& polygon : shadow.polygons) {
         if (!std::all_of(polygon.begin(), polygon.end(), in_front)) return false;
-    }
-    if (!std::all_of(shadow.contact.begin(), shadow.contact.end(), in_front)) {
-        return false;
     }
     return in_front(shadow.fade_start) && in_front(shadow.fade_end);
 }
@@ -169,13 +164,18 @@ ClipScene ProjectPass::operator()(const ViewScene& scene) const
         }
         // A highlight lies on the face's plane; its centre may sit off the
         // face but still in front of the eye, as the mirror image of a light
-        // above the plane always is when the eye is above it too.
+        // above the plane always is when the eye is above it too. Its rim is
+        // a radius away along the plane, and a wide lobe on a plane tilted
+        // towards the eye can put that point behind the near plane while the
+        // centre and the face are in front. The rim only measures the radius,
+        // so the point the same distance the other way serves as well -- and
+        // with the centre in front, that one always is.
         for (const auto& glint : face.highlights) {
-            if (glint.centre.z < -near_plane && glint.rim.z < -near_plane) {
-                projected.highlights.push_back(HighlightOf<math::Vec2>{
-                    to_ndc(glint.centre), to_ndc(glint.rim), glint.alpha,
-                    glint.mid});
-            }
+            if (glint.centre.z >= -near_plane) continue;
+            math::Vec3 rim = glint.rim;
+            if (rim.z >= -near_plane) rim = glint.centre * 2.0f - glint.rim;
+            projected.highlights.push_back(HighlightOf<math::Vec2>{
+                to_ndc(glint.centre), to_ndc(rim), glint.alpha, glint.mid});
         }
         result.faces.push_back(projected);
     }
@@ -271,7 +271,6 @@ RenderScene ViewportPass::operator()(const ClipScene& scene) const
         shadow.polygons = mapped->polygons;
         shadow.fade_start = mapped->fade_start;
         shadow.fade_end = mapped->fade_end;
-        shadow.contact = mapped->contact;
         shadow.opacity = mapped->opacity;
         shadow.blur_sigma = kShadowBlurShare * rect.width;
         shadow.clip = clip;

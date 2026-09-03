@@ -140,14 +140,7 @@ int main(int argc, char** argv)
     if (scene.shadow) {
         RenderScene v = scene;
         v.shadow->blur_sigma = 0.01f;
-        time_variant("shadow, blur ~0", v);
-        v = scene;
-        v.shadow->contact.clear();
-        time_variant("shadow, no contact patch", v);
-        v = scene;
-        v.shadow->contact.clear();
-        v.shadow->blur_sigma = 0.01f;
-        time_variant("shadow, bare (fade+clip)", v);
+        time_variant("shadow, blur ~0 (fade+clip)", v);
     }
 #endif
 

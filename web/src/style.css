@@ -751,6 +751,23 @@ input:focus-visible,
   flex-wrap: wrap;
 }
 
+.settings__sublabel {
+  margin: 0.25rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* The list as the address bar takes it: small, selectable in one gesture. */
+.lighting-values {
+  display: block;
+  color: var(--color-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
 /* Page states */
 
 #app[data-state="loading"] #view {

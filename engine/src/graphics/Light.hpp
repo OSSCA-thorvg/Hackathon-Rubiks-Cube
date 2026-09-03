@@ -174,16 +174,6 @@ inline constexpr float kShadowFadeMinLength = 4.0f;
 inline constexpr float kShadowFadeBand = 1.0f;
 
 /**
- * The soft patch directly under the cube, whatever the light is doing.
- *
- * Read as the ambient shadow of something hovering close to the ground, which
- * is what the cube is, rather than as contact -- so a turning layer does not
- * contradict it.
- */
-inline constexpr float kContactRadiusShare = 0.55f;
-inline constexpr std::uint8_t kContactAlpha = 64;
-
-/**
  * A colour at a brightness, in the integer arithmetic the render contract is
  * written in.
  *

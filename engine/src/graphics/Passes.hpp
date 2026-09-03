@@ -33,8 +33,8 @@ struct TransformPass {
  * Casts the casters onto the ground from the light, in world space.
  *
  * Fills `WorldScene::shadow` with one convex polygon per caster, the fade
- * anchors, the contact patch and an opacity already thinned by how close the
- * eye is to the ground. Leaves it empty when there is nothing to cast, when
+ * anchors and an opacity already thinned by how close the eye is to the
+ * ground. Leaves it empty when there is nothing to cast, when
  * the light is not above the cube, or when the eye is at or below the ground.
  *
  * Runs before `view` because the ground is a world-space plane. Reads the

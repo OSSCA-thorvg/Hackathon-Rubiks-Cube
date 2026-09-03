@@ -691,6 +691,25 @@ void cancel_painting() noexcept;
  */
 [[nodiscard]] bool set_lighting(std::uint32_t count) noexcept;
 
+/**
+ * How many values lighting_values() writes for the current lighting: three
+ * plus six per lamp. Zero before initialization.
+ */
+[[nodiscard]] std::uint32_t lighting_count() noexcept;
+
+/**
+ * Writes the current lighting into the buffer as the flat list set_lighting()
+ * reads, and returns the buffer's address.
+ *
+ * The same buffer lighting_buffer() hands out, so a page that reads the
+ * lights and writes them back works through one arrangement. Here so the page
+ * can show the lights it is drawing under without keeping a copy of the
+ * engine's defaults.
+ *
+ * @return zero when `count` is not lighting_count(), and before initialization.
+ */
+[[nodiscard]] std::uintptr_t lighting_values(std::uint32_t count) noexcept;
+
 /** Restores the home camera without changing cube or view mode. */
 void reset_view() noexcept;
 

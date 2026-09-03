@@ -380,7 +380,6 @@ TEST_CASE("the shadow's points travel through the passes like face corners")
         std::vector<Vec3>(face.points.begin(), face.points.end()));
     shadow.fade_start = face.points[0];
     shadow.fade_end = face.points[2];
-    shadow.contact = {face.points[1], face.points[3]};
     shadow.opacity = 77;
     scene.shadow = shadow;
     // And a caster, which becomes a body on screen.
@@ -402,7 +401,6 @@ TEST_CASE("the shadow's points travel through the passes like face corners")
     }
     REQUIRE(result.shadow->fade_start.x == Approx(result.faces[0].points[0].x));
     REQUIRE(result.shadow->fade_end.y == Approx(result.faces[0].points[2].y));
-    REQUIRE(result.shadow->contact.size() == 2);
     REQUIRE(result.shadow->opacity == 77);
 
     // The viewport pass is the one that knows the rectangle.
@@ -802,7 +800,6 @@ TEST_CASE("a resting cube casts one convex shadow onto the ground")
     REQUIRE(scene.shadow.has_value());
     const auto& cast = *scene.shadow;
     REQUIRE(cast.polygons.size() == 1);
-    REQUIRE(cast.contact.size() == 16);
     REQUIRE(cast.opacity == kShadowOpacity);
 
     // Everything lies on the ground plane, and the polygon is its own hull.
@@ -813,7 +810,6 @@ TEST_CASE("a resting cube casts one convex shadow onto the ground")
     }
     REQUIRE(footprint.size() >= 4);
     REQUIRE(convex_hull(footprint).size() == footprint.size());
-    for (const auto& point : cast.contact) REQUIRE(point.y == Approx(kGroundY));
 
     // The anchor is the cube's centre dropped straight down; the far anchor
     // is away from the key light, which sits at +X +Z of the cube.
@@ -1023,4 +1019,46 @@ TEST_CASE("the home viewpoint's planes shade to the bytes the contract names")
             }
         }
     }
+}
+
+TEST_CASE("a highlight whose rim crosses the near plane keeps its radius")
+{
+    // A face in front of the eye carrying a glint whose centre is in front
+    // too, but whose rim -- a wide lobe measured along a plane tilted towards
+    // the eye -- has crossed the near plane. The face is drawn, so the glint
+    // on it must be as well.
+    ViewFace face;
+    face.points = {Vec3{-1.0f, -1.0f, -4.0f}, Vec3{1.0f, -1.0f, -4.0f},
+                   Vec3{1.0f, 1.0f, -4.0f}, Vec3{-1.0f, 1.0f, -4.0f}};
+    face.color = Color{255, 255, 255, 255};
+    face.highlights.push_back(HighlightOf<Vec3>{
+        Vec3{0.0f, 0.0f, -2.5f}, Vec3{0.0f, 1.0f, -0.5f}, 120, 40});
+    ViewScene scene;
+    scene.faces.push_back(face);
+
+    const Camera camera = identity_camera();
+    const ClipScene projected = scene | project(camera);
+    REQUIRE(projected.faces.size() == 1);
+    REQUIRE(projected.faces[0].highlights.size() == 1);
+    const auto& glint = projected.faces[0].highlights[0];
+    REQUIRE(glint.alpha == 120);
+    REQUIRE(glint.mid == 40);
+
+    // The rim came through as the point the same distance the other way,
+    // which is what (0, -1, -4.5) projects to.
+    const ViewScene mirrored = [&] {
+        ViewScene copy = scene;
+        copy.faces[0].highlights[0].rim = Vec3{0.0f, -1.0f, -4.5f};
+        return copy;
+    }();
+    const ClipScene mirrored_projected = mirrored | project(camera);
+    const auto& reference = mirrored_projected.faces[0].highlights[0];
+    REQUIRE(glint.rim.x == Approx(reference.rim.x));
+    REQUIRE(glint.rim.y == Approx(reference.rim.y));
+
+    // A glint whose centre itself is behind the near plane still cannot be
+    // drawn, and is dropped as before.
+    ViewScene behind = scene;
+    behind.faces[0].highlights[0].centre = Vec3{0.0f, 0.0f, -0.5f};
+    REQUIRE((behind | project(camera)).faces[0].highlights.empty());
 }

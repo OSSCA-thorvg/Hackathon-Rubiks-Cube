@@ -67,7 +67,16 @@ function createFakeModule() {
     // takes what is written into it.
     restoreBufferOverride: null as number | null,
     restoreApplyResult: 1,
+    // The lights, as the engine would hold them, and whether it takes a list.
+    lighting: [0.75, 1, 1.25, 2.6, 7, 4, 0.38, 0.6, 12] as number[],
+    lightingBufferResult: 1,
+    setLightingResult: 1,
   };
+
+  // Where the engine hands out its lighting buffer, and how long the last
+  // one asked for was.
+  const lightingPointer = 1 << 17;
+  let lightingCount = 0;
 
   // The words the restore buffer was filled with, read back out of the heap
   // the way the engine would read them.
@@ -196,6 +205,28 @@ function createFakeModule() {
       return behavior.setSpeedScaleResult;
     }),
     _thorvg_rubiks_speed_scale: vi.fn((): number => behavior.speedScale),
+    _thorvg_rubiks_lighting_buffer: vi.fn((count: number): number => {
+      if (behavior.lightingBufferResult === 0) return 0;
+      lightingCount = count;
+      return lightingPointer;
+    }),
+    _thorvg_rubiks_set_lighting: vi.fn((count: number): number => {
+      if (count !== lightingCount || behavior.setLightingResult === 0) return 0;
+      behavior.lighting = [
+        ...new Float32Array(heap.buffer, lightingPointer, count),
+      ];
+      return 1;
+    }),
+    _thorvg_rubiks_lighting_count: vi.fn(
+      (): number => behavior.lighting.length,
+    ),
+    _thorvg_rubiks_lighting_values: vi.fn((count: number): number => {
+      if (count !== behavior.lighting.length) return 0;
+      new Float32Array(heap.buffer, lightingPointer, count).set(
+        behavior.lighting,
+      );
+      return lightingPointer;
+    }),
     _thorvg_rubiks_reset_view: vi.fn((): void => {}),
     _thorvg_rubiks_is_busy: vi.fn((): number => behavior.busyResult),
   } satisfies ThorvgRubiksModule;
@@ -811,5 +842,53 @@ describe('CubeEngine.dispose', () => {
     expect(() => engine.resize({ width: 40, height: 40 })).toThrow('disposed');
     expect(() => engine.pointerDown(1, 2)).toThrow('disposed');
     expect(() => engine.advance(16)).toThrow('disposed');
+  });
+});
+
+describe('CubeEngine lighting', () => {
+  it('reads the lights back through the engine-owned buffer', async () => {
+    const { engine, module } = await createEngine();
+
+    const lights = engine.lighting();
+
+    // Float32 on the way over, so the values come back as the engine holds
+    // them rather than as they were typed.
+    expect(lights.map((value) => Number(value.toFixed(3)))).toEqual([
+      0.75, 1, 1.25, 2.6, 7, 4, 0.38, 0.6, 12,
+    ]);
+    expect(module._thorvg_rubiks_lighting_values).toHaveBeenCalledWith(9);
+  });
+
+  it('writes a list through the same buffer and reports a refusal', async () => {
+    const { engine, behavior } = await createEngine();
+
+    expect(engine.setLighting([0.5, 1, 1, 2.6, 7, 4, 0.38, 0.6, 12])).toBe(true);
+    expect(engine.lighting().map((value) => Number(value.toFixed(3)))).toEqual([
+      0.5, 1, 1, 2.6, 7, 4, 0.38, 0.6, 12,
+    ]);
+
+    // A count the engine will not hand a buffer for, and a list it refuses
+    // once written, both come back as false with the lights unchanged.
+    behavior.lightingBufferResult = 0;
+    expect(engine.setLighting([1, 2, 3])).toBe(false);
+    behavior.lightingBufferResult = 1;
+    behavior.setLightingResult = 0;
+    expect(engine.setLighting([0.9, 1, 1, 2.6, 7, 4, 0.38, 0.6, 12])).toBe(
+      false,
+    );
+    expect(engine.lighting()[0]).toBe(0.5);
+  });
+
+  it('refuses a lighting count or buffer the heap cannot hold', async () => {
+    const { engine, behavior, module } = await createEngine();
+
+    behavior.lighting = [];
+    expect(() => engine.lighting()).toThrow('invalid lighting count');
+
+    behavior.lighting = [0.75, 1, 1.25, 2.6, 7, 4, 0.38, 0.6, 12];
+    module._thorvg_rubiks_lighting_values.mockReturnValueOnce(
+      module.HEAPU8.byteLength - 4,
+    );
+    expect(() => engine.lighting()).toThrow('invalid lighting buffer');
   });
 });

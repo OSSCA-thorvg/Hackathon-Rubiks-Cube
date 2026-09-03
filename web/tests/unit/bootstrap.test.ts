@@ -38,7 +38,15 @@ describe('bootstrap', () => {
     // The commands that moved into Settings are still here, and still the
     // same ids: what changed is where they are on the page, not what the
     // controller finds when it goes looking for them.
-    for (const id of ['#reset', '#cube-size', '#speed', '#mute', '#home-view']) {
+    for (const id of [
+      '#reset',
+      '#cube-size',
+      '#speed',
+      '#mute',
+      '#home-view',
+      '#lighting-ambient',
+      '#lighting-reset',
+    ]) {
       expect(app.querySelector(id)?.closest('#settings-panel')).not.toBeNull();
     }
     expect(app.querySelector('#settings-panel')?.hasAttribute('hidden')).toBe(

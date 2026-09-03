@@ -67,8 +67,6 @@ struct RenderShadow {
     std::vector<std::vector<math::Vec2>> polygons;
     math::Vec2 fade_start{};
     math::Vec2 fade_end{};
-    /** Points round the soft patch directly under the cube. */
-    std::vector<math::Vec2> contact;
     std::uint8_t opacity = 0;
     /** Gaussian sigma of the edge, in pixels. */
     float blur_sigma = 0.0f;

@@ -902,6 +902,31 @@ export class CubeEngine {
     return this.module._thorvg_rubiks_set_lighting(values.length) !== 0;
   }
 
+  /**
+   * The lights the 3D view is drawn under, in the order setLighting() takes.
+   *
+   * Read from the engine so the page shows what the cube is actually lit by
+   * -- the defaults, or the list the address bar handed over -- rather than
+   * a copy of the defaults kept on this side.
+   */
+  lighting(): number[] {
+    this.assertUsable();
+    const count = this.module._thorvg_rubiks_lighting_count();
+    if (!Number.isSafeInteger(count) || count <= 0) {
+      throw new Error(`Engine returned an invalid lighting count ${count}.`);
+    }
+    const pointer = this.module._thorvg_rubiks_lighting_values(count);
+    if (!this.heapRegionUsable(pointer, count * 4)) {
+      throw new Error(
+        `Engine returned an invalid lighting buffer for ${count} values: ` +
+          `pointer ${pointer}.`,
+      );
+    }
+    return Array.from(
+      new Float32Array(this.module.HEAPU8.buffer, pointer, count),
+    );
+  }
+
   /** Returns the multiplier the engine settled on, after its own clamp. */
   speedScale(): number {
     this.assertUsable();

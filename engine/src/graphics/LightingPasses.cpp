@@ -15,7 +15,6 @@ namespace {
 
 constexpr std::size_t kCorners = 4;
 constexpr float kPi = 3.14159265358979323846f;
-constexpr int kContactPoints = 16;
 /** Stops of a plane's shading gradient, the true brightness at each. */
 constexpr std::size_t kShadingStops = 5;
 
@@ -413,15 +412,6 @@ WorldScene ShadowPass::operator()(WorldScene scene) const
             }
             shadow.fade_end = shadow.fade_start + direction * reach;
         }
-    }
-
-    const float radius = kContactRadiusShare * half_extent;
-    shadow.contact.reserve(kContactPoints);
-    for (int i = 0; i < kContactPoints; ++i) {
-        const float angle = 2.0f * kPi * static_cast<float>(i) / kContactPoints;
-        shadow.contact.push_back(
-            math::Vec3{shadow.fade_start.x + radius * std::cos(angle), ground_y,
-                       shadow.fade_start.z + radius * std::sin(angle)});
     }
 
     shadow.opacity = static_cast<std::uint8_t>(

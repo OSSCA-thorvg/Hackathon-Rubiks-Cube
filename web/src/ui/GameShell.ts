@@ -1,4 +1,5 @@
 import type { GameUi } from '../game/GameController.ts';
+import type { LightingUi } from './LightingControls.ts';
 import {
   DEFAULT_CUBE_SIZE,
   DEFAULT_SCRAMBLE_MOVES,
@@ -23,6 +24,8 @@ export type GameShell = {
   readonly settingsPanel: HTMLElement;
   readonly settingsBackdrop: HTMLElement;
   readonly settingsClose: HTMLButtonElement;
+  /** The lighting sliders, which the lifecycle wires once an engine is up. */
+  readonly lightingUi: LightingUi;
   readonly themeButtons: readonly HTMLButtonElement[];
   readonly activityTabs: readonly HTMLButtonElement[];
   readonly activityPanels: readonly HTMLElement[];
@@ -272,6 +275,61 @@ export function createGameShell(host: HTMLElement): GameShell {
       </div>
     </div>
 
+    <div class="settings__group" role="group" aria-label="Lighting">
+      <p class="settings__label">Lighting</p>
+      <label class="slider-field" for="lighting-ambient">
+        <span>Ambient</span>
+        <input type="range" id="lighting-ambient" data-lighting="ambient" min="0" max="1.5" step="0.01">
+        <output for="lighting-ambient" data-lighting-value="ambient"></output>
+      </label>
+      <label class="slider-field" for="lighting-attenuation">
+        <span>Falloff</span>
+        <input type="range" id="lighting-attenuation" data-lighting="attenuation" min="0" max="3" step="0.05">
+        <output for="lighting-attenuation" data-lighting-value="attenuation"></output>
+      </label>
+      <label class="slider-field" for="lighting-saturation">
+        <span>Saturation</span>
+        <input type="range" id="lighting-saturation" data-lighting="saturation" min="0" max="2" step="0.01">
+        <output for="lighting-saturation" data-lighting-value="saturation"></output>
+      </label>
+      <p class="settings__sublabel">Key light</p>
+      <label class="slider-field" for="lighting-x">
+        <span>X</span>
+        <input type="range" id="lighting-x" data-lighting="x" min="-10" max="10" step="0.1">
+        <output for="lighting-x" data-lighting-value="x"></output>
+      </label>
+      <label class="slider-field" for="lighting-y">
+        <span>Y</span>
+        <input type="range" id="lighting-y" data-lighting="y" min="-10" max="10" step="0.1">
+        <output for="lighting-y" data-lighting-value="y"></output>
+      </label>
+      <label class="slider-field" for="lighting-z">
+        <span>Z</span>
+        <input type="range" id="lighting-z" data-lighting="z" min="-10" max="10" step="0.1">
+        <output for="lighting-z" data-lighting-value="z"></output>
+      </label>
+      <label class="slider-field" for="lighting-diffuse">
+        <span>Diffuse</span>
+        <input type="range" id="lighting-diffuse" data-lighting="diffuse" min="0" max="1.5" step="0.01">
+        <output for="lighting-diffuse" data-lighting-value="diffuse"></output>
+      </label>
+      <label class="slider-field" for="lighting-specular">
+        <span>Specular</span>
+        <input type="range" id="lighting-specular" data-lighting="specular" min="0" max="1.5" step="0.01">
+        <output for="lighting-specular" data-lighting-value="specular"></output>
+      </label>
+      <label class="slider-field" for="lighting-shininess">
+        <span>Shininess</span>
+        <input type="range" id="lighting-shininess" data-lighting="shininess" min="1" max="128" step="1">
+        <output for="lighting-shininess" data-lighting-value="shininess"></output>
+      </label>
+      <div class="settings__row">
+        <button class="button" type="button" id="lighting-reset">Reset lights</button>
+        <button class="button" type="button" id="lighting-copy">Copy values</button>
+      </div>
+      <output class="lighting-values" id="lighting-values" aria-label="Lighting values"></output>
+    </div>
+
     <div class="settings__group settings__group--danger">
       <p class="settings__label">Danger zone</p>
       <button class="button button--danger" type="button" id="reset">Reset session</button>
@@ -329,6 +387,13 @@ export function createGameShell(host: HTMLElement): GameShell {
     settingsPanel: requireElement<HTMLElement>(root, '#settings-panel'),
     settingsBackdrop: requireElement<HTMLElement>(root, '#settings-backdrop'),
     settingsClose: requireElement<HTMLButtonElement>(root, '#settings-close'),
+    lightingUi: {
+      inputs: requireAll<HTMLInputElement>(root, '[data-lighting]'),
+      readouts: requireAll<HTMLOutputElement>(root, '[data-lighting-value]'),
+      resetButton: requireElement<HTMLButtonElement>(root, '#lighting-reset'),
+      copyButton: requireElement<HTMLButtonElement>(root, '#lighting-copy'),
+      values: requireElement<HTMLOutputElement>(root, '#lighting-values'),
+    },
     themeButtons: requireAll<HTMLButtonElement>(root, '[data-theme-choice]'),
     activityTabs: requireAll<HTMLButtonElement>(root, '[role="tab"]'),
     activityPanels: requireAll<HTMLElement>(root, '[role="tabpanel"]'),

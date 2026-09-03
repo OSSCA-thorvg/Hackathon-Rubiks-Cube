@@ -15,6 +15,11 @@ import {
   type ThemeListener,
 } from './ui/ThemeController.ts';
 import {
+  attachLightingControls,
+  type LightingControls,
+  type LightingUi,
+} from './ui/LightingControls.ts';
+import {
   attachGameController,
   type GameController,
   type GameControllerOptions,
@@ -43,6 +48,7 @@ export type EngineLike = PointerTarget &
     /** The ground the cube is drawn against, which the page decides. */
     setCanvasTheme(theme: CubeCanvasTheme): void;
     setLighting(values: readonly number[]): boolean;
+    lighting(): number[];
     /** @returns false when the engine would not take the shared record. */
     restoreSession(
       size: number,
@@ -116,6 +122,8 @@ export type StartAppOptions = {
   readonly canvas: HTMLCanvasElement;
   /** Gameplay controls the lifecycle hands to the game controller. */
   readonly gameUi: GameUi;
+  /** The lighting sliders; absent on a page without them. */
+  readonly lightingUi?: LightingUi;
   readonly setState: (state: AppState, message: string) => void;
   /** Called for failures after the app reached the ready state. */
   readonly onError: (error: unknown) => void;
@@ -275,6 +283,7 @@ export async function startApp(
   let observer: ObserverLike | null = null;
   let pointer: PointerController | null = null;
   let game: GameController | null = null;
+  let lighting: LightingControls | null = null;
   let frameHandle: number | null = null;
   let previousTimestamp: number | null = null;
   // Whether a loop was taken away by the tab going out of sight, and so is
@@ -408,6 +417,7 @@ export async function startApp(
     attempt(() => unsubscribeTheme?.());
     attempt(() => pointer?.teardown());
     attempt(() => game?.teardown());
+    attempt(() => lighting?.teardown());
     attempt(() => observer?.disconnect());
     attempt(() => win.removeEventListener('resize', applySize));
     attempt(() => win.removeEventListener('pagehide', onPageHide));
@@ -441,6 +451,18 @@ export async function startApp(
         onError(error);
       },
     });
+    // The lights are drawn by the engine and nothing else, so the sliders
+    // talk to it directly and a failure there is the engine's failure.
+    if (options.lightingUi !== undefined) {
+      lighting = attachLightingControls({
+        engine,
+        ui: options.lightingUi,
+        onError: (error: unknown): void => {
+          teardown();
+          onError(error);
+        },
+      });
+    }
     // A theme change is not a cube change, so it asks for one frame rather
     // than starting a loop: nothing is moving, and the ground is repainted
     // by the same render every other still frame goes through.

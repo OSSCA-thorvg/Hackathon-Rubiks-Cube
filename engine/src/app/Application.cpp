@@ -1852,6 +1852,22 @@ bool set_lighting(std::uint32_t count) noexcept
     return true;
 }
 
+std::uint32_t lighting_count() noexcept
+{
+    if (!state) return 0;
+    return static_cast<std::uint32_t>(state->lighting.value_count());
+}
+
+std::uintptr_t lighting_values(std::uint32_t count) noexcept
+{
+    if (!state) return 0;
+    if (count != state->lighting.value_count()) return 0;
+
+    state->lighting_values.assign(count, 0.0f);
+    state->lighting.to_values(state->lighting_values.data());
+    return reinterpret_cast<std::uintptr_t>(state->lighting_values.data());
+}
+
 bool set_canvas_theme(graphics::CanvasTheme theme) noexcept
 {
     if (!state || !valid_canvas_theme(theme)) return false;

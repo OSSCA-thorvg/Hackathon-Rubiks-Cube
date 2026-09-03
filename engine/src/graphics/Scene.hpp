@@ -75,6 +75,18 @@ struct HighlightOf {
      * rim, sampled from the lobe itself; the last is the rim and is zero.
      */
     std::array<std::uint8_t, kGlintStops> stops{};
+    /**
+     * Where the footprint is flattened for the screen: a point of the plane
+     * on the cube face, with the plane's unit axes. The screen ellipse is
+     * the footprint carried through the projection's tangent there, so it
+     * is right where the glint is seen -- a footprint wider than the face is
+     * far from affine under perspective, and fitting it through its own rims
+     * would draw the far side of the lobe compressed onto the stickers.
+     * Unused once flattened.
+     */
+    Point anchor{};
+    Point axis_u{};
+    Point axis_v{};
 };
 
 /**

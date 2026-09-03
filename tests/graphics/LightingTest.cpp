@@ -1033,58 +1033,82 @@ TEST_CASE("the home viewpoint's planes shade to the bytes the contract names")
     }
 }
 
-TEST_CASE("a highlight whose rim crosses the near plane keeps its radius")
+TEST_CASE("a highlight is flattened through the projection's tangent at its anchor")
 {
-    // A face in front of the eye carrying a glint whose centre is in front
-    // too, but whose rim -- a wide lobe measured along a plane tilted towards
-    // the eye -- has crossed the near plane. The face is drawn, so the glint
-    // on it must be as well.
-    ViewFace face;
-    face.points = {Vec3{-1.0f, -1.0f, -4.0f}, Vec3{1.0f, -1.0f, -4.0f},
-                   Vec3{1.0f, 1.0f, -4.0f}, Vec3{-1.0f, 1.0f, -4.0f}};
-    face.color = Color{255, 255, 255, 255};
-    HighlightOf<Vec3> wide;
-    wide.centre = Vec3{0.0f, 0.0f, -2.5f};
-    wide.rims = {Vec3{0.0f, 1.0f, -0.5f}, Vec3{0.0f, -1.0f, -4.5f},
-                 Vec3{1.0f, 0.0f, -2.5f}, Vec3{-1.0f, 0.0f, -2.5f}};
-    wide.stops = {120, 90, 60, 30, 0};
-    face.highlights.push_back(wide);
-    ViewScene scene;
-    scene.faces.push_back(face);
-
     const Camera camera = identity_camera();
-    const ClipScene projected = scene | project(camera);
-    REQUIRE(projected.faces.size() == 1);
-    REQUIRE(projected.faces[0].highlights.size() == 1);
-    const auto& glint = projected.faces[0].highlights[0];
-    REQUIRE(glint.stops[0] == 120);
-    REQUIRE(glint.stops[3] == 30);
 
-    // The rim that had crossed came through as its partner's mirror image
-    // through the projected centre, so the pair still spans an axis; the
-    // rims that were in front are where they project to.
-    REQUIRE(glint.rims[0].x == Approx(2.0f * glint.centre.x - glint.rims[1].x));
-    REQUIRE(glint.rims[0].y == Approx(2.0f * glint.centre.y - glint.rims[1].y));
-    REQUIRE(glint.rims[0].y != Approx(glint.rims[1].y));
-    const ViewScene untouched = [&] {
-        ViewScene copy = scene;
-        copy.faces[0].highlights[0].rims[0] = Vec3{0.0f, -1.0f, -4.5f};
-        return copy;
-    }();
-    const ClipScene untouched_projected = untouched | project(camera);
-    const auto& reference = untouched_projected.faces[0].highlights[0];
-    REQUIRE(glint.rims[1].y == Approx(reference.rims[1].y));
-    REQUIRE(glint.rims[2].x == Approx(reference.rims[2].x));
-    REQUIRE(glint.rims[3].x == Approx(reference.rims[3].x));
+    SECTION("on a plane facing the eye the tangent is the projection itself")
+    {
+        // A face whose edges' midpoints are exactly where the rims are, so
+        // the flattened rims can be checked against projected corners.
+        ViewFace face;
+        face.points = {Vec3{-2.5f, -3.0f, -4.0f}, Vec3{3.5f, -3.0f, -4.0f},
+                       Vec3{3.5f, 3.0f, -4.0f}, Vec3{-2.5f, 3.0f, -4.0f}};
+        face.color = Color{255, 255, 255, 255};
+        HighlightOf<Vec3> glint;
+        glint.centre = Vec3{0.5f, 0.0f, -4.0f};
+        glint.rims = {Vec3{3.5f, 0.0f, -4.0f}, Vec3{-2.5f, 0.0f, -4.0f},
+                      Vec3{0.5f, 3.0f, -4.0f}, Vec3{0.5f, -3.0f, -4.0f}};
+        glint.stops = {120, 90, 60, 30, 0};
+        glint.anchor = Vec3{0.0f, 0.0f, -4.0f};
+        glint.axis_u = Vec3{1.0f, 0.0f, 0.0f};
+        glint.axis_v = Vec3{0.0f, 1.0f, 0.0f};
+        face.highlights.push_back(glint);
+        ViewScene scene;
+        scene.faces.push_back(face);
 
-    // A pair with both ends behind the near plane has no axis to draw.
-    ViewScene axis_gone = scene;
-    axis_gone.faces[0].highlights[0].rims[1] = Vec3{0.0f, -1.0f, -0.5f};
-    REQUIRE((axis_gone | project(camera)).faces[0].highlights.empty());
+        const ClipScene projected = scene | project(camera);
+        REQUIRE(projected.faces.size() == 1);
+        REQUIRE(projected.faces[0].highlights.size() == 1);
+        const auto& flat = projected.faces[0].highlights[0];
+        const auto& ndc = projected.faces[0].ndc;
+        REQUIRE(flat.stops[0] == 120);
+        REQUIRE(flat.stops[3] == 30);
+        // +u rim: the middle of the right edge; -u rim: of the left edge.
+        REQUIRE(flat.rims[0].x == Approx(0.5f * (ndc[1].x + ndc[2].x)).margin(1e-4));
+        REQUIRE(flat.rims[0].y == Approx(0.5f * (ndc[1].y + ndc[2].y)).margin(1e-4));
+        REQUIRE(flat.rims[1].x == Approx(0.5f * (ndc[0].x + ndc[3].x)).margin(1e-4));
+        // +v rim: the middle of the top edge.
+        REQUIRE(flat.rims[2].y == Approx(0.5f * (ndc[2].y + ndc[3].y)).margin(1e-4));
+        REQUIRE(flat.rims[3].y == Approx(0.5f * (ndc[0].y + ndc[1].y)).margin(1e-4));
+    }
 
-    // A glint whose centre itself is behind the near plane still cannot be
-    // drawn, and is dropped as before.
-    ViewScene behind = scene;
-    behind.faces[0].highlights[0].centre = Vec3{0.0f, 0.0f, -0.5f};
-    REQUIRE((behind | project(camera)).faces[0].highlights.empty());
+    SECTION("a rim behind the eye is no obstacle, an anchor behind it is")
+    {
+        // A wide lobe on a plane tilted towards the eye: one rim has crossed
+        // the near plane, and the face is still drawn, so the glint is too.
+        ViewFace face;
+        face.points = {Vec3{-1.0f, -1.0f, -4.0f}, Vec3{1.0f, -1.0f, -4.0f},
+                       Vec3{1.0f, 1.0f, -2.0f}, Vec3{-1.0f, 1.0f, -2.0f}};
+        face.color = Color{255, 255, 255, 255};
+        const Vec3 up = rubiks::math::normalize(Vec3{0.0f, 1.0f, 1.0f});
+        HighlightOf<Vec3> glint;
+        glint.anchor = Vec3{0.0f, 0.0f, -3.0f};
+        glint.axis_u = Vec3{1.0f, 0.0f, 0.0f};
+        glint.axis_v = up;
+        glint.centre = glint.anchor + up * 1.0f;
+        glint.rims = {glint.centre + Vec3{4.0f, 0.0f, 0.0f}, glint.centre - Vec3{4.0f, 0.0f, 0.0f},
+                      glint.centre + up * 4.0f, glint.centre - up * 4.0f};
+        glint.stops = {150, 120, 80, 30, 0};
+        REQUIRE(glint.rims[2].z > -camera.near_plane());
+        face.highlights.push_back(glint);
+        ViewScene scene;
+        scene.faces.push_back(face);
+
+        const ClipScene projected = scene | project(camera);
+        REQUIRE(projected.faces.size() == 1);
+        REQUIRE(projected.faces[0].highlights.size() == 1);
+        const auto& flat = projected.faces[0].highlights[0];
+        for (const auto& rim : flat.rims) {
+            REQUIRE(std::isfinite(rim.x));
+            REQUIRE(std::isfinite(rim.y));
+        }
+        // Symmetric about the centre on screen, as an affine image is.
+        REQUIRE(flat.rims[0].x + flat.rims[1].x == Approx(2.0f * flat.centre.x).margin(1e-4));
+        REQUIRE(flat.rims[2].y + flat.rims[3].y == Approx(2.0f * flat.centre.y).margin(1e-4));
+
+        ViewScene behind = scene;
+        behind.faces[0].highlights[0].anchor = Vec3{0.0f, 0.0f, -0.5f};
+        REQUIRE((behind | project(camera)).faces[0].highlights.empty());
+    }
 }

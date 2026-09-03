@@ -355,6 +355,9 @@ ViewScene LightPass::operator()(ViewScene scene) const
                             glint.stops[s] = static_cast<std::uint8_t>(previous);
                         }
                         glint.stops[kGlintStops - 1] = 0;
+                        glint.anchor = anchor_foot;
+                        glint.axis_u = u_hat;
+                        glint.axis_v = v_hat;
                         plane->glint = glint;
                         plane->axis_u = u_hat;
                         plane->axis_v = v_hat;

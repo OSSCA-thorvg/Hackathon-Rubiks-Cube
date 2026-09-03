@@ -162,40 +162,39 @@ ClipScene ProjectPass::operator()(const ViewScene& scene) const
                 to_ndc(face.shading->from), to_ndc(face.shading->to),
                 face.shading->colors};
         }
-        // A highlight lies on the face's plane; its centre may sit off the
-        // face but still in front of the eye, as the mirror image of a light
-        // above the plane always is when the eye is above it too. Its rims
-        // are a semi-axis away along the plane, and a wide lobe on a plane
-        // tilted towards the eye can put one of a pair behind the near plane
-        // while the centre and the face are in front. That rim is then put
-        // where its partner's mirror image through the projected centre
-        // falls: the ellipse stays symmetric about its centre on screen,
-        // which is the one thing the drawing needs of it. A pair with both
-        // ends behind has no axis to draw, and the glint is dropped.
+        // A highlight lies on the face's plane, and its footprint can be far
+        // wider than the face. Under perspective a footprint like that is not
+        // an ellipse on screen, and an ellipse fitted through its projected
+        // rims would put the far side of the lobe, compressed, onto the
+        // stickers. So the footprint is carried through the tangent of the
+        // projection at the glint's anchor on the face: exact where the glint
+        // is seen, and never asking a rim behind the eye to project. Only the
+        // anchor and its two tangent steps are projected.
         for (const auto& glint : face.highlights) {
-            if (glint.centre.z >= -near_plane) continue;
-            HighlightOf<math::Vec2> flat;
-            flat.centre = to_ndc(glint.centre);
-            bool drawable = true;
-            for (std::size_t pair = 0; pair < glint.rims.size(); pair += 2) {
-                const math::Vec3& a = glint.rims[pair];
-                const math::Vec3& b = glint.rims[pair + 1];
-                const bool a_front = a.z < -near_plane;
-                const bool b_front = b.z < -near_plane;
-                if (!a_front && !b_front) {
-                    drawable = false;
-                    break;
-                }
-                const auto mirrored = [&](const math::Vec2& point) {
-                    return math::Vec2{2.0f * flat.centre.x - point.x,
-                                      2.0f * flat.centre.y - point.y};
-                };
-                if (a_front) flat.rims[pair] = to_ndc(a);
-                if (b_front) flat.rims[pair + 1] = to_ndc(b);
-                if (!a_front) flat.rims[pair] = mirrored(flat.rims[pair + 1]);
-                if (!b_front) flat.rims[pair + 1] = mirrored(flat.rims[pair]);
+            constexpr float kTangentStep = 0.25f;
+            const math::Vec3& anchor = glint.anchor;
+            const math::Vec3 step_u = anchor + glint.axis_u * kTangentStep;
+            const math::Vec3 step_v = anchor + glint.axis_v * kTangentStep;
+            if (anchor.z >= -near_plane || step_u.z >= -near_plane ||
+                step_v.z >= -near_plane) {
+                continue;
             }
-            if (!drawable) continue;
+            const math::Vec2 origin = to_ndc(anchor);
+            const math::Vec2 along_u = to_ndc(step_u);
+            const math::Vec2 along_v = to_ndc(step_v);
+            const auto flatten = [&](const math::Vec3& point) {
+                const math::Vec3 d = point - anchor;
+                const float cu = math::dot(d, glint.axis_u) / kTangentStep;
+                const float cv = math::dot(d, glint.axis_v) / kTangentStep;
+                return math::Vec2{
+                    origin.x + cu * (along_u.x - origin.x) + cv * (along_v.x - origin.x),
+                    origin.y + cu * (along_u.y - origin.y) + cv * (along_v.y - origin.y)};
+            };
+            HighlightOf<math::Vec2> flat;
+            flat.centre = flatten(glint.centre);
+            for (std::size_t i = 0; i < glint.rims.size(); ++i) {
+                flat.rims[i] = flatten(glint.rims[i]);
+            }
             flat.stops = glint.stops;
             projected.highlights.push_back(flat);
         }

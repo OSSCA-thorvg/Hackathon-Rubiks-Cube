@@ -279,23 +279,20 @@ void require_solved_net()
 /** Whether a pixel is the body at some brightness a lit cut face can have. */
 bool is_lit_body(const std::uint8_t* pixel)
 {
+    // The body by its hue rather than by a table of shades: kBody is
+    // (70, 74, 82), and every brightness of it, and every white glint laid
+    // over it, keeps the channels in that order with the blue-green step
+    // twice the green-red step. A glint on a cut face can be as strong as
+    // the lamp's whole specular, so its amount is not bounded here; what is
+    // is the spread, which shrinks towards white and is zero for a white
+    // sticker, and the darkness, which rules out the ground.
     if (pixel[3] != kBody[3]) return false;
-    // The body at any brightness of the band, with up to a faint white glint
-    // laid over it: a lobe whose tail reaches a cut face is lighting, not a
-    // different colour, and the question here is only which colour.
-    constexpr int kGlintSlack = 24;
-    for (unsigned b = 190; b <= 300; ++b) {
-        const auto shade = lit(kBody, b);
-        for (int a = 0; a <= kGlintSlack; ++a) {
-            bool matches = true;
-            for (int c = 0; c < 3 && matches; ++c) {
-                const int glossed = int{shade[c]} + (a * (255 - int{shade[c]}) + 127) / 255;
-                matches = std::abs(int{pixel[c]} - glossed) <= 2;
-            }
-            if (matches) return true;
-        }
-    }
-    return false;
+    const int r = pixel[0], g = pixel[1], b = pixel[2];
+    if (r > g || g > b) return false;
+    const int spread = b - r;
+    if (spread < 2 || spread > 16) return false;
+    if (std::abs((b - g) - 2 * (g - r)) > 3) return false;
+    return r >= 40 && r <= 220;
 }
 
 /** The pixel a world point falls on from the home viewpoint. */

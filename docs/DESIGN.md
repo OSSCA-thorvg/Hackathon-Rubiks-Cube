@@ -303,7 +303,7 @@ auto scene =
 renderer.render(scene);
 ```
 
-`Shadow`와 `Light`는 [Phase 19](./tasks/19-lighting-and-shadow.md)에서 들어왔습니다. 조명은 renderer가 아니라 pass입니다 — RenderScene은 여전히 ThorVG를 모르고, 그림자 그룹과 하이라이트를 기하와 색으로만 넘기며, 그것을 Scene 합성·GaussianBlur·blend·gradient·mask·clip으로 옮기는 것은 renderer의 일입니다.
+`Shadow`와 `Light`는 [Phase 19](./tasks/19-lighting-and-shadow.md)에서 들어왔습니다. 조명은 renderer가 아니라 pass입니다 — RenderScene은 여전히 ThorVG를 모르고, 그림자 그룹·몸체 실루엣·평면 음영·광택 타원을 기하와 색으로만 넘기며, 그것을 gradient fill·fill rule·Scene 합성·GaussianBlur·clip으로 옮기는 것은 renderer의 일입니다.
 
 꼭 `operator|`를 실제로 구현할 필요는 없습니다. 중요한 건:
 

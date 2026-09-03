@@ -38,7 +38,9 @@ namespace {
 using Rgba = std::array<std::uint8_t, 4>;
 
 constexpr Rgba kBackground{32, 32, 32, 255};
-constexpr Rgba kWhite{216, 216, 216, 255};   // +Y up, paper white
+constexpr Rgba kWhite{255, 255, 255, 255};   // +Y up, as the net draws it
+// The same white as the 3D view lights it: graphics::kPaperWhite.
+constexpr Rgba kPaperWhite{216, 216, 216, 255};
 constexpr Rgba kYellow{255, 213, 0, 255};    // -Y down
 constexpr Rgba kGreen{0, 155, 72, 255};      // +Z front
 constexpr Rgba kBlue{0, 70, 173, 255};       // -Z back
@@ -244,7 +246,7 @@ void require_cube_faces(std::uint32_t width, std::uint32_t height)
     // Three faces at three brightnesses: a normal the wrong way round now
     // shows up as the wrong shade as well as the wrong colour.
     require_pixel_near(pixel_in_cube(kUpSample, width, height),
-                       lit(saturated(kWhite), kLitUp), slack);
+                       lit(saturated(kPaperWhite), kLitUp), slack);
     require_pixel_near(pixel_in_cube(kFrontSample, width, height),
                        lit(saturated(kGreen), kLitFront), slack);
     require_pixel_near(pixel_in_cube(kRightSample, width, height),

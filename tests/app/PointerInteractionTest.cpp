@@ -27,7 +27,8 @@ namespace {
 using Rgba = std::array<std::uint8_t, 4>;
 
 constexpr Rgba kGreen{0, 155, 72, 255};
-constexpr Rgba kWhite{216, 216, 216, 255};
+constexpr Rgba kWhite{255, 255, 255, 255};
+constexpr Rgba kPaperWhite{216, 216, 216, 255};  // the 3D view's white
 constexpr Rgba kRed{183, 18, 52, 255};
 constexpr Rgba kBlue{0, 70, 173, 255};
 constexpr Rgba kOrange{255, 88, 0, 255};
@@ -79,7 +80,7 @@ constexpr Rgba saturated(const Rgba& color)
 // The six faces as the 3D view shows them: a sticker's colour, saturated, at
 // its plane's brightness. Named by the face so an orbit test reads as which
 // face is where.
-constexpr Rgba kUpLit = lit(saturated(kWhite), kLitUp);
+constexpr Rgba kUpLit = lit(saturated(kPaperWhite), kLitUp);
 constexpr Rgba kFrontLit = lit(saturated(kGreen), kLitFront);
 constexpr Rgba kRightLit = lit(saturated(kRed), kLitRight);
 constexpr Rgba kBackLit = lit(saturated(kBlue), kLitAway);

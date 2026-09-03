@@ -7,7 +7,9 @@ import { expect, type Page } from '@playwright/test';
 // as the wrong color here rather than as a plausible picture -- and since v4
 // a normal the wrong way round shows up as the wrong brightness too.
 export const BACKGROUND = [32, 32, 32, 255];
-export const WHITE = [216, 216, 216, 255]; // +Y up, paper white
+export const WHITE = [255, 255, 255, 255]; // +Y up
+/** The classic white as the 3D view lights it: the net keeps WHITE. */
+export const PAPER_WHITE = [216, 216, 216, 255];
 export const YELLOW = [255, 213, 0, 255]; // -Y down
 export const GREEN = [0, 155, 72, 255]; // +Z front
 export const BLUE = [0, 70, 173, 255]; // -Z back
@@ -66,7 +68,7 @@ export function saturated(color: readonly number[]): number[] {
 }
 
 /** The six faces as the lit 3D view shows them on a solved cube. */
-export const UP_LIT = lit(saturated(WHITE), LIT_UP);
+export const UP_LIT = lit(saturated(PAPER_WHITE), LIT_UP);
 export const FRONT_LIT = lit(saturated(GREEN), LIT_FRONT);
 export const RIGHT_LIT = lit(saturated(RED), LIT_RIGHT);
 export const BACK_LIT = lit(saturated(BLUE), LIT_AWAY);

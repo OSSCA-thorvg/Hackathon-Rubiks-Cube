@@ -31,6 +31,19 @@ enum class Palette { Classic, HighContrast };
 [[nodiscard]] Color to_color(cube::FaceColor color,
                              Palette palette = Palette::Classic) noexcept;
 
+/** The classic white as an object under light, for the 3D view alone. */
+inline constexpr Color kPaperWhite{216, 216, 216, 255};
+
+/**
+ * The colour a sticker has as a lit object, for the 3D view.
+ *
+ * The same as to_color() except that the classic white is kPaperWhite, so
+ * the lit face towards the key can be brighter than the sticker's own colour
+ * and a glint has room above it. The flat views draw to_color() as it is.
+ */
+[[nodiscard]] Color to_lit_color(cube::FaceColor color,
+                                 Palette palette = Palette::Classic) noexcept;
+
 /**
  * The color a guide line takes, by the axis its ring turns about.
  *

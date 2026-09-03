@@ -158,12 +158,19 @@ TEST_CASE("classic palette is the standard cube, channel for channel")
 {
     // Known answers rather than a property: the reason Classic exists is that
     // it is the cube people know, so the thing to fix is the exact shades.
-    REQUIRE(same(to_color(FaceColor::White), Color{216, 216, 216, 255}));
+    REQUIRE(same(to_color(FaceColor::White), Color{255, 255, 255, 255}));
     REQUIRE(same(to_color(FaceColor::Yellow), Color{255, 213, 0, 255}));
     REQUIRE(same(to_color(FaceColor::Green), Color{0, 155, 72, 255}));
     REQUIRE(same(to_color(FaceColor::Blue), Color{0, 70, 173, 255}));
     REQUIRE(same(to_color(FaceColor::Red), Color{183, 18, 52, 255}));
     REQUIRE(same(to_color(FaceColor::Orange), Color{255, 88, 0, 255}));
+
+    // As a lit object the classic white is paper white, and nothing else moves;
+    // the high-contrast set is drawn unlit and comes back untouched.
+    REQUIRE(same(rubiks::graphics::to_lit_color(FaceColor::White), rubiks::graphics::kPaperWhite));
+    REQUIRE(same(rubiks::graphics::to_lit_color(FaceColor::Red), to_color(FaceColor::Red)));
+    REQUIRE(same(rubiks::graphics::to_lit_color(FaceColor::White, Palette::HighContrast),
+                 to_color(FaceColor::White, Palette::HighContrast)));
 }
 
 TEST_CASE("the palette defaults to classic")

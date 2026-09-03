@@ -1009,16 +1009,15 @@ bool render() noexcept
 
     graphics::RenderScene scene;
     if (shown.cube) {
-        // The ground the shadow may lie on: the canvas, less whatever flat
-        // view shares it below. The cube's viewport is a square in the middle
-        // of that, and its shadow leans out of the square into the margins.
-        graphics::Rect stage{0.0f, 0.0f,
-                             static_cast<float>(state->surface_width),
-                             static_cast<float>(state->surface_height)};
-        if (flat.net) stage.height = std::min(stage.height, state->placement.net.y);
-        if (flat.rings) {
-            stage.height = std::min(stage.height, state->placement.rings.y);
-        }
+        // The ground the shadow may lie on: the whole canvas. The cube's
+        // viewport is a square in the middle of it and its shadow leans out
+        // into the margins -- and under a flat view sharing the canvas below,
+        // which is drawn over it afterwards. A shadow cut off at that view's
+        // top edge read as clipped; one running on beneath the net reads as
+        // a floor the net is laid on.
+        const graphics::Rect stage{0.0f, 0.0f,
+                                   static_cast<float>(state->surface_width),
+                                   static_cast<float>(state->surface_height)};
 
         // The high-contrast palette exists to keep six shades apart for eyes
         // that would otherwise merge them; shading those shades would undo

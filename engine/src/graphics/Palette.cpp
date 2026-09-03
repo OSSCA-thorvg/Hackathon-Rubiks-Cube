@@ -12,14 +12,7 @@ Color classic(cube::FaceColor color) noexcept
         case cube::FaceColor::Orange:
             return Color{255, 88, 0, 255};
         case cube::FaceColor::White:
-            // Paper white rather than 255: the lit view multiplies a face's
-            // colour by a brightness that passes 1 on the face towards the
-            // key, and a 255 white clamps there -- flat, and with no room for
-            // a glint to be brighter than the sticker it lands on. At 216 the
-            // top face shades like the others (220 to 246 across it) and a
-            // reflection still has somewhere to go. The net draws this value
-            // as it is.
-            return Color{216, 216, 216, 255};
+            return Color{255, 255, 255, 255};
         case cube::FaceColor::Yellow:
             return Color{255, 213, 0, 255};
         case cube::FaceColor::Green:
@@ -79,6 +72,22 @@ Color high_contrast(cube::FaceColor color) noexcept
 }
 
 }  // namespace
+
+Color to_lit_color(cube::FaceColor color, Palette palette) noexcept
+{
+    // Paper white rather than 255: the lit view multiplies a sticker's colour
+    // by a brightness that passes 1 on the face towards the key, and a 255
+    // white clamps there -- flat, and with no room for a glint to be brighter
+    // than the sticker it lands on. At 216 the top face shades like the
+    // others (220 to 246 across it at the home view) and a reflection still
+    // has somewhere to go. Only the classic white: the high-contrast set is
+    // drawn unlit and must come back byte for byte, and the flat views take
+    // to_color() and stay as bright as the page.
+    if (palette == Palette::Classic && color == cube::FaceColor::White) {
+        return kPaperWhite;
+    }
+    return to_color(color, palette);
+}
 
 Color to_color(cube::FaceColor color, Palette palette) noexcept
 {

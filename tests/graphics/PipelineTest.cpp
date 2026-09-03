@@ -358,7 +358,7 @@ TEST_CASE("a solved cube renders 27 stickers, nine of each visible color")
 
     // Three faces of a 3x3 sheet; the other 27 stickers face away.
     REQUIRE(scene.faces.size() == 27);
-    REQUIRE(count_color(scene, to_color(FaceColor::White)) == 9);
+    REQUIRE(count_color(scene, rubiks::graphics::to_lit_color(FaceColor::White)) == 9);
     REQUIRE(count_color(scene, to_color(FaceColor::Green)) == 9);
     REQUIRE(count_color(scene, to_color(FaceColor::Red)) == 9);
     REQUIRE(count_color(scene, to_color(FaceColor::Yellow)) == 0);
@@ -379,7 +379,7 @@ TEST_CASE("the contract samples land on the center sticker of each face")
     REQUIRE(up != nullptr);
     REQUIRE(front != nullptr);
     REQUIRE(right != nullptr);
-    REQUIRE(up->color == to_color(FaceColor::White));
+    REQUIRE(up->color == rubiks::graphics::to_lit_color(FaceColor::White));
     REQUIRE(front->color == to_color(FaceColor::Green));
     REQUIRE(right->color == to_color(FaceColor::Red));
 }
@@ -422,7 +422,7 @@ TEST_CASE("a move changes the colors the pipeline puts on screen")
     // takes the right face's red, and the right row takes blue from the back
     // face, which is itself culled along with the orange it received.
     REQUIRE(scene.faces.size() == 27);
-    REQUIRE(count_color(scene, to_color(FaceColor::White)) == 9);
+    REQUIRE(count_color(scene, rubiks::graphics::to_lit_color(FaceColor::White)) == 9);
     REQUIRE(count_color(scene, to_color(FaceColor::Green)) == 6);
     REQUIRE(count_color(scene, to_color(FaceColor::Red)) == 6 + 3);
     REQUIRE(count_color(scene, to_color(FaceColor::Blue)) == 3);
@@ -431,7 +431,7 @@ TEST_CASE("a move changes the colors the pipeline puts on screen")
     // Centers sit outside the turning layer, so the contract samples are
     // unchanged; only the rows above them moved.
     REQUIRE(face_at(scene, cube_sample(0.50f, 0.29f))->color ==
-            to_color(FaceColor::White));
+            rubiks::graphics::to_lit_color(FaceColor::White));
     REQUIRE(face_at(scene, cube_sample(0.31f, 0.61f))->color ==
             to_color(FaceColor::Green));
     REQUIRE(face_at(scene, cube_sample(0.69f, 0.61f))->color ==

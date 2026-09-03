@@ -227,7 +227,7 @@ WorldScene build_cube_scene(const cube::CubeState& state, Palette palette)
                         continue;
                     }
                     append_sticker(scene, center, half_extent, face,
-                                   to_color(cubie.sticker(face), palette));
+                                   to_lit_color(cubie.sticker(face), palette));
                 }
             }
         }
@@ -277,7 +277,7 @@ WorldScene build_cube_scene(const cube::CubeState& state,
                         outer_layer(face, size)) {
                         continue;
                     }
-                    emit(center, face, to_color(cubie.sticker(face), palette),
+                    emit(center, face, to_lit_color(cubie.sticker(face), palette),
                          turning);
                 }
 

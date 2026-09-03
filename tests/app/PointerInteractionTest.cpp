@@ -280,12 +280,19 @@ void require_solved_net()
 bool is_lit_body(const std::uint8_t* pixel)
 {
     if (pixel[3] != kBody[3]) return false;
+    // The body at any brightness of the band, with up to a faint white glint
+    // laid over it: a lobe whose tail reaches a cut face is lighting, not a
+    // different colour, and the question here is only which colour.
+    constexpr int kGlintSlack = 24;
     for (unsigned b = 190; b <= 300; ++b) {
-        const Rgba shade = lit(kBody, b);
-        if (std::abs(int{pixel[0]} - int{shade[0]}) <= 2 &&
-            std::abs(int{pixel[1]} - int{shade[1]}) <= 2 &&
-            std::abs(int{pixel[2]} - int{shade[2]}) <= 2) {
-            return true;
+        const auto shade = lit(kBody, b);
+        for (int a = 0; a <= kGlintSlack; ++a) {
+            bool matches = true;
+            for (int c = 0; c < 3 && matches; ++c) {
+                const int glossed = int{shade[c]} + (a * (255 - int{shade[c]}) + 127) / 255;
+                matches = std::abs(int{pixel[c]} - glossed) <= 2;
+            }
+            if (matches) return true;
         }
     }
     return false;

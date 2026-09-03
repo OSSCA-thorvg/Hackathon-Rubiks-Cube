@@ -14,7 +14,6 @@ namespace rubiks::graphics {
 namespace {
 
 constexpr std::size_t kCorners = 4;
-constexpr float kPi = 3.14159265358979323846f;
 /** Stops of a plane's shading gradient, the true brightness at each. */
 constexpr std::size_t kShadingStops = 5;
 
@@ -60,18 +59,55 @@ std::uint8_t specular_alpha(const Light& lamp, const math::Vec3& lamp_pos,
 }
 
 /**
- * The glint of one lamp on one plane: its peak on the plane, how far it
- * reaches and how strong it is. Worked out once per plane and lamp and shared
- * by every face on the plane -- the reach is found by bisection, which is not
- * something to do four thousand times a frame on a big cube.
+ * The glint of one lamp on one plane: where its lobe lands, how far it
+ * reaches each way and how strong it is. Worked out once per plane and lamp
+ * and shared by every face on the plane -- the reach is found by bisection,
+ * which is not something to do four thousand times a frame on a big cube.
+ *
+ * The footprint is an ellipse rather than a circle: a lobe seen at a slant
+ * reaches further towards the eye than away from it, so its reach is measured
+ * both ways along both of the plane's axes and the ellipse is fitted to the
+ * four ends. That is also the shape every sticker is tested against, so a
+ * sticker joins or leaves the glint exactly where the drawn ellipse does.
  */
 struct PlaneGlint {
     std::size_t lamp;
     math::Vec3 normal;
     float offset;
     std::optional<HighlightOf<math::Vec3>> glint;
-    float radius;
+    /** The footprint's unit axes and semi-axes on the plane. */
+    math::Vec3 axis_u{};
+    math::Vec3 axis_v{};
+    float semi_u = 0.0f;
+    float semi_v = 0.0f;
 };
+
+/**
+ * How far a lobe stays above the highlight threshold from `peak` along
+ * `along`, found by bisection; the whole span when it never falls below.
+ */
+float lobe_reach(const Light& lamp, const math::Vec3& lamp_pos,
+                 const math::Vec3& peak, const math::Vec3& along,
+                 const math::Vec3& normal) noexcept
+{
+    constexpr float kFarthest = 40.0f;
+    if (specular_alpha(lamp, lamp_pos, peak + along * kFarthest, normal) >=
+        kHighlightMinAlpha) {
+        return kFarthest;
+    }
+    float inside = 0.0f;
+    float outside = kFarthest;
+    for (int step = 0; step < 24; ++step) {
+        const float probe = 0.5f * (inside + outside);
+        if (specular_alpha(lamp, lamp_pos, peak + along * probe, normal) >=
+            kHighlightMinAlpha) {
+            inside = probe;
+        } else {
+            outside = probe;
+        }
+    }
+    return inside;
+}
 
 }  // namespace
 
@@ -268,7 +304,7 @@ ViewScene LightPass::operator()(ViewScene scene) const
                 }
             }
             if (!plane) {
-                planes.push_back(PlaneGlint{i, *normal, offset, std::nullopt, 0.0f});
+                planes.push_back(PlaneGlint{i, *normal, offset, std::nullopt});
                 plane = &planes.back();
 
                 const math::Vec3 mirrored = lamp_pos - *normal * (2.0f * lamp_height);
@@ -276,46 +312,82 @@ ViewScene LightPass::operator()(ViewScene scene) const
                 // crosses the plane at this fraction of its length.
                 const float t = lamp_height / (lamp_height + eye_height);
                 const math::Vec3 peak = mirrored * (1.0f - t);
-                const math::Vec3 along = u / std::sqrt(uu);
+                const math::Vec3 u_hat = u / std::sqrt(uu);
+                const math::Vec3 v_hat = v / std::sqrt(vv);
 
                 const auto peak_alpha = specular_alpha(lamp, lamp_pos, peak, *normal);
                 if (peak_alpha >= kHighlightMinAlpha) {
-                    // The glint's radius is where the lobe has fallen to the
-                    // threshold, found along the plane by bisection.
-                    constexpr float kFarthest = 40.0f;
-                    float inside = 0.0f, outside = kFarthest;
-                    if (specular_alpha(lamp, lamp_pos, peak + along * kFarthest,
-                                       *normal) >= kHighlightMinAlpha) {
-                        inside = kFarthest;
-                    } else {
-                        for (int step = 0; step < 24; ++step) {
-                            const float probe = 0.5f * (inside + outside);
-                            if (specular_alpha(lamp, lamp_pos, peak + along * probe,
-                                               *normal) >= kHighlightMinAlpha) {
-                                inside = probe;
-                            } else {
-                                outside = probe;
-                            }
+                    // The footprint: how far the lobe stays above the
+                    // threshold each way along each axis, and the ellipse
+                    // through those four ends.
+                    const float plus_u = lobe_reach(lamp, lamp_pos, peak, u_hat, *normal);
+                    const float minus_u = lobe_reach(lamp, lamp_pos, peak, -u_hat, *normal);
+                    const float plus_v = lobe_reach(lamp, lamp_pos, peak, v_hat, *normal);
+                    const float minus_v = lobe_reach(lamp, lamp_pos, peak, -v_hat, *normal);
+                    const float semi_u = 0.5f * (plus_u + minus_u);
+                    const float semi_v = 0.5f * (plus_v + minus_v);
+                    if (semi_u > 0.0f && semi_v > 0.0f) {
+                        const math::Vec3 centre = peak + u_hat * (0.5f * (plus_u - minus_u)) +
+                                                  v_hat * (0.5f * (plus_v - minus_v));
+                        const auto at = [&](const math::Vec3& point) {
+                            return int{specular_alpha(lamp, lamp_pos, point, *normal)};
+                        };
+                        // The stops are the lobe's own strength at evenly
+                        // spaced distances out, taken round the ellipse on
+                        // both axes, so the falloff drawn is the lobe's rather
+                        // than a guess between the centre and the rim. Kept
+                        // non-increasing outwards, and zero at the rim: the rim
+                        // is where the lobe fell below the threshold, and a
+                        // gradient pads its last stop past the radius.
+                        HighlightOf<math::Vec3> glint;
+                        glint.centre = centre;
+                        glint.rims = {centre + u_hat * semi_u, centre - u_hat * semi_u,
+                                      centre + v_hat * semi_v, centre - v_hat * semi_v};
+                        int previous = 255;
+                        for (std::size_t s = 0; s + 1 < kGlintStops; ++s) {
+                            const float t = static_cast<float>(s) /
+                                            static_cast<float>(kGlintStops - 1);
+                            const int sampled = (at(centre + u_hat * (t * semi_u)) +
+                                                 at(centre - u_hat * (t * semi_u)) +
+                                                 at(centre + v_hat * (t * semi_v)) +
+                                                 at(centre - v_hat * (t * semi_v)) + 2) / 4;
+                            previous = std::min(previous, sampled);
+                            glint.stops[s] = static_cast<std::uint8_t>(previous);
                         }
-                    }
-                    if (inside > 0.0f) {
-                        plane->radius = inside;
-                        plane->glint = HighlightOf<math::Vec3>{
-                            peak, peak + along * inside, peak_alpha,
-                            specular_alpha(lamp, lamp_pos,
-                                           peak + along * (0.5f * inside), *normal)};
+                        glint.stops[kGlintStops - 1] = 0;
+                        plane->glint = glint;
+                        plane->axis_u = u_hat;
+                        plane->axis_v = v_hat;
+                        plane->semi_u = semi_u;
+                        plane->semi_v = semi_v;
                     }
                 }
             }
             if (!plane->glint) continue;
 
-            // Only stickers the glint reaches carry it: the nearest point of
-            // the sticker to the peak is within the radius.
-            const math::Vec3& peak = plane->glint->centre;
-            const float a = std::clamp(math::dot(peak - origin, u) / uu, 0.0f, 1.0f);
-            const float b = std::clamp(math::dot(peak - origin, v) / vv, 0.0f, 1.0f);
-            const math::Vec3 nearest = origin + u * a + v * b;
-            if (math::length(nearest - peak) >= plane->radius) continue;
+            // Only stickers the footprint reaches carry it. The sticker's box
+            // in the footprint's own frame, scaled so the ellipse is the unit
+            // circle, has to come within that circle -- with a little to
+            // spare, since the drawn lobe is all but gone at the rim and a
+            // sticker cut off exactly there would show the cut.
+            constexpr float kReachMargin = 1.1f;
+            const math::Vec3& centre = plane->glint->centre;
+            float min_u = 1e9f, max_u = -1e9f, min_v = 1e9f, max_v = -1e9f;
+            for (const auto& corner : face.points) {
+                const math::Vec3 d = corner - centre;
+                const float cu = math::dot(d, plane->axis_u) / plane->semi_u;
+                const float cv = math::dot(d, plane->axis_v) / plane->semi_v;
+                min_u = std::min(min_u, cu);
+                max_u = std::max(max_u, cu);
+                min_v = std::min(min_v, cv);
+                max_v = std::max(max_v, cv);
+            }
+            const float nearest_u = std::clamp(0.0f, min_u, max_u);
+            const float nearest_v = std::clamp(0.0f, min_v, max_v);
+            if (nearest_u * nearest_u + nearest_v * nearest_v >=
+                kReachMargin * kReachMargin) {
+                continue;
+            }
 
             face.highlights.push_back(*plane->glint);
         }

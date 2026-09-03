@@ -716,18 +716,28 @@ TEST_CASE("a highlight sits where the light reflects into the eye")
 
         REQUIRE(lit.faces[0].highlights.size() == 1);
         const auto& glint = lit.faces[0].highlights[0];
-        // Mirrored to (0.5, 0.5, -4); half way back to the eye is z = -2.
-        REQUIRE(glint.centre.x == Approx(0.25f).margin(1e-4));
-        REQUIRE(glint.centre.y == Approx(0.25f).margin(1e-4));
+        // Mirrored to (0.5, 0.5, -4); half way back to the eye is z = -2,
+        // where the peak is. The footprint is fitted round the peak, so its
+        // centre lies on the plane within the footprint of the peak.
         REQUIRE(glint.centre.z == Approx(-2.0f).margin(1e-4));
-        // A perfect reflection: the whole specular strength, falling off to
-        // the threshold at the rim, with the half-way value in between.
-        REQUIRE(glint.alpha == std::lround(lamp.lamps[0].specular * 255.0f));
-        REQUIRE(glint.mid < glint.alpha);
-        REQUIRE(glint.mid >= kHighlightMinAlpha);
-        const Vec3 span = glint.rim - glint.centre;
-        REQUIRE(rubiks::math::length(span) > 0.0f);
-        REQUIRE(span.z == Approx(0.0f));
+        const Vec3 semi_u = glint.rims[0] - glint.centre;
+        const Vec3 semi_v = glint.rims[2] - glint.centre;
+        REQUIRE(rubiks::math::length(semi_u) > 0.0f);
+        REQUIRE(rubiks::math::length(semi_v) > 0.0f);
+        REQUIRE(semi_u.z == Approx(0.0f).margin(1e-4));
+        REQUIRE(semi_v.z == Approx(0.0f).margin(1e-4));
+        // Opposite rims mirror each other through the centre.
+        REQUIRE((glint.rims[0] + glint.rims[1]).x == Approx(2.0f * glint.centre.x).margin(1e-4));
+        REQUIRE((glint.rims[2] + glint.rims[3]).y == Approx(2.0f * glint.centre.y).margin(1e-4));
+        REQUIRE(std::abs(glint.centre.x - 0.25f) < rubiks::math::length(semi_u));
+        REQUIRE(std::abs(glint.centre.y - 0.25f) < rubiks::math::length(semi_v));
+        // Strong at the centre, never rising outwards, gone at the rim.
+        REQUIRE(glint.stops.front() >= std::lround(lamp.lamps[0].specular * 255.0f) / 2);
+        for (std::size_t s = 1; s < glint.stops.size(); ++s) {
+            REQUIRE(glint.stops[s] <= glint.stops[s - 1]);
+        }
+        REQUIRE(glint.stops[1] >= kHighlightMinAlpha);
+        REQUIRE(glint.stops.back() == 0);
     }
 
     SECTION("left where it falls when the mirror point is off the face")
@@ -740,9 +750,11 @@ TEST_CASE("a highlight sits where the light reflects into the eye")
 
         REQUIRE(lit.faces[0].highlights.size() == 1);
         const auto& glint = lit.faces[0].highlights[0];
-        REQUIRE(glint.centre.x == Approx(2.5f).margin(1e-4));
-        REQUIRE(glint.alpha == std::lround(lamp.lamps[0].specular * 255.0f));
-        REQUIRE(rubiks::math::length(glint.rim - glint.centre) > 1.5f);
+        // The footprint's centre is off the face, and its near rim reaches
+        // across the edge into it.
+        REQUIRE(glint.centre.x > 1.0f);
+        REQUIRE(std::min(glint.rims[0].x, glint.rims[1].x) < 1.0f);
+        REQUIRE(glint.stops.front() >= kHighlightMinAlpha);
     }
 
     SECTION("two lamps, two glints, each where its own mirror point is")
@@ -751,8 +763,8 @@ TEST_CASE("a highlight sits where the light reflects into the eye")
         pair.lamps.push_back(Light{Vec3{-0.5f, -0.5f, 0.0f}, 0.0f, 0.6f, 16.0f});
         const ViewScene lit = light(pair, camera)(scene);
         REQUIRE(lit.faces[0].highlights.size() == 2);
-        REQUIRE(lit.faces[0].highlights[0].centre.x == Approx(0.25f).margin(1e-4));
-        REQUIRE(lit.faces[0].highlights[1].centre.x == Approx(-0.25f).margin(1e-4));
+        REQUIRE(lit.faces[0].highlights[0].centre.x > 0.0f);
+        REQUIRE(lit.faces[0].highlights[1].centre.x < 0.0f);
     }
 
     SECTION("and gone when a tight lobe's mirror point is far away")
@@ -1031,8 +1043,12 @@ TEST_CASE("a highlight whose rim crosses the near plane keeps its radius")
     face.points = {Vec3{-1.0f, -1.0f, -4.0f}, Vec3{1.0f, -1.0f, -4.0f},
                    Vec3{1.0f, 1.0f, -4.0f}, Vec3{-1.0f, 1.0f, -4.0f}};
     face.color = Color{255, 255, 255, 255};
-    face.highlights.push_back(HighlightOf<Vec3>{
-        Vec3{0.0f, 0.0f, -2.5f}, Vec3{0.0f, 1.0f, -0.5f}, 120, 40});
+    HighlightOf<Vec3> wide;
+    wide.centre = Vec3{0.0f, 0.0f, -2.5f};
+    wide.rims = {Vec3{0.0f, 1.0f, -0.5f}, Vec3{0.0f, -1.0f, -4.5f},
+                 Vec3{1.0f, 0.0f, -2.5f}, Vec3{-1.0f, 0.0f, -2.5f}};
+    wide.stops = {120, 90, 60, 30, 0};
+    face.highlights.push_back(wide);
     ViewScene scene;
     scene.faces.push_back(face);
 
@@ -1041,20 +1057,30 @@ TEST_CASE("a highlight whose rim crosses the near plane keeps its radius")
     REQUIRE(projected.faces.size() == 1);
     REQUIRE(projected.faces[0].highlights.size() == 1);
     const auto& glint = projected.faces[0].highlights[0];
-    REQUIRE(glint.alpha == 120);
-    REQUIRE(glint.mid == 40);
+    REQUIRE(glint.stops[0] == 120);
+    REQUIRE(glint.stops[3] == 30);
 
-    // The rim came through as the point the same distance the other way,
-    // which is what (0, -1, -4.5) projects to.
-    const ViewScene mirrored = [&] {
+    // The rim that had crossed came through as its partner's mirror image
+    // through the projected centre, so the pair still spans an axis; the
+    // rims that were in front are where they project to.
+    REQUIRE(glint.rims[0].x == Approx(2.0f * glint.centre.x - glint.rims[1].x));
+    REQUIRE(glint.rims[0].y == Approx(2.0f * glint.centre.y - glint.rims[1].y));
+    REQUIRE(glint.rims[0].y != Approx(glint.rims[1].y));
+    const ViewScene untouched = [&] {
         ViewScene copy = scene;
-        copy.faces[0].highlights[0].rim = Vec3{0.0f, -1.0f, -4.5f};
+        copy.faces[0].highlights[0].rims[0] = Vec3{0.0f, -1.0f, -4.5f};
         return copy;
     }();
-    const ClipScene mirrored_projected = mirrored | project(camera);
-    const auto& reference = mirrored_projected.faces[0].highlights[0];
-    REQUIRE(glint.rim.x == Approx(reference.rim.x));
-    REQUIRE(glint.rim.y == Approx(reference.rim.y));
+    const ClipScene untouched_projected = untouched | project(camera);
+    const auto& reference = untouched_projected.faces[0].highlights[0];
+    REQUIRE(glint.rims[1].y == Approx(reference.rims[1].y));
+    REQUIRE(glint.rims[2].x == Approx(reference.rims[2].x));
+    REQUIRE(glint.rims[3].x == Approx(reference.rims[3].x));
+
+    // A pair with both ends behind the near plane has no axis to draw.
+    ViewScene axis_gone = scene;
+    axis_gone.faces[0].highlights[0].rims[1] = Vec3{0.0f, -1.0f, -0.5f};
+    REQUIRE((axis_gone | project(camera)).faces[0].highlights.empty());
 
     // A glint whose centre itself is behind the near plane still cannot be
     // drawn, and is dropped as before.

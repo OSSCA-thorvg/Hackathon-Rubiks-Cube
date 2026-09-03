@@ -1,6 +1,7 @@
 #include "render/ThorVGSoftwareRenderer.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <limits>
@@ -97,24 +98,33 @@ bool add_gaussian_blur(tvg::Scene& scene, float sigma, int quality) noexcept
 }
 
 /** White at `alpha` in the middle, `mid` half way out, nothing at the edge. */
-bool fill_glow(tvg::Shape& shape, const Vec2& centre, float radius,
-               const graphics::Color& color, std::uint8_t alpha,
-               std::uint8_t mid) noexcept
+/**
+ * A glow over an ellipse: the unit radial falloff carried onto the screen by
+ * an affine map whose columns are the ellipse's semi-axes and whose
+ * translation is its centre, so a lobe seen at a slant is drawn at the slant.
+ */
+bool fill_glow(tvg::Shape& shape, const Vec2& centre, const Vec2& axis_a,
+               const Vec2& axis_b, const graphics::Color& color,
+               const std::array<std::uint8_t, graphics::kGlintStops>& alphas) noexcept
 {
     auto* gradient = tvg::RadialGradient::gen();
     if (!gradient) return false;
 
-    if (gradient->radial(centre.x, centre.y, radius, centre.x, centre.y, 0.0f) !=
-        tvg::Result::Success) {
+    if (gradient->radial(0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f) !=
+            tvg::Result::Success ||
+        gradient->transform(tvg::Matrix{axis_a.x, axis_b.x, centre.x, axis_a.y,
+                                        axis_b.y, centre.y, 0.0f, 0.0f, 1.0f}) !=
+            tvg::Result::Success) {
         delete gradient;
         return false;
     }
-    const tvg::Fill::ColorStop stops[]{
-        {0.0f, color.r, color.g, color.b, alpha},
-        {0.5f, color.r, color.g, color.b, mid},
-        {1.0f, color.r, color.g, color.b, 0},
-    };
-    if (gradient->colorStops(stops, 3) != tvg::Result::Success) {
+    std::array<tvg::Fill::ColorStop, graphics::kGlintStops> stops{};
+    for (std::size_t i = 0; i < stops.size(); ++i) {
+        stops[i] = {static_cast<float>(i) / static_cast<float>(stops.size() - 1),
+                    color.r, color.g, color.b, alphas[i]};
+    }
+    if (gradient->colorStops(stops.data(), static_cast<uint32_t>(stops.size())) !=
+        tvg::Result::Success) {
         delete gradient;
         return false;
     }
@@ -405,17 +415,23 @@ bool ThorVGSoftwareRenderer::draw_highlight(
     // The same outline as the face, so the glow is cut to the sticker.
     if (!append_polygon(*shape, face.points)) return false;
 
-    const float radius = std::max(
-        std::hypot(highlight.rim.x - highlight.centre.x,
-                   highlight.rim.y - highlight.centre.y),
-        0.5f);
+    // The ellipse through the four projected rim points: its centre is their
+    // mean and its semi-axes half the distance between each opposite pair.
+    // Under perspective that is where the footprint's edge actually falls,
+    // which the projected centre alone would not say.
+    const auto& rims = highlight.rims;
+    const Vec2 centre{(rims[0].x + rims[1].x + rims[2].x + rims[3].x) * 0.25f,
+                      (rims[0].y + rims[1].y + rims[2].y + rims[3].y) * 0.25f};
+    const Vec2 axis_a{(rims[0].x - rims[1].x) * 0.5f, (rims[0].y - rims[1].y) * 0.5f};
+    const Vec2 axis_b{(rims[2].x - rims[3].x) * 0.5f, (rims[2].y - rims[3].y) * 0.5f};
+    // Too thin to hold a pixel: nothing to draw, and nothing to invert.
+    if (std::abs(axis_a.x * axis_b.y - axis_a.y * axis_b.x) < 0.25f) return true;
     // White laid over at the glint's alpha. This is the same arithmetic as a
     // screen blend of white -- c + a(255 - c) either way -- so it brightens a
     // sticker towards white without hiding which colour it was, and without
     // the composition layer a blend mode would ask for on every glint.
-    return fill_glow(*shape, highlight.centre, radius,
-                     graphics::Color{255, 255, 255, 255}, highlight.alpha,
-                     highlight.mid);
+    return fill_glow(*shape, centre, axis_a, axis_b,
+                     graphics::Color{255, 255, 255, 255}, highlight.stops);
 }
 
 bool ThorVGSoftwareRenderer::draw_shadow(

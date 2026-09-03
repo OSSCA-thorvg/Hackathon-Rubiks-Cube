@@ -9,6 +9,7 @@
 
 #include "graphics/Color.hpp"
 #include "graphics/Rect.hpp"
+#include "graphics/Scene.hpp"
 #include "math/Types.hpp"
 
 namespace rubiks::graphics {
@@ -23,10 +24,10 @@ namespace rubiks::graphics {
  */
 struct RenderHighlight {
     math::Vec2 centre{};
-    math::Vec2 rim{};
-    std::uint8_t alpha = 0;
-    /** Strength half way from centre to rim, so the falloff has a shape. */
-    std::uint8_t mid = 0;
+    /** The ends of the footprint's two axes on screen: +u, -u, +v, -v. */
+    std::array<math::Vec2, 4> rims{};
+    /** Strength at evenly spaced distances from centre to rim; the rim is 0. */
+    std::array<std::uint8_t, kGlintStops> stops{};
 };
 
 /**

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <vector>
 
 #include "app/Application.hpp"
@@ -69,12 +70,10 @@ int main(int argc, char** argv)
     std::printf("size %d, %d frames at 45 degrees: median %.2f ms, p95 %.2f ms\n",
                 size, frames, median(samples), percentile95(samples));
 
-    // Optionally write the resting frame out as a binary PPM, for looking at
-    // the pixels the numbers above were made of.
+    // Optionally write the frame out as a binary PPM, for looking at the
+    // pixels the numbers above were made of -- the layer still at 45 degrees,
+    // since that is where the lighting has something to show.
     if (argc > 3) {
-        rubiks::app::reset_cube();
-        while (rubiks::app::advance(16.0)) {
-        }
         if (!rubiks::app::render()) return 1;
         const auto* pixels =
             reinterpret_cast<const std::uint8_t*>(rubiks::app::pixel_buffer());
@@ -127,6 +126,42 @@ int main(int argc, char** argv)
                     percentile95(times));
     };
     time_variant("full", scene);
+    // What the highlights change: the frame with and without them, differenced.
+    {
+        RenderScene bare = scene;
+        for (auto& face : bare.faces) face.highlights.clear();
+        auto lit = rubiks::render::ThorVGSoftwareRenderer::create(kCanvas, kCanvas);
+        auto flat = rubiks::render::ThorVGSoftwareRenderer::create(kCanvas, kCanvas);
+        if (lit && flat && lit->render(scene) && flat->render(bare)) {
+            const auto* a = reinterpret_cast<const std::uint8_t*>(lit->pixel_buffer());
+            const auto* b = reinterpret_cast<const std::uint8_t*>(flat->pixel_buffer());
+            std::size_t changed = 0;
+            int max_diff = 0;
+            for (std::uint32_t i = 0; i < kCanvas * kCanvas; ++i) {
+                int d = 0;
+                for (int c = 0; c < 3; ++c) {
+                    d = std::max(d, std::abs(int(a[i * 4 + c]) - int(b[i * 4 + c])));
+                }
+                if (d > 2) ++changed;
+                max_diff = std::max(max_diff, d);
+            }
+            std::printf("highlights change %zu pixels, max channel diff %d\n", changed, max_diff);
+            if (argc > 3) {
+                std::string path = std::string(argv[3]) + ".glint.ppm";
+                if (FILE* out = std::fopen(path.c_str(), "wb")) {
+                    std::fprintf(out, "P6\n%u %u\n255\n", kCanvas, kCanvas);
+                    for (std::uint32_t i = 0; i < kCanvas * kCanvas; ++i) {
+                        for (int c = 0; c < 3; ++c) {
+                            const int d = std::abs(int(a[i * 4 + c]) - int(b[i * 4 + c]));
+                            const std::uint8_t v = static_cast<std::uint8_t>(std::min(255, d * 3));
+                            std::fwrite(&v, 1, 1, out);
+                        }
+                    }
+                    std::fclose(out);
+                }
+            }
+        }
+    }
     {
         RenderScene v = scene;
         v.shadow.reset();

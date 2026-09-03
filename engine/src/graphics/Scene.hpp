@@ -57,14 +57,24 @@ struct ShadowGroup {
  * so that projecting both gives the renderer a screen radius that shrinks with
  * distance the way the face does. Peak strength is `alpha`.
  */
+/** Stops of a glint's falloff, centre to rim. */
+inline constexpr std::size_t kGlintStops = 5;
+
 template <typename Point>
 struct HighlightOf {
-    /** On the plane; outside the face when the glint only reaches into it. */
+    /**
+     * The centre of the lobe's footprint on the plane -- an ellipse, since a
+     * lobe seen at a slant reaches further one way than the other. Outside
+     * the face when the glint only reaches into it.
+     */
     Point centre{};
-    Point rim{};
-    /** Strength at the centre and half way to the rim, to shape the lobe. */
-    std::uint8_t alpha = 0;
-    std::uint8_t mid = 0;
+    /** The ends of the footprint's two axes: +u, -u, +v, -v from the centre. */
+    std::array<Point, 4> rims{};
+    /**
+     * The lobe's strength at evenly spaced distances from the centre to the
+     * rim, sampled from the lobe itself; the last is the rim and is zero.
+     */
+    std::array<std::uint8_t, kGlintStops> stops{};
 };
 
 /**

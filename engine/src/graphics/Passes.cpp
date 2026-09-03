@@ -164,18 +164,40 @@ ClipScene ProjectPass::operator()(const ViewScene& scene) const
         }
         // A highlight lies on the face's plane; its centre may sit off the
         // face but still in front of the eye, as the mirror image of a light
-        // above the plane always is when the eye is above it too. Its rim is
-        // a radius away along the plane, and a wide lobe on a plane tilted
-        // towards the eye can put that point behind the near plane while the
-        // centre and the face are in front. The rim only measures the radius,
-        // so the point the same distance the other way serves as well -- and
-        // with the centre in front, that one always is.
+        // above the plane always is when the eye is above it too. Its rims
+        // are a semi-axis away along the plane, and a wide lobe on a plane
+        // tilted towards the eye can put one of a pair behind the near plane
+        // while the centre and the face are in front. That rim is then put
+        // where its partner's mirror image through the projected centre
+        // falls: the ellipse stays symmetric about its centre on screen,
+        // which is the one thing the drawing needs of it. A pair with both
+        // ends behind has no axis to draw, and the glint is dropped.
         for (const auto& glint : face.highlights) {
             if (glint.centre.z >= -near_plane) continue;
-            math::Vec3 rim = glint.rim;
-            if (rim.z >= -near_plane) rim = glint.centre * 2.0f - glint.rim;
-            projected.highlights.push_back(HighlightOf<math::Vec2>{
-                to_ndc(glint.centre), to_ndc(rim), glint.alpha, glint.mid});
+            HighlightOf<math::Vec2> flat;
+            flat.centre = to_ndc(glint.centre);
+            bool drawable = true;
+            for (std::size_t pair = 0; pair < glint.rims.size(); pair += 2) {
+                const math::Vec3& a = glint.rims[pair];
+                const math::Vec3& b = glint.rims[pair + 1];
+                const bool a_front = a.z < -near_plane;
+                const bool b_front = b.z < -near_plane;
+                if (!a_front && !b_front) {
+                    drawable = false;
+                    break;
+                }
+                const auto mirrored = [&](const math::Vec2& point) {
+                    return math::Vec2{2.0f * flat.centre.x - point.x,
+                                      2.0f * flat.centre.y - point.y};
+                };
+                if (a_front) flat.rims[pair] = to_ndc(a);
+                if (b_front) flat.rims[pair + 1] = to_ndc(b);
+                if (!a_front) flat.rims[pair] = mirrored(flat.rims[pair + 1]);
+                if (!b_front) flat.rims[pair + 1] = mirrored(flat.rims[pair]);
+            }
+            if (!drawable) continue;
+            flat.stops = glint.stops;
+            projected.highlights.push_back(flat);
         }
         result.faces.push_back(projected);
     }
@@ -258,9 +280,13 @@ RenderScene ViewportPass::operator()(const ClipScene& scene) const
                                            face.shading->colors};
         }
         for (const auto& glint : face.highlights) {
-            mapped.highlights.push_back(RenderHighlight{
-                to_pixels(glint.centre), to_pixels(glint.rim), glint.alpha,
-                glint.mid});
+            RenderHighlight pixels;
+            pixels.centre = to_pixels(glint.centre);
+            for (std::size_t i = 0; i < glint.rims.size(); ++i) {
+                pixels.rims[i] = to_pixels(glint.rims[i]);
+            }
+            pixels.stops = glint.stops;
+            mapped.highlights.push_back(pixels);
         }
         result.faces.push_back(mapped);
     }

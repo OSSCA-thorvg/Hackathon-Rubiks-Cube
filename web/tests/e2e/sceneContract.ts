@@ -97,8 +97,16 @@ export function near(
  * probes it says whether a layer is part way round.
  */
 export function isBody(pixel: readonly number[]): boolean {
+  // The body at any brightness of the band, with up to a faint white glint
+  // laid over it: a lobe whose tail reaches a cut face is lighting, not a
+  // different colour, and the question here is only which colour.
+  const GLINT_SLACK = 24;
   for (let b = 190; b <= 300; b += 1) {
-    if (near(pixel, lit(BODY, b), 2)) return true;
+    const shade = lit(BODY, b);
+    for (let a = 0; a <= GLINT_SLACK; a += 1) {
+      const glossed = shade.map((c) => c + Math.round((a * (255 - c)) / 255));
+      if (near(pixel, glossed, 2)) return true;
+    }
   }
   return false;
 }

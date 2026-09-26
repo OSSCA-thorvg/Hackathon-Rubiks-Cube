@@ -209,6 +209,23 @@ describe('MoveLog with somewhere to go', () => {
     log.update(frame(3, 2, 0));
     expect(document.activeElement).toBe(buttons()[0]);
     expect((document.activeElement as HTMLElement).dataset.index).toBe('0');
+
+    // And the one stop is where the focus is, not on the move the cube has
+    // walked to -- a second stop further on would be where Tab went next,
+    // rather than out of the list.
+    expect(buttons().map((button) => button.tabIndex)).toEqual([0, -1, -1]);
+  });
+
+  it('moves the stop back to the cursor once the keyboard is elsewhere', () => {
+    const { log, buttons } = createPickable([R, U, F]);
+    log.update(frame(3, 3, 0));
+    buttons()[0]!.focus();
+    log.update(frame(3, 2, 0));
+    expect(buttons().map((button) => button.tabIndex)).toEqual([0, -1, -1]);
+
+    buttons()[0]!.blur();
+    log.update(frame(3, 3, 0));
+    expect(buttons().map((button) => button.tabIndex)).toEqual([-1, -1, 0]);
   });
 
   it('stops answering presses at teardown', () => {

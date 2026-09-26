@@ -120,22 +120,23 @@ export class MoveLog {
 
     if (this.onPick === null) return;
 
-    // One stop for the whole list, on the entry the cube is at, so tabbing
-    // past a long solve is one key rather than one per move. The arrows walk
-    // the rest.
-    const stop = current ?? items[0];
+    // One stop for the whole list, so tabbing past a long solve is one key
+    // rather than one per move; the arrows walk the rest. It is on the entry
+    // the cube is at -- unless the keyboard is already in the list, when it
+    // stays on the entry holding focus. A stop anywhere else would be one
+    // more place for Tab to land before it left.
     const buttons = this.buttons();
-    for (const button of buttons) {
-      button.tabIndex = button.closest('li') === stop ? 0 : -1;
-    }
+    const atCursor = (current ?? items[0])?.querySelector('button') ?? null;
+    const focused =
+      focusedIndex === null
+        ? null
+        : (buttons.find(
+            (button) => Number(button.dataset.index) === focusedIndex,
+          ) ?? atCursor);
+    const stop = focused ?? atCursor;
+    for (const button of buttons) button.tabIndex = button === stop ? 0 : -1;
 
-    if (focusedIndex !== null) {
-      const again =
-        buttons.find((button) => Number(button.dataset.index) === focusedIndex) ??
-        stop?.querySelector('button') ??
-        null;
-      again?.focus({ preventScroll: true });
-    }
+    focused?.focus({ preventScroll: true });
   }
 
   /** Stops listening; the list itself is the caller's. */

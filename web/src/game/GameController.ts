@@ -298,10 +298,16 @@ const PALETTE_NAME_BY_VALUE: Readonly<Record<CubePalette, string>> = {
  * twelve" or "turn these five", so both are walked from here: every step is
  * an ordinary undo, redo or face turn, asked for once the one before it has
  * landed. The turns are a queue the walk eats from the front of.
+ *
+ * `landsAt` is where the record's cursor stands once the step in flight has
+ * landed, or null before the first. Every commit moves the cursor by exactly
+ * one, so a cursor anywhere else when the walk is next idle is a commit the
+ * walk did not make.
  */
-type Walk =
+type Walk = (
   | { readonly kind: 'seek'; readonly target: number }
-  | { readonly kind: 'turns'; readonly turns: TypedTurn[] };
+  | { readonly kind: 'turns'; readonly turns: TypedTurn[] }
+) & { landsAt: number | null };
 
 /**
  * What each refusal reads as, one sentence apiece.
@@ -475,6 +481,17 @@ export function attachGameController(
         returnFocus: ui.shareButton,
       }),
   );
+
+  // Where the record stood when the link on the card was read from it. The
+  // card comes down once the cube is somewhere else, since it says the link
+  // opens this cube: a command takes it down as it runs, and a drag -- which
+  // comes through no command -- shows as a record that has moved.
+  let sharedAt: { readonly cursor: number; readonly length: number } | null =
+    null;
+  const hideShareCard = (): void => {
+    sharedAt = null;
+    shareCard.hide();
+  };
   const records = setup(
     () => new SessionRecords(ui.recordBest, ui.recordList, ui.recordTally),
   );
@@ -850,6 +867,8 @@ export function attachGameController(
       // Whatever was being walked to is not where this command is going. A
       // step already landing finishes; the ones after it are not asked for.
       walk = null;
+      // Nor is the cube the link on the card opens, or not for long.
+      hideShareCard();
       leaveAmbient();
       action();
       updateEngineControls();
@@ -899,16 +918,29 @@ export function attachGameController(
    *
    * Cleared out and re-set so that refusing twice running shows twice; setting
    * an attribute that is already there restarts no animation.
+   *
+   * Not set at all on a box inside a closed panel -- which is where Escape
+   * leaves it, since closing is what takes the focus away and commits the
+   * edit. No animation runs on a box that is not drawn, so none would end,
+   * and the mark would flash again the next time the panel opened.
    */
   const flashRefusal = (box: HTMLInputElement): void => {
     delete box.dataset.refused;
+    if (box.closest('[hidden]') !== null) return;
     void box.offsetWidth;
     box.dataset.refused = '';
   };
 
   // The mark lasts as long as its animation, which is why one always runs --
   // the reduced-motion variant fades instead of moving rather than not being
-  // there, so this always arrives and the mark can never stick.
+  // there. Ended or cancelled, since a panel closed while the box is flashing
+  // cancels it, and the mark must not outlive it either way.
+  const refusalBoxes = [
+    ui.scrambleMovesInput,
+    ui.cubeSizeInput,
+    ui.turnDepthInput,
+  ];
+  const REFUSAL_FLASH_ENDS = ['animationend', 'animationcancel'] as const;
   const onRefusalFlashEnd = (event: Event): void => {
     const box = event.currentTarget;
     if (box instanceof HTMLInputElement) delete box.dataset.refused;
@@ -1093,10 +1125,16 @@ export function attachGameController(
    */
   const onStop = (): void => {
     run((): void => {
+      // A walk still waiting for a scramble to finish has not begun, and the
+      // scramble cannot be stopped: the walk is all Stop takes away, and the
+      // cube goes on turning, so "Stopped." would not be true.
+      const waiting = walk !== null && session.state === 'scrambling';
       walk = null;
       engine.stopPlayback();
       rewinding = false;
-      session.announce('Stopped.');
+      session.announce(
+        waiting ? 'Cancelled. The scramble still plays out.' : 'Stopped.',
+      );
       updateEngineControls();
     });
   };
@@ -1105,26 +1143,39 @@ export function attachGameController(
    * Asks for the next step of the walk, if the last one has landed.
    *
    * Called when a walk begins and again after every frame, so each step goes
-   * in on the first idle frame after the one before it. A step the engine
-   * refuses ends the walk there rather than being retried: the cube is
-   * somewhere a person has taken it -- a drag, a colouring -- and walking on
-   * past that would be walking over them.
+   * in on the first idle frame after the one before it. The walk ends rather
+   * than going on when the cube is somewhere a person has taken it: a step
+   * the engine refuses, or a commit the walk did not make.
+   *
+   * The second is how a drag shows. A typed turn is an ordinary turn and not
+   * a sequence the engine plays, so a press on the cube while one is turning
+   * is taken -- the turn is committed on the spot and the drag goes on from
+   * there -- and nothing is refused afterwards. Only the record says it
+   * happened: one commit more than the walk asked for.
    */
   const stepWalk = (): void => {
     if (walk === null || engine.isBusy()) return;
 
+    const cursor = engine.timelineCursor();
+    if (walk.landsAt !== null && cursor !== walk.landsAt) {
+      walk = null;
+      session.announce('Stopped playing: a layer was turned by hand.');
+      return;
+    }
+
     if (walk.kind === 'seek') {
-      const cursor = engine.timelineCursor();
       if (cursor === walk.target) {
         walk = null;
         return;
       }
       // One move at a time, played the way Undo and Redo play it, so a walk
       // back through twelve moves is watched as twelve moves coming off.
-      if (!(cursor > walk.target ? engine.undo() : engine.redo())) {
+      const back = cursor > walk.target;
+      if (!(back ? engine.undo() : engine.redo())) {
         walk = null;
         return;
       }
+      walk.landsAt = back ? cursor - 1 : cursor + 1;
       rewinding = true;
       startFrameLoop();
       return;
@@ -1146,6 +1197,7 @@ export function attachGameController(
       walk = null;
       return;
     }
+    walk.landsAt = cursor + 1;
     startFrameLoop();
   };
 
@@ -1175,7 +1227,7 @@ export function attachGameController(
   /** Walks the cube to the point in the record just past `cursor` moves. */
   const seekTo = (cursor: number): void => {
     if (cursor === engine.timelineCursor() && !engine.isBusy()) return;
-    startWalk({ kind: 'seek', target: cursor });
+    startWalk({ kind: 'seek', target: cursor, landsAt: null });
   };
 
   /** Reads a line of typed moves and walks through them, or says why not. */
@@ -1190,7 +1242,7 @@ export function attachGameController(
       if (typed.turns.length === 0) return;
 
       const count = typed.turns.length;
-      startWalk({ kind: 'turns', turns: [...typed.turns] });
+      startWalk({ kind: 'turns', turns: [...typed.turns], landsAt: null });
       if (walk !== null) {
         session.announce(`Playing ${count} ${count === 1 ? 'move' : 'moves'}.`);
       }
@@ -1364,11 +1416,13 @@ export function attachGameController(
         (): void => {
           if (!active) return;
           session.announce(`Link copied. ${opens}`);
+          sharedAt = { cursor: now.cursor, length: now.length };
           shareCard.show({ link, copied: true, opens });
         },
         (): void => {
           if (!active) return;
           session.announce('Could not copy the link.');
+          sharedAt = { cursor: now.cursor, length: now.length };
           shareCard.show({ link, copied: false, opens });
         },
       );
@@ -1441,11 +1495,13 @@ export function attachGameController(
   };
 
   ui.scrambleMovesInput.addEventListener('change', onScrambleMovesChange);
-  ui.scrambleMovesInput.addEventListener('animationend', onRefusalFlashEnd);
   ui.cubeSizeInput.addEventListener('change', onCubeSizeChange);
-  ui.cubeSizeInput.addEventListener('animationend', onRefusalFlashEnd);
   ui.turnDepthInput.addEventListener('change', onTurnDepthChange);
-  ui.turnDepthInput.addEventListener('animationend', onRefusalFlashEnd);
+  for (const box of refusalBoxes) {
+    for (const type of REFUSAL_FLASH_ENDS) {
+      box.addEventListener(type, onRefusalFlashEnd);
+    }
+  }
   ui.turnWideButton.addEventListener('click', onTurnWide);
   ui.scrambleButton.addEventListener('click', onScramble);
   ui.resetButton.addEventListener('click', onReset);
@@ -1494,6 +1550,12 @@ export function attachGameController(
         // state this frame may just have moved it to.
         const now = engineNow();
         session.observe(now);
+        if (
+          sharedAt !== null &&
+          (now.cursor !== sharedAt.cursor || now.length !== sharedAt.length)
+        ) {
+          hideShareCard();
+        }
 
         // A walk takes its next step as soon as the last one has landed, and
         // before the controls are read, so Stop does not blink out for the
@@ -1549,14 +1611,13 @@ export function attachGameController(
         'change',
         onScrambleMovesChange,
       );
-      ui.scrambleMovesInput.removeEventListener(
-        'animationend',
-        onRefusalFlashEnd,
-      );
       ui.cubeSizeInput.removeEventListener('change', onCubeSizeChange);
-      ui.cubeSizeInput.removeEventListener('animationend', onRefusalFlashEnd);
       ui.turnDepthInput.removeEventListener('change', onTurnDepthChange);
-      ui.turnDepthInput.removeEventListener('animationend', onRefusalFlashEnd);
+      for (const box of refusalBoxes) {
+        for (const type of REFUSAL_FLASH_ENDS) {
+          box.removeEventListener(type, onRefusalFlashEnd);
+        }
+      }
       ui.turnWideButton.removeEventListener('click', onTurnWide);
       ui.scrambleButton.removeEventListener('click', onScramble);
       ui.resetButton.removeEventListener('click', onReset);

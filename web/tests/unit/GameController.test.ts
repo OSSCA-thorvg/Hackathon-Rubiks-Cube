@@ -754,6 +754,37 @@ describe('attachGameController', () => {
     expect(input.dataset.refused).toBeUndefined();
   });
 
+  it('does not outlive a flash that was cancelled', () => {
+    const harness = createHarness();
+    const input = harness.ui.scrambleMovesInput;
+
+    input.value = '101';
+    input.dispatchEvent(new Event('change'));
+    expect(input.dataset.refused).toBeDefined();
+
+    // A panel closed while the box is flashing cancels the animation rather
+    // than ending it, and the mark goes with it all the same.
+    input.dispatchEvent(new Event('animationcancel'));
+    expect(input.dataset.refused).toBeUndefined();
+  });
+
+  it('marks nothing on a box inside a panel that has closed', () => {
+    const harness = createHarness();
+    const input = harness.ui.scrambleMovesInput;
+    // Escape closes the panel first, and the edit is committed by the focus
+    // leaving it: the box is refused where nobody can see it.
+    const panel = document.createElement('div');
+    input.replaceWith(panel);
+    panel.append(input);
+    panel.hidden = true;
+
+    input.value = '101';
+    input.dispatchEvent(new Event('change'));
+    expect(harness.ui.status.textContent).toContain('Kept 20');
+    expect(input.value).toBe('20');
+    expect(input.dataset.refused).toBeUndefined();
+  });
+
   it('puts the refusal out as soon as the length is corrected', () => {
     const harness = createHarness();
     const input = harness.ui.scrambleMovesInput;
@@ -1815,6 +1846,31 @@ describe('sharing the cube', () => {
     expect(document.activeElement).toBe(card.link);
   });
 
+  it('takes the card down once the cube is somewhere else', async () => {
+    const harness = createHarness();
+    harness.failCopy(true);
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+
+    // A refused copy stays up until it is closed -- or until the cube it
+    // opens is no longer the one on the table, here by a drag.
+    harness.ui.shareButton.click();
+    const card = harness.ui.shareCard;
+    await vi.waitFor(() => expect(card.card.hidden).toBe(false));
+    harness.controller.afterEngineFrame();
+    expect(card.card.hidden).toBe(false);
+
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(card.card.hidden).toBe(true);
+
+    // And by a command, which says so before it runs.
+    harness.ui.shareButton.click();
+    await vi.waitFor(() => expect(card.card.hidden).toBe(false));
+    harness.ui.resetButton.click();
+    expect(card.card.hidden).toBe(true);
+  });
+
   it('is out of reach while anything is playing', () => {
     const harness = createHarness();
 
@@ -2223,6 +2279,49 @@ describe('walking the cube along its record', () => {
     expect(harness.ui.stopButton.hidden).toBe(true);
     // The first of them started the clock, as a turn by hand would.
     expect(harness.controller.state).toBe('running');
+  });
+
+  it('ends a typed line when a layer is turned by hand in the middle of it', () => {
+    const harness = withMoves(0);
+    harness.engine.turnFace.mockClear();
+
+    harness.ui.root.dispatchEvent(
+      new CustomEvent(PLAY_MOVES_EVENT, { detail: { text: 'R U F' } }),
+    );
+    expect(harness.engine.turnFace).toHaveBeenCalledTimes(1);
+
+    // A press while R is turning commits it on the spot and drags a layer of
+    // its own, which commits too: two moves on the record where the walk
+    // asked for one. Nothing refuses anything, so only the record tells.
+    harness.commitMove();
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+
+    expect(harness.engine.turnFace).toHaveBeenCalledTimes(1);
+    expect(harness.ui.stopButton.hidden).toBe(true);
+    expect(harness.ui.status.textContent).toBe(
+      'Stopped playing: a layer was turned by hand.',
+    );
+  });
+
+  it('cancels a typed line waiting on a scramble, and says the scramble goes on', () => {
+    const harness = createHarness();
+    harness.ui.scrambleButton.click();
+    harness.controller.afterEngineFrame();
+
+    harness.ui.root.dispatchEvent(
+      new CustomEvent(PLAY_MOVES_EVENT, { detail: { text: 'R U' } }),
+    );
+    expect(harness.engine.turnFace).not.toHaveBeenCalled();
+    expect(harness.ui.stopButton.hidden).toBe(false);
+
+    harness.ui.stopButton.click();
+    expect(harness.ui.status.textContent).toBe(
+      'Cancelled. The scramble still plays out.',
+    );
+
+    harness.finishScramble();
+    expect(harness.engine.turnFace).not.toHaveBeenCalled();
   });
 
   it('says why a typed line was refused, and plays none of it', () => {

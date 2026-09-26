@@ -30,7 +30,14 @@ function createKeyboard() {
   };
 }
 
-function build(options: { canPlay?: boolean; blocked?: boolean } = {}) {
+function build(
+  options: {
+    canPlay?: boolean;
+    blocked?: boolean;
+    /** Further commands, after the ones every test has. */
+    extra?: readonly Command[];
+  } = {},
+) {
   const host = document.createElement('div');
   host.innerHTML = `
     <button id="trigger" aria-expanded="false"><kbd id="shortcut"></kbd></button>
@@ -81,6 +88,7 @@ function build(options: { canPlay?: boolean; blocked?: boolean } = {}) {
       note: () => 'Current',
       run: () => ran.push('split'),
     },
+    ...(options.extra ?? []),
   ];
 
   const keyboard = createKeyboard();
@@ -177,6 +185,39 @@ describe('attachCommandPalette', () => {
 
     key('Enter');
     expect(play).toHaveBeenCalledWith("r u r' u'");
+  });
+
+  it('puts a command first for a word that is also a move', () => {
+    const { palette, play, ran, options, type, key } = build({
+      extra: [
+        { label: () => 'View: 2D', available: () => true, run: () => ran.push('2d') },
+        { label: () => 'Reset cube', available: () => true, run: () => ran.push('reset') },
+      ],
+    });
+    palette.open();
+
+    // "2d" is a slice of D as well as the name of a view; somebody typing it
+    // into a search is after the view.
+    type('2d');
+    expect(options()[0]!.textContent).toBe('View: 2D');
+    expect(options().some((option) => option.textContent?.startsWith('Play'))).toBe(
+      true,
+    );
+    key('Enter');
+    expect(ran).toEqual(['2d']);
+    expect(play).not.toHaveBeenCalled();
+
+    // The start of a command's name is a search too, however it reads.
+    palette.open();
+    type('res');
+    expect(options()[0]!.textContent).toBe('Reset cube');
+
+    // A spaced line, a primed one and a single letter are moves first, even
+    // where every letter of them turns up in some command's name.
+    for (const line of ['r u', "RUR'U'", 'R']) {
+      type(line);
+      expect(options()[0]!.textContent?.startsWith('Play')).toBe(true);
+    }
   });
 
   it('says why a line of moves cannot be played', () => {

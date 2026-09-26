@@ -96,8 +96,9 @@ test('the command menu runs the page commands and says what it cannot read', asy
     '"4R" reaches past a 3×3.',
   );
 
-  // A command is found by its words and run as a press on its button.
-  await page.locator('#command-input').fill('view 2d');
+  // A command is found by its words and run as a press on its button --
+  // "2d" is a slice of D as well, and still finds the view first.
+  await page.locator('#command-input').fill('2d');
   await expect(
     page.locator('#command-list [role="option"]').first(),
   ).toContainText('View: 2D');

@@ -71,6 +71,24 @@ type Entry = {
 const MOVE_LIKE = /^[\s,RLUDFBMESXYZrludfbmesxyzwW'’′`\d-]+$/;
 
 /**
+ * Whether a line that reads as moves is more likely a search for a command.
+ *
+ * Moves are read in either case, so short words are moves too: "2d" is a
+ * slice of D, "res" is R E S, "mu" is M U. A single run of two or more
+ * characters that begins a word in the name of a command it found is taken
+ * as that search, and the command goes above the moves. Anything spaced or
+ * primed -- "R U R' U'", "RUR'U'" -- and any single letter stays a line of
+ * moves first. Both are listed either way, an arrow key apart.
+ */
+function readsAsSearch(query: string, found: readonly string[]): boolean {
+  const token = query.toLowerCase();
+  if (token.length < 2 || /[\s,'’′`]/.test(token)) return false;
+  return found.some((haystack) =>
+    haystack.split(/[^a-z0-9]+/).some((word) => word.startsWith(token)),
+  );
+}
+
+/**
  * The command menu: one field that searches the page's commands and plays
  * typed moves.
  *
@@ -194,11 +212,13 @@ export function attachCommandPalette(
     }
 
     const commands: Entry[] = [];
+    const found: string[] = [];
     options.commands().forEach((command, index) => {
       if (!command.available()) return;
       const label = command.label();
       const haystack = `${label} ${command.keywords ?? ''}`.toLowerCase();
       if (!words.every((word) => haystack.includes(word))) return;
+      found.push(haystack);
 
       const note = command.note?.() ?? null;
       commands.push(
@@ -221,10 +241,15 @@ export function attachCommandPalette(
           : `Nothing matches "${query}". Moves are written like R U' F2 or 2Rw.`;
     }
 
-    entries = [...moves, ...commands];
+    const groups = [
+      { name: 'Moves', members: moves },
+      { name: 'Commands', members: commands },
+    ].filter(({ members }) => members.length > 0);
+    if (moves.length > 0 && readsAsSearch(query, found)) groups.reverse();
+
+    entries = groups.flatMap(({ members }) => members);
     list.replaceChildren(
-      ...(moves.length > 0 ? [group('Moves', moves)] : []),
-      ...(commands.length > 0 ? [group('Commands', commands)] : []),
+      ...groups.map(({ name, members }) => group(name, members)),
     );
     message.textContent = reason;
     message.hidden = reason === '';

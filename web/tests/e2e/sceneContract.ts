@@ -193,6 +193,13 @@ export const NET_ONLY_HEIGHT = 0.78;
 export const CUBE_REGION_SIDE = 0.84;
 
 /**
+ * The most pixels the page draws its canvases at, all of them together:
+ * MAX_STAGE_PIXELS in src/AppLifecycle.ts, repeated here on purpose so a
+ * change has to be made deliberately in both places.
+ */
+export const STAGE_PIXEL_BUDGET = 2_600_000;
+
+/**
  * Fraction of the 3D region's width a drag has to cover for a quarter turn,
  * mirroring the engine's own drag sensitivity.
  */
@@ -218,6 +225,11 @@ export type CanvasFrame = {
  */
 export type CanvasProbe = CanvasFrame & {
   readonly devicePixelRatio: number;
+  /**
+   * The density every canvas on the stage is drawn at: the device's own,
+   * until the canvases together would pass the page's pixel budget.
+   */
+  readonly density: number;
   /** The net's canvas, all zeros while the net is not on show. */
   readonly netCanvas: CanvasFrame;
   readonly top: number[];
@@ -373,9 +385,23 @@ export async function probeCanvas(
         box: { left: 0, top: 0, width: 0, height: 0 },
       };
 
+      // Worked out the way the page works it out, over every canvas on the
+      // stage, the hidden ones counting for nothing.
+      const area = [
+        ...document.querySelectorAll<HTMLCanvasElement>('.stage-view > canvas'),
+      ].reduce((sum, each) => sum + each.clientWidth * each.clientHeight, 0);
+      const density =
+        area > 0
+          ? Math.min(
+              window.devicePixelRatio,
+              Math.sqrt(config.stagePixelBudget / area),
+            )
+          : window.devicePixelRatio;
+
       return {
         ...cube.frame,
         devicePixelRatio: window.devicePixelRatio,
+        density,
         netCanvas: shown ? flat.frame : zero,
         top: inCube(config.topSample),
         left: inCube(config.leftSample),
@@ -406,6 +432,7 @@ export async function probeCanvas(
       cubeRegionSide: CUBE_REGION_SIDE,
       netOnlyWidth: NET_ONLY_WIDTH,
       netOnlyHeight: NET_ONLY_HEIGHT,
+      stagePixelBudget: STAGE_PIXEL_BUDGET,
       signatureSteps: SIGNATURE_STEPS,
     },
   );
@@ -550,15 +577,19 @@ export function assertSceneContract(probe: CanvasProbe): void {
   expect(probe.net).toEqual(expectedNet());
 }
 
-/** Every canvas on show is drawn at the page's density, box for box. */
+/**
+ * Every canvas on show is drawn at the stage's one density, box for box --
+ * the device's own ratio on any stage small enough, lower on a large one.
+ */
 export function assertDrawingBufferMatchesCss(probe: CanvasProbe): void {
+  expect(probe.density).toBeLessThanOrEqual(probe.devicePixelRatio);
   for (const frame of [probe, probe.netCanvas]) {
     if (frame.cssWidth === 0) continue;
     expect(frame.width).toBe(
-      Math.max(1, Math.round(frame.cssWidth * probe.devicePixelRatio)),
+      Math.max(1, Math.round(frame.cssWidth * probe.density)),
     );
     expect(frame.height).toBe(
-      Math.max(1, Math.round(frame.cssHeight * probe.devicePixelRatio)),
+      Math.max(1, Math.round(frame.cssHeight * probe.density)),
     );
   }
 }

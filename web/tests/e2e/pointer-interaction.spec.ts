@@ -364,6 +364,73 @@ test('dragging the background sweeps the viewpoint, not the cube', async ({
   expect(turned.net).toEqual(expectedNet());
 });
 
+test('a drag on the empty part of the net turns the viewpoint, as empty space round the cube does', async ({
+  page,
+}) => {
+  await page.goto('./');
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+
+  const atRest = await probeCanvas(page);
+  // The cross leaves its top-left block empty, so there is nothing of the
+  // net there to take hold of: the press goes to the cube's canvas, in its
+  // pixels, and sweeps the viewpoint by the same distance a drag there would.
+  const empty = pagePointInNet(atRest, { column: 0, row: 0 }, 1, 1);
+  await page.mouse.move(empty.x, empty.y);
+  await page.mouse.down();
+  await page.mouse.move(empty.x - dragFor(atRest, 1), empty.y, { steps: 12 });
+  await page.mouse.up();
+
+  await expect
+    .poll(async () => near((await probeCanvas(page)).left, RIGHT_LIT, 2))
+    .toBe(true);
+  const turned = await probeCanvas(page);
+  assertVisibleFaces(turned, UP_LIT, RIGHT_LIT, BACK_LIT);
+  expect(turned.net).toEqual(expectedNet());
+});
+
+test('the axes badge follows the viewpoint, and the net is not drawn again for it', async ({
+  page,
+}) => {
+  await page.goto('./');
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+
+  const badge = page.locator('#view-axes');
+  await expect(badge).toBeVisible();
+  const frameOf = (selector: string): Promise<string> =>
+    page
+      .locator(selector)
+      .evaluate((element) => (element as HTMLCanvasElement).toDataURL());
+
+  // The arms are drawn: the badge is not the bare ground.
+  const inked = await badge.evaluate((element) => {
+    const canvas = element as HTMLCanvasElement;
+    const data = canvas
+      .getContext('2d')!
+      .getImageData(0, 0, canvas.width, canvas.height).data;
+    let count = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] !== 32 || data[i + 1] !== 32 || data[i + 2] !== 32) count += 1;
+    }
+    return count;
+  });
+  expect(inked).toBeGreaterThan(0);
+
+  const atRest = await probeCanvas(page);
+  const badgeBefore = await frameOf('#view-axes');
+  const netBefore = await frameOf('#view-net');
+
+  const corner = pagePointInCube(atRest, [0.94, 0.06]);
+  await page.mouse.move(corner.x, corner.y);
+  await page.mouse.down();
+  await page.mouse.move(corner.x - dragFor(atRest, 1), corner.y, { steps: 12 });
+  await page.mouse.up();
+
+  await expect.poll(() => frameOf('#view-axes')).not.toBe(badgeBefore);
+  // Sweeping the viewpoint changes nothing the net shows, and it is left as
+  // it was drawn rather than drawn again.
+  expect(await frameOf('#view-net')).toBe(netBefore);
+});
+
 test('a layer still turns after the viewpoint comes back round', async ({
   page,
 }) => {

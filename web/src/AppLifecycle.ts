@@ -444,6 +444,9 @@ export async function startApp(
   let lighting: LightingControls | null = null;
   let frameHandle: number | null = null;
   let previousTimestamp: number | null = null;
+  // Whether a frame is being drawn this moment, which is what tells a loop
+  // asked for from inside one from a loop starting afresh.
+  let drawing = false;
   // Whether a loop was taken away by the tab going out of sight, and so is
   // owed back when it returns. Nothing else may set it: a loop that ended
   // because the cube stopped moving is not owed anything.
@@ -460,6 +463,7 @@ export async function startApp(
       previousTimestamp === null ? 0 : timestamp - previousTimestamp;
     previousTimestamp = timestamp;
 
+    drawing = true;
     try {
       const moreFrames = engine.advance(elapsed);
       engine.render();
@@ -479,6 +483,8 @@ export async function startApp(
     } catch (error) {
       teardown();
       onError(error);
+    } finally {
+      drawing = false;
     }
   };
 
@@ -486,12 +492,15 @@ export async function startApp(
    * Runs frames while the engine has work.
    *
    * Nothing animates at rest, so there is no loop then either: a still cube
-   * costs no frames at all.
+   * costs no frames at all. A loop started from rest measures its first frame
+   * from nothing, so the time spent at rest never arrives as one enormous
+   * step; one asked for while a frame is being drawn -- a walk putting its
+   * next step in -- is the same loop going on, and keeps its clock.
    */
   const startFrameLoop = (): void => {
     if (!active || frameHandle !== null) return;
 
-    previousTimestamp = null;
+    if (!drawing) previousTimestamp = null;
     frameHandle = requestFrame(drawFrame);
   };
 

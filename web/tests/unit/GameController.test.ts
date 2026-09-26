@@ -2324,6 +2324,23 @@ describe('walking the cube along its record', () => {
     expect(harness.engine.turnFace).not.toHaveBeenCalled();
   });
 
+  it('asks for no further step once the controller is gone', () => {
+    const harness = withMoves(0);
+    harness.engine.turnFace.mockClear();
+
+    harness.ui.root.dispatchEvent(
+      new CustomEvent(PLAY_MOVES_EVENT, { detail: { text: 'R U F' } }),
+    );
+    expect(harness.engine.turnFace).toHaveBeenCalledTimes(1);
+
+    // Torn down with the first step still landing: the frame that lands it
+    // is the last one anybody hears of, and the rest are never asked for.
+    harness.controller.teardown();
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.engine.turnFace).toHaveBeenCalledTimes(1);
+  });
+
   it('says why a typed line was refused, and plays none of it', () => {
     const harness = withMoves(0);
     harness.engine.turnFace.mockClear();

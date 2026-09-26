@@ -71,7 +71,12 @@ function createHarness(overrides: {
         canvasListeners.get(type)?.delete(listener);
       },
     ),
-    getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 50 }),
+    getBoundingClientRect: () => ({
+      left: 0,
+      top: 0,
+      width: canvasState.clientWidth,
+      height: canvasState.clientHeight,
+    }),
     hasPointerCapture: vi.fn(() => true),
     setPointerCapture: vi.fn(),
     releasePointerCapture: vi.fn(),
@@ -264,6 +269,10 @@ function createHarness(overrides: {
     triggerObserver: () => observerCallback(),
     dispatch,
     listenerCount,
+    /** A screen of another density, as moving the window would give. */
+    setDevicePixelRatio: (value: number): void => {
+      targetWindow.devicePixelRatio = value;
+    },
     /** Takes the tab out of sight, or brings it back, as the browser would. */
     setHidden: (hidden: boolean): void => {
       targetDocument.hidden = hidden;
@@ -538,6 +547,29 @@ describe('startApp', () => {
 
     expect(harness.canvasState.setPointerCapture).not.toHaveBeenCalled();
     expect(harness.hasPendingFrame()).toBe(false);
+  });
+
+  it('takes a frame the controller asked for as the next one, clock and all', async () => {
+    const harness = createHarness();
+    await harness.start();
+    // A walk: every frame the controller puts its next step in, and asks for
+    // a frame for it, while the engine is still asking for frames itself.
+    harness.game.afterEngineFrame.mockImplementation(() =>
+      harness.gameOptions()!.startFrameLoop(),
+    );
+    harness.engine.advance.mockReturnValue(true);
+
+    harness.dispatchPointer('pointerdown', {});
+    harness.requestFrame.mockClear();
+
+    // One request a frame, not two -- two would run two frames a tick, each
+    // advancing the clock -- and the second frame measures the time since
+    // the first rather than starting over at nothing.
+    harness.runFrame(1000);
+    expect(harness.requestFrame).toHaveBeenCalledTimes(1);
+    harness.runFrame(1016);
+    expect(harness.requestFrame).toHaveBeenCalledTimes(2);
+    expect(harness.engine.advance).toHaveBeenLastCalledWith(16);
   });
 
   it('keeps drawing while the engine asks for frames and then stops', async () => {
@@ -1028,6 +1060,61 @@ describe('startApp with a canvas per view', () => {
       130,
       30,
     );
+  });
+
+  it('puts the cube away with its canvas, and a press beside it reaches nothing', async () => {
+    const { net, views } = createViews();
+    const harness = createHarness({ views });
+    await harness.start();
+
+    // The 2D view: the cube's canvas has no box, so its surface is put away.
+    harness.canvasState.clientWidth = 0;
+    harness.canvasState.clientHeight = 0;
+    harness.triggerObserver();
+    expect(harness.engine.resizeSurface).toHaveBeenCalledWith(
+      CubeSurface.Cube,
+      null,
+    );
+
+    // A press on the net's empty part is offered to the cube's canvas, which
+    // has no pixels to put it in: nothing begins, and nothing is captured.
+    harness.engine.pointerDownOn.mockClear();
+    harness.engine.pointerDownOn.mockReturnValueOnce(false);
+    net.press(130, 30);
+    expect(harness.engine.pointerDownOn).toHaveBeenCalledTimes(1);
+    expect(harness.engine.pointerDownOn).toHaveBeenCalledWith(
+      CubeSurface.Net,
+      20,
+      30,
+    );
+    expect(net.state.setPointerCapture).not.toHaveBeenCalled();
+    expect(harness.hasPendingFrame()).toBe(false);
+  });
+
+  it('draws every view again at a screen of another density', async () => {
+    const { views } = createViews();
+    const harness = createHarness({ views });
+    await harness.start();
+    harness.engine.resizeSurface.mockClear();
+
+    // Moving the window to a denser screen arrives as a resize of the window,
+    // with every box the size it was.
+    harness.setDevicePixelRatio(2);
+    harness.dispatch('resize', new Event('resize'));
+
+    expect(harness.engine.resizeSurface).toHaveBeenCalledWith(CubeSurface.Cube, {
+      width: 200,
+      height: 100,
+    });
+    expect(harness.engine.resizeSurface).toHaveBeenCalledWith(CubeSurface.Net, {
+      width: 160,
+      height: 120,
+    });
+    expect(harness.engine.resizeSurface).toHaveBeenCalledWith(CubeSurface.Axes, {
+      width: 40,
+      height: 40,
+    });
+    expect(harness.engine.render).toHaveBeenCalledTimes(2);
   });
 
   it('leaves a view that is only looked at alone', async () => {

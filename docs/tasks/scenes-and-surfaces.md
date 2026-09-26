@@ -79,17 +79,24 @@ surface가 그리는 것은 `scenes & shown_scenes()`입니다. 무엇이 보이
 
 ### 바뀐 것만 그립니다
 
-surface마다 마지막으로 그린 입력(`DrawnInputs`)을 두고 `render()`가 비교합니다. 비교하는 것은 다음과 같습니다.
+surface마다 마지막 프레임을 그린 입력(`graphics::FrameInputs`)을 두고, `render()`가 다음 프레임의 입력과 비교해 같으면 건너뜁니다.
 
-- 크기와 그리는 장면
-- theme과 palette
-- 카메라(yaw, pitch)
-- 진행 중인 회전
-- 가이드
-- 큐브 상태와 칠하기 draft의 revision
-- 조명 revision
+`FrameInputs`는 크기, 배치, 그리고 그 surface가 그리는 그림마다 값 하나로 이루어집니다. 그림의 값에는 그 그림이 읽는 것이 전부 들어 있고, 읽지 않는 것은 들어 있지 않습니다.
 
-큐브와 draft는 바뀌는 곳마다 표시하지 않습니다. 마지막으로 그린 것과 값으로 비교합니다(`note_changes()`). 표시를 빠뜨려 그림이 멈추는 종류의 버그가 생길 수 없게 하기 위해서입니다.
+| 그림 | 읽는 것 |
+| --- | --- |
+| `CubeDrawing` | 큐브, 진행 중인 회전, palette, 조명, 시점 |
+| `NetDrawing` | 큐브, 진행 중인 회전, palette, 가이드, 칠하는 중인 draft |
+| `RingsDrawing` | 큐브, 진행 중인 회전, palette, 가이드 |
+| `AxesDrawing` | 시점 |
+
+넷의 값에는 시점이 없으므로 시점을 돌려도 넷의 프레임은 그대로이고, 축의 값에는 큐브가 없으므로 층을 돌려도 축의 프레임은 그대로입니다. 건너뛰기는 이 표가 전부입니다.
+
+그림은 `graphics::compose(frame)`가 만듭니다. graphics 라이브러리에 있어 앱의 상태에 닿을 수 없고, 받은 값만 읽습니다. 그래서 그리는 것과 비교하는 것이 어긋날 수 없습니다. 그림이 새로 읽을 것이 생기면 그 값에 필드를 더할 수밖에 없고, 기억할 곳은 바로 아래에 있는 그 값의 `operator==` 하나입니다. 회전, 가이드, 조명, 시점 같은 값의 비교도 각자의 타입 옆에 있습니다.
+
+큐브만 복사하지 않습니다. 가장 큰 큐브는 cubie가 2만 개가 넘어 캔버스마다 매 프레임 복사하기에는 크기 때문입니다. 대신 주소와 revision(`CubeRevision`)으로 들고, revision이 같으면 같은 큐브입니다. revision은 큐브가 바뀌는 곳마다 올리지 않습니다. `render()`가 마지막으로 그린 큐브와 값으로 비교해 올립니다(`note_cube_change()`). 올리기를 빠뜨려 그림이 멈추는 종류의 버그가 생길 수 없게 하기 위해서입니다.
+
+배경색은 장면이 아니라 renderer가 들고 있습니다. 그래서 프레임의 입력에 없고, theme이 바뀌면 모든 surface의 마지막 프레임을 잊습니다. 크기가 바뀌었을 때와 같습니다.
 
 `surface_frame(id)`는 실제로 그린 횟수입니다. 웹은 그 값이 움직인 캔버스만 `putImageData`합니다. `invalidate()`를 부르면 다음 render가 모두 그립니다. render bench는 측정하는 프레임마다 앞에서 이를 부릅니다. 건너뛴 프레임은 아무것도 재지 않기 때문입니다.
 
@@ -142,7 +149,8 @@ surface마다 마지막으로 그린 입력(`DrawnInputs`)을 두고 `render()`�
 
 ```text
 engine/src/
-├── app/Application.{hpp,cpp}     Surface, DrawnInputs, 장면별 배치, surface별 누름, dirty 판정
+├── app/Application.{hpp,cpp}     Surface, 장면별 배치, surface별 누름, frame_for와 건너뛰기
+├── graphics/FrameInputs.{hpp,cpp} 그림마다 읽는 값과 그 비교, compose
 ├── graphics/AxisGizmo.{hpp,cpp}  draw_arms, build_axis_badge
 └── platform/web/bindings.cpp     surface ABI
 
@@ -199,3 +207,7 @@ npm --prefix web run test:e2e
 
 - 좁은 화면에서 무대는 최소 높이 `min(64vw, 300px)` 근처에 머뭅니다(375×812에서 259px). 두 줄의 rail과 dock이 세로 공간을 먼저 가져가기 때문이고, 이 작업 전부터의 배치입니다. 그 안에서는 Split이 좌우로 놓여 예전의 한 캔버스보다 두 view가 모두 큽니다.
 - 캔버스 사이의 12px 틈은 누름을 받지 않습니다.
+
+## 개정 기록
+
+- **건너뛰기의 네 목록을 하나로 모았습니다.** 처음에는 한 프레임이 무엇으로 그려졌는지를 네 곳이 따로 적었습니다. 입력을 담는 구조체(`DrawnInputs`), 장면마다 무엇을 채울지(`inputs_for`), 필드마다 비교(`same_inputs`), 그리고 앱의 상태를 직접 읽는 그리기(`scene_for`)입니다. 그리기가 새로 읽는 것을 나머지 셋 중 하나에 빠뜨리면, 그림이 바뀌었는데도 프레임을 건너뛰어 옛 그림이 남습니다. 게다가 조용히 남습니다. 지금은 그림마다 값 하나가 그 그림이 읽는 것 전부이고, `compose()`는 graphics 라이브러리에서 그 값만 받습니다. 빠뜨리는 방향이 바뀌었습니다. 값에 없는 것은 그릴 수 없으므로, 빠뜨리면 조용히 남는 옛 그림이 아니라 눈에 보이는 틀린 그림이 됩니다. 조명과 draft도 이제 값으로 비교하므로 `lighting_revision`, `paint_revision`, `drawn_draft`는 없어졌습니다. `tests/graphics/FrameTest.cpp`(suite `frame inputs`)는 모든 입력이 비교에 들어가는지 보고, `surfaces`에는 palette, 조명, 칠하기, theme이 각각 그것을 보여 주는 surface만 다시 그리는지 보는 test를 더했습니다. 조명 비교를 빼거나 theme에서 프레임을 잊지 않게 바꾸면 이 test들이 실패하는 것을 확인했습니다. native suite는 30개가 되었습니다.

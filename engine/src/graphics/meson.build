@@ -9,6 +9,7 @@ graphics_lib = static_library(
     'CanvasTheme.cpp',
     'ConvexHull.cpp',
     'CubeGeometry.cpp',
+    'FrameInputs.cpp',
     'Light.cpp',
     'LightingPasses.cpp',
     'Layout.cpp',

@@ -10,4 +10,10 @@ struct Rect {
     float height = 0.0f;
 };
 
+[[nodiscard]] constexpr bool operator==(const Rect& a, const Rect& b) noexcept
+{
+    return a.x == b.x && a.y == b.y && a.width == b.width &&
+           a.height == b.height;
+}
+
 }  // namespace rubiks::graphics

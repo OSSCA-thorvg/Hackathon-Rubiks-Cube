@@ -81,6 +81,12 @@ struct RingsGuide {
     int layer;
 };
 
+[[nodiscard]] constexpr bool operator==(const RingsGuide& a,
+                                        const RingsGuide& b) noexcept
+{
+    return a.axis == b.axis && a.layer == b.layer;
+}
+
 /**
  * Where a sticker rests in the diagram drawn in `rect`.
  *

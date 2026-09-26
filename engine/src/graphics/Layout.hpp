@@ -52,6 +52,12 @@ struct CanvasLayout {
     Rect rings;
 };
 
+[[nodiscard]] constexpr bool operator==(const CanvasLayout& a,
+                                        const CanvasLayout& b) noexcept
+{
+    return a.cube == b.cube && a.net == b.net && a.rings == b.rings;
+}
+
 /** Side of the square 3D region. */
 inline constexpr float kCubeRegionSide = 0.58f;
 /** Gap above the 3D region. */

@@ -1,8 +1,10 @@
 #include "app/Application.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -10,6 +12,7 @@
 #include "cube/Cubie.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/NetGeometry.hpp"
+#include "graphics/Palette.hpp"
 
 // Surfaces: more than one canvas drawn by one engine. Each holds the scenes it
 // shows and has a size of its own; where the canvases go on a page is the
@@ -275,6 +278,61 @@ TEST_CASE("a surface whose picture has not changed keeps its frame")
     for (std::size_t i = 0; i < again.size(); ++i) {
         REQUIRE(again[i] == turned[i] + 1);
     }
+}
+
+TEST_CASE("each change draws the surfaces that show it, and no others")
+{
+    const rubiks::test::EngineLifecycle engine(kCubeSide, kCubeSide);
+    open_three_canvases();
+    REQUIRE(rubiks::app::render());
+
+    // Which of the cube, the net and the axes drew a frame for the change.
+    auto last = std::array<std::uint32_t, 3>{};
+    const auto redrawn = [&last]() {
+        REQUIRE(rubiks::app::render());
+        const std::array<std::uint32_t, 3> now{
+            rubiks::app::surface_frame(kCube), rubiks::app::surface_frame(kNet),
+            rubiks::app::surface_frame(kAxes)};
+        const std::array<bool, 3> moved{now[0] != last[0], now[1] != last[1],
+                                        now[2] != last[2]};
+        last = now;
+        return moved;
+    };
+    static_cast<void>(redrawn());
+
+    // The palette colours the stickers, which the axes have none of.
+    REQUIRE(rubiks::app::set_palette(rubiks::graphics::Palette::HighContrast));
+    REQUIRE(redrawn() == std::array<bool, 3>{true, true, false});
+
+    // The lights fall on the cube in three dimensions alone.
+    const std::uint32_t count = rubiks::app::lighting_count();
+    const auto* current =
+        reinterpret_cast<const float*>(rubiks::app::lighting_values(count));
+    std::vector<float> values(current, current + count);
+    values[0] -= 0.1f;
+    auto* buffer = reinterpret_cast<float*>(rubiks::app::lighting_buffer(count));
+    std::copy(values.begin(), values.end(), buffer);
+    REQUIRE(rubiks::app::set_lighting(count));
+    REQUIRE(redrawn() == std::array<bool, 3>{true, false, false});
+
+    // A draft is drawn on the net, and a stroke on it changes the net alone.
+    REQUIRE(rubiks::app::begin_painting());
+    REQUIRE(redrawn() == std::array<bool, 3>{false, true, false});
+    REQUIRE(rubiks::app::set_brush(rubiks::cube::FaceColor::Red));
+    const auto up = net_cell(rubiks::cube::Face::Up, 1, 1);
+    REQUIRE(rubiks::app::pointer_down_on(kNet, up.x, up.y));
+    rubiks::app::pointer_up();
+    REQUIRE(redrawn() == std::array<bool, 3>{false, true, false});
+    rubiks::app::cancel_painting();
+    REQUIRE(redrawn() == std::array<bool, 3>{false, true, false});
+
+    // The ground is behind all three.
+    REQUIRE(rubiks::app::set_canvas_theme(rubiks::graphics::CanvasTheme::Light));
+    REQUIRE(redrawn() == std::array<bool, 3>{true, true, true});
+
+    // And the same again is nothing new.
+    REQUIRE(rubiks::app::set_palette(rubiks::graphics::Palette::HighContrast));
+    REQUIRE(redrawn() == std::array<bool, 3>{false, false, false});
 }
 
 TEST_CASE("a change of look reaches every surface, even one sized after it")

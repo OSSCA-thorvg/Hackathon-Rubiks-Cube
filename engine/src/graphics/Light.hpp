@@ -37,6 +37,12 @@ struct Light {
     float shininess = 16.0f;
 };
 
+[[nodiscard]] inline bool operator==(const Light& a, const Light& b) noexcept
+{
+    return a.position == b.position && a.diffuse == b.diffuse &&
+           a.specular == b.specular && a.shininess == b.shininess;
+}
+
 struct Lighting {
     /**
      * Floor of the brightness. Kept high because a sticker's colour is its
@@ -103,6 +109,20 @@ struct Lighting {
     [[nodiscard]] bool from_values(const float* values, std::size_t count);
     void to_values(float* values) const;
 };
+
+/**
+ * Whether two setups light the cube alike.
+ *
+ * Every field, the same as the flat form: the cube is drawn again when its
+ * light changes because the two setups compare unequal, so a field left out
+ * here would be a change of light the picture never showed.
+ */
+[[nodiscard]] inline bool operator==(const Lighting& a,
+                                     const Lighting& b) noexcept
+{
+    return a.ambient == b.ambient && a.attenuation == b.attenuation &&
+           a.saturation == b.saturation && a.lamps == b.lamps;
+}
 
 /**
  * A colour with its chroma scaled about its luminance, in integer arithmetic:

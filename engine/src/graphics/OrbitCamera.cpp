@@ -32,6 +32,13 @@ void OrbitCamera::turn(float yaw_delta, float pitch_delta) noexcept
                                -kPitchLimitDegrees, kPitchLimitDegrees);
 }
 
+Camera camera_into(const OrbitCamera& orbit, const Rect& region) noexcept
+{
+    const float aspect =
+        region.height > 0.0f ? region.width / region.height : 1.0f;
+    return orbit.to_camera(aspect);
+}
+
 Camera OrbitCamera::to_camera(float aspect) const noexcept
 {
     const float yaw = yaw_degrees * kRadiansPerDegree;

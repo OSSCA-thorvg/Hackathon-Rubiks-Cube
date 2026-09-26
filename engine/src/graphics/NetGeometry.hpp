@@ -93,6 +93,12 @@ struct NetGuide {
     NetCell cell;
 };
 
+[[nodiscard]] constexpr bool operator==(const NetGuide& a,
+                                        const NetGuide& b) noexcept
+{
+    return a.axis == b.axis && a.layer == b.layer && a.cell == b.cell;
+}
+
 /**
  * The net drawn from a colouring of stickers instead of from a cube.
  *

@@ -20,20 +20,16 @@
 #include "cube/solver/LayerByLayer.hpp"
 #include "cube/solver/Reduction.hpp"
 #include "cube/solver/Solver.hpp"
-#include "graphics/AxisGizmo.hpp"
 #include "graphics/Camera.hpp"
-#include "graphics/CubeGeometry.hpp"
+#include "graphics/FrameInputs.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/Light.hpp"
 #include "graphics/NetGeometry.hpp"
 #include "graphics/RingsGeometry.hpp"
 #include "graphics/OrbitCamera.hpp"
-#include "graphics/Pipeline.hpp"
-#include "graphics/RenderScene.hpp"
 #include "interaction/InteractionController.hpp"
 #include "interaction/NetPicking.hpp"
 #include "interaction/RingsPicking.hpp"
-#include "math/Transform.hpp"
 #include "render/Renderer.hpp"
 #include "render/ThorVGSoftwareRenderer.hpp"
 
@@ -148,30 +144,6 @@ struct Player {
 };
 
 /**
- * What one surface's last frame was drawn from.
- *
- * Only what the scenes on it read is filled in; everything else keeps its
- * default, so a change a surface does not show cannot make it draw again.
- * That is the whole of skipping a frame: the net does not move when the
- * viewpoint sweeps, and the axes do not move when a layer turns.
- */
-struct DrawnInputs {
-    std::uint32_t width = 0;
-    std::uint32_t height = 0;
-    std::uint32_t scenes = 0;
-    graphics::CanvasTheme theme = graphics::CanvasTheme::Dark;
-    std::uint64_t cube = 0;
-    std::optional<graphics::ActiveRotation> rotation;
-    graphics::Palette palette = graphics::Palette::Classic;
-    std::uint64_t lighting = 0;
-    float yaw = 0.0f;
-    float pitch = 0.0f;
-    std::vector<graphics::NetGuide> net_guides;
-    std::vector<graphics::RingsGuide> rings_guides;
-    std::uint64_t paint = 0;
-};
-
-/**
  * One canvas's worth of drawing: a target, its size, and what it shows.
  *
  * Which scenes a surface holds is its own; which of those are drawn is the
@@ -188,8 +160,9 @@ struct Surface {
     graphics::CanvasLayout placement;
 
     // What the target holds now, or nothing when it has to be drawn whatever
-    // happens -- a new size, a new renderer, a failed frame.
-    std::optional<DrawnInputs> drawn;
+    // happens -- a new size, a new renderer, a new ground, a failed frame.
+    // Those are the renderer's own, which no frame's inputs describe.
+    std::optional<graphics::FrameInputs> drawn;
 
     // How many frames have been drawn into it, for a host copying it out.
     std::uint32_t frame = 0;
@@ -213,17 +186,14 @@ struct ApplicationState {
     // surface's pixels, and resizing any other surface leaves it alone.
     std::uint32_t gesture_surface = 0;
 
-    // What the drawings were last made of, and counters that move when it
-    // changes. The cube and the draft are compared with a copy rather than
-    // tracked at each place they change: there are a dozen of those, and a
-    // frame skipped because one was missed would be a picture of a cube that
-    // is not the cube.
+    // The cube as it was last drawn, and a count that moves when it changes.
+    // The one input a frame is not handed a copy of, being the one too large
+    // to copy for every canvas on every frame. Compared with this copy rather
+    // than tracked at each place the cube changes: there are a dozen of
+    // those, and a frame skipped because one was missed would be a picture of
+    // a cube that is not the cube.
     cube::CubeState drawn_cube{kDefaultCubeSize};
     std::uint64_t cube_revision = 0;
-    std::optional<std::pair<std::vector<cube::FaceColor>, std::vector<int>>>
-        drawn_draft;
-    std::uint64_t paint_revision = 0;
-    std::uint64_t lighting_revision = 0;
 
     // The whole of the viewpoint state. The Camera is derived from this and
     // the layout whenever one is needed rather than stored, so there is no
@@ -352,15 +322,10 @@ std::unique_ptr<ApplicationState> state;
     return size >= kMinCubeSize && size <= kMaxCubeSize;
 }
 
-/** The camera looking into one cube region, whose aspect it takes. */
+/** The camera looking into one cube region, the one it was drawn with. */
 [[nodiscard]] graphics::Camera camera_for(const graphics::Rect& cube_rect) noexcept
 {
-    // Follows the cube region rather than the canvas. That region is square,
-    // so the aspect is always 1, but deriving it keeps the two in step if the
-    // layout ever changes.
-    const float aspect =
-        cube_rect.height > 0.0f ? cube_rect.width / cube_rect.height : 1.0f;
-    return state->orbit.to_camera(aspect);
+    return graphics::camera_into(state->orbit, cube_rect);
 }
 
 /**
@@ -1202,7 +1167,7 @@ bool advance(double elapsed_ms) noexcept
 namespace {
 
 /**
- * Notes whether the cube or the draft has changed since it was last drawn.
+ * Notes whether the cube has changed since it was last drawn.
  *
  * By looking rather than by being told. Every command that replaces the cube
  * and every commit that turns it would otherwise have to remember to say so,
@@ -1211,189 +1176,55 @@ namespace {
  * the largest and half a megabyte to compare -- but it is a fraction of a
  * millisecond next to a frame of that cube that takes a dozen.
  */
-void note_changes() noexcept
+void note_cube_change() noexcept
 {
     if (!(state->cube_state == state->drawn_cube)) {
         state->drawn_cube = state->cube_state;
         ++state->cube_revision;
     }
-
-    std::optional<std::pair<std::vector<cube::FaceColor>, std::vector<int>>>
-        draft;
-    if (state->paint) {
-        draft.emplace(state->paint->stickers, state->paint->reading.blamed);
-    }
-    if (draft != state->drawn_draft) {
-        state->drawn_draft = std::move(draft);
-        ++state->paint_revision;
-    }
 }
 
-/** What a surface's next frame would be drawn from, filled in for its scenes. */
-[[nodiscard]] DrawnInputs inputs_for(const Surface& surface) noexcept
+/**
+ * What a surface's next frame would be drawn from.
+ *
+ * Each scene it draws, handed everything that scene reads and nothing it does
+ * not -- which is the whole of skipping a frame: the net holds no viewpoint,
+ * so a sweep leaves its frame standing, and the axes hold no cube, so a turn
+ * leaves theirs.
+ */
+[[nodiscard]] graphics::FrameInputs frame_for(const Surface& surface) noexcept
 {
     const std::uint32_t drawn = drawn_scenes(surface);
+    const graphics::CubeRevision cube{&state->cube_state, state->cube_revision};
+    const auto rotation = state->interaction.active_rotation();
 
-    DrawnInputs inputs;
-    inputs.width = surface.width;
-    inputs.height = surface.height;
-    inputs.scenes = drawn;
-    inputs.theme = state->canvas_theme;
+    graphics::FrameInputs frame;
+    frame.width = surface.width;
+    frame.height = surface.height;
+    frame.placement = surface.placement;
 
-    // The cube, the net and the rings are three drawings of one cube.
-    if ((drawn & (kSceneCube | kSceneNet | kSceneRings)) != 0) {
-        inputs.cube = state->cube_revision;
-        inputs.rotation = state->interaction.active_rotation();
-        inputs.palette = state->palette;
-    }
-    // The cube and the axes are both seen from the viewpoint.
-    if ((drawn & (kSceneCube | kSceneAxes)) != 0) {
-        inputs.yaw = state->orbit.yaw_degrees;
-        inputs.pitch = state->orbit.pitch_degrees;
-    }
-    if ((drawn & kSceneCube) != 0) inputs.lighting = state->lighting_revision;
-    if ((drawn & kSceneNet) != 0) {
-        inputs.net_guides = state->interaction.net_guides();
-        inputs.paint = state->paint_revision;
-    }
-    if ((drawn & kSceneRings) != 0) {
-        inputs.rings_guides = state->interaction.rings_guides();
-    }
-    return inputs;
-}
-
-[[nodiscard]] bool same_rotation(
-    const std::optional<graphics::ActiveRotation>& a,
-    const std::optional<graphics::ActiveRotation>& b) noexcept
-{
-    if (a.has_value() != b.has_value()) return false;
-    if (!a) return true;
-    return a->axis == b->axis && a->layers == b->layers &&
-           a->angle_degrees == b->angle_degrees && a->opening == b->opening;
-}
-
-[[nodiscard]] bool same_inputs(const DrawnInputs& a, const DrawnInputs& b) noexcept
-{
-    if (a.width != b.width || a.height != b.height || a.scenes != b.scenes ||
-        a.theme != b.theme || a.cube != b.cube || a.palette != b.palette ||
-        a.lighting != b.lighting || a.yaw != b.yaw || a.pitch != b.pitch ||
-        a.paint != b.paint || !same_rotation(a.rotation, b.rotation)) {
-        return false;
-    }
-
-    if (a.net_guides.size() != b.net_guides.size()) return false;
-    for (std::size_t i = 0; i < a.net_guides.size(); ++i) {
-        const auto& x = a.net_guides[i];
-        const auto& y = b.net_guides[i];
-        if (x.axis != y.axis || x.layer != y.layer || !(x.cell == y.cell)) {
-            return false;
-        }
-    }
-
-    if (a.rings_guides.size() != b.rings_guides.size()) return false;
-    for (std::size_t i = 0; i < a.rings_guides.size(); ++i) {
-        const auto& x = a.rings_guides[i];
-        const auto& y = b.rings_guides[i];
-        if (x.axis != y.axis || x.layer != y.layer) return false;
-    }
-    return true;
-}
-
-/** Everything one surface shows, as the one scene its renderer draws. */
-[[nodiscard]] graphics::RenderScene scene_for(const Surface& surface,
-                                              std::uint32_t drawn) noexcept
-{
-    // The model transform is identity for now, but it goes through the real
-    // path so the quaternion-to-matrix step is exercised every frame.
-    const math::Transform model;
-    const auto& placement = surface.placement;
-
-    // The ground the shadow may lie on: the whole surface. The cube's viewport
-    // is a square in the middle of it and its shadow leans out into the
-    // margins -- and under a flat view sharing the surface below, which is
-    // drawn over it afterwards. A shadow cut off at that view's top edge read
-    // as clipped; one running on beneath the net reads as a floor the net is
-    // laid on.
-    const graphics::Rect stage{0.0f, 0.0f, static_cast<float>(surface.width),
-                               static_cast<float>(surface.height)};
-
-    graphics::RenderScene scene;
     if ((drawn & kSceneCube) != 0) {
-        const graphics::Camera camera = camera_for(placement.cube);
-
-        // The high-contrast palette exists to keep six shades apart for eyes
-        // that would otherwise merge them; shading those shades would undo
-        // that, so it is drawn under a light that leaves every colour as it
-        // is. The passes run either way -- it is a value, not a branch.
-        const graphics::Lighting lamp =
-            state->palette == graphics::Palette::HighContrast
-                ? graphics::Lighting::unlit(state->lighting)
-                : state->lighting;
-
-        scene = graphics::build_cube_scene(state->cube_state,
-                                           state->interaction.active_rotation(),
-                                           state->palette)  //
-                | graphics::transform(model)                                  //
-                | graphics::shadow(lamp, camera)                              //
-                | graphics::view(camera)                                      //
-                | graphics::light(lamp, camera)                               //
-                | graphics::project(camera)                                   //
-                | graphics::cull()                                            //
-                | graphics::depth_sort()                                      //
-                | graphics::viewport(placement.cube, stage);
-
-        // Which way each axis points from here, in the colors the net's guide
-        // lines use, so a cyan loop over there and a cyan arm over here are
-        // plainly the same axis. In the cube's corner when the two share a
-        // surface.
-        if ((drawn & kSceneAxes) != 0) {
-            graphics::append_scene(
-                scene, graphics::build_axis_gizmo(camera, placement.cube));
+        frame.cube = graphics::CubeDrawing{cube, rotation, state->palette,
+                                           state->lighting, state->orbit};
+    }
+    if ((drawn & kSceneNet) != 0) {
+        std::optional<graphics::NetPainting> painting;
+        if (state->paint) {
+            painting = graphics::NetPainting{state->paint->stickers,
+                                             state->paint->reading.blamed};
         }
-    } else if ((drawn & kSceneAxes) != 0) {
-        // On a surface of their own the axes are the whole of it: the same
-        // three arms from the same viewpoint, drawn from its middle.
-        graphics::append_scene(
-            scene, graphics::build_axis_badge(state->orbit.to_camera(1.0f),
-                                              stage));
+        frame.net = graphics::NetDrawing{cube, rotation, state->palette,
+                                         state->interaction.net_guides(),
+                                         std::move(painting)};
     }
-
-    if ((drawn & kSceneNet) != 0 && state->paint) {
-        // A draft is drawn instead of the cube, because a draft is what is
-        // being edited and mostly is not a cube at all until the last square
-        // is right. No guides either: nothing here turns, so there is nowhere
-        // for a guide to promise.
-        graphics::append_scene(
-            scene, graphics::build_net_painting(
-                       state->paint->stickers, size_of_cube(), placement.net,
-                       state->palette, state->paint->reading.blamed));
-    } else if ((drawn & kSceneNet) != 0) {
-        // The net is already screen-space, so it only has to be appended. It
-        // gets the same rotation as the 3D scene, which is what makes one
-        // gesture move every view in the same frame.
-        graphics::append_scene(
-            scene, graphics::build_net_scene(
-                       state->cube_state, placement.net,
-                       state->interaction.active_rotation(), state->palette));
-
-        // The rings the pressed cell could turn on, drawn over the stickers
-        // so the gesture says where it is about to go before it goes there.
-        graphics::append_scene(
-            scene, graphics::build_net_guides(state->interaction.net_guides(),
-                                              placement.net, size_of_cube()));
-    }
-
     if ((drawn & kSceneRings) != 0) {
-        // The same rotation again. The rings a press is offering come with it,
-        // since picking one out is a matter of drawing it heavier rather than
-        // adding a line.
-        graphics::append_scene(
-            scene, graphics::build_rings_scene(
-                       state->cube_state, placement.rings,
-                       state->interaction.active_rotation(),
-                       state->interaction.rings_guides(), state->palette));
+        frame.rings = graphics::RingsDrawing{cube, rotation, state->palette,
+                                             state->interaction.rings_guides()};
     }
-    return scene;
+    if ((drawn & kSceneAxes) != 0) {
+        frame.axes = graphics::AxesDrawing{state->orbit};
+    }
+    return frame;
 }
 
 }  // namespace
@@ -1402,7 +1233,7 @@ bool render() noexcept
 {
     if (!state) return false;
 
-    note_changes();
+    note_cube_change();
 
     // Each surface draws only when what it shows has changed since its last
     // frame. A viewpoint sweep leaves the net's frame where it was, and a turn
@@ -1412,15 +1243,15 @@ bool render() noexcept
     for (auto& surface : state->surfaces) {
         if (!surface.renderer) continue;
 
-        DrawnInputs inputs = inputs_for(surface);
-        if (surface.drawn && same_inputs(*surface.drawn, inputs)) continue;
+        graphics::FrameInputs frame = frame_for(surface);
+        if (surface.drawn == frame) continue;
 
-        if (!surface.renderer->render(scene_for(surface, inputs.scenes))) {
+        if (!surface.renderer->render(graphics::compose(frame))) {
             surface.drawn.reset();
             drawn_all = false;
             continue;
         }
-        surface.drawn = std::move(inputs);
+        surface.drawn = std::move(frame);
         ++surface.frame;
     }
     return drawn_all;
@@ -2209,7 +2040,6 @@ bool set_lighting(std::uint32_t count) noexcept
     graphics::Lighting next = state->lighting;
     if (!next.from_values(state->lighting_values.data(), count)) return false;
     state->lighting = std::move(next);
-    ++state->lighting_revision;
     return true;
 }
 
@@ -2236,11 +2066,16 @@ bool set_canvas_theme(graphics::CanvasTheme theme) noexcept
     // Both, in one place: the field is what a query reads and the renderer
     // is what a frame reads, and a refused value has already left above, so
     // neither can be written without the other.
+    //
+    // The ground is the renderer's rather than the scene's, so no frame's
+    // inputs describe it: every target holds the old one until it is drawn
+    // again, which is what forgetting its last frame says.
     state->canvas_theme = theme;
     for (auto& surface : state->surfaces) {
         if (surface.renderer) {
             surface.renderer->set_background(graphics::canvas_background(theme));
         }
+        surface.drawn.reset();
     }
     return true;
 }

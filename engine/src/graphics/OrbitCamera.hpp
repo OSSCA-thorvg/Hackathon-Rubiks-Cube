@@ -1,6 +1,7 @@
 #pragma once
 
 #include "graphics/Camera.hpp"
+#include "graphics/Rect.hpp"
 
 namespace rubiks::graphics {
 
@@ -43,6 +44,23 @@ struct OrbitCamera {
     /** The camera for this viewpoint; only the eye differs from the home. */
     [[nodiscard]] Camera to_camera(float aspect) const noexcept;
 };
+
+[[nodiscard]] constexpr bool operator==(const OrbitCamera& a,
+                                        const OrbitCamera& b) noexcept
+{
+    return a.yaw_degrees == b.yaw_degrees && a.pitch_degrees == b.pitch_degrees;
+}
+
+/**
+ * The camera for a viewpoint looking into one region of a canvas.
+ *
+ * With the region's aspect rather than the canvas's. The cube's region is
+ * square, so that is always 1, but deriving it keeps the two in step if the
+ * layout ever changes -- and the drawing and the picking both ask here, so a
+ * press is read through the camera the cube under it was drawn with.
+ */
+[[nodiscard]] Camera camera_into(const OrbitCamera& orbit,
+                                 const Rect& region) noexcept;
 
 /**
  * The viewpoint the rendered scene contract was derived from.

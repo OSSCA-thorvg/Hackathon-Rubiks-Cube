@@ -61,3 +61,11 @@ lighting_test = executable(
 )
 
 test('lighting and shadow', lighting_test)
+
+frame_test = executable(
+  'frame-test',
+  files('FrameTest.cpp'),
+  dependencies: [graphics_dep, catch2_dep],
+)
+
+test('frame inputs', frame_test)

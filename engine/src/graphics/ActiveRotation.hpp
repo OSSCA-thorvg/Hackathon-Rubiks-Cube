@@ -39,4 +39,11 @@ struct ActiveRotation {
     float opening = 0.0f;
 };
 
+[[nodiscard]] constexpr bool operator==(const ActiveRotation& a,
+                                        const ActiveRotation& b) noexcept
+{
+    return a.axis == b.axis && a.layers == b.layers &&
+           a.angle_degrees == b.angle_degrees && a.opening == b.opening;
+}
+
 }  // namespace rubiks::graphics

@@ -636,9 +636,7 @@ export function attachGameController(
   const initialSpeedScale = (): number => {
     const reduced =
       options.prefersReducedMotion ??
-      (typeof window !== 'undefined' &&
-        typeof window.matchMedia === 'function' &&
-        window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     return reduced ? REDUCED_MOTION_SPEED : 1;
   };
 

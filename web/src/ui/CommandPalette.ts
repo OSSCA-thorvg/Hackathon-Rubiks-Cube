@@ -130,8 +130,7 @@ export function attachCommandPalette(
     });
     const current = entries[active]!;
     input.setAttribute('aria-activedescendant', current.id);
-    // Optional, because not every document a test builds can scroll.
-    current.element.scrollIntoView?.({ block: 'nearest' });
+    current.element.scrollIntoView({ block: 'nearest' });
   };
 
   const option = (

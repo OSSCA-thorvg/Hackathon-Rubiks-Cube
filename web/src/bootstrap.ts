@@ -81,16 +81,9 @@ function gameplayControls(
  */
 const WIDE_QUERY = '(min-width: 1024px)';
 
-/**
- * The media query for the wide layout, or null where there is none to ask.
- *
- * A test document has no media queries, and a page with none is read as the
- * narrow one -- the single-column layout is the one that works everywhere.
- */
-function wideQuery(): MediaQueryList | null {
-  return typeof window.matchMedia === 'function'
-    ? window.matchMedia(WIDE_QUERY)
-    : null;
+/** The media query for the wide layout. */
+function wideQuery(): MediaQueryList {
+  return window.matchMedia(WIDE_QUERY);
 }
 
 /** Whether this is a Mac or an iPhone, whose menu shortcut is Command-K. */
@@ -364,10 +357,10 @@ export function bootstrap(
   attachDetailPanels({
     toggles: shell.panelToggles,
     root: shell.root,
-    oneAtATime: () => wide === null || !wide.matches,
+    oneAtATime: () => !wide.matches,
     watchWidth: (listener) => {
-      wide?.addEventListener('change', listener);
-      return () => wide?.removeEventListener('change', listener);
+      wide.addEventListener('change', listener);
+      return () => wide.removeEventListener('change', listener);
     },
   });
 

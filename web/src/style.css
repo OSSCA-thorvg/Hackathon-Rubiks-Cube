@@ -56,6 +56,18 @@
 
   --radius-control: 12px;
   --radius-panel: 20px;
+  --radius-pill: 999px;
+
+  /* The least a thing to press is drawn at, on its short side. */
+  --target: 44px;
+
+  /* What floats over what, in one place: the share card over the page, the
+     settings drawer over the card, and the command menu over everything. */
+  --z-card: 15;
+  --z-drawer-backdrop: 20;
+  --z-drawer: 21;
+  --z-menu-backdrop: 30;
+  --z-menu: 31;
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
@@ -127,6 +139,10 @@ body {
   background: var(--color-page);
 }
 
+#app {
+  width: 100%;
+}
+
 button,
 input,
 kbd {
@@ -171,12 +187,45 @@ kbd {
 }
 
 /*
+ * The shell. This sheet is written for the narrow screen first: every rule
+ * outside a media query is the phone's, and the wide screen's block at the
+ * end says only what is different there. On a narrow screen the page is one
+ * column, read top to bottom in the order the document is written in; the
+ * canvas takes what the rest leaves, and never less than a comfortable square
+ * -- past that the column scrolls rather than the cube shrinking to nothing
+ * under an open panel.
+ *
+ * The column is exactly as tall as the window rather than at least as tall.
+ * The stage is sized from its own box in both directions, and a box the
+ * column hands out is only a size the stage can measure itself by when the
+ * column's own height is a fixed one.
+ */
+.game-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100vh;
+  height: 100dvh;
+  padding:
+    max(12px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+.game-shell > * {
+  flex-shrink: 0;
+}
+
+/*
  * Glass: whatever floats over the stage.
  *
  * Translucent rather than solid so the ground reads through it, and blurred
- * so what reads through is colour rather than detail.
+ * so what reads through is colour rather than detail. The view rail is glass
+ * only on a wide screen; on a narrow one its groups are.
  */
-.view-rail,
 .details-rail,
 .detail-panels .panel,
 .action-dock,
@@ -199,11 +248,11 @@ kbd {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-width: 44px;
-  height: 44px;
+  min-width: var(--target);
+  height: var(--target);
   padding: 0 16px 0 14px;
   border: 1px solid var(--color-line-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--color-text);
   background: var(--color-ghost);
   font-size: 14px;
@@ -224,8 +273,19 @@ kbd {
 
 .pill-button--icon {
   justify-content: center;
-  width: 44px;
+  width: var(--target);
   padding: 0;
+}
+
+/* A labelled pill is its icon alone until there is room for the word. */
+.pill-button:not(.pill-button--icon, .command-trigger) {
+  justify-content: center;
+  width: var(--target);
+  padding: 0;
+}
+
+.pill-button__label {
+  display: none;
 }
 
 .chip-button {
@@ -236,25 +296,27 @@ kbd {
 }
 
 .command-trigger {
-  width: 264px;
-  padding: 0 8px 0 14px;
+  justify-content: center;
+  width: var(--target);
+  padding: 0;
   gap: 10px;
   color: var(--color-text-muted);
   font-size: 13px;
 }
 
 .command-trigger__label {
+  display: none;
   flex: 1;
   text-align: left;
 }
 
 .command-trigger__key {
-  display: inline-flex;
+  display: none;
   align-items: center;
   height: 26px;
   padding: 0 9px;
   border: 1px solid var(--color-line-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--color-text-soft);
   font-size: 11.5px;
 }
@@ -265,8 +327,8 @@ kbd {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-width: 44px;
-  min-height: 44px;
+  min-width: var(--target);
+  min-height: var(--target);
   padding: 0 16px;
   border: 1px solid var(--color-line-strong);
   border-radius: var(--radius-control);
@@ -320,15 +382,15 @@ kbd {
   gap: 2px;
   padding: 3px;
   border: 1px solid var(--color-line);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--color-ghost);
 }
 
 .segmented button {
-  min-height: 44px;
+  min-height: var(--target);
   padding: 0 16px;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--color-text-muted);
   background: transparent;
   font-size: 13.5px;
@@ -347,24 +409,24 @@ kbd {
 }
 
 /*
- * A rail button: an icon with its word under it on a wide screen, beside it
- * on a narrow one. Pressed and open are the same look, because on a rail both
- * mean "this is on".
+ * A rail button: an icon with its word beside it on a narrow screen, under
+ * it on a wide one. Pressed and open are the same look, because on a rail
+ * both mean "this is on".
  */
 .rail-button {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  width: 100%;
-  min-height: 52px;
-  padding: 0;
+  gap: 6px;
+  width: auto;
+  min-height: var(--target);
+  padding: 0 14px;
   border: none;
-  border-radius: 16px;
+  border-radius: var(--radius-pill);
   color: var(--color-text-muted);
   background: transparent;
-  font-size: 10.5px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease;
@@ -385,12 +447,6 @@ kbd {
   opacity: 0.4;
 }
 
-.rail-button--text {
-  min-height: 44px;
-  border-radius: var(--radius-control);
-  font-size: 11.5px;
-}
-
 /*
  * The dock's buttons. The primary one takes whatever room is left, so the
  * dock has one obvious thing in its middle -- Scramble, or Stop while a
@@ -402,9 +458,9 @@ kbd {
   justify-content: center;
   gap: 8px;
   flex-shrink: 0;
-  height: 52px;
+  height: 48px;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--color-text);
   background: transparent;
   font-size: 14px;
@@ -423,12 +479,14 @@ kbd {
 }
 
 .dock-button--side {
-  padding: 0 16px 0 14px;
+  width: 48px;
+  padding: 0;
   color: var(--color-text-soft);
 }
 
 .dock-button--round {
-  width: 52px;
+  width: 48px;
+  padding: 0;
   background: var(--color-ghost);
 }
 
@@ -453,6 +511,18 @@ kbd {
   background: var(--color-danger);
 }
 
+/* Words a narrow screen says but does not draw: the dock's labels and the
+   Watch and Paint buttons'. A wide screen has room for them. */
+.dock-button__label,
+.rail-group--modes .rail-button span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* A face-turn key, with the face's colour beside its letter. */
 .key-button {
   display: flex;
@@ -460,7 +530,7 @@ kbd {
   justify-content: center;
   gap: 5px;
   min-width: 0;
-  height: 44px;
+  height: var(--target);
   padding: 0;
   border: 1px solid var(--color-line-strong);
   border-radius: 10px;
@@ -515,7 +585,7 @@ kbd {
   justify-content: center;
   gap: 5px;
   width: 100%;
-  min-width: 44px;
+  min-width: var(--target);
   height: 32px;
   margin: 6px 0;
   padding: 0 8px;
@@ -579,7 +649,7 @@ kbd {
 .number-field input,
 .stepper__input {
   width: 5rem;
-  min-height: 44px;
+  min-height: var(--target);
   padding: 0 8px;
   border: 1px solid var(--color-line-strong);
   border-radius: var(--radius-control);
@@ -698,6 +768,7 @@ kbd {
 }
 
 .brand__byline {
+  display: none;
   margin: 0;
   color: var(--color-text-muted);
   font-family: var(--font-mono);
@@ -707,6 +778,7 @@ kbd {
 }
 
 .size-chip {
+  display: none;
   grid-column: 1 / -1;
   justify-self: start;
 }
@@ -746,7 +818,7 @@ kbd {
 .status-line {
   display: -webkit-box;
   max-width: 34rem;
-  height: 2.7em;
+  height: 2lh;
   margin: 0;
   overflow: hidden;
   color: var(--color-text-muted);
@@ -786,8 +858,9 @@ kbd {
 .game-stage {
   container: stage / size;
   position: relative;
+  flex: 1 1 0;
   min-width: 0;
-  min-height: 0;
+  min-height: min(64vw, 300px);
 }
 
 /* Inside the stage rather than the stage itself, because a container query
@@ -922,7 +995,7 @@ kbd {
   width: fit-content;
   margin: 0 auto;
   padding: 6px 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--color-text-muted);
   background: var(--color-glass);
   font-size: 12px;
@@ -937,16 +1010,41 @@ kbd {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 0;
-  border: none;
-  background: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
 }
 
 .rail-group {
   display: flex;
   gap: 4px;
+}
+
+/* On a narrow screen the rail is the row under the stage: Scene on the left,
+   Watch and Paint on the right, and the diagram on a row of its own while it
+   means anything. Scene and the diagram are pills of their own. */
+.view-rail .rail-group:not(.rail-group--modes) {
+  padding: 3px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-pill);
+  background: var(--color-glass);
+}
+
+.rail-group--modes {
+  margin-left: auto;
+  gap: 8px;
+}
+
+.rail-group--modes .rail-button {
+  width: var(--target);
+  padding: 0;
+  border: 1px solid var(--color-line);
+}
+
+.rail-group--diagram {
+  order: 1;
+  flex-basis: 100%;
+}
+
+.rail-group--diagram .rail-button {
+  flex: 1;
 }
 
 /* The diagram means nothing while the flat region is off the stage, so the
@@ -985,6 +1083,15 @@ kbd {
     transform: translateX(12px);
     opacity: 0;
   }
+}
+
+/* One height for all three on a narrow screen, so opening one is the only
+   thing that ever changes how much room the stage has -- a list growing a
+   move at a time inside it does not. */
+.detail-panels .panel {
+  height: min(280px, 44dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .panel__header {
@@ -1155,7 +1262,7 @@ kbd {
   height: 18px;
   padding: 0 6px;
   border: 1px solid var(--color-line-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--color-text-soft);
   font-size: 10px;
   letter-spacing: 0.06em;
@@ -1208,7 +1315,7 @@ kbd {
 .stepper__button {
   display: grid;
   place-items: center;
-  width: 44px;
+  width: var(--target);
   height: 42px;
   padding: 0;
   border: none;
@@ -1260,6 +1367,7 @@ kbd {
  */
 .paint-bar {
   display: grid;
+  align-self: center;
   gap: 10px;
   width: min(640px, 100%);
   padding: 12px;
@@ -1361,6 +1469,7 @@ kbd {
  */
 .timeline {
   display: grid;
+  align-self: center;
   gap: 4px;
   width: min(600px, 100%);
 }
@@ -1370,7 +1479,7 @@ kbd {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 44px;
+  height: var(--target);
   margin: 0;
   padding: 0 56px;
   overflow-x: auto;
@@ -1480,11 +1589,12 @@ kbd {
 /* The dock: one pill of the commands that change the cube. */
 .action-dock {
   display: flex;
+  align-self: center;
   align-items: center;
   gap: 4px;
   width: min(560px, 100%);
   padding: 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 /* Details: which panels are open. */
@@ -1493,7 +1603,13 @@ kbd {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   padding: 3px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
+}
+
+.details-rail .rail-button {
+  gap: 7px;
+  width: 100%;
+  padding: 0;
 }
 
 /*
@@ -1504,14 +1620,17 @@ kbd {
 .command-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 20;
   background: var(--color-scrim);
+}
+
+.settings-backdrop {
+  z-index: var(--z-drawer-backdrop);
 }
 
 .settings {
   position: fixed;
   inset: auto 0 0 0;
-  z-index: 21;
+  z-index: var(--z-drawer);
   display: grid;
   align-content: start;
   gap: 16px;
@@ -1604,7 +1723,7 @@ kbd {
   top: calc(max(12px, env(safe-area-inset-top)) + 56px);
   right: 16px;
   left: 16px;
-  z-index: 15;
+  z-index: var(--z-card);
   display: grid;
   gap: 10px;
   padding: 14px 14px 14px 16px;
@@ -1664,8 +1783,8 @@ kbd {
 .share-card__close {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: var(--target);
+  height: var(--target);
   margin: -10px -8px -10px 0;
   padding: 0;
   border: none;
@@ -1695,7 +1814,7 @@ kbd {
 .share-card__link {
   flex: 1;
   min-width: 0;
-  height: 44px;
+  height: var(--target);
   padding: 0 12px;
   border: 1px solid var(--color-line-strong);
   border-radius: var(--radius-control);
@@ -1711,14 +1830,14 @@ kbd {
  * typed moves.
  */
 .command-backdrop {
-  z-index: 30;
+  z-index: var(--z-menu-backdrop);
 }
 
 .command-palette {
   position: fixed;
   top: min(132px, 10dvh);
   left: 50%;
-  z-index: 31;
+  z-index: var(--z-menu);
   display: flex;
   flex-direction: column;
   width: min(640px, calc(100% - 32px));
@@ -1811,7 +1930,7 @@ kbd {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 44px;
+  min-height: var(--target);
   padding: 0 12px;
   border-radius: var(--radius-control);
   color: var(--color-text);
@@ -1865,159 +1984,6 @@ kbd {
   font-size: 11px;
 }
 
-/*
- * Narrow screens: one column, read top to bottom in the order the document
- * is written in. The canvas takes what the rest leaves, and never less than
- * a comfortable square -- past that the column scrolls rather than the cube
- * shrinking to nothing under an open panel.
- *
- * The column is exactly as tall as the window rather than at least as tall.
- * The stage is sized from its own box in both directions, and a box the
- * column hands out is only a size the stage can measure itself by when the
- * column's own height is a fixed one.
- */
-#app {
-  width: 100%;
-}
-
-.game-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  height: 100vh;
-  height: 100dvh;
-  padding:
-    max(12px, env(safe-area-inset-top))
-    max(16px, env(safe-area-inset-right))
-    max(16px, env(safe-area-inset-bottom))
-    max(16px, env(safe-area-inset-left));
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-}
-
-.game-shell > * {
-  flex-shrink: 0;
-}
-
-.game-stage {
-  flex: 1 1 0;
-  min-height: min(64vw, 300px);
-}
-
-.brand__byline,
-.size-chip,
-.command-trigger__label,
-.pill-button__label {
-  display: none;
-}
-
-.command-trigger {
-  width: 44px;
-  padding: 0;
-  justify-content: center;
-}
-
-.command-trigger__key {
-  display: none;
-}
-
-.pill-button:not(.pill-button--icon, .command-trigger) {
-  width: 44px;
-  padding: 0;
-  justify-content: center;
-}
-
-/* The row under the stage: Scene on the left, Watch and Paint on the right,
-   and the diagram on a row of its own while it means anything. */
-.view-rail .rail-group:not(.rail-group--modes) {
-  padding: 3px;
-  border: 1px solid var(--color-line);
-  border-radius: 999px;
-  background: var(--color-glass);
-}
-
-.view-rail .rail-button {
-  flex-direction: row;
-  gap: 6px;
-  width: auto;
-  min-height: 44px;
-  padding: 0 14px;
-  border-radius: 999px;
-  font-size: 13px;
-}
-
-.rail-group--modes {
-  margin-left: auto;
-  gap: 8px;
-}
-
-.rail-group--modes .rail-button {
-  width: 44px;
-  padding: 0;
-  border: 1px solid var(--color-line);
-}
-
-.rail-group--modes .rail-button span {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.rail-group--diagram {
-  order: 1;
-  flex-basis: 100%;
-}
-
-.rail-group--diagram .rail-button {
-  flex: 1;
-}
-
-/* One height for all three, so opening one is the only thing that ever
-   changes how much room the stage has -- a list growing a move at a time
-   inside it does not. */
-.detail-panels .panel {
-  height: min(280px, 44dvh);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.paint-bar,
-.timeline,
-.action-dock {
-  align-self: center;
-}
-
-.action-dock .dock-button--side,
-.action-dock .dock-button--round {
-  width: 48px;
-  height: 48px;
-  padding: 0;
-}
-
-.action-dock .dock-button--primary {
-  height: 48px;
-}
-
-.dock-button__label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.details-rail .rail-button {
-  flex-direction: row;
-  gap: 7px;
-  min-height: 44px;
-  border-radius: 999px;
-  font-size: 13px;
-}
-
 @media (min-width: 560px) {
   .paint-bar__swatches {
     grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -2053,8 +2019,6 @@ kbd {
     grid-template-columns: var(--rail-zone) minmax(0, 1fr) var(--panel-zone) var(--rail-zone);
     grid-template-rows: auto minmax(0, 1fr) auto auto auto;
     gap: 0;
-    height: 100vh;
-    height: 100dvh;
     padding: 24px 0 20px;
     overflow: hidden;
     transition: grid-template-columns 260ms ease;
@@ -2076,16 +2040,17 @@ kbd {
     pointer-events: auto;
   }
 
-  .brand__byline,
-  .size-chip,
-  .pill-button__label,
-  .command-trigger__key {
-    display: revert;
+  .brand__byline {
+    display: block;
   }
 
   .size-chip,
   .command-trigger__key {
     display: inline-flex;
+  }
+
+  .pill-button__label {
+    display: inline;
   }
 
   .pill-button:not(.pill-button--icon, .command-trigger) {
@@ -2094,9 +2059,9 @@ kbd {
   }
 
   .command-trigger {
+    justify-content: flex-start;
     width: auto;
     padding: 0 8px 0 14px;
-    justify-content: flex-start;
   }
 
   .clock {
@@ -2142,27 +2107,17 @@ kbd {
     padding: 10px;
   }
 
-  .action-dock .dock-button--side {
-    width: auto;
+  .dock-button {
     height: 52px;
+  }
+
+  .dock-button--side {
+    width: auto;
     padding: 0 16px 0 14px;
   }
 
-  .action-dock .dock-button--round {
+  .dock-button--round {
     width: 52px;
-    height: 52px;
-  }
-
-  .action-dock .dock-button--primary {
-    height: 52px;
-  }
-
-  .dock-button__label {
-    position: static;
-    width: auto;
-    height: auto;
-    overflow: visible;
-    clip-path: none;
   }
 
   /* The two rails: glass pills, one word under each icon. */
@@ -2196,12 +2151,14 @@ kbd {
     gap: 4px;
   }
 
-  .view-rail .rail-group,
-  .view-rail .rail-group:not(.rail-group--modes) {
+  .view-rail .rail-group {
     flex-direction: column;
     flex-basis: auto;
     gap: 4px;
     margin: 0;
+  }
+
+  .view-rail .rail-group:not(.rail-group--modes) {
     padding: 0;
     border: none;
     border-radius: 0;
@@ -2216,12 +2173,10 @@ kbd {
 
   .rail-group--diagram {
     order: 0;
-    gap: 2px;
   }
 
   .view-rail .rail-button,
-  .details-rail .rail-button,
-  .rail-group--modes .rail-button {
+  .details-rail .rail-button {
     flex-direction: column;
     gap: 4px;
     width: 100%;
@@ -2233,11 +2188,12 @@ kbd {
   }
 
   .view-rail .rail-button--text {
-    min-height: 44px;
+    min-height: var(--target);
     border-radius: var(--radius-control);
     font-size: 11.5px;
   }
 
+  .dock-button__label,
   .rail-group--modes .rail-button span {
     position: static;
     width: auto;
@@ -2317,8 +2273,7 @@ kbd {
   }
 
   .view-rail .rail-button,
-  .details-rail .rail-button,
-  .rail-group--modes .rail-button {
+  .details-rail .rail-button {
     min-height: 46px;
   }
 
@@ -2332,13 +2287,11 @@ kbd {
     padding: 6px;
   }
 
-  .action-dock .dock-button--side,
-  .action-dock .dock-button--round,
-  .action-dock .dock-button--primary {
+  .dock-button {
     height: 48px;
   }
 
-  .action-dock .dock-button--round {
+  .dock-button--round {
     width: 48px;
   }
 }

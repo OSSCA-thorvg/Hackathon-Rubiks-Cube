@@ -4,6 +4,13 @@
 
 `Completed`
 
+**2026-09-26 개정.** [Scenes and surfaces](./scenes-and-surfaces.md)가 무대를 다시 짰습니다.
+
+- **캔버스가 view마다 하나입니다.** 무대는 정사각형 캔버스 하나가 아니라 큐브, 전개도, 링, 축 배지의 캔버스 넷입니다. 어디에 얼마나 크게 둘지는 stylesheet가 정하고, Split은 넓은 무대에서 좌우로 놓입니다. 아래 "좁은 화면의 열" 절의 `min(100cqw, 100cqh)` 정사각형은 더 이상 없습니다. 무대 안의 grid가 container query로 배치를 고릅니다.
+- **엔진이 바뀌었습니다.** 이 문서의 "엔진은 한 줄도 바뀌지 않는다"는 이 작업까지의 이야기입니다. 엔진은 surface마다 장면을 그리고, 바뀐 surface만 다시 그립니다.
+- **표시 속성이 무대로 옮겨졌습니다.** `data-view-mode`와 `data-flat-style`는 `#stage`에 있고, `GameUi.canvas`는 `GameUi.stage`가 되었습니다.
+- **드래그 취소의 범위가 좁아졌습니다.** 크기가 바뀐 surface에서 시작한 드래그만 취소됩니다. 무대 주변 상자의 높이를 고정한 결정은 그대로 둡니다. 큐브 캔버스의 크기는 여전히 그 상자들이 남긴 공간에서 나오기 때문입니다.
+
 Phase 번호가 없는 횡단 작업입니다. [UI polish and showcase](./ui-polish-and-showcase.md)가 정한 화면 구성을 새 방향으로 개정합니다. 기능은 하나도 빠지지 않고, 엔진(C++)은 한 줄도 바뀌지 않습니다. 방향은 Design 캔버스에서 네 시안(A Stage, B Console, C Toy Box, D Exhibit)을 비교한 뒤 정했습니다. A를 바탕으로 B의 상세 기능을 토글 패널로 얹은 "E · Stage + Panels" 시안을 그대로 옮긴 것입니다.
 
 ## Objective

@@ -164,6 +164,8 @@ Wide, slice, 전체 회전은 factory 없이 `CubeMove`를 직접 구성합니�
 
 ### Canvas layout
 
+> **개정 (Scenes and surfaces, 2026-09-26)**: 아래 배치는 모든 장면을 가진 surface, 곧 캔버스 하나의 배치로 그대로 남습니다. 브라우저 페이지는 이제 view마다 캔버스를 두고, 엔진은 surface가 그리는 장면만으로 같은 `layout()`을 부릅니다. 그래서 큐브 캔버스의 cube viewport는 짧은 변의 0.84인 가운데 정사각형(Cube3D 배치)이고, 전개도 캔버스의 넷은 단독 배치입니다. Cube viewport가 항상 정사각형이라는 계약과 sample이 viewport 기준 비율이라는 것은 그대로라, 아래 contract의 좌표는 바뀌지 않습니다. e2e probe는 큐브를 `#view`에서, 전개도를 `#view-net`에서 읽습니다. 브라우저의 seam 검증 임계는 캔버스 1024px이 아니라 같은 뜻의 cube viewport 594px(0.58 × 1024)로 옮겼습니다. 자세한 내용은 [Scenes and surfaces](./scenes-and-surfaces.md)에 있습니다.
+
 Canvas를 두 영역으로 나눕니다. 좌표는 canvas의 짧은 변에 대한 비율이며 두 영역 모두 가로 중앙 정렬입니다.
 
 ```text

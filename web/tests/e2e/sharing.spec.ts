@@ -47,6 +47,15 @@ test('a link opens the same cube somewhere else', async ({ page, context }) => {
   expect(plain).not.toContain('#');
   expect(plain).toContain('/Hackathon-Rubiks-Cube/');
 
+  // The same link on the card by the button, where it can be read and
+  // copied again, and which goes away when it is closed.
+  const card = page.locator('#share-card');
+  await expect(card).toBeVisible();
+  await expect(page.locator('#share-card-title')).toHaveText('Link copied');
+  await expect(page.locator('#share-card-link')).toHaveValue(plain);
+  await page.locator('#share-card-close').click();
+  await expect(card).toBeHidden();
+
   await page.locator('#scramble').click();
   await expect(shell).toHaveAttribute('data-game-state', 'ready');
 

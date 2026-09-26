@@ -117,6 +117,9 @@ export const ICONS = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
   sound: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/>',
   reset: '<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  link: '<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/>',
+  close: '<path d="M6.5 6.5 17.5 17.5"/><path d="M17.5 6.5 6.5 17.5"/>',
 } as const;
 
 /** One face-turn key: the letter, which way, and what a reader is told. */
@@ -201,6 +204,21 @@ export function createGameShell(host: HTMLElement): GameShell {
         aria-controls="settings-panel" aria-expanded="false" aria-label="Settings">${icon(ICONS.settings, 18)}</button>
     </div>
   </header>
+
+  <section class="share-card" id="share-card" aria-labelledby="share-card-title" hidden>
+    <div class="share-card__head">
+      <span class="share-card__icon share-card__icon--copied" aria-hidden="true">${icon(ICONS.check, 16)}</span>
+      <span class="share-card__icon share-card__icon--link" aria-hidden="true">${icon(ICONS.link, 16)}</span>
+      <h2 class="share-card__title" id="share-card-title">Link copied</h2>
+      <button class="share-card__close" type="button" id="share-card-close" aria-label="Close">${icon(ICONS.close, 16)}</button>
+    </div>
+    <p class="share-card__note" id="share-card-note"></p>
+    <div class="share-card__row">
+      <input class="share-card__link" type="text" id="share-card-link" readonly
+        aria-label="Share link" spellcheck="false">
+      <button class="soft-button" type="button" id="share-card-copy">Copy</button>
+    </div>
+  </section>
 
   <div class="clock">
     <output class="timer" id="timer" aria-label="Elapsed time" aria-live="off">00:00.00</output>
@@ -465,6 +483,14 @@ export function createGameShell(host: HTMLElement): GameShell {
     solverNote: requireElement<HTMLParagraphElement>(root, '#solver-note'),
     stopButton: requireElement<HTMLButtonElement>(root, '#stop'),
     shareButton: requireElement<HTMLButtonElement>(root, '#share'),
+    shareCard: {
+      card: requireElement<HTMLElement>(root, '#share-card'),
+      title: requireElement<HTMLElement>(root, '#share-card-title'),
+      note: requireElement<HTMLElement>(root, '#share-card-note'),
+      link: requireElement<HTMLInputElement>(root, '#share-card-link'),
+      copyButton: requireElement<HTMLButtonElement>(root, '#share-card-copy'),
+      closeButton: requireElement<HTMLButtonElement>(root, '#share-card-close'),
+    },
     recordBest: requireElement<HTMLParagraphElement>(root, '#record-best'),
     recordList: requireElement<HTMLOListElement>(root, '#record-list'),
     recordTally: requireElement<HTMLElement>(root, '#record-tally'),

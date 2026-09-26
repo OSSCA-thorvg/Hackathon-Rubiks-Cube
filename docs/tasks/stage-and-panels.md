@@ -72,6 +72,15 @@ walk의 다음 걸음은 `afterEngineFrame` 안에서 요청되고, 이때 프�
 
 메뉴는 combobox와 listbox로 되어 있습니다. focus는 입력란에 머물고, 화살표로 활성 항목을 옮기고, Enter로 실행하고, Escape나 바깥 클릭으로 닫습니다. 패널과 달리 이것은 답을 받으면 사라지는 질문입니다.
 
+### Share는 만든 링크를 카드로 보여 줍니다
+
+Share를 누르면 링크를 클립보드에 복사하고, 그 링크를 Share 버튼 아래 카드에 보여 줍니다([ShareCard.ts](../../web/src/game/ShareCard.ts)). 카드에는 링크를 읽고, 선택하고, 다시 복사할 수 있습니다. dialog가 아니므로 뒤의 조작을 막지 않습니다.
+
+- **복사된 링크**: 카드가 7초 뒤 스스로 사라집니다. 포인터가 위에 있거나 focus가 안에 있는 동안에는 사라지지 않고, 떠나면 7초를 처음부터 다시 셉니다.
+- **클립보드가 거절한 링크**: 사람이 직접 복사해야 합니다. 그래서 링크를 선택한 채 focus를 두고, 닫을 때까지 남깁니다.
+
+상태 줄은 모든 명령에서처럼 무슨 일이 있었는지를 그대로 말합니다. 카드는 그 결과로 사람이 할 수 있는 일을 보여 주는 곳입니다.
+
 ### Rewind의 뜻은 바뀌지 않습니다
 
 시안의 명령 메뉴에는 "Rewind to scramble"이 있었지만, Rewind는 지금처럼 스크램블까지 되감아 맞춘 큐브로 돌아갑니다. 메뉴의 이름도 "Rewind to solved"입니다. 되감기는 타임라인에서 재생 헤드가 점선인 스크램블 구간을 거꾸로 지나는 모습으로 보입니다.
@@ -169,6 +178,7 @@ web/src/
 │   ├── MoveLog.ts          무브 칩: 면 색, 누르면 이동, roving tabindex, focus 유지
 │   ├── Timeline.ts         칩 줄, 기록 막대, 진행 표시, 스크램블 수열
 │   ├── SessionRecords.ts   부분으로 나눈 기록(같은 문장), 풀이 횟수
+│   ├── ShareCard.ts        Share가 만든 링크를 보여 주는 카드
 │   └── notation.ts         parseMoves, faceOfNotation
 └── ui/
     ├── GameShell.ts        새 markup, 아이콘, typed 참조
@@ -177,7 +187,7 @@ web/src/
     └── SettingsPanel.ts    open({ focus }) — 크기 칩이 크기 입력란으로 엽니다
 ```
 
-모든 element id와 `GameUi`의 기존 필드, 그리고 그 의미는 그대로입니다. `GameUi`에는 `timeline`, `cubeSizeLabel`, `recordTally`가 더해졌습니다.
+모든 element id와 `GameUi`의 기존 필드, 그리고 그 의미는 그대로입니다. `GameUi`에는 `timeline`, `cubeSizeLabel`, `recordTally`, `shareCard`가 더해졌습니다.
 
 ## Verification
 

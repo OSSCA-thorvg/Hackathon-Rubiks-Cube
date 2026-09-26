@@ -25,6 +25,7 @@ import {
   type SessionEngine,
 } from './GameSession.ts';
 import { SessionRecords, type SolveRecord } from './SessionRecords.ts';
+import { ShareCard, type ShareCardUi } from './ShareCard.ts';
 import {
   encodePainting,
   encodeSession,
@@ -112,6 +113,8 @@ export type GameUi = {
   readonly stopButton: HTMLButtonElement;
   /** Copies a link that opens this cube; out of reach when there is none. */
   readonly shareButton: HTMLButtonElement;
+  /** Where the link a share made is shown, by the button that made it. */
+  readonly shareCard: ShareCardUi;
   /** The fastest solve of the sitting, written out in one line. */
   readonly recordBest: HTMLElement;
   /** The latest few solves, newest first. */
@@ -461,6 +464,13 @@ export function attachGameController(
     () => new MoveLog(ui.moveLogList, engine, { onPick: pickMove }),
   );
   const timeline = setup(() => new Timeline(ui.timeline, engine, pickMove));
+  const shareCard = setup(
+    () =>
+      new ShareCard(ui.shareCard, {
+        copy: (text: string): Promise<void> => shareTarget.copy(text),
+        returnFocus: ui.shareButton,
+      }),
+  );
   const records = setup(
     () => new SessionRecords(ui.recordBest, ui.recordList, ui.recordTally),
   );
@@ -1314,7 +1324,7 @@ export function attachGameController(
       // and a fragment carrying an empty one would only be a longer way of
       // saying the same thing.
       let link: string = pageUrl(shareTarget.currentUrl());
-      let copied = 'Link copied. It opens a fresh cube.';
+      let opens = 'It opens a fresh cube.';
 
       if (hasStateToShare(now)) {
         // A cube somebody painted cannot be written as moves -- nothing from
@@ -1336,18 +1346,26 @@ export function attachGameController(
           return;
         }
         link = shareUrl(shareTarget.currentUrl(), encoded);
-        copied = 'Link copied. It opens this cube.';
+        opens = 'It opens this cube.';
       }
 
       // Guarded on the way back rather than on the way out: a controller torn
       // down while the clipboard was thinking has no status line left to
       // write to, and the elements are no longer this controller's.
+      //
+      // Either way the link goes up on the card by the button. Copied, it is
+      // there to read and to copy again; refused, it is there to be copied
+      // by hand, which is the only way it still reaches anybody.
       void shareTarget.copy(link).then(
         (): void => {
-          if (active) session.announce(copied);
+          if (!active) return;
+          session.announce(`Link copied. ${opens}`);
+          shareCard.show({ link, copied: true, opens });
         },
         (): void => {
-          if (active) session.announce('Could not copy the link.');
+          if (!active) return;
+          session.announce('Could not copy the link.');
+          shareCard.show({ link, copied: false, opens });
         },
       );
     });
@@ -1500,6 +1518,7 @@ export function attachGameController(
       session.teardown();
       moveLog.teardown();
       timeline.teardown();
+      shareCard.teardown();
       setCommandsDisabled(true);
       // The one moment the move buttons, the rewinds and the watch toggle are
       // not the engine's and the session's to decide.

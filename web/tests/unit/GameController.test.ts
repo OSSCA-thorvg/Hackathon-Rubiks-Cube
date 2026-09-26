@@ -93,6 +93,13 @@ function createUi(): GameUi {
     <span id="timeline-progress"></span>
     <p id="scramble-text"></p>
     <span id="moves-progress"></span>
+    <section id="share-card" hidden>
+      <h2 id="share-card-title"></h2>
+      <button id="share-card-close" type="button">Close</button>
+      <p id="share-card-note"></p>
+      <input id="share-card-link" readonly>
+      <button id="share-card-copy" type="button">Copy</button>
+    </section>
   `;
   document.body.replaceChildren(root);
 
@@ -114,6 +121,14 @@ function createUi(): GameUi {
     solverNote: root.querySelector<HTMLParagraphElement>('#solver-note')!,
     stopButton: root.querySelector<HTMLButtonElement>('#stop')!,
     shareButton: root.querySelector<HTMLButtonElement>('#share')!,
+    shareCard: {
+      card: root.querySelector<HTMLElement>('#share-card')!,
+      title: root.querySelector<HTMLElement>('#share-card-title')!,
+      note: root.querySelector<HTMLElement>('#share-card-note')!,
+      link: root.querySelector<HTMLInputElement>('#share-card-link')!,
+      copyButton: root.querySelector<HTMLButtonElement>('#share-card-copy')!,
+      closeButton: root.querySelector<HTMLButtonElement>('#share-card-close')!,
+    },
     recordBest: root.querySelector<HTMLParagraphElement>('#record-best')!,
     recordList: root.querySelector<HTMLOListElement>('#record-list')!,
     recordTally: root.querySelector<HTMLElement>('#record-tally')!,
@@ -1700,6 +1715,14 @@ describe('sharing the cube', () => {
     expect(harness.ui.status.textContent).toBe(
       'Link copied. It opens a fresh cube.',
     );
+
+    // And the link itself goes up on the card by the button.
+    const card = harness.ui.shareCard;
+    await vi.waitFor(() => expect(card.card.hidden).toBe(false));
+    expect(card.card.dataset.copied).toBe('true');
+    expect(card.title.textContent).toBe('Link copied');
+    expect(card.note.textContent).toBe('It opens a fresh cube.');
+    expect(card.link.value).toBe('https://example.test/cube/');
   });
 
   it('carries the record once there is one', async () => {
@@ -1780,6 +1803,15 @@ describe('sharing the cube', () => {
       expect(harness.ui.status.textContent).toBe('Could not copy the link.'),
     );
     expect(harness.onError).not.toHaveBeenCalled();
+
+    // The link still reaches the card, where it can be copied by hand, and
+    // the keyboard is put on it with the whole of it selected.
+    const card = harness.ui.shareCard;
+    expect(card.card.hidden).toBe(false);
+    expect(card.card.dataset.copied).toBe('false');
+    expect(card.title.textContent).toBe('Copy this link');
+    expect(card.link.value).toContain('#s=');
+    expect(document.activeElement).toBe(card.link);
   });
 
   it('is out of reach while anything is playing', () => {

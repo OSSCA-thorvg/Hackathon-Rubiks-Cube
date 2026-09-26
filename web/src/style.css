@@ -1472,6 +1472,118 @@ kbd {
 }
 
 /*
+ * The link a share made, on a card under the button that made it: to read,
+ * to select, or to copy again. Not a dialog -- nothing behind it stops
+ * working -- so it has no backdrop, and a copied link goes away by itself.
+ */
+.share-card {
+  position: fixed;
+  top: calc(max(12px, env(safe-area-inset-top)) + 56px);
+  right: 16px;
+  left: 16px;
+  z-index: 15;
+  display: grid;
+  gap: 10px;
+  padding: 14px 14px 14px 16px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 18px;
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-dialog);
+  animation: share-card-in 180ms ease-out;
+}
+
+@keyframes share-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.share-card__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.share-card__icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--color-ghost);
+}
+
+.share-card__icon--copied {
+  color: var(--color-live);
+}
+
+.share-card__icon--link {
+  color: var(--color-text-soft);
+}
+
+.share-card[data-copied="true"] .share-card__icon--link,
+.share-card[data-copied="false"] .share-card__icon--copied {
+  display: none;
+}
+
+.share-card__title {
+  flex: 1;
+  margin: 0;
+  color: var(--color-text-strong);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+/* 44 pixels to press, drawn no bigger than the icon: the margins take back
+   what the target adds to the card. */
+.share-card__close {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -10px -8px -10px 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  color: var(--color-text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.share-card__close:hover {
+  color: var(--color-text);
+  background: var(--color-hover);
+}
+
+.share-card__note {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.share-card__row {
+  display: flex;
+  gap: 8px;
+}
+
+.share-card__link {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-control);
+  color: var(--color-text);
+  background: var(--color-ghost);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+}
+
+/*
  * The command menu: a field that searches the page's commands and plays
  * typed moves.
  */
@@ -2035,6 +2147,13 @@ kbd {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
+  .share-card {
+    top: 80px;
+    right: 32px;
+    left: auto;
+    width: 380px;
+  }
+
   .settings {
     inset: 12px 12px 12px auto;
     width: min(380px, calc(100% - 24px));
@@ -2113,6 +2232,8 @@ kbd {
   visibility: hidden;
 }
 
+#app[data-state="unsupported"] .share-card,
+#app[data-state="error"] .share-card,
 #app[data-state="unsupported"] .game-stage,
 #app[data-state="unsupported"] .view-rail,
 #app[data-state="unsupported"] .detail-panels,
@@ -2167,6 +2288,7 @@ kbd {
   .game-shell,
   .panel,
   .settings,
+  .share-card,
   .command-palette,
   .timeline__done,
   .timeline__head,

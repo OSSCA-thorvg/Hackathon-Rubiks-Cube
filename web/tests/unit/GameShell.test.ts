@@ -41,3 +41,34 @@ describe('the brand mark', () => {
     expect(stroke * scale!).toBeCloseTo(BRAND_MARK.stroke, 3);
   });
 });
+
+describe('the details panels', () => {
+  it('come after the buttons that open them, with nothing to tab to between', () => {
+    const shell = createGameShell(document.createElement('div'));
+    const toggles = [
+      ...shell.root.querySelectorAll<HTMLButtonElement>(
+        '.details-rail [aria-controls]',
+      ),
+    ];
+    expect(toggles).toHaveLength(3);
+
+    for (const toggle of toggles) {
+      const panel = shell.root.querySelector(
+        `#${toggle.getAttribute('aria-controls')}`,
+      )!;
+      expect(
+        toggle.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+
+    // Tab from the last of the buttons reaches a panel's first control, open
+    // panels being the only ones anything can be tabbed to.
+    const tabbable = [
+      ...shell.root.querySelectorAll<HTMLElement>(
+        'button, input, select, textarea, a[href], [tabindex]',
+      ),
+    ];
+    const next = tabbable[tabbable.indexOf(toggles.at(-1)!) + 1];
+    expect(next?.closest('.detail-panels')).not.toBeNull();
+  });
+});

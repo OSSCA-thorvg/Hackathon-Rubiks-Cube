@@ -246,6 +246,29 @@ test('a detail panel stays open until its own button, and the stage makes room',
   await expect(page.locator('#panel-session')).toBeVisible();
 });
 
+// The panels are shown in a different place on each, and are tabbed to from
+// the same one: straight after the button that opened them.
+for (const [screen, viewport] of [
+  ['wide', DESKTOP],
+  ['narrow', { width: 390, height: 844 }],
+] as const) {
+  test(`a panel opened from the keyboard is where Tab goes next, ${screen}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const toggle = page.locator('#details-turn');
+
+    await toggle.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#panel-turn')).toBeVisible();
+
+    await page.keyboard.press('Tab');
+    await expect(page.locator('#panel-turn [data-step="-1"]')).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(toggle).toBeFocused();
+  });
+}
+
 test('a scramble is turned into the cube where it can be watched', async ({
   page,
 }) => {

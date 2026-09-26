@@ -273,9 +273,13 @@ function swatches(): string {
  * -- no cast stands in for the list -- so a control dropped from the markup is
  * a type error rather than an undefined at the first click.
  *
- * The order is the order a narrow screen reads it in, top to bottom, which is
- * also the order it is tabbed through. A wide screen lifts the two rails and
- * the panels out to the sides; nothing moves in the document to do it.
+ * The order is the order it is tabbed through, and the order a narrow screen
+ * shows it in, top to bottom -- except for the panels. Each is written after
+ * the button that opens it, so the next Tab after opening one lands inside
+ * it; a narrow screen shows them under the stage, where there is room for
+ * one, which the stylesheet arranges with `order`. A wide screen lifts the
+ * two rails and the panels out to the sides; nothing moves in the document to
+ * do that either.
  */
 export function createGameShell(host: HTMLElement): GameShell {
   host.innerHTML = `
@@ -353,6 +357,42 @@ export function createGameShell(host: HTMLElement): GameShell {
     </div>
   </div>
 
+  <section class="paint-bar" id="paint-bar" aria-label="Colour your cube" hidden>
+    <div class="paint-bar__swatches" role="group" aria-label="Sticker colour">${swatches()}</div>
+    <div class="paint-bar__actions">
+      <button class="soft-button" type="button" id="paint-fill">Fill face</button>
+      <button class="soft-button soft-button--primary" type="button" id="paint-apply">Use this cube</button>
+      <button class="soft-button" type="button" id="paint-cancel">Cancel</button>
+    </div>
+    <p class="paint-bar__note" id="paint-note" role="alert"></p>
+  </section>
+
+  <div class="timeline" role="group" aria-label="Move timeline">
+    <ol class="timeline__moves" id="timeline-moves" aria-label="Your moves, around where the cube is"></ol>
+    <div class="timeline__bar">
+      <span class="timeline__label" id="timeline-scramble">No scramble</span>
+      <div class="timeline__track" id="timeline-track" aria-hidden="true"><span class="timeline__scramble"></span><span class="timeline__done"></span><span class="timeline__head"></span></div>
+      <span class="timeline__label timeline__label--end" id="timeline-progress">0 / 0</span>
+    </div>
+  </div>
+
+  <p class="solver-note" id="solver-note" hidden>No solver for this cube size yet — Rewind still works.</p>
+
+  <div class="action-dock" role="group" aria-label="Cube actions">
+    <button class="dock-button dock-button--side" type="button" id="rewind">${icon(ICONS.rewind, 18)}<span class="dock-button__label">Rewind</span></button>
+    <button class="dock-button dock-button--round" type="button" id="undo" aria-label="Undo">${icon(ICONS.undo)}</button>
+    <button class="dock-button dock-button--primary" type="button" id="scramble">${icon(ICONS.scramble, 18)}<span>Scramble</span></button>
+    <button class="dock-button dock-button--primary dock-button--stop" type="button" id="stop" hidden>${icon(ICONS.stop, 18)}<span>Stop</span></button>
+    <button class="dock-button dock-button--round" type="button" id="redo" aria-label="Redo">${icon(ICONS.redo)}</button>
+    <button class="dock-button dock-button--side" type="button" id="solve">${icon(ICONS.solve, 18)}<span class="dock-button__label">Solve</span></button>
+  </div>
+
+  <div class="details-rail" role="group" aria-label="Details">
+    <button class="rail-button" type="button" id="details-moves" data-panel="moves" aria-controls="panel-moves" aria-expanded="false">${icon(ICONS.moves)}<span>Moves</span></button>
+    <button class="rail-button" type="button" id="details-session" data-panel="session" aria-controls="panel-session" aria-expanded="false">${icon(ICONS.session)}<span>Session</span></button>
+    <button class="rail-button" type="button" id="details-turn" data-panel="turn" aria-controls="panel-turn" aria-expanded="false">${icon(ICONS.turn)}<span>Turn</span></button>
+  </div>
+
   <div class="detail-panels">
     <section class="panel" id="panel-moves" aria-labelledby="panel-moves-title" hidden>
       <header class="panel__header">
@@ -395,42 +435,6 @@ export function createGameShell(host: HTMLElement): GameShell {
       </div>
       <div class="move-grid" role="group" aria-label="Face turns">${faceKeys()}</div>
     </section>
-  </div>
-
-  <section class="paint-bar" id="paint-bar" aria-label="Colour your cube" hidden>
-    <div class="paint-bar__swatches" role="group" aria-label="Sticker colour">${swatches()}</div>
-    <div class="paint-bar__actions">
-      <button class="soft-button" type="button" id="paint-fill">Fill face</button>
-      <button class="soft-button soft-button--primary" type="button" id="paint-apply">Use this cube</button>
-      <button class="soft-button" type="button" id="paint-cancel">Cancel</button>
-    </div>
-    <p class="paint-bar__note" id="paint-note" role="alert"></p>
-  </section>
-
-  <div class="timeline" role="group" aria-label="Move timeline">
-    <ol class="timeline__moves" id="timeline-moves" aria-label="Your moves, around where the cube is"></ol>
-    <div class="timeline__bar">
-      <span class="timeline__label" id="timeline-scramble">No scramble</span>
-      <div class="timeline__track" id="timeline-track" aria-hidden="true"><span class="timeline__scramble"></span><span class="timeline__done"></span><span class="timeline__head"></span></div>
-      <span class="timeline__label timeline__label--end" id="timeline-progress">0 / 0</span>
-    </div>
-  </div>
-
-  <p class="solver-note" id="solver-note" hidden>No solver for this cube size yet — Rewind still works.</p>
-
-  <div class="action-dock" role="group" aria-label="Cube actions">
-    <button class="dock-button dock-button--side" type="button" id="rewind">${icon(ICONS.rewind, 18)}<span class="dock-button__label">Rewind</span></button>
-    <button class="dock-button dock-button--round" type="button" id="undo" aria-label="Undo">${icon(ICONS.undo)}</button>
-    <button class="dock-button dock-button--primary" type="button" id="scramble">${icon(ICONS.scramble, 18)}<span>Scramble</span></button>
-    <button class="dock-button dock-button--primary dock-button--stop" type="button" id="stop" hidden>${icon(ICONS.stop, 18)}<span>Stop</span></button>
-    <button class="dock-button dock-button--round" type="button" id="redo" aria-label="Redo">${icon(ICONS.redo)}</button>
-    <button class="dock-button dock-button--side" type="button" id="solve">${icon(ICONS.solve, 18)}<span class="dock-button__label">Solve</span></button>
-  </div>
-
-  <div class="details-rail" role="group" aria-label="Details">
-    <button class="rail-button" type="button" id="details-moves" data-panel="moves" aria-controls="panel-moves" aria-expanded="false">${icon(ICONS.moves)}<span>Moves</span></button>
-    <button class="rail-button" type="button" id="details-session" data-panel="session" aria-controls="panel-session" aria-expanded="false">${icon(ICONS.session)}<span>Session</span></button>
-    <button class="rail-button" type="button" id="details-turn" data-panel="turn" aria-controls="panel-turn" aria-expanded="false">${icon(ICONS.turn)}<span>Turn</span></button>
   </div>
 
   <div class="settings-backdrop" id="settings-backdrop" hidden></div>

@@ -224,6 +224,22 @@ kbd {
 }
 
 /*
+ * The panels are written after the details rail, so each follows the button
+ * that opens it when the page is tabbed through. The column still shows them
+ * under the stage and the view rail, where there is room for one: everything
+ * written between the view rail and the panels is moved after them. A wide
+ * screen places all of these on its grid, where the order only keeps them
+ * painted as they always were -- over a panel still sliding in.
+ */
+.paint-bar,
+.timeline,
+.solver-note,
+.action-dock,
+.details-rail {
+  order: 1;
+}
+
+/*
  * Glass: whatever floats over the stage.
  *
  * Translucent rather than solid so the ground reads through it, and blurred

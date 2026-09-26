@@ -134,6 +134,8 @@ surface마다 마지막으로 그린 입력(`DrawnInputs`)을 두고 `render()`�
 
 모두 초기화 전에는 0을 돌려주고, 없는 surface id도 거절합니다. `CubeEngine`은 `presentSurface`, `setSurfaceScenes`, `resizeSurface`, `pointerDownOn`으로 이들을 감쌉니다. `render()`는 frame 수가 움직인 캔버스만 복사합니다.
 
+큐브 캔버스(surface 0)도 같은 호출로 다룹니다. 처음에는 surface 0만 예전 한 캔버스 호출(`resize`, `pixel_buffer`, `pointer_down`)로 따로 다뤘는데, 치웠다가 되돌릴 때 크기를 0으로 만들어 호출을 억지로 다시 일으켜야 했고 고칠 때마다 두 곳을 고쳐야 했습니다. 엔진은 그 호출들을 여전히 내보내지만 페이지는 쓰지 않습니다. `resizeSurface`는 크기가 바뀌었는지를 돌려주고, AppLifecycle은 크기를 따로 들고 있지 않습니다. 크기는 엔진이 들고 있는 것 하나뿐입니다.
+
 ## Source organization
 
 ```text
@@ -143,8 +145,8 @@ engine/src/
 └── platform/web/bindings.cpp     surface ABI
 
 web/src/
-├── wasm/CubeEngine.ts            CubeSurface, CubeScene, stageDensity, surface 표시와 복사
-├── AppLifecycle.ts               StageView, 한 밀도로 맞추기, 캔버스별 포인터
+├── wasm/CubeEngine.ts            CubeSurface, CubeScene, 모든 캔버스(surface 0 포함)를 한 경로로 표시와 복사
+├── AppLifecycle.ts               StageView, stageDensity와 픽셀 상한, 한 밀도로 맞추기, 캔버스별 포인터
 ├── input/PointerController.ts    PointerFallback, GestureLock
 ├── ui/GameShell.ts               무대의 캔버스 넷
 └── style.css                     stage grid, container query, 축 배지
@@ -158,7 +160,7 @@ web/src/
   - view mode가 보이는 것만 그립니다.
   - 누름은 누른 surface에 닿습니다.
   - 큐브 surface 밖의 누름은 시점을 돌립니다.
-  - 그림이 같으면 frame이 그대로이고, 돌린 뒤 되돌려도 다시 그립니다.
+  - 그림이 같으면 frame이 그대로입니다. 두 프레임 사이에 돌렸다가 되돌린 큐브도 마지막으로 그린 큐브와 같으므로 다시 그리지 않습니다.
   - theme이 모든 surface에 닿습니다.
   - 치운 surface가 돌아옵니다.
   - 다른 surface의 resize에도 드래그가 살아남습니다.
@@ -167,9 +169,9 @@ web/src/
   - native suite 29개가 모두 통과합니다.
 - **WASM**: emsdk로 다시 빌드했습니다.
 - **TypeScript unit**:
-  - CubeEngine: fake module의 surface, 복사를 건너뛰는 frame, 치우고 되돌리기, 거절, `stageDensity`.
+  - CubeEngine: fake module의 surface, 복사를 건너뛰는 frame(surface마다), 치우고 되돌리기, 크기가 바뀐 뒤의 복사, 메모리 증가 뒤의 view, 버퍼 없는 surface, 거절.
   - PointerController: 거절된 누름의 fallback, 공유 lock.
-  - AppLifecycle: view마다의 장면, 첫 프레임 전 크기, 한 밀도, 치우고 되돌리기, 모든 캔버스 관찰, 누름 라우팅, teardown.
+  - AppLifecycle: view마다의 장면, 첫 프레임 전 크기, 한 밀도, 치우고 되돌리기, 모든 캔버스 관찰, 누름 라우팅, teardown, `stageDensity`.
   - GameController: 무대의 속성.
   - 모두 317개가 통과합니다.
 - **Browser e2e**:
@@ -193,5 +195,5 @@ npm --prefix web run test:e2e
 
 ## Out of scope
 
-- 좁은 화면에서 무대는 최소 높이 `min(64vw, 300px)`에 머뭅니다. 두 줄의 rail과 dock이 세로 공간을 먼저 가져가기 때문이고, 이 작업 전부터의 배치입니다. 그 안에서는 Split이 좌우로 놓여 예전의 한 캔버스보다 두 view가 모두 큽니다.
+- 좁은 화면에서 무대는 최소 높이 `min(64vw, 300px)` 근처에 머뭅니다(375×812에서 259px). 두 줄의 rail과 dock이 세로 공간을 먼저 가져가기 때문이고, 이 작업 전부터의 배치입니다. 그 안에서는 Split이 좌우로 놓여 예전의 한 캔버스보다 두 view가 모두 큽니다.
 - 캔버스 사이의 12px 틈은 누름을 받지 않습니다.

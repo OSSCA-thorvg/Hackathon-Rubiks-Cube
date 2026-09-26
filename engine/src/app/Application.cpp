@@ -1206,8 +1206,10 @@ namespace {
  *
  * By looking rather than by being told. Every command that replaces the cube
  * and every commit that turns it would otherwise have to remember to say so,
- * and a skipped frame is only safe if none of them ever forgets. A cube is a
- * few thousand cubies at the widest, so the look is cheap next to the frame.
+ * and a skipped frame is only safe if none of them ever forgets. The look is
+ * not free -- a cube of N layers is N^3 cubies, about twenty-two thousand at
+ * the largest and half a megabyte to compare -- but it is a fraction of a
+ * millisecond next to a frame of that cube that takes a dozen.
  */
 void note_changes() noexcept
 {

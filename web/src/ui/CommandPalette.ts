@@ -32,7 +32,7 @@ export type KeyboardTarget = {
 
 export type CommandPaletteOptions = {
   readonly shell: CommandShell;
-  /** Built on every opening, so an entry's wording is never stale. */
+  /** Asked for each time the list is drawn, so an entry's wording is never stale. */
   readonly commands: () => readonly Command[];
   /** Reads a line as moves for the cube in hand. */
   readonly parse: (text: string) => TypedMoves;

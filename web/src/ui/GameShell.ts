@@ -293,7 +293,7 @@ export function createGameShell(host: HTMLElement): GameShell {
     <div class="app-header__tools">
       <button class="pill-button command-trigger" type="button" id="command-trigger"
         aria-haspopup="dialog" aria-controls="command-palette" aria-expanded="false"
-        aria-keyshortcuts="Meta+K Control+K" aria-label="Search commands or type moves">${icon(ICONS.search, 18)}<span class="command-trigger__label" aria-hidden="true">Search or type a move</span><kbd class="command-trigger__key" id="command-shortcut" aria-hidden="true">⌘K</kbd></button>
+        aria-keyshortcuts="Meta+K Control+K" aria-label="Search or type a move">${icon(ICONS.search, 18)}<span class="command-trigger__label" aria-hidden="true">Search or type a move</span><kbd class="command-trigger__key" id="command-shortcut" aria-hidden="true">⌘K</kbd></button>
       <button class="pill-button" type="button" id="share" aria-label="Share">${icon(ICONS.share, 18)}<span class="pill-button__label" aria-hidden="true">Share</span></button>
       <button class="pill-button pill-button--icon" type="button" id="settings-trigger"
         aria-controls="settings-panel" aria-expanded="false" aria-label="Settings">${icon(ICONS.settings, 18)}</button>

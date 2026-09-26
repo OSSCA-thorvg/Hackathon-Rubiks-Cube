@@ -98,8 +98,10 @@ function isApple(): boolean {
  *
  * Nothing is run that the page could not run by hand, and nothing is offered
  * that the page would not let a hand press: a command is available exactly
- * while its button is enabled and on screen, and the controller that owns the
- * button decides both, as it always has.
+ * while its button is enabled and not hidden, and the controller that owns
+ * the button decides both, as it always has. A button in the Settings drawer
+ * counts whether the drawer is open or not -- reaching it without opening
+ * the drawer is what the menu is for.
  */
 function pageCommands(
   shell: GameShell,
@@ -301,7 +303,7 @@ export function bootstrap(
 
   // Only the gameplay controls, which the game controller takes over from
   // here and owns the enabled state of. The settings trigger, the theme
-  // selector and the activity tabs are the page's own and work whether or
+  // selector and the detail panels are the page's own and work whether or
   // not an engine ever arrives -- a browser that cannot run the cube can
   // still be read in the theme its owner chose.
   for (const control of gameplayControls(shell.ui)) control.disabled = true;

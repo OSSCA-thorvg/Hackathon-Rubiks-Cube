@@ -276,7 +276,10 @@ export type TypedMoves =
   | {
       readonly ok: true;
       readonly turns: readonly TypedTurn[];
-      /** Each move as it was read, in the one spelling the log uses. */
+      /**
+       * Each move as it was read, tidied into the log's letters and suffixes.
+       * Not always the log's own name for it: see readToken.
+       */
       readonly written: readonly string[];
     }
   | { readonly ok: false; readonly reason: string };
@@ -352,9 +355,11 @@ function readToken(match: RegExpExecArray, size: number): ReadToken | string {
   const turns: QuarterTurns =
     suffix === '' ? 1 : suffix === "'" ? -1 : 2;
 
-  // The token again in the log's own spelling: upper case, a lower-case w,
-  // and one way of writing each turn. What is shown back to a person before
-  // it is played should read the way it will read on the list afterwards.
+  // The token again, tidied the way the log writes: upper case, a lower-case
+  // w, and one way of writing each turn. It keeps the name the person chose,
+  // though, which is not always the one the log will give the move once it
+  // is played -- 2R on a 3x3 is shown as 2R and logged as M' -- because what
+  // is shown back before playing is what they typed, made legible.
   const range = first === undefined ? '' : last === undefined ? first : `${first}-${last}`;
   const written = `${range}${letter}${wide === '' ? '' : 'w'}${
     turns === 2 ? '2' : turns === -1 ? "'" : ''

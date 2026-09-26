@@ -120,14 +120,19 @@ export class SessionRecords {
         if (this.bestBySize.get(record.cubeSize) === record) {
           item.dataset.best = 'true';
         }
+        // The separators are read and not drawn, and so is the scramble
+        // length, which the panel has no room for.
         item.append(
           span('records__time', formatElapsed(record.elapsedMs)),
-          span('records__sep', ' · '),
+          span('visually-hidden', ' · '),
           span('records__size', `${record.cubeSize}×${record.cubeSize}`),
-          span('records__sep', ' · '),
+          span('visually-hidden', ' · '),
           span('records__moves', `${record.userMoveCount} moves`),
-          span('records__sep', ' · '),
-          span('records__scramble', `${record.scrambleLength}-move scramble`),
+          span('visually-hidden', ' · '),
+          span(
+            'records__scramble visually-hidden',
+            `${record.scrambleLength}-move scramble`,
+          ),
         );
         return item;
       }),

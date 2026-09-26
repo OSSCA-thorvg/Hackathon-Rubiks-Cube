@@ -221,6 +221,7 @@ Generated module과 WASM binary는 Vite module graph 안에 있으므로 다른 
 web/dist/
 ├── index.html
 ├── favicon.svg
+├── favicon-32.png
 └── assets/
     ├── index-<hash>.js
     ├── index-<hash>.css

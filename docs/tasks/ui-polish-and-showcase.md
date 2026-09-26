@@ -10,7 +10,7 @@
 - **Activity tab이 토글 패널로 바뀌었습니다.** Moves와 Session은 Turn과 함께, 각자의 버튼으로 여닫는 패널입니다.
 - **Advanced controls `<details>`가 Turn 패널이 되었습니다.**
 - **View bar가 View rail이 되었습니다.**
-- **그대로인 것들이 있습니다.** Scramble/Stop 자리 교체, state visibility 표, 모든 element id와 `GameUi`의 의미, canvas theme 경계는 이 문서 그대로입니다.
+- **그대로인 것들이 있습니다.** Scramble/Stop 자리 교체, state visibility 표, canvas theme 경계는 이 문서 그대로입니다. element id와 `GameUi`의 의미도 Stage and panels에서는 그대로였지만, 뒤이은 [Scenes and surfaces](./scenes-and-surfaces.md)에서 바뀌었습니다. `GameUi.canvas`가 `GameUi.stage`가 되었고, view 속성은 `#view`가 아니라 `#stage`에 있으며, 무대는 view마다 캔버스를 하나씩 둡니다.
 
 Phase 번호를 붙이지 않는 횡단 작업입니다. 상위 계획의 Phase 17은 이미 **Solve hint and step-through**로 예약되어 있으므로 그 의미와 번호를 바꾸지 않습니다. 이 문서는 완성된 기능을 다시 설계하는 phase가 아니라, Phase 6~16에서 하나씩 추가된 UI를 ThorVG showcase에 맞는 하나의 제품 화면으로 재편하는 작업을 다룹니다.
 

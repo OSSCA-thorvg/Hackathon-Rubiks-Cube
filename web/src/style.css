@@ -1127,10 +1127,6 @@ kbd {
   border-bottom: none;
 }
 
-.records__sep {
-  display: none;
-}
-
 .records__time {
   display: flex;
   flex: 1;
@@ -1144,21 +1140,16 @@ kbd {
   text-align: right;
 }
 
-.records__scramble {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
 .records__item[data-best="true"] .records__time {
   color: var(--color-text-strong);
 }
 
 .records__item[data-best="true"] .records__time::after {
+  /* Drawn and not read: the entry reads as the sentence it always was. The
+     first line is for a browser that cannot say what generated text reads
+     as; it draws the tag and reads it too. */
   content: "Best";
+  content: "Best" / "";
   display: inline-flex;
   align-items: center;
   height: 18px;

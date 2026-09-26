@@ -40,6 +40,7 @@
 
   --color-primary: light-dark(#15171c, #f6f7f9);
   --color-primary-ink: light-dark(#f6f7f9, #15171c);
+  --color-primary-hover: light-dark(#2c3039, #ffffff);
   --color-live: light-dark(#1f9d5b, #58e39a);
   --color-focus: light-dark(#2563eb, #7cb4ff);
   --color-danger: light-dark(#c62828, #ff8a80);
@@ -201,13 +202,16 @@ kbd {
  * column's own height is a fixed one.
  */
 .game-shell {
+  /* Where the header starts, which the share card under it is placed from. */
+  --shell-top: max(12px, env(safe-area-inset-top));
+
   display: flex;
   flex-direction: column;
   gap: 8px;
   height: 100vh;
   height: 100dvh;
   padding:
-    max(12px, env(safe-area-inset-top))
+    var(--shell-top)
     max(16px, env(safe-area-inset-right))
     max(16px, env(safe-area-inset-bottom))
     max(16px, env(safe-area-inset-left));
@@ -358,8 +362,8 @@ kbd {
 }
 
 .soft-button--primary:hover:not(:disabled) {
-  background: var(--color-primary);
-  filter: brightness(1.08);
+  border-color: var(--color-primary-hover);
+  background: var(--color-primary-hover);
 }
 
 .soft-button--danger {
@@ -501,8 +505,7 @@ kbd {
 }
 
 .dock-button--primary:hover:not(:disabled) {
-  background: var(--color-primary);
-  filter: brightness(1.08);
+  background: var(--color-primary-hover);
 }
 
 .dock-button--stop,
@@ -602,7 +605,7 @@ kbd {
 .move-chip::after {
   content: "";
   position: absolute;
-  inset: -7px 0;
+  inset: calc((var(--target) - 32px) / -2) 0;
 }
 
 .move-chip:hover {
@@ -1635,7 +1638,7 @@ kbd {
   align-content: start;
   gap: 16px;
   max-height: 85dvh;
-  padding: 20px;
+  padding: 20px 20px max(20px, env(safe-area-inset-bottom));
   overflow-y: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--color-line-strong);
@@ -1720,9 +1723,10 @@ kbd {
  */
 .share-card {
   position: fixed;
-  top: calc(max(12px, env(safe-area-inset-top)) + 56px);
-  right: 16px;
-  left: 16px;
+  /* Twelve pixels under the header's buttons, wherever the header starts. */
+  top: calc(var(--shell-top) + var(--target) + 12px);
+  right: max(16px, env(safe-area-inset-right));
+  left: max(16px, env(safe-area-inset-left));
   z-index: var(--z-card);
   display: grid;
   gap: 10px;
@@ -2014,12 +2018,13 @@ kbd {
   .game-shell {
     --rail-zone: 96px;
     --panel-zone: 0px;
+    --shell-top: 24px;
 
     display: grid;
     grid-template-columns: var(--rail-zone) minmax(0, 1fr) var(--panel-zone) var(--rail-zone);
     grid-template-rows: auto minmax(0, 1fr) auto auto auto;
     gap: 0;
-    padding: 24px 0 20px;
+    padding: var(--shell-top) 0 20px;
     overflow: hidden;
     transition: grid-template-columns 260ms ease;
   }
@@ -2102,9 +2107,8 @@ kbd {
     grid-column: 2;
     justify-self: center;
     gap: 6px;
-    height: 72px;
     margin-top: 14px;
-    padding: 10px;
+    padding: 9px;
   }
 
   .dock-button {
@@ -2227,7 +2231,6 @@ kbd {
   }
 
   .share-card {
-    top: 80px;
     right: 32px;
     left: auto;
     width: 380px;
@@ -2257,7 +2260,7 @@ kbd {
 /* A wide window that is short: less chrome, so the canvas keeps its size. */
 @media (min-width: 1024px) and (max-height: 760px) {
   .game-shell {
-    padding-top: 16px;
+    --shell-top: 16px;
   }
 
   .brand__byline {
@@ -2282,7 +2285,6 @@ kbd {
   }
 
   .action-dock {
-    height: 62px;
     margin-top: 10px;
     padding: 6px;
   }

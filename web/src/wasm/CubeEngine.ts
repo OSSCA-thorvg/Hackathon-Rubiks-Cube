@@ -23,6 +23,12 @@ export type CubeEngineOptions = {
    * generated module from the Vite module graph.
    */
   readonly loadModule?: () => Promise<ThorvgRubiksModule>;
+  /**
+   * The drawing buffer the engine starts at. A page with more than one view
+   * decides it, since the density is shared between them; without it the
+   * canvas's own box at the device pixel ratio is used.
+   */
+  readonly size?: CubeEngineSize;
 };
 
 /** External faces in the same stable order as the C++ cube domain. */
@@ -256,35 +262,6 @@ export const DEFAULT_SCRAMBLE_MOVES = 20;
 export const MAX_SHARED_MOVES = 4096;
 
 /**
- * The most pixels the views are drawn at, all of them together.
- *
- * A software renderer's frame costs what its pixels cost, and a large stage
- * on a dense screen asks for more of them than anyone can see: past about two
- * and a half million a frame, the views are drawn at a lower density and
- * scaled up to their boxes, which on a screen that dense is not a difference
- * an eye makes out.
- */
-export const MAX_STAGE_PIXELS = 2_600_000;
-
-/**
- * The pixel density every view is drawn at, the same for all of them.
- *
- * The device's own ratio, until the boxes together would ask for more pixels
- * than the budget; past it they come down together, so no view is drawn
- * sharper than the one beside it.
- */
-export function stageDensity(
-  boxes: readonly CubeEngineSize[],
-  devicePixelRatio: number,
-  pixelBudget: number = MAX_STAGE_PIXELS,
-): number {
-  const area = boxes.reduce((sum, box) => sum + box.width * box.height, 0);
-  const pixels = area * devicePixelRatio * devicePixelRatio;
-  if (!Number.isFinite(pixels) || pixels <= pixelBudget) return devicePixelRatio;
-  return devicePixelRatio * Math.sqrt(pixelBudget / pixels);
-}
-
-/**
  * Computes the drawing buffer size for a CSS size and device pixel ratio.
  *
  * Non-finite inputs normalize to one pixel; the result is clamped to at
@@ -341,50 +318,62 @@ export function isUint32(value: number): boolean {
 /**
  * One canvas showing one engine surface.
  *
- * Holds the view over that surface's pixels and the last frame it copied out,
- * so a surface the engine did not draw again is not copied again either.
+ * Holds the view over that surface's pixels and the frame it last copied
+ * out, so a surface the engine did not draw again is not copied again either.
  */
 type Presentation = {
   readonly id: CubeSurface;
   readonly canvas: HTMLCanvasElement;
   readonly context: CanvasRenderingContext2D;
+  /** The size the engine last took for the surface; 0 by 0 while put away. */
   width: number;
   height: number;
   pointer: number;
   byteLength: number;
   view: Uint8ClampedArray<ArrayBuffer> | null;
   image: ImageData | null;
-  /** The engine frame the canvas shows, or -1 for none yet. */
-  shown: number;
+  /** The engine frame the canvas was last written from, or -1 for none. */
+  frame: number;
 };
+
+function presentationOf(
+  id: CubeSurface,
+  canvas: HTMLCanvasElement,
+): Presentation {
+  const context = canvas.getContext('2d');
+  if (context === null) {
+    throw new Error('CubeEngine requires a 2D canvas context.');
+  }
+  return {
+    id,
+    canvas,
+    context,
+    width: 0,
+    height: 0,
+    pointer: 0,
+    byteLength: 0,
+    view: null,
+    image: null,
+    frame: -1,
+  };
+}
 
 /**
  * Owns one engine module instance and presents its surfaces on canvases.
  *
  * The canvas it is created with shows surface 0; a page with a canvas per
- * view hands the others over with presentSurface().
+ * view hands the others over with presentSurface(). Every canvas is then
+ * sized, drawn and pressed the same way, whichever surface it shows.
  */
 export class CubeEngine {
   private readonly module: ThorvgRubiksModule;
-  private readonly canvas: HTMLCanvasElement;
-  private readonly context: CanvasRenderingContext2D;
-  private width: number;
-  private height: number;
-  private pixelPointer = 0;
-  private pixelByteLength = 0;
-  private view: Uint8ClampedArray<ArrayBuffer> | null = null;
-  private image: ImageData | null = null;
-  private disposed = false;
-  /** The canvases beyond the first, by surface. */
+  /** Every canvas the engine draws on, by surface. */
   private readonly presentations = new Map<CubeSurface, Presentation>();
-  /** Surface 0's own presentation state, for what the first canvas shows. */
-  private firstShown = -1;
-  /** Whether surface 0 has been put away, which only resizeSurface() does. */
-  private firstAway = false;
+  private disposed = false;
 
   /**
-   * Loads the WASM module, initializes the engine to the canvas CSS size,
-   * and sizes the canvas drawing buffer to match.
+   * Loads the WASM module and initializes the engine to a canvas: at the
+   * size the options give, or at the canvas's CSS box otherwise.
    *
    * @throws Error when the module, the 2D context, or initialization fails.
    */
@@ -393,20 +382,15 @@ export class CubeEngine {
     options: CubeEngineOptions = {},
   ): Promise<CubeEngine> {
     const module = await (options.loadModule ?? loadGeneratedModule)();
+    const first = presentationOf(CubeSurface.Cube, canvas);
 
-    const context = canvas.getContext('2d');
-    if (context === null) {
-      throw new Error('CubeEngine requires a 2D canvas context.');
-    }
-
-    // At the density a stage of this one canvas would be drawn at; a page
-    // with more views fits them all afterwards.
-    const box = { width: canvas.clientWidth, height: canvas.clientHeight };
-    const size = computeDrawingBufferSize(
-      box.width,
-      box.height,
-      stageDensity([box], window.devicePixelRatio),
-    );
+    const size =
+      options.size ??
+      computeDrawingBufferSize(
+        canvas.clientWidth,
+        canvas.clientHeight,
+        window.devicePixelRatio,
+      );
 
     if (module._thorvg_rubiks_initialize(size.width, size.height) === 0) {
       throw new Error(
@@ -418,9 +402,7 @@ export class CubeEngine {
     // engine instance exists must shut the module down again, or the only
     // owner able to release them is lost.
     try {
-      canvas.width = size.width;
-      canvas.height = size.height;
-      return new CubeEngine(module, canvas, context, size);
+      return new CubeEngine(module, first, size);
     } catch (error) {
       module._thorvg_rubiks_shutdown();
       throw error;
@@ -429,57 +411,12 @@ export class CubeEngine {
 
   private constructor(
     module: ThorvgRubiksModule,
-    canvas: HTMLCanvasElement,
-    context: CanvasRenderingContext2D,
+    first: Presentation,
     size: CubeEngineSize,
   ) {
     this.module = module;
-    this.canvas = canvas;
-    this.context = context;
-    this.width = size.width;
-    this.height = size.height;
-    this.refreshPixelSource();
-  }
-
-  /**
-   * Resizes the engine drawing buffer and the canvas to a new size.
-   *
-   * A size equal to the current one returns without calling the engine.
-   *
-   * @throws Error when disposed or when the engine rejects the resize.
-   */
-  resize(size: CubeEngineSize): void {
-    this.assertUsable();
-
-    // CubeEngineSize is compile-time only; reject values the Emscripten
-    // i32 boundary would silently coerce into unrelated integers.
-    if (!isValidDimension(size.width) || !isValidDimension(size.height)) {
-      throw new Error(
-        `Invalid drawing buffer size ${size.width}x${size.height}.`,
-      );
-    }
-
-    if (size.width === this.width && size.height === this.height) return;
-
-    if (this.module._thorvg_rubiks_resize(size.width, size.height) === 0) {
-      throw new Error(`Engine resize failed for ${size.width}x${size.height}.`);
-    }
-
-    this.width = size.width;
-    this.height = size.height;
-    this.canvas.width = size.width;
-    this.canvas.height = size.height;
-    this.firstAway = false;
-    this.firstShown = -1;
-
-    try {
-      this.refreshPixelSource();
-    } catch (error) {
-      // The new size is already committed; without a valid buffer the
-      // instance cannot recover, so release the native side entirely.
-      this.dispose();
-      throw error;
-    }
+    this.presentations.set(first.id, first);
+    this.adopt(first, size);
   }
 
   /**
@@ -496,22 +433,7 @@ export class CubeEngine {
     if (id === CubeSurface.Cube || !Object.values(CubeSurface).includes(id)) {
       throw new Error(`Surface ${id} cannot be given a canvas.`);
     }
-    const context = canvas.getContext('2d');
-    if (context === null) {
-      throw new Error('CubeEngine requires a 2D canvas context.');
-    }
-    this.presentations.set(id, {
-      id,
-      canvas,
-      context,
-      width: 0,
-      height: 0,
-      pointer: 0,
-      byteLength: 0,
-      view: null,
-      image: null,
-      shown: -1,
-    });
+    this.presentations.set(id, presentationOf(id, canvas));
   }
 
   /**
@@ -533,14 +455,18 @@ export class CubeEngine {
    * Resizes one surface and its canvas, or puts it away with null.
    *
    * A surface put away draws nothing and holds no buffer: what a canvas the
-   * page is not showing needs. A size equal to the current one returns
-   * without calling the engine.
+   * page is not showing needs. The engine is asked only when the size is not
+   * the one it already has, which is what the answer says.
    *
-   * @throws Error when disposed or when the engine rejects the size.
+   * @returns whether the size changed, and so a frame is owed.
+   * @throws Error when disposed, for a surface with no canvas, or when the
+   *         engine rejects the size.
    */
-  resizeSurface(id: CubeSurface, size: CubeEngineSize | null): void {
+  resizeSurface(id: CubeSurface, size: CubeEngineSize | null): boolean {
     this.assertUsable();
 
+    // CubeEngineSize is compile-time only; reject values the Emscripten
+    // i32 boundary would silently coerce into unrelated integers.
     if (
       size !== null &&
       (!isValidDimension(size.width) || !isValidDimension(size.height))
@@ -550,62 +476,32 @@ export class CubeEngine {
       );
     }
 
-    if (id === CubeSurface.Cube) {
-      if (size === null) {
-        if (this.firstAway) return;
-        if (this.module._thorvg_rubiks_resize_surface(0, 0, 0) === 0) {
-          throw new Error('Engine could not put surface 0 away.');
-        }
-        this.firstAway = true;
-        this.firstShown = -1;
-        return;
-      }
-      if (this.firstAway) {
-        // Coming back from away: the old size may match, but the buffer is
-        // gone, so the engine is asked whatever the size.
-        this.width = 0;
-        this.height = 0;
-      }
-      this.resize(size);
-      return;
-    }
-
-    const shown = this.presentations.get(id);
-    if (shown === undefined) {
+    const presentation = this.presentations.get(id);
+    if (presentation === undefined) {
       throw new Error(`Surface ${id} has no canvas.`);
     }
 
     const width = size?.width ?? 0;
     const height = size?.height ?? 0;
-    if (width === shown.width && height === shown.height) return;
+    if (width === presentation.width && height === presentation.height) {
+      return false;
+    }
 
     if (this.module._thorvg_rubiks_resize_surface(id, width, height) === 0) {
-      throw new Error(`Engine resize failed for surface ${id} at ${width}x${height}.`);
-    }
-    shown.width = width;
-    shown.height = height;
-    shown.shown = -1;
-    shown.view = null;
-    shown.image = null;
-    if (size === null) {
-      shown.pointer = 0;
-      shown.byteLength = 0;
-      return;
-    }
-
-    shown.canvas.width = width;
-    shown.canvas.height = height;
-    const pointer = this.module._thorvg_rubiks_surface_pixel_buffer(id);
-    const length = this.module._thorvg_rubiks_surface_pixel_byte_length(id);
-    if (length !== width * height * 4 || !this.heapRegionUsable(pointer, length)) {
-      this.dispose();
       throw new Error(
-        `Engine returned an invalid pixel buffer for surface ${id} at ` +
-          `${width}x${height}: pointer ${pointer}, byte length ${length}.`,
+        `Engine resize failed for surface ${id} at ${width}x${height}.`,
       );
     }
-    shown.pointer = pointer;
-    shown.byteLength = length;
+
+    try {
+      this.adopt(presentation, size);
+    } catch (error) {
+      // The new size is already committed; without a valid buffer the
+      // instance cannot recover, so release the native side entirely.
+      this.dispose();
+      throw error;
+    }
+    return true;
   }
 
   /**
@@ -624,35 +520,13 @@ export class CubeEngine {
       throw new Error('Engine rendering failed.');
     }
 
-    if (!this.firstAway) {
-      const frame = this.module._thorvg_rubiks_surface_frame(0);
-      if (frame !== this.firstShown) {
-        this.context.putImageData(this.imageData(), 0, 0);
-        this.firstShown = frame;
-      }
+    for (const presentation of this.presentations.values()) {
+      if (presentation.byteLength === 0) continue;
+      const frame = this.module._thorvg_rubiks_surface_frame(presentation.id);
+      if (frame === presentation.frame) continue;
+      presentation.context.putImageData(this.imageOf(presentation), 0, 0);
+      presentation.frame = frame;
     }
-
-    for (const shown of this.presentations.values()) {
-      if (shown.byteLength === 0) continue;
-      const frame = this.module._thorvg_rubiks_surface_frame(shown.id);
-      if (frame === shown.shown) continue;
-      shown.context.putImageData(this.presentationImage(shown), 0, 0);
-      shown.shown = frame;
-    }
-  }
-
-  /**
-   * Begins a gesture at a point in drawing buffer pixels.
-   *
-   * Over the cube that is a layer drag, elsewhere a viewpoint sweep.
-   *
-   * @returns true when a gesture began.
-   * @throws Error when disposed.
-   */
-  pointerDown(x: number, y: number): boolean {
-    this.assertUsable();
-
-    return this.module._thorvg_rubiks_pointer_down(x, y) !== 0;
   }
 
   /**
@@ -1244,23 +1118,6 @@ export class CubeEngine {
   }
 
   /**
-   * Lays the brush on the square under a point, in drawing-buffer pixels.
-   *
-   * False for a press that missed the net, which is an ordinary thing for a
-   * press to do -- the cross has four empty corners.
-   */
-  paintAt(x: number, y: number): boolean {
-    this.assertUsable();
-    return this.module._thorvg_rubiks_paint_at(x, y) !== 0;
-  }
-
-  /** Lays the brush on every square of the face under a point. */
-  paintFill(x: number, y: number): boolean {
-    this.assertUsable();
-    return this.module._thorvg_rubiks_paint_fill(x, y) !== 0;
-  }
-
-  /**
    * The colouring this session began from, or an empty list.
    *
    * Its emptiness is the question "does a link for this need the colours"
@@ -1393,8 +1250,6 @@ export class CubeEngine {
     if (this.disposed) return;
 
     this.disposed = true;
-    this.view = null;
-    this.image = null;
     this.presentations.clear();
     this.module._thorvg_rubiks_shutdown();
   }
@@ -1440,76 +1295,73 @@ export class CubeEngine {
   }
 
   /**
-   * Re-queries and validates the pixel source after initialize or resize.
+   * Takes a surface's new size, and the pixel buffer that came with it.
    *
-   * State is committed only when the full metadata contract holds: a usable
-   * heap region, and the exact width * height * 4 byte length on top of it.
+   * The size is committed first, since the engine already holds it; the
+   * buffer only when the full metadata contract holds -- a usable heap
+   * region, and the exact width * height * 4 byte length on top of it. A
+   * region can be perfectly usable and still be the wrong size for its
+   * canvas, which is why the length is checked as well.
+   *
+   * @throws Error when the engine hands back a buffer that is not there.
    */
-  private refreshPixelSource(): void {
-    const pointer = this.module._thorvg_rubiks_pixel_buffer();
-    const length = this.module._thorvg_rubiks_pixel_byte_length();
-    const expectedLength = this.width * this.height * 4;
+  private adopt(presentation: Presentation, size: CubeEngineSize | null): void {
+    presentation.width = size?.width ?? 0;
+    presentation.height = size?.height ?? 0;
+    presentation.pointer = 0;
+    presentation.byteLength = 0;
+    presentation.view = null;
+    presentation.image = null;
+    presentation.frame = -1;
+    if (size === null) return;
 
-    // The length is the pixel buffer's own extra condition: a region can be
-    // perfectly usable and still be the wrong size for this canvas.
-    if (length !== expectedLength || !this.heapRegionUsable(pointer, length)) {
+    presentation.canvas.width = size.width;
+    presentation.canvas.height = size.height;
+
+    const { id } = presentation;
+    const pointer = this.module._thorvg_rubiks_surface_pixel_buffer(id);
+    const length = this.module._thorvg_rubiks_surface_pixel_byte_length(id);
+    if (
+      length !== size.width * size.height * 4 ||
+      !this.heapRegionUsable(pointer, length)
+    ) {
       throw new Error(
-        `Engine returned an invalid pixel buffer for ` +
-          `${this.width}x${this.height}: pointer ${pointer}, ` +
+        `Engine returned an invalid pixel buffer for surface ${id} at ` +
+          `${size.width}x${size.height}: pointer ${pointer}, ` +
           `byte length ${length}.`,
       );
     }
-
-    this.pixelPointer = pointer;
-    this.pixelByteLength = length;
-    this.view = null;
-    this.image = null;
-  }
-
-  /** The same view as imageData(), for one of the other surfaces. */
-  private presentationImage(shown: Presentation): ImageData {
-    const heapBuffer = this.module.HEAPU8.buffer;
-    const stale =
-      shown.view === null ||
-      shown.image === null ||
-      shown.view.buffer !== heapBuffer ||
-      shown.view.buffer.byteLength === 0;
-
-    if (stale) {
-      shown.view = new Uint8ClampedArray(
-        heapBuffer,
-        shown.pointer,
-        shown.byteLength,
-      );
-      shown.image = new ImageData(shown.view, shown.width, shown.height);
-    }
-
-    return shown.image as ImageData;
+    presentation.pointer = pointer;
+    presentation.byteLength = length;
   }
 
   /**
-   * Returns an ImageData view over the WASM pixel buffer.
+   * An ImageData view over a surface's pixel buffer in the WASM heap.
    *
    * The view is reused while the buffer stays valid and is recreated after
    * memory growth detaches the previous ArrayBuffer.
    */
-  private imageData(): ImageData {
+  private imageOf(presentation: Presentation): ImageData {
     const heapBuffer = this.module.HEAPU8.buffer;
     const stale =
-      this.view === null ||
-      this.image === null ||
-      this.view.buffer !== heapBuffer ||
-      this.view.buffer.byteLength === 0;
+      presentation.view === null ||
+      presentation.image === null ||
+      presentation.view.buffer !== heapBuffer ||
+      presentation.view.buffer.byteLength === 0;
 
     if (stale) {
-      this.view = new Uint8ClampedArray(
+      presentation.view = new Uint8ClampedArray(
         heapBuffer,
-        this.pixelPointer,
-        this.pixelByteLength,
+        presentation.pointer,
+        presentation.byteLength,
       );
-      this.image = new ImageData(this.view, this.width, this.height);
+      presentation.image = new ImageData(
+        presentation.view,
+        presentation.width,
+        presentation.height,
+      );
     }
 
-    return this.image as ImageData;
+    return presentation.image as ImageData;
   }
 }

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  MAX_STAGE_PIXELS,
+  stageDensity,
   startApp,
   type EngineLike,
   type ObserverLike,
@@ -12,11 +14,7 @@ import type {
   GameUi,
 } from '../../src/game/GameController.ts';
 import { encodeSession } from '../../src/game/shareCode.ts';
-import {
-  CubeScene,
-  CubeSurface,
-  MAX_STAGE_PIXELS,
-} from '../../src/wasm/CubeEngine.ts';
+import { CubeScene, CubeSurface } from '../../src/wasm/CubeEngine.ts';
 
 /**
  * The gameplay DOM the lifecycle forwards. GameController owns what the
@@ -80,12 +78,12 @@ function createHarness(overrides: {
   };
   const canvas = canvasState as unknown as HTMLCanvasElement;
   const presented = new Map<number, HTMLCanvasElement>();
+  // What the engine holds for each surface, the way CubeEngine keeps it:
+  // surface 0 at the size it was made at, the others with none until given
+  // one. A size it already has is answered with no change.
+  const held = new Map<number, string>([[0, '100x50']]);
 
   const engine = {
-    resize: vi.fn((size: { width: number; height: number }) => {
-      canvasState.width = size.width;
-      canvasState.height = size.height;
-    }),
     render: vi.fn(),
     dispose: vi.fn(),
     advance: vi.fn(() => false),
@@ -104,7 +102,6 @@ function createHarness(overrides: {
     resetView: vi.fn(),
     isBusy: vi.fn(() => false),
     restoreSession: vi.fn(() => true),
-    pointerDown: vi.fn(() => true),
     pointerMove: vi.fn(),
     pointerUp: vi.fn(),
     pointerCancel: vi.fn(),
@@ -115,12 +112,16 @@ function createHarness(overrides: {
     // Commits the size to the canvas the way CubeEngine does; surface 0's
     // canvas is the one the engine was made with.
     resizeSurface: vi.fn(
-      (id: number, size: { width: number; height: number } | null) => {
-        if (size === null) return;
+      (id: number, size: { width: number; height: number } | null): boolean => {
+        const key = size === null ? 'away' : `${size.width}x${size.height}`;
+        if ((held.get(id) ?? 'away') === key) return false;
+        held.set(id, key);
         const target = id === 0 ? canvas : presented.get(id);
-        if (target === undefined) return;
-        target.width = size.width;
-        target.height = size.height;
+        if (size !== null && target !== undefined) {
+          target.width = size.width;
+          target.height = size.height;
+        }
+        return true;
       },
     ),
     pointerDownOn: vi.fn(() => true),
@@ -316,20 +317,23 @@ describe('startApp', () => {
     harness.canvasState.clientWidth = 60;
     harness.triggerObserver();
 
-    expect(harness.engine.resize).toHaveBeenCalledWith({
-      width: 60,
-      height: 50,
-    });
+    expect(harness.engine.resizeSurface).toHaveBeenLastCalledWith(
+      CubeSurface.Cube,
+      { width: 60, height: 50 },
+    );
     expect(harness.engine.render).toHaveBeenCalledTimes(2);
   });
 
-  it('skips the engine when the drawing buffer size is unchanged', async () => {
+  it('draws nothing more when no drawing buffer size changed', async () => {
     const harness = createHarness();
     await harness.start();
+    harness.engine.resizeSurface.mockClear();
 
     harness.triggerObserver();
 
-    expect(harness.engine.resize).not.toHaveBeenCalled();
+    // The engine is the one holding the sizes, so it is asked, and says no.
+    expect(harness.engine.resizeSurface).toHaveBeenCalledTimes(1);
+    expect(harness.engine.resizeSurface.mock.results[0]!.value).toBe(false);
     expect(harness.engine.render).toHaveBeenCalledTimes(1);
   });
 
@@ -337,7 +341,7 @@ describe('startApp', () => {
     const harness = createHarness();
     await harness.start();
 
-    harness.engine.resize.mockImplementationOnce(() => {
+    harness.engine.resizeSurface.mockImplementationOnce(() => {
       throw new Error('resize failed');
     });
     harness.canvasState.clientWidth = 60;
@@ -372,10 +376,10 @@ describe('startApp', () => {
     harness.canvasState.clientWidth = 60;
     harness.dispatch('pageshow', { persisted: true } as unknown as Event);
 
-    expect(harness.engine.resize).toHaveBeenCalledWith({
-      width: 60,
-      height: 50,
-    });
+    expect(harness.engine.resizeSurface).toHaveBeenLastCalledWith(
+      CubeSurface.Cube,
+      { width: 60, height: 50 },
+    );
     expect(harness.engine.render).toHaveBeenCalledTimes(2);
   });
 
@@ -400,7 +404,10 @@ describe('startApp', () => {
     harness.canvasState.clientWidth = 60;
     harness.triggerObserver();
 
-    expect(harness.engine.resize).toHaveBeenCalledTimes(1);
+    expect(harness.engine.resizeSurface).toHaveBeenLastCalledWith(
+      CubeSurface.Cube,
+      { width: 60, height: 50 },
+    );
     expect(harness.engine.dispose).toHaveBeenCalledTimes(1);
     expect(harness.onError).toHaveBeenCalledTimes(1);
   });
@@ -439,11 +446,12 @@ describe('startApp', () => {
     const harness = createHarness();
     const controller = await harness.start();
 
+    harness.engine.resizeSurface.mockClear();
     controller.teardown();
     harness.canvasState.clientWidth = 60;
     harness.triggerObserver();
 
-    expect(harness.engine.resize).not.toHaveBeenCalled();
+    expect(harness.engine.resizeSurface).not.toHaveBeenCalled();
     expect(harness.onError).not.toHaveBeenCalled();
     expect(harness.engine.dispose).toHaveBeenCalledTimes(1);
   });
@@ -462,7 +470,7 @@ describe('startApp', () => {
     });
     await harness.start();
 
-    harness.engine.resize.mockImplementationOnce(() => {
+    harness.engine.resizeSurface.mockImplementationOnce(() => {
       throw new Error('resize failed');
     });
     harness.canvasState.clientWidth = 60;
@@ -513,13 +521,17 @@ describe('startApp', () => {
 
     harness.dispatchPointer('pointerdown', {});
 
-    expect(harness.engine.pointerDown).toHaveBeenCalledTimes(1);
+    expect(harness.engine.pointerDownOn).toHaveBeenCalledWith(
+      CubeSurface.Cube,
+      10,
+      10,
+    );
     expect(harness.hasPendingFrame()).toBe(true);
   });
 
   it('leaves the page alone when the engine declines the press', async () => {
     const harness = createHarness();
-    harness.engine.pointerDown.mockReturnValueOnce(false);
+    harness.engine.pointerDownOn.mockReturnValueOnce(false);
     await harness.start();
 
     harness.dispatchPointer('pointerdown', {});
@@ -915,11 +927,11 @@ describe('startApp with a canvas per view', () => {
       width: 20,
       height: 20,
     });
-    // The cube's canvas was already the size of its box.
-    expect(harness.engine.resizeSurface).not.toHaveBeenCalledWith(
-      CubeSurface.Cube,
-      expect.anything(),
-    );
+    // The cube's canvas was made at the size of its box, so asked again it
+    // has nothing to change.
+    const { calls, results } = harness.engine.resizeSurface.mock;
+    const cube = calls.findIndex(([id]) => id === CubeSurface.Cube);
+    expect(results[cube]!.value).toBe(false);
     const lastResize = Math.max(
       ...harness.engine.resizeSurface.mock.invocationCallOrder,
     );
@@ -960,18 +972,24 @@ describe('startApp with a canvas per view', () => {
     expect(harness.engine.resizeSurface).toHaveBeenCalledWith(CubeSurface.Net, null);
     expect(harness.engine.render).toHaveBeenCalledTimes(2);
 
-    // Nothing moved since, so nothing is asked of the engine.
+    // Nothing moved since, so nothing changes and nothing is drawn.
+    harness.engine.resizeSurface.mockClear();
     harness.triggerObserver();
-    expect(harness.engine.resizeSurface).toHaveBeenCalledTimes(1);
+    expect(
+      harness.engine.resizeSurface.mock.results.every(
+        (result) => result.value === false,
+      ),
+    ).toBe(true);
     expect(harness.engine.render).toHaveBeenCalledTimes(2);
 
     net.state.clientWidth = 80;
     net.state.clientHeight = 60;
+    harness.engine.resizeSurface.mockClear();
     harness.triggerObserver();
-    expect(harness.engine.resizeSurface).toHaveBeenLastCalledWith(
-      CubeSurface.Net,
-      { width: 80, height: 60 },
-    );
+    expect(harness.engine.resizeSurface).toHaveBeenCalledWith(CubeSurface.Net, {
+      width: 80,
+      height: 60,
+    });
     expect(harness.engine.render).toHaveBeenCalledTimes(3);
   });
 
@@ -996,7 +1014,7 @@ describe('startApp with a canvas per view', () => {
       20,
       30,
     );
-    expect(harness.engine.pointerDown).not.toHaveBeenCalled();
+    expect(harness.engine.pointerDownOn).toHaveBeenCalledTimes(1);
     expect(harness.hasPendingFrame()).toBe(true);
     net.release();
     expect(harness.engine.pointerUp).toHaveBeenCalledTimes(1);
@@ -1005,7 +1023,11 @@ describe('startApp with a canvas per view', () => {
     // cube's canvas in its own pixels, off its right-hand edge.
     harness.engine.pointerDownOn.mockReturnValueOnce(false);
     net.press(130, 30);
-    expect(harness.engine.pointerDown).toHaveBeenCalledWith(130, 30);
+    expect(harness.engine.pointerDownOn).toHaveBeenLastCalledWith(
+      CubeSurface.Cube,
+      130,
+      30,
+    );
   });
 
   it('leaves a view that is only looked at alone', async () => {
@@ -1024,5 +1046,35 @@ describe('startApp with a canvas per view', () => {
     expect(net.listenerCount()).toBeGreaterThan(0);
     app.teardown();
     expect(net.listenerCount()).toBe(0);
+  });
+});
+
+describe('stageDensity', () => {
+  it('keeps the device ratio while the views fit the budget', () => {
+    expect(stageDensity([{ width: 100, height: 50 }], 2)).toBe(2);
+    expect(stageDensity([], 3)).toBe(3);
+  });
+
+  it('brings every view down together past the budget', () => {
+    const boxes = [
+      { width: 1000, height: 1000 },
+      { width: 600, height: 400 },
+    ];
+    const density = stageDensity(boxes, 2);
+    expect(density).toBeLessThan(2);
+    const pixels = boxes.reduce(
+      (sum, box) => sum + box.width * density * box.height * density,
+      0,
+    );
+    expect(pixels).toBeCloseTo(MAX_STAGE_PIXELS, -2);
+  });
+
+  it('takes a budget of its own', () => {
+    expect(stageDensity([{ width: 100, height: 100 }], 1, 2_500)).toBe(0.5);
+  });
+
+  it('takes a ratio that is not a positive number as one', () => {
+    expect(stageDensity([{ width: 10, height: 10 }], Number.NaN)).toBe(1);
+    expect(stageDensity([{ width: 10, height: 10 }], 0)).toBe(1);
   });
 });

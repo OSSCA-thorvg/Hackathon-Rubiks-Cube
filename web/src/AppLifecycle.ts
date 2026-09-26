@@ -9,7 +9,6 @@ import {
   computeDrawingBufferSize,
   CubeEngine,
   CubeSurface,
-  stageDensity,
   type CubeCanvasTheme,
   type CubeEngineSize,
 } from './wasm/CubeEngine.ts';
@@ -42,17 +41,22 @@ import {
 export type AppState = 'loading' | 'ready' | 'unsupported' | 'error';
 
 /** Engine surface the lifecycle needs; CubeEngine satisfies it. */
-export type EngineLike = PointerTarget &
-  GameEngine & {
-    resize(size: CubeEngineSize): void;
+export type EngineLike = GameEngine & {
     /** Hands one of the surfaces beyond the first a canvas of its own. */
     presentSurface(id: CubeSurface, canvas: HTMLCanvasElement): void;
     /** Which scenes a surface shows, as CubeScene bits. */
     setSurfaceScenes(id: CubeSurface, scenes: number): void;
-    /** Null puts a surface away, for a canvas that is not on the page. */
-    resizeSurface(id: CubeSurface, size: CubeEngineSize | null): void;
+    /**
+     * Null puts a surface away, for a canvas that is not on the page.
+     *
+     * @returns whether the size changed, and so a frame is owed.
+     */
+    resizeSurface(id: CubeSurface, size: CubeEngineSize | null): boolean;
     /** A press on one surface, in that surface's pixels. */
     pointerDownOn(id: CubeSurface, x: number, y: number): boolean;
+    pointerMove(x: number, y: number): void;
+    pointerUp(): void;
+    pointerCancel(): void;
     render(): void;
     dispose(): void;
     /** @returns true while further frames still have to be drawn. */
@@ -162,8 +166,15 @@ export type StartAppOptions = {
   readonly onError: (error: unknown) => void;
   /** Where the canvas ground comes from; absent leaves the engine default. */
   readonly theme?: ThemeSource;
-  /** Test seams; production uses CubeEngine and the real globals. */
-  readonly createEngine?: (canvas: HTMLCanvasElement) => Promise<EngineLike>;
+  /**
+   * Test seams; production uses CubeEngine and the real globals. The engine
+   * is created at the size its canvas is first given, which is this
+   * module's to decide since the density is shared by every view.
+   */
+  readonly createEngine?: (
+    canvas: HTMLCanvasElement,
+    size: CubeEngineSize,
+  ) => Promise<EngineLike>;
   readonly createObserver?: (callback: () => void) => ObserverLike;
   readonly targetWindow?: WindowLike;
   readonly targetDocument?: DocumentLike;
@@ -259,9 +270,37 @@ function pressingSurface(engine: EngineLike, id: CubeSurface): PointerTarget {
   };
 }
 
-function sameSize(a: CubeEngineSize | null, b: CubeEngineSize | null): boolean {
-  if (a === null || b === null) return a === b;
-  return a.width === b.width && a.height === b.height;
+/**
+ * The most pixels the views are drawn at, all of them together.
+ *
+ * A software renderer's frame costs what its pixels cost, and a large stage
+ * on a dense screen asks for more of them than anyone can see: past about two
+ * and a half million a frame, the views are drawn at a lower density and
+ * scaled up to their boxes, which on a screen that dense is not a difference
+ * an eye makes out.
+ */
+export const MAX_STAGE_PIXELS = 2_600_000;
+
+/**
+ * The pixel density every view is drawn at, the same for all of them.
+ *
+ * The device's own ratio, until the boxes together would ask for more pixels
+ * than the budget; past it they come down together, so no view is drawn
+ * sharper than the one beside it. A ratio that is not a positive number is
+ * taken as one.
+ */
+export function stageDensity(
+  boxes: readonly CubeEngineSize[],
+  devicePixelRatio: number,
+  pixelBudget: number = MAX_STAGE_PIXELS,
+): number {
+  const ratio =
+    Number.isFinite(devicePixelRatio) && devicePixelRatio > 0
+      ? devicePixelRatio
+      : 1;
+  const area = boxes.reduce((sum, box) => sum + box.width * box.height, 0);
+  if (!(area > 0)) return ratio;
+  return Math.min(ratio, Math.sqrt(pixelBudget / area));
 }
 
 /**
@@ -277,7 +316,8 @@ export async function startApp(
   const { canvas, setState, onError } = options;
   const createEngine =
     options.createEngine ??
-    ((target: HTMLCanvasElement) => CubeEngine.create(target));
+    ((target: HTMLCanvasElement, size: CubeEngineSize) =>
+      CubeEngine.create(target, { size }));
   const createObserver =
     options.createObserver ??
     ((callback: () => void) => new ResizeObserver(callback));
@@ -296,70 +336,65 @@ export async function startApp(
 
   setState('loading', 'Loading engine…');
 
-  const engine = await createEngine(canvas);
-
   const theme: ThemeSource | null = options.theme ?? null;
   const views = options.views ?? [];
 
-  // Every canvas the engine draws on, the cube's first, and the size each was
-  // last given -- null for one put away, which is how the others start.
+  // Every canvas the engine draws on, the cube's first.
   const surfaces: readonly { id: CubeSurface; canvas: HTMLCanvasElement }[] = [
     { id: CubeSurface.Cube, canvas },
     ...views,
   ];
-  const sizes = new Map<CubeSurface, CubeEngineSize | null>([
-    [CubeSurface.Cube, { width: canvas.width, height: canvas.height }],
-    ...views.map((view) => [view.id, null] as const),
-  ]);
+
+  /**
+   * Each canvas's drawing buffer for its box as it is now.
+   *
+   * All at one density, so a view is never sharper than the one beside it. A
+   * canvas with no box is not on the page -- its view is not the one being
+   * looked at -- and is null, for its surface to be put away rather than
+   * drawn at a pixel.
+   */
+  const measure = (): (CubeEngineSize | null)[] => {
+    const density = stageDensity(
+      surfaces.map(({ canvas: target }) => ({
+        width: target.clientWidth,
+        height: target.clientHeight,
+      })),
+      win.devicePixelRatio,
+    );
+    return surfaces.map(({ canvas: target }) =>
+      target.clientWidth === 0 || target.clientHeight === 0
+        ? null
+        : computeDrawingBufferSize(
+            target.clientWidth,
+            target.clientHeight,
+            density,
+          ),
+    );
+  };
+
+  // The engine starts at the size the cube's canvas is about to be given, so
+  // it is not made at one size and then straight away remade at another. It
+  // needs some size to start at, and a canvas with no box is put away just
+  // after.
+  const engine = await createEngine(
+    canvas,
+    measure()[0] ?? { width: 1, height: 1 },
+  );
 
   /**
    * Brings every drawing buffer to its canvas's box.
    *
-   * All at one density, so a view is never sharper than the one beside it. A
-   * canvas with no box is not on the page -- its view is not the one being
-   * looked at -- and its surface is put away rather than drawn at a pixel.
+   * The engine is asked about every surface and says which it changed: it
+   * holds the sizes, so this keeps no second copy of them to disagree with.
    *
    * @returns true when any of them changed, so a frame is owed.
    */
   const fitSurfaces = (): boolean => {
-    const density = stageDensity(
-      surfaces.map((surface) => ({
-        width: surface.canvas.clientWidth,
-        height: surface.canvas.clientHeight,
-      })),
-      win.devicePixelRatio,
-    );
-
-    if (views.length === 0) {
-      // One canvas, which is never put away: the page has nothing else.
-      const size = computeDrawingBufferSize(
-        canvas.clientWidth,
-        canvas.clientHeight,
-        density,
-      );
-      // Only an actual drawing buffer change reaches the engine.
-      if (size.width === canvas.width && size.height === canvas.height) {
-        return false;
-      }
-      engine.resize(size);
-      return true;
-    }
-
+    const sizes = measure();
     let changed = false;
-    for (const { id, canvas: target } of surfaces) {
-      const size =
-        target.clientWidth === 0 || target.clientHeight === 0
-          ? null
-          : computeDrawingBufferSize(
-              target.clientWidth,
-              target.clientHeight,
-              density,
-            );
-      if (sameSize(sizes.get(id) ?? null, size)) continue;
-      engine.resizeSurface(id, size);
-      sizes.set(id, size);
-      changed = true;
-    }
+    surfaces.forEach(({ id }, index) => {
+      if (engine.resizeSurface(id, sizes[index] ?? null)) changed = true;
+    });
     return changed;
   };
 
@@ -557,8 +592,14 @@ export async function startApp(
   try {
     // One gesture at a time across every canvas, as the engine follows it.
     const lock: GestureLock = { held: false };
+    const cube = pressingSurface(engine, CubeSurface.Cube);
     pointers.push(
-      attachPointer({ canvas, engine, onGestureStart: startFrameLoop, lock }),
+      attachPointer({
+        canvas,
+        engine: cube,
+        onGestureStart: startFrameLoop,
+        lock,
+      }),
     );
     for (const view of views) {
       if (!view.pressable) continue;
@@ -569,7 +610,7 @@ export async function startApp(
           // A press on the empty part of a flat view turns the viewpoint, as
           // empty space round the cube does: offered to the cube's canvas,
           // in its pixels, once this one's engine has turned it down.
-          fallback: { canvas, engine },
+          fallback: { canvas, engine: cube },
           onGestureStart: startFrameLoop,
           lock,
         }),

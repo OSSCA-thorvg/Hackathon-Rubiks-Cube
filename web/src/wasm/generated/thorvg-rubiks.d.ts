@@ -4,6 +4,11 @@
  * The generated JavaScript and WASM artifacts are synchronized into this
  * directory by build_wasm.sh and are not tracked by Git. This declaration
  * is source: update it whenever the exported C ABI changes.
+ *
+ * Only what the page calls is declared. The engine also still exports the
+ * calls it had before surfaces -- resize, pixel_buffer, pointer_down and the
+ * paint_at pair, all of which mean surface 0 alone -- and nothing here uses
+ * them: every canvas goes through the surface calls, the cube's included.
  */
 
 /** Surface of the generated Emscripten module used by this project. */
@@ -15,10 +20,7 @@ export type ThorvgRubiksModule = {
    */
   readonly HEAPU8: Uint8Array<ArrayBuffer>;
   _thorvg_rubiks_initialize(width: number, height: number): number;
-  _thorvg_rubiks_resize(width: number, height: number): number;
   _thorvg_rubiks_render(): number;
-  _thorvg_rubiks_pixel_buffer(): number;
-  _thorvg_rubiks_pixel_byte_length(): number;
   _thorvg_rubiks_shutdown(): void;
   /**
    * Resizes surface `id`; zero by zero puts it away. Surface 0 is the one
@@ -35,8 +37,6 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_surface_frame(id: number): number;
   /** A press on surface `id`, in that surface's pixels; 1 when a gesture began. */
   _thorvg_rubiks_pointer_down_on(id: number, x: number, y: number): number;
-  /** Coordinates are drawing buffer pixels; returns 1 when a gesture began. */
-  _thorvg_rubiks_pointer_down(x: number, y: number): number;
   _thorvg_rubiks_pointer_move(x: number, y: number): void;
   _thorvg_rubiks_pointer_up(): void;
   _thorvg_rubiks_pointer_cancel(): void;
@@ -178,8 +178,6 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_is_painting(): number;
   _thorvg_rubiks_set_paint_brush(colour: number): number;
   _thorvg_rubiks_paint_brush(): number;
-  _thorvg_rubiks_paint_at(x: number, y: number): number;
-  _thorvg_rubiks_paint_fill(x: number, y: number): number;
   _thorvg_rubiks_set_paint_filling(wholeFace: number): number;
   _thorvg_rubiks_is_paint_filling(): number;
   _thorvg_rubiks_painted_count(colour: number): number;

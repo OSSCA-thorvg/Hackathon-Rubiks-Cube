@@ -133,6 +133,41 @@ export const ICONS = {
   close: '<path d="M6.5 6.5 17.5 17.5"/><path d="M17.5 6.5 6.5 17.5"/>',
 } as const;
 
+/**
+ * The ThorVG bolt as the project's own logo draws it (thorvg/thorvg.site,
+ * readme/logo): one outline, in the logo's units -- 172 across, 185 down.
+ */
+const THORVG_BOLT =
+  'M164.743 10.1558C144.373 37.0515 112.597 52.8675 78.8633 52.9087H160.583L122.846 105.667H146.915L67.4805 184.849V146.468C67.4805 123.935 85.7476 105.668 108.281 105.667H39.2021L69.9531 52.9097H0L34.2998 0.150879H172.32L164.743 10.1558Z';
+
+/** The four tiles of the mark, two across and two down, the middle pair dim. */
+const BRAND_TILES: readonly (readonly [number, number])[] = [
+  [0, 0],
+  [14.5, 0],
+  [0, 14.5],
+  [14.5, 14.5],
+];
+
+/**
+ * The mark beside the title: the cube's grey face, with the ThorVG bolt drawn
+ * over its tiles as a white outline.
+ *
+ * An outline and no colour: the header stays grey, and the colours are the
+ * favicon's. The bolt is clipped to the tiles, so each tile holds a piece of
+ * it and the four together still read as the bolt. It stands 5px inside the
+ * face on every side, the margin an icon keeps round its figure, which also
+ * means the tiles' outer edge cuts none of its line. Its stroke is 1.5px at
+ * this size, written in the logo's own units.
+ */
+function brandMark(): string {
+  const tile = ([x, y]: readonly [number, number], extra = ''): string =>
+    `<rect x="${x}" y="${y}" width="13.5" height="13.5" rx="3"${extra}/>`;
+  const tiles = BRAND_TILES.map((at, index) =>
+    tile(at, ` class="brand__tile${index === 1 || index === 2 ? ' brand__tile--dim' : ''}"`),
+  ).join('');
+  return `<svg class="brand__mark" viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false"><defs><clipPath id="brand-tiles">${BRAND_TILES.map((at) => tile(at)).join('')}</clipPath></defs>${tiles}<g clip-path="url(#brand-tiles)"><path class="brand__bolt" transform="translate(5.6 4.99) scale(0.0975)" stroke-width="15.39" d="${THORVG_BOLT}"/></g></svg>`;
+}
+
 /** One face-turn key: the letter, which way, and what a reader is told. */
 const FACE_KEYS: readonly {
   readonly face: string;
@@ -198,9 +233,9 @@ export function createGameShell(host: HTMLElement): GameShell {
 <main class="game-shell" data-game-state="idle" data-sticker-palette="classic" data-panels="closed">
   <header class="app-header">
     <div class="brand">
-      <span class="brand__mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+      ${brandMark()}
       <div class="brand__text">
-        <h1 class="brand__title" id="game-title">Rubik's Cube</h1>
+        <h1 class="brand__title" id="game-title">ThorVG <span class="brand__name">Rubik's Cube</span></h1>
         <p class="brand__byline">drawn with ThorVG</p>
       </div>
       <button class="chip-button size-chip" type="button" id="cube-size-chip"><span class="visually-hidden">Cube size </span><span id="cube-size-label">${DEFAULT_CUBE_SIZE}×${DEFAULT_CUBE_SIZE}×${DEFAULT_CUBE_SIZE}</span>${icon(ICONS.chevron, 16)}</button>

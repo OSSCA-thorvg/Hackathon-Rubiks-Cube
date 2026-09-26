@@ -643,21 +643,30 @@ kbd {
   min-width: 0;
 }
 
+/*
+ * The mark: the cube's face in black and grey, with the ThorVG bolt drawn
+ * over its tiles as a white outline and nothing more.
+ *
+ * The same in both themes, and fixed rather than the theme's ink: it is the
+ * light theme's face -- its ink, and that ink at 45% over its page for the
+ * middle pair -- because a white line needs a dark tile under it whichever
+ * ground the page is on.
+ */
 .brand__mark {
-  display: grid;
-  grid-template-columns: repeat(2, 9px);
-  grid-template-rows: repeat(2, 9px);
-  gap: 2px;
+  display: block;
 }
 
-.brand__mark span {
-  border-radius: 2px;
-  background: var(--color-text-strong);
+.brand__tile {
+  fill: #0f1115;
 }
 
-.brand__mark span:nth-child(2),
-.brand__mark span:nth-child(3) {
-  opacity: 0.45;
+.brand__tile--dim {
+  fill: #86898d;
+}
+
+.brand__bolt {
+  fill: none;
+  stroke: #ffffff;
 }
 
 .brand__text {
@@ -666,12 +675,20 @@ kbd {
   min-width: 0;
 }
 
+/* One line wherever it fits. A phone's header has room for the mark and
+   the three buttons but not for the whole name beside them, so the name may
+   break after "ThorVG" and nowhere else; two lines still sit inside the
+   buttons' height. */
 .brand__title {
   margin: 0;
   color: var(--color-text-strong);
   font-size: 16px;
   font-weight: 600;
+  line-height: 1.2;
   letter-spacing: -0.01em;
+}
+
+.brand__name {
   white-space: nowrap;
 }
 

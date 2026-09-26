@@ -73,11 +73,15 @@ int main(int argc, char** argv)
     if (!rubiks::app::set_cube_size(size)) return 1;
 
     const auto time_frames = [&](std::vector<double>& samples) {
-        // A few frames first, so the caches and the allocator are warm.
+        // A few frames first, so the caches and the allocator are warm. Every
+        // one of them drawn: render() skips a frame whose picture would not
+        // change, and a skipped frame measures nothing.
         for (int i = 0; i < 5; ++i) {
+            rubiks::app::invalidate();
             if (!rubiks::app::render()) return false;
         }
         for (int i = 0; i < frames; ++i) {
+            rubiks::app::invalidate();
             const auto start = std::chrono::steady_clock::now();
             if (!rubiks::app::render()) return false;
             const auto end = std::chrono::steady_clock::now();

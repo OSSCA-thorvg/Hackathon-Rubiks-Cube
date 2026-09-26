@@ -20,6 +20,21 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_pixel_buffer(): number;
   _thorvg_rubiks_pixel_byte_length(): number;
   _thorvg_rubiks_shutdown(): void;
+  /**
+   * Resizes surface `id`; zero by zero puts it away. Surface 0 is the one
+   * initialize() made, and the others start with no size.
+   */
+  _thorvg_rubiks_resize_surface(id: number, width: number, height: number): number;
+  /** Which scenes surface `id` shows: cube 1, net 2, rings 4, axes 8. */
+  _thorvg_rubiks_set_surface_scenes(id: number, scenes: number): number;
+  _thorvg_rubiks_surface_scenes(id: number): number;
+  /** Zero for a surface with no buffer; valid until that surface is resized. */
+  _thorvg_rubiks_surface_pixel_buffer(id: number): number;
+  _thorvg_rubiks_surface_pixel_byte_length(id: number): number;
+  /** How many frames surface `id` has had drawn; render() skips unchanged ones. */
+  _thorvg_rubiks_surface_frame(id: number): number;
+  /** A press on surface `id`, in that surface's pixels; 1 when a gesture began. */
+  _thorvg_rubiks_pointer_down_on(id: number, x: number, y: number): number;
   /** Coordinates are drawing buffer pixels; returns 1 when a gesture began. */
   _thorvg_rubiks_pointer_down(x: number, y: number): number;
   _thorvg_rubiks_pointer_move(x: number, y: number): void;

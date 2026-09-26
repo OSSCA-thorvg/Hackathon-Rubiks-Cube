@@ -33,4 +33,20 @@ inline constexpr float kAxisGizmoWidthShare = 0.013f;
 [[nodiscard]] RenderScene build_axis_gizmo(const Camera& camera,
                                            const Rect& region);
 
+/** Arm length of the axes drawn alone, as a share of their surface's shorter side. */
+inline constexpr float kAxisBadgeArmShare = 0.34f;
+
+/** Line thickness of the axes drawn alone, on the same share. */
+inline constexpr float kAxisBadgeWidthShare = 0.06f;
+
+/**
+ * The same three arms drawn by themselves, out of the middle of `surface`.
+ *
+ * For a host that puts the axes somewhere of their own rather than in the
+ * cube's corner. Nothing else changes: the arms still follow only the
+ * viewpoint's rotation and still carry the net's guide colours.
+ */
+[[nodiscard]] RenderScene build_axis_badge(const Camera& camera,
+                                           const Rect& surface);
+
 }  // namespace rubiks::graphics

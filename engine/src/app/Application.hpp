@@ -14,6 +14,35 @@
 namespace rubiks::app {
 
 /**
+ * How many surfaces the engine draws into.
+ *
+ * A surface is one canvas's worth of drawing: a target of its own size and
+ * the scenes it shows. Surface 0 is made by initialize(), and every call
+ * below that names no surface -- resize(), pixel_buffer(), pointer_down() --
+ * is about it. A host with one canvas never needs another. A host that lays
+ * its views out itself gives each of the others a size and a scene, and puts
+ * the canvases wherever it likes: where the views sit and how big they are is
+ * the host's, and what is in each of them is the engine's.
+ */
+inline constexpr std::uint32_t kSurfaceCount = 4;
+
+/**
+ * The scenes a surface can show, as bits of one set.
+ *
+ * A surface draws the scenes it holds that the view mode shows, laid out by
+ * the one layout every canvas has always used -- so a surface holding one
+ * scene shows that scene alone, filling it, and a surface holding them all is
+ * the one canvas this application began with. The axes sit in the cube's
+ * corner when the two share a surface, and fill a surface of their own.
+ */
+inline constexpr std::uint32_t kSceneCube = 1u << 0;
+inline constexpr std::uint32_t kSceneNet = 1u << 1;
+inline constexpr std::uint32_t kSceneRings = 1u << 2;
+inline constexpr std::uint32_t kSceneAxes = 1u << 3;
+inline constexpr std::uint32_t kAllScenes =
+    kSceneCube | kSceneNet | kSceneRings | kSceneAxes;
+
+/**
  * Initializes the ThorVG runtime and the software renderer.
  *
  * Dimensions are validated first and invalid ones fail even when already
@@ -26,19 +55,53 @@ namespace rubiks::app {
                               std::uint32_t height) noexcept;
 
 /**
- * Resizes the render target following the resize failure semantics of the
- * Phase 1 contract.
+ * Resizes surface 0 following the resize failure semantics of the Phase 1
+ * contract. A size, never nothing: see resize_surface() for putting one away.
  *
  * @return true when the target uses the new size afterwards.
  */
 [[nodiscard]] bool resize(std::uint32_t width, std::uint32_t height) noexcept;
 
 /**
- * Renders one frame into the renderer-owned target.
+ * Resizes surface `id`, or puts it away with zero by zero.
  *
- * @return true when update, draw, and sync all succeed.
+ * A surface put away holds no target and draws nothing until it is given a
+ * size again. A drag begun on it is dropped, as a resize has always dropped
+ * one; a drag on any other surface carries on.
+ *
+ * @return false for an unknown surface or a size no target can have.
+ */
+[[nodiscard]] bool resize_surface(std::uint32_t id, std::uint32_t width,
+                                  std::uint32_t height) noexcept;
+
+/**
+ * Says which scenes surface `id` shows, as a set of the kScene bits.
+ *
+ * @return false for an unknown surface or bits that name no scene.
+ */
+[[nodiscard]] bool set_surface_scenes(std::uint32_t id,
+                                      std::uint32_t scenes) noexcept;
+
+/** The scenes surface `id` holds; zero for an unknown surface. */
+[[nodiscard]] std::uint32_t surface_scenes(std::uint32_t id) noexcept;
+
+/**
+ * Draws every surface whose picture has changed since its last frame.
+ *
+ * A surface is drawn again only when something it shows is different: the
+ * net keeps its frame while the viewpoint sweeps, and the axes keep theirs
+ * while a layer turns. surface_frame() counts the frames actually drawn.
+ *
+ * @return true when every surface that had to be drawn was.
  */
 [[nodiscard]] bool render() noexcept;
+
+/**
+ * Makes the next render() draw every surface, changed or not.
+ *
+ * For measuring a frame, which a skipped one would not be.
+ */
+void invalidate() noexcept;
 
 /**
  * Returns the address of the software pixel buffer.
@@ -53,6 +116,19 @@ namespace rubiks::app {
  * @return zero without a valid software buffer.
  */
 [[nodiscard]] std::uint32_t pixel_byte_length() noexcept;
+
+/** The same two, for surface `id`; zero for one with no target. */
+[[nodiscard]] std::uintptr_t surface_pixel_buffer(std::uint32_t id) noexcept;
+[[nodiscard]] std::uint32_t surface_pixel_byte_length(
+    std::uint32_t id) noexcept;
+
+/**
+ * How many frames surface `id` has had drawn into it.
+ *
+ * A host copies a surface out when this has moved since it last did, and
+ * leaves it alone when it has not.
+ */
+[[nodiscard]] std::uint32_t surface_frame(std::uint32_t id) noexcept;
 
 /**
  * Begins a pointer gesture at a point in drawing-buffer pixels.
@@ -80,6 +156,17 @@ namespace rubiks::app {
  *         while a sequence plays.
  */
 [[nodiscard]] bool pointer_down(float x, float y) noexcept;
+
+/**
+ * The same press, on surface `id`, at a point in that surface's pixels.
+ *
+ * What the press can start is what that surface shows: a cell of its net, a
+ * sticker of its rings, or a layer or the viewpoint on its cube. The moves
+ * that follow arrive in the same surface's pixels. A press outside a surface's
+ * cube but on a surface that shows one sweeps the viewpoint, as a press on the
+ * background of one canvas always has.
+ */
+[[nodiscard]] bool pointer_down_on(std::uint32_t id, float x, float y) noexcept;
 
 /** Continues the active gesture. Ignored without one. */
 void pointer_move(float x, float y) noexcept;

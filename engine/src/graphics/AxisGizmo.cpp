@@ -24,16 +24,13 @@ struct Arm {
 
 }  // namespace
 
-RenderScene build_axis_gizmo(const Camera& camera, const Rect& region)
+namespace {
+
+/** The three arms out of one point, as long and as thick as they are asked. */
+RenderScene draw_arms(const Camera& camera, Vec2 origin, float arm_length,
+                      float line_width)
 {
     RenderScene scene;
-    if (region.width <= 0.0f || region.height <= 0.0f) return scene;
-
-    const float side = std::min(region.width, region.height);
-    const float arm_length = kAxisGizmoArmShare * side;
-    const float inset = kAxisGizmoInsetShare * side;
-    const Vec2 origin{region.x + region.width - inset, region.y + inset};
-
     const math::Mat4 view = camera.view();
 
     constexpr std::array<std::pair<Axis, Vec3>, 3> kAxes{
@@ -65,7 +62,7 @@ RenderScene build_axis_gizmo(const Camera& camera, const Rect& region)
         RenderStroke line;
         line.start = origin;
         line.closed = false;
-        line.width = kAxisGizmoWidthShare * side;
+        line.width = line_width;
         line.color = guide_color(arm.axis);
 
         // A straight cubic: the controls a third and two thirds along, which
@@ -79,6 +76,30 @@ RenderScene build_axis_gizmo(const Camera& camera, const Rect& region)
         scene.strokes.push_back(std::move(line));
     }
     return scene;
+}
+
+}  // namespace
+
+RenderScene build_axis_gizmo(const Camera& camera, const Rect& region)
+{
+    if (region.width <= 0.0f || region.height <= 0.0f) return RenderScene{};
+
+    const float side = std::min(region.width, region.height);
+    const float inset = kAxisGizmoInsetShare * side;
+    const Vec2 origin{region.x + region.width - inset, region.y + inset};
+    return draw_arms(camera, origin, kAxisGizmoArmShare * side,
+                     kAxisGizmoWidthShare * side);
+}
+
+RenderScene build_axis_badge(const Camera& camera, const Rect& surface)
+{
+    if (surface.width <= 0.0f || surface.height <= 0.0f) return RenderScene{};
+
+    const float side = std::min(surface.width, surface.height);
+    const Vec2 origin{surface.x + surface.width * 0.5f,
+                      surface.y + surface.height * 0.5f};
+    return draw_arms(camera, origin, kAxisBadgeArmShare * side,
+                     kAxisBadgeWidthShare * side);
 }
 
 }  // namespace rubiks::graphics

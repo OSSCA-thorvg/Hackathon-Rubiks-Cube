@@ -68,6 +68,84 @@ EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_pixel_byte_length() noexcept
 }
 
 /**
+ * Resizes surface `id`, or puts it away with zero by zero.
+ *
+ * Surface 0 is the one initialize() made; the others start with no size.
+ * A surface put away holds no buffer until it is given a size again.
+ *
+ * @return one when the surface has the new size afterwards; otherwise zero.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_resize_surface(
+    std::uint32_t id, std::uint32_t width, std::uint32_t height) noexcept
+{
+    return rubiks::app::resize_surface(id, width, height) ? 1 : 0;
+}
+
+/**
+ * Sets which scenes surface `id` shows, as a set of bits: cube 1, net 2,
+ * rings 4, axes 8.
+ *
+ * @return one when accepted; zero for an unknown surface or unknown bits.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_surface_scenes(
+    std::uint32_t id, std::uint32_t scenes) noexcept
+{
+    return rubiks::app::set_surface_scenes(id, scenes) ? 1 : 0;
+}
+
+/** Returns the scenes surface `id` holds; zero for an unknown surface. */
+EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_surface_scenes(
+    std::uint32_t id) noexcept
+{
+    return rubiks::app::surface_scenes(id);
+}
+
+/**
+ * Returns surface `id`'s pixel buffer address in WASM linear memory.
+ *
+ * Valid until that surface is next resized, or until shutdown.
+ *
+ * @return zero for a surface with no buffer.
+ */
+EMSCRIPTEN_KEEPALIVE std::uintptr_t thorvg_rubiks_surface_pixel_buffer(
+    std::uint32_t id) noexcept
+{
+    return rubiks::app::surface_pixel_buffer(id);
+}
+
+/** Returns surface `id`'s pixel buffer length in bytes; zero without one. */
+EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_surface_pixel_byte_length(
+    std::uint32_t id) noexcept
+{
+    return rubiks::app::surface_pixel_byte_length(id);
+}
+
+/**
+ * Returns how many frames surface `id` has had drawn into it.
+ *
+ * render() skips a surface whose picture would not change, so a client
+ * copies a surface out only when this has moved since it last did.
+ */
+EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_surface_frame(
+    std::uint32_t id) noexcept
+{
+    return rubiks::app::surface_frame(id);
+}
+
+/**
+ * Begins a pointer gesture on surface `id`, in that surface's pixels.
+ *
+ * @return one when a gesture began; zero as thorvg_rubiks_pointer_down
+ *         returns it, and for a surface with no buffer.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_pointer_down_on(std::uint32_t id,
+                                                       float x,
+                                                       float y) noexcept
+{
+    return rubiks::app::pointer_down_on(id, x, y) ? 1 : 0;
+}
+
+/**
  * Begins a pointer gesture. Coordinates are drawing-buffer pixels.
  *
  * Pressing a cell of either the cube or the net drags a layer, pressing

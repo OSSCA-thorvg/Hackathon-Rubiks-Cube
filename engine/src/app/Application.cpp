@@ -148,6 +148,54 @@ struct Player {
 };
 
 /**
+ * What one surface's last frame was drawn from.
+ *
+ * Only what the scenes on it read is filled in; everything else keeps its
+ * default, so a change a surface does not show cannot make it draw again.
+ * That is the whole of skipping a frame: the net does not move when the
+ * viewpoint sweeps, and the axes do not move when a layer turns.
+ */
+struct DrawnInputs {
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    std::uint32_t scenes = 0;
+    graphics::CanvasTheme theme = graphics::CanvasTheme::Dark;
+    std::uint64_t cube = 0;
+    std::optional<graphics::ActiveRotation> rotation;
+    graphics::Palette palette = graphics::Palette::Classic;
+    std::uint64_t lighting = 0;
+    float yaw = 0.0f;
+    float pitch = 0.0f;
+    std::vector<graphics::NetGuide> net_guides;
+    std::vector<graphics::RingsGuide> rings_guides;
+    std::uint64_t paint = 0;
+};
+
+/**
+ * One canvas's worth of drawing: a target, its size, and what it shows.
+ *
+ * Which scenes a surface holds is its own; which of those are drawn is the
+ * view mode's, the same for every surface. Where they sit on it is worked
+ * out from the two by the one layout every canvas has always used, so a
+ * surface holding one scene shows that scene alone, filling it.
+ */
+struct Surface {
+    // Absent while the surface has no size: a surface put away holds nothing.
+    std::unique_ptr<render::Renderer> renderer;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    std::uint32_t scenes = 0;
+    graphics::CanvasLayout placement;
+
+    // What the target holds now, or nothing when it has to be drawn whatever
+    // happens -- a new size, a new renderer, a failed frame.
+    std::optional<DrawnInputs> drawn;
+
+    // How many frames have been drawn into it, for a host copying it out.
+    std::uint32_t frame = 0;
+};
+
+/**
  * Everything one running application owns.
  *
  * One object rather than a list of globals so that its lifetime is the
@@ -155,13 +203,27 @@ struct Player {
  * there is no reset list that a new field could be left off of.
  */
 struct ApplicationState {
-    std::unique_ptr<render::Renderer> renderer;
+    // Where frames are drawn. Surface 0 is the one initialize() makes, and it
+    // holds every scene until it is told otherwise -- which is all a host with
+    // one canvas ever needs. A host with more gives each of the others a size
+    // and the scenes it shows.
+    std::array<Surface, kSurfaceCount> surfaces;
 
-    // Mirrors the renderer target size; only updated after a successful
-    // initialize() or resize(), so it cannot drift from the actual target.
-    graphics::CanvasLayout placement;
-    std::uint32_t surface_width = 0;
-    std::uint32_t surface_height = 0;
+    // The surface the gesture in hand began on. Its moves arrive in that
+    // surface's pixels, and resizing any other surface leaves it alone.
+    std::uint32_t gesture_surface = 0;
+
+    // What the drawings were last made of, and counters that move when it
+    // changes. The cube and the draft are compared with a copy rather than
+    // tracked at each place they change: there are a dozen of those, and a
+    // frame skipped because one was missed would be a picture of a cube that
+    // is not the cube.
+    cube::CubeState drawn_cube{kDefaultCubeSize};
+    std::uint64_t cube_revision = 0;
+    std::optional<std::pair<std::vector<cube::FaceColor>, std::vector<int>>>
+        drawn_draft;
+    std::uint64_t paint_revision = 0;
+    std::uint64_t lighting_revision = 0;
 
     // The whole of the viewpoint state. The Camera is derived from this and
     // the layout whenever one is needed rather than stored, so there is no
@@ -290,20 +352,12 @@ std::unique_ptr<ApplicationState> state;
     return size >= kMinCubeSize && size <= kMaxCubeSize;
 }
 
-void adopt_surface(std::uint32_t width, std::uint32_t height) noexcept
-{
-    state->surface_width = width;
-    state->surface_height = height;
-    state->placement = graphics::layout(width, height, state->view_mode,
-                                        state->flat_style);
-}
-
-[[nodiscard]] graphics::Camera current_camera() noexcept
+/** The camera looking into one cube region, whose aspect it takes. */
+[[nodiscard]] graphics::Camera camera_for(const graphics::Rect& cube_rect) noexcept
 {
     // Follows the cube region rather than the canvas. That region is square,
     // so the aspect is always 1, but deriving it keeps the two in step if the
     // layout ever changes.
-    const auto& cube_rect = state->placement.cube;
     const float aspect =
         cube_rect.height > 0.0f ? cube_rect.width / cube_rect.height : 1.0f;
     return state->orbit.to_camera(aspect);
@@ -616,6 +670,74 @@ struct FlatParts {
 }
 
 /**
+ * The scenes the view mode shows, on whichever surface holds them.
+ *
+ * The axes go with the cube: they say which way the cube's axes point from
+ * where it is being looked at, which means nothing with no cube on screen.
+ */
+[[nodiscard]] std::uint32_t shown_scenes() noexcept
+{
+    const auto flat = flat_parts();
+    std::uint32_t shown = 0;
+    if (visible_views(state->view_mode).cube) shown |= kSceneCube | kSceneAxes;
+    if (flat.net) shown |= kSceneNet;
+    if (flat.rings) shown |= kSceneRings;
+    return shown;
+}
+
+/** What one surface draws: the scenes it holds that are shown. */
+[[nodiscard]] std::uint32_t drawn_scenes(const Surface& surface) noexcept
+{
+    return surface.scenes & shown_scenes();
+}
+
+/**
+ * Works out where a surface's scenes sit on it.
+ *
+ * With the same layout one canvas has always had, asked about the scenes this
+ * surface draws rather than about every scene: the cube alone is the cube
+ * alone, the net alone is the net alone, and a surface holding them all is the
+ * canvas it always was. The axes take no region of their own beside the cube;
+ * alone, they take the whole surface.
+ */
+void relayout(Surface& surface) noexcept
+{
+    const std::uint32_t drawn = drawn_scenes(surface);
+    const bool cube = (drawn & kSceneCube) != 0;
+    const bool net = (drawn & kSceneNet) != 0;
+    const bool rings = (drawn & kSceneRings) != 0;
+
+    if (surface.width == 0 || surface.height == 0 || (!cube && !net && !rings)) {
+        surface.placement = graphics::CanvasLayout{};
+        return;
+    }
+
+    const auto mode = cube && (net || rings) ? graphics::ViewMode::Both
+                      : cube                 ? graphics::ViewMode::Cube3D
+                                             : graphics::ViewMode::Flat;
+    const auto style = net && rings ? graphics::FlatStyle::Both
+                       : net        ? graphics::FlatStyle::Net
+                                    : graphics::FlatStyle::Rings;
+    surface.placement =
+        graphics::layout(surface.width, surface.height, mode, style);
+}
+
+void relayout_all() noexcept
+{
+    for (auto& surface : state->surfaces) relayout(surface);
+}
+
+/** Whether `id` names a surface, and that surface has a target to draw on. */
+[[nodiscard]] bool live_surface(std::uint32_t id) noexcept
+{
+    return id < kSurfaceCount && state->surfaces[id].renderer != nullptr;
+}
+
+// Defined with the painting below; the press on a draft reaches them first.
+[[nodiscard]] bool paint_on(std::uint32_t id, float x, float y) noexcept;
+[[nodiscard]] bool fill_on(std::uint32_t id, float x, float y) noexcept;
+
+/**
  * The one place a settled turn becomes a change to the logical cube.
  *
  * Two paths reach it -- a snap ending on its own frame, and one confirmed
@@ -822,8 +944,12 @@ bool initialize(std::uint32_t width, std::uint32_t height) noexcept
     }
 
     state = std::make_unique<ApplicationState>();
-    state->renderer = std::move(renderer);
-    adopt_surface(width, height);
+    Surface& first = state->surfaces[0];
+    first.renderer = std::move(renderer);
+    first.width = width;
+    first.height = height;
+    first.scenes = kAllScenes;
+    relayout(first);
     return true;
 }
 
@@ -831,29 +957,99 @@ bool resize(std::uint32_t width, std::uint32_t height) noexcept
 {
     if (!state) return false;
 
-    if (!state->renderer->resize(width, height)) return false;
+    // Surface 0 keeps the contract it has always had: a size, never nothing.
+    // Putting it away is resize_surface()'s, which says so in its name.
+    if (!render::ThorVGSoftwareRenderer::valid_dimensions(width, height)) {
+        return false;
+    }
+    return resize_surface(0, width, height);
+}
+
+bool resize_surface(std::uint32_t id, std::uint32_t width,
+                    std::uint32_t height) noexcept
+{
+    if (!state || id >= kSurfaceCount) return false;
+
+    const bool away = width == 0 && height == 0;
+    if (!away &&
+        !render::ThorVGSoftwareRenderer::valid_dimensions(width, height)) {
+        return false;
+    }
+
+    Surface& surface = state->surfaces[id];
+    if (away) {
+        surface.renderer.reset();
+    } else if (surface.renderer) {
+        if (!surface.renderer->resize(width, height)) return false;
+    } else {
+        auto renderer = render::ThorVGSoftwareRenderer::create(width, height);
+        if (!renderer) return false;
+        // A surface given a size after the theme was chosen is cleared to
+        // that theme like the rest, not to the renderer's own default.
+        renderer->set_background(graphics::canvas_background(state->canvas_theme));
+        surface.renderer = std::move(renderer);
+    }
 
     // Whatever the gesture swept before the resize still counts; only the
-    // gesture itself cannot continue.
+    // gesture itself cannot continue -- and only a gesture on this surface.
+    // One on another surface holds directions read off that surface, which
+    // has not changed.
     drain_orbit();
 
     // A drag holds screen directions derived from the old viewport, so it
     // cannot survive the change; dropping it leaves the cube untouched. A snap
     // only animates an angle, so it is unaffected and keeps running.
-    state->interaction.cancel();
+    if (state->gesture_surface == id) state->interaction.cancel();
 
-    adopt_surface(width, height);
+    surface.width = away ? 0 : width;
+    surface.height = away ? 0 : height;
+    surface.drawn.reset();
+    relayout(surface);
     return true;
 }
 
+bool set_surface_scenes(std::uint32_t id, std::uint32_t scenes) noexcept
+{
+    if (!state || id >= kSurfaceCount) return false;
+    if ((scenes & ~kAllScenes) != 0) return false;
+
+    Surface& surface = state->surfaces[id];
+    if (surface.scenes == scenes) return true;
+
+    // The same as a resize to the gesture on it: its regions are about to
+    // move or vanish.
+    drain_orbit();
+    if (state->gesture_surface == id) state->interaction.cancel();
+
+    surface.scenes = scenes;
+    relayout(surface);
+    return true;
+}
+
+std::uint32_t surface_scenes(std::uint32_t id) noexcept
+{
+    if (!state || id >= kSurfaceCount) return 0;
+    return state->surfaces[id].scenes;
+}
+
 bool pointer_down(float x, float y) noexcept
+{
+    return pointer_down_on(0, x, y);
+}
+
+bool pointer_down_on(std::uint32_t id, float x, float y) noexcept
 {
     if (!state) return false;
 
     // Everything that could reject the press comes first. A press that starts
     // nothing must not change anything either, and confirming the snap below
-    // is a change.
+    // is a change. A surface with no size has nothing on it to press.
+    if (!live_surface(id)) return false;
     if (!std::isfinite(x) || !std::isfinite(y)) return false;
+
+    const Surface& surface = state->surfaces[id];
+    const std::uint32_t drawn = drawn_scenes(surface);
+    const bool cube_here = (drawn & kSceneCube) != 0;
 
     // Ahead of every pick and of the confirmation below, which is the only
     // position where it does what it says: while a sequence plays, a press may
@@ -869,25 +1065,30 @@ bool pointer_down(float x, float y) noexcept
     // pattern is worth turning round to watch. What ends the watching is a
     // command, which a drag is not.
     if (state->playback) {
-        if (!visible_views(state->view_mode).cube) return false;
+        if (!cube_here) return false;
 
         drain_orbit();
-        return state->interaction.start_orbit(x, y, state->placement.cube);
+        if (!state->interaction.start_orbit(x, y, surface.placement.cube)) {
+            return false;
+        }
+        state->gesture_surface = id;
+        return true;
     }
 
     // The layout is what routes the press. The flat view owns every cell or
     // sticker inside its own region, and the 3D region and the background
     // around it own the rest, so the two never contend for the same pixel.
-    const auto shown = visible_views(state->view_mode);
-    const auto flat = flat_parts();
+    // Which views there are is this surface's: a press lands on the surface
+    // it was made on and on nothing else.
 
     // A draft turns the net from something to turn into something to colour.
     // The press is answered here and goes no further: nothing about the cube
     // may move while somebody is writing down what is on theirs, and a drag
     // from this press carries the brush rather than a layer.
     if (state->paint) {
-        state->paint->stroking = state->paint->filling ? fill_face_at(x, y)
-                                                       : paint_at(x, y);
+        state->paint->stroking = state->paint->filling ? fill_on(id, x, y)
+                                                       : paint_on(id, x, y);
+        if (state->paint->stroking) state->gesture_surface = id;
         return state->paint->stroking;
     }
 
@@ -895,19 +1096,19 @@ bool pointer_down(float x, float y) noexcept
     // give two answers.
     std::optional<interaction::NetPick> net_pick;
     std::optional<interaction::RingsPick> rings_pick;
-    if (flat.net) {
+    if ((drawn & kSceneNet) != 0) {
         net_pick =
-            interaction::pick_net(x, y, state->placement.net, size_of_cube());
+            interaction::pick_net(x, y, surface.placement.net, size_of_cube());
     }
-    if (!net_pick && flat.rings) {
-        rings_pick = interaction::pick_rings(x, y, state->placement.rings,
+    if (!net_pick && (drawn & kSceneRings) != 0) {
+        rings_pick = interaction::pick_rings(x, y, surface.placement.rings,
                                              size_of_cube());
     }
 
-    // Nothing to start: the flat view is the only one showing and the press
-    // missed everything in it. Sweeping the viewpoint is not the fallback
-    // here, because there is no viewpoint on screen to sweep.
-    if (!net_pick && !rings_pick && !shown.cube) return false;
+    // Nothing to start: no cube on this surface and the press missed
+    // everything flat on it. Sweeping the viewpoint is not the fallback here,
+    // because there is no viewpoint on this surface to sweep.
+    if (!net_pick && !rings_pick && !cube_here) return false;
 
     // A snap still animating already knows its turn, so it is applied here
     // rather than made to block the new gesture: that is what kept fast
@@ -920,18 +1121,19 @@ bool pointer_down(float x, float y) noexcept
     // two frames must aim at the viewpoint the last one produced.
     drain_orbit();
 
+    bool began = false;
     if (net_pick) {
-        return state->interaction.net_pointer_down(x, y, state->placement.net,
-                                                   *net_pick);
+        began = state->interaction.net_pointer_down(
+            x, y, surface.placement.net, *net_pick);
+    } else if (rings_pick) {
+        began = state->interaction.rings_pointer_down(
+            x, y, surface.placement.rings, *rings_pick);
+    } else {
+        began = state->interaction.pointer_down(
+            x, y, camera_for(surface.placement.cube), surface.placement.cube);
     }
-
-    if (rings_pick) {
-        return state->interaction.rings_pointer_down(
-            x, y, state->placement.rings, *rings_pick);
-    }
-
-    return state->interaction.pointer_down(x, y, current_camera(),
-                                           state->placement.cube);
+    if (began) state->gesture_surface = id;
+    return began;
 }
 
 void pointer_move(float x, float y) noexcept
@@ -939,9 +1141,12 @@ void pointer_move(float x, float y) noexcept
     if (!state) return;
 
     // A drag across the net colours every cell it crosses, which is how a face
-    // is copied off a real one without lifting the finger between squares.
+    // is copied off a real one without lifting the finger between squares --
+    // on the surface the stroke began on, whose pixels the moves are in.
     if (state->paint) {
-        if (state->paint->stroking) static_cast<void>(paint_at(x, y));
+        if (state->paint->stroking) {
+            static_cast<void>(paint_on(state->gesture_surface, x, y));
+        }
         return;
     }
 
@@ -994,30 +1199,125 @@ bool advance(double elapsed_ms) noexcept
     return more_frames || state->playback.has_value();
 }
 
-bool render() noexcept
-{
-    if (!state) return false;
+namespace {
 
+/**
+ * Notes whether the cube or the draft has changed since it was last drawn.
+ *
+ * By looking rather than by being told. Every command that replaces the cube
+ * and every commit that turns it would otherwise have to remember to say so,
+ * and a skipped frame is only safe if none of them ever forgets. A cube is a
+ * few thousand cubies at the widest, so the look is cheap next to the frame.
+ */
+void note_changes() noexcept
+{
+    if (!(state->cube_state == state->drawn_cube)) {
+        state->drawn_cube = state->cube_state;
+        ++state->cube_revision;
+    }
+
+    std::optional<std::pair<std::vector<cube::FaceColor>, std::vector<int>>>
+        draft;
+    if (state->paint) {
+        draft.emplace(state->paint->stickers, state->paint->reading.blamed);
+    }
+    if (draft != state->drawn_draft) {
+        state->drawn_draft = std::move(draft);
+        ++state->paint_revision;
+    }
+}
+
+/** What a surface's next frame would be drawn from, filled in for its scenes. */
+[[nodiscard]] DrawnInputs inputs_for(const Surface& surface) noexcept
+{
+    const std::uint32_t drawn = drawn_scenes(surface);
+
+    DrawnInputs inputs;
+    inputs.width = surface.width;
+    inputs.height = surface.height;
+    inputs.scenes = drawn;
+    inputs.theme = state->canvas_theme;
+
+    // The cube, the net and the rings are three drawings of one cube.
+    if ((drawn & (kSceneCube | kSceneNet | kSceneRings)) != 0) {
+        inputs.cube = state->cube_revision;
+        inputs.rotation = state->interaction.active_rotation();
+        inputs.palette = state->palette;
+    }
+    // The cube and the axes are both seen from the viewpoint.
+    if ((drawn & (kSceneCube | kSceneAxes)) != 0) {
+        inputs.yaw = state->orbit.yaw_degrees;
+        inputs.pitch = state->orbit.pitch_degrees;
+    }
+    if ((drawn & kSceneCube) != 0) inputs.lighting = state->lighting_revision;
+    if ((drawn & kSceneNet) != 0) {
+        inputs.net_guides = state->interaction.net_guides();
+        inputs.paint = state->paint_revision;
+    }
+    if ((drawn & kSceneRings) != 0) {
+        inputs.rings_guides = state->interaction.rings_guides();
+    }
+    return inputs;
+}
+
+[[nodiscard]] bool same_rotation(
+    const std::optional<graphics::ActiveRotation>& a,
+    const std::optional<graphics::ActiveRotation>& b) noexcept
+{
+    if (a.has_value() != b.has_value()) return false;
+    if (!a) return true;
+    return a->axis == b->axis && a->layers == b->layers &&
+           a->angle_degrees == b->angle_degrees && a->opening == b->opening;
+}
+
+[[nodiscard]] bool same_inputs(const DrawnInputs& a, const DrawnInputs& b) noexcept
+{
+    if (a.width != b.width || a.height != b.height || a.scenes != b.scenes ||
+        a.theme != b.theme || a.cube != b.cube || a.palette != b.palette ||
+        a.lighting != b.lighting || a.yaw != b.yaw || a.pitch != b.pitch ||
+        a.paint != b.paint || !same_rotation(a.rotation, b.rotation)) {
+        return false;
+    }
+
+    if (a.net_guides.size() != b.net_guides.size()) return false;
+    for (std::size_t i = 0; i < a.net_guides.size(); ++i) {
+        const auto& x = a.net_guides[i];
+        const auto& y = b.net_guides[i];
+        if (x.axis != y.axis || x.layer != y.layer || !(x.cell == y.cell)) {
+            return false;
+        }
+    }
+
+    if (a.rings_guides.size() != b.rings_guides.size()) return false;
+    for (std::size_t i = 0; i < a.rings_guides.size(); ++i) {
+        const auto& x = a.rings_guides[i];
+        const auto& y = b.rings_guides[i];
+        if (x.axis != y.axis || x.layer != y.layer) return false;
+    }
+    return true;
+}
+
+/** Everything one surface shows, as the one scene its renderer draws. */
+[[nodiscard]] graphics::RenderScene scene_for(const Surface& surface,
+                                              std::uint32_t drawn) noexcept
+{
     // The model transform is identity for now, but it goes through the real
     // path so the quaternion-to-matrix step is exercised every frame.
     const math::Transform model;
-    const graphics::Camera camera = current_camera();
+    const auto& placement = surface.placement;
 
-    const auto shown = visible_views(state->view_mode);
-
-    const auto flat = flat_parts();
+    // The ground the shadow may lie on: the whole surface. The cube's viewport
+    // is a square in the middle of it and its shadow leans out into the
+    // margins -- and under a flat view sharing the surface below, which is
+    // drawn over it afterwards. A shadow cut off at that view's top edge read
+    // as clipped; one running on beneath the net reads as a floor the net is
+    // laid on.
+    const graphics::Rect stage{0.0f, 0.0f, static_cast<float>(surface.width),
+                               static_cast<float>(surface.height)};
 
     graphics::RenderScene scene;
-    if (shown.cube) {
-        // The ground the shadow may lie on: the whole canvas. The cube's
-        // viewport is a square in the middle of it and its shadow leans out
-        // into the margins -- and under a flat view sharing the canvas below,
-        // which is drawn over it afterwards. A shadow cut off at that view's
-        // top edge read as clipped; one running on beneath the net reads as
-        // a floor the net is laid on.
-        const graphics::Rect stage{0.0f, 0.0f,
-                                   static_cast<float>(state->surface_width),
-                                   static_cast<float>(state->surface_height)};
+    if ((drawn & kSceneCube) != 0) {
+        const graphics::Camera camera = camera_for(placement.cube);
 
         // The high-contrast palette exists to keep six shades apart for eyes
         // that would otherwise merge them; shading those shades would undo
@@ -1038,54 +1338,96 @@ bool render() noexcept
                 | graphics::project(camera)                                   //
                 | graphics::cull()                                            //
                 | graphics::depth_sort()                                      //
-                | graphics::viewport(state->placement.cube, stage);
+                | graphics::viewport(placement.cube, stage);
 
         // Which way each axis points from here, in the colors the net's guide
         // lines use, so a cyan loop over there and a cyan arm over here are
-        // plainly the same axis.
+        // plainly the same axis. In the cube's corner when the two share a
+        // surface.
+        if ((drawn & kSceneAxes) != 0) {
+            graphics::append_scene(
+                scene, graphics::build_axis_gizmo(camera, placement.cube));
+        }
+    } else if ((drawn & kSceneAxes) != 0) {
+        // On a surface of their own the axes are the whole of it: the same
+        // three arms from the same viewpoint, drawn from its middle.
         graphics::append_scene(
-            scene, graphics::build_axis_gizmo(camera, state->placement.cube));
+            scene, graphics::build_axis_badge(state->orbit.to_camera(1.0f),
+                                              stage));
     }
 
-    if (flat.net && state->paint) {
+    if ((drawn & kSceneNet) != 0 && state->paint) {
         // A draft is drawn instead of the cube, because a draft is what is
         // being edited and mostly is not a cube at all until the last square
         // is right. No guides either: nothing here turns, so there is nowhere
         // for a guide to promise.
         graphics::append_scene(
             scene, graphics::build_net_painting(
-                       state->paint->stickers, size_of_cube(),
-                       state->placement.net, state->palette,
-                       state->paint->reading.blamed));
-    } else if (flat.net) {
+                       state->paint->stickers, size_of_cube(), placement.net,
+                       state->palette, state->paint->reading.blamed));
+    } else if ((drawn & kSceneNet) != 0) {
         // The net is already screen-space, so it only has to be appended. It
         // gets the same rotation as the 3D scene, which is what makes one
         // gesture move every view in the same frame.
         graphics::append_scene(
             scene, graphics::build_net_scene(
-                       state->cube_state, state->placement.net,
+                       state->cube_state, placement.net,
                        state->interaction.active_rotation(), state->palette));
 
         // The rings the pressed cell could turn on, drawn over the stickers
         // so the gesture says where it is about to go before it goes there.
         graphics::append_scene(
             scene, graphics::build_net_guides(state->interaction.net_guides(),
-                                              state->placement.net,
-                                              size_of_cube()));
+                                              placement.net, size_of_cube()));
     }
 
-    if (flat.rings) {
+    if ((drawn & kSceneRings) != 0) {
         // The same rotation again. The rings a press is offering come with it,
         // since picking one out is a matter of drawing it heavier rather than
         // adding a line.
         graphics::append_scene(
             scene, graphics::build_rings_scene(
-                       state->cube_state, state->placement.rings,
+                       state->cube_state, placement.rings,
                        state->interaction.active_rotation(),
                        state->interaction.rings_guides(), state->palette));
     }
+    return scene;
+}
 
-    return state->renderer->render(scene);
+}  // namespace
+
+bool render() noexcept
+{
+    if (!state) return false;
+
+    note_changes();
+
+    // Each surface draws only when what it shows has changed since its last
+    // frame. A viewpoint sweep leaves the net's frame where it was, and a turn
+    // leaves the axes' -- and a host copies a surface out only when its frame
+    // count has moved, so the skipped work is skipped all the way to the page.
+    bool drawn_all = true;
+    for (auto& surface : state->surfaces) {
+        if (!surface.renderer) continue;
+
+        DrawnInputs inputs = inputs_for(surface);
+        if (surface.drawn && same_inputs(*surface.drawn, inputs)) continue;
+
+        if (!surface.renderer->render(scene_for(surface, inputs.scenes))) {
+            surface.drawn.reset();
+            drawn_all = false;
+            continue;
+        }
+        surface.drawn = std::move(inputs);
+        ++surface.frame;
+    }
+    return drawn_all;
+}
+
+void invalidate() noexcept
+{
+    if (!state) return;
+    for (auto& surface : state->surfaces) surface.drawn.reset();
 }
 
 bool scramble(std::uint32_t seed, std::uint32_t move_count) noexcept
@@ -1207,13 +1549,55 @@ namespace {
                          cube::face_index(cell.face)];
 }
 
-/** The cell a point is over, when the net is on screen and holds the point. */
-[[nodiscard]] std::optional<interaction::NetPick> net_cell_at(float x,
+/**
+ * The cell a point on one surface is over, when that surface draws the net
+ * and the net holds the point.
+ */
+[[nodiscard]] std::optional<interaction::NetPick> net_cell_on(std::uint32_t id,
+                                                              float x,
                                                               float y) noexcept
 {
     if (!std::isfinite(x) || !std::isfinite(y)) return std::nullopt;
-    if (!flat_parts().net) return std::nullopt;
-    return interaction::pick_net(x, y, state->placement.net, size_of_cube());
+    if (!live_surface(id)) return std::nullopt;
+
+    const Surface& surface = state->surfaces[id];
+    if ((drawn_scenes(surface) & kSceneNet) == 0) return std::nullopt;
+    return interaction::pick_net(x, y, surface.placement.net, size_of_cube());
+}
+
+bool paint_on(std::uint32_t id, float x, float y) noexcept
+{
+    if (!state || !state->paint) return false;
+
+    const auto pick = net_cell_on(id, x, y);
+    if (!pick) return false;
+
+    const int slot = painted_slot(*pick, size_of_cube());
+    if (slot < 0) return false;
+
+    state->paint->stickers[static_cast<std::size_t>(slot)] =
+        state->paint->brush;
+    return true;
+}
+
+bool fill_on(std::uint32_t id, float x, float y) noexcept
+{
+    if (!state || !state->paint) return false;
+
+    const auto pick = net_cell_on(id, x, y);
+    if (!pick) return false;
+
+    const int size = size_of_cube();
+    for (int row = 0; row < size; ++row) {
+        for (int col = 0; col < size; ++col) {
+            const int slot =
+                painted_slot(interaction::NetPick{pick->face, col, row}, size);
+            if (slot < 0) continue;
+            state->paint->stickers[static_cast<std::size_t>(slot)] =
+                state->paint->brush;
+        }
+    }
+    return true;
 }
 
 }  // namespace
@@ -1268,17 +1652,7 @@ cube::FaceColor brush() noexcept
 
 bool paint_at(float x, float y) noexcept
 {
-    if (!state || !state->paint) return false;
-
-    const auto pick = net_cell_at(x, y);
-    if (!pick) return false;
-
-    const int slot = painted_slot(*pick, size_of_cube());
-    if (slot < 0) return false;
-
-    state->paint->stickers[static_cast<std::size_t>(slot)] =
-        state->paint->brush;
-    return true;
+    return paint_on(0, x, y);
 }
 
 bool set_filling(bool whole_face) noexcept
@@ -1295,22 +1669,7 @@ bool is_filling() noexcept
 
 bool fill_face_at(float x, float y) noexcept
 {
-    if (!state || !state->paint) return false;
-
-    const auto pick = net_cell_at(x, y);
-    if (!pick) return false;
-
-    const int size = size_of_cube();
-    for (int row = 0; row < size; ++row) {
-        for (int col = 0; col < size; ++col) {
-            const int slot =
-                painted_slot(interaction::NetPick{pick->face, col, row}, size);
-            if (slot < 0) continue;
-            state->paint->stickers[static_cast<std::size_t>(slot)] =
-                state->paint->brush;
-        }
-    }
-    return true;
+    return fill_on(0, x, y);
 }
 
 int painted_count(cube::FaceColor colour) noexcept
@@ -1786,7 +2145,7 @@ bool set_view_mode(graphics::ViewMode mode) noexcept
     drain_orbit();
     state->interaction.cancel();
     state->view_mode = mode;
-    adopt_surface(state->surface_width, state->surface_height);
+    relayout_all();
     return true;
 }
 
@@ -1804,7 +2163,7 @@ bool set_flat_style(graphics::FlatStyle style) noexcept
     // same way a resize sends it. A snap only animates an angle and carries on.
     state->interaction.cancel();
     state->flat_style = style;
-    adopt_surface(state->surface_width, state->surface_height);
+    relayout_all();
     return true;
 }
 
@@ -1848,6 +2207,7 @@ bool set_lighting(std::uint32_t count) noexcept
     graphics::Lighting next = state->lighting;
     if (!next.from_values(state->lighting_values.data(), count)) return false;
     state->lighting = std::move(next);
+    ++state->lighting_revision;
     return true;
 }
 
@@ -1875,7 +2235,11 @@ bool set_canvas_theme(graphics::CanvasTheme theme) noexcept
     // is what a frame reads, and a refused value has already left above, so
     // neither can be written without the other.
     state->canvas_theme = theme;
-    state->renderer->set_background(graphics::canvas_background(theme));
+    for (auto& surface : state->surfaces) {
+        if (surface.renderer) {
+            surface.renderer->set_background(graphics::canvas_background(theme));
+        }
+    }
     return true;
 }
 
@@ -1924,16 +2288,30 @@ bool is_busy() noexcept
 
 std::uintptr_t pixel_buffer() noexcept
 {
-    if (!state) return 0;
-
-    return state->renderer->pixel_buffer();
+    return surface_pixel_buffer(0);
 }
 
 std::uint32_t pixel_byte_length() noexcept
 {
-    if (!state) return 0;
+    return surface_pixel_byte_length(0);
+}
 
-    return state->renderer->pixel_byte_length();
+std::uintptr_t surface_pixel_buffer(std::uint32_t id) noexcept
+{
+    if (!state || !live_surface(id)) return 0;
+    return state->surfaces[id].renderer->pixel_buffer();
+}
+
+std::uint32_t surface_pixel_byte_length(std::uint32_t id) noexcept
+{
+    if (!state || !live_surface(id)) return 0;
+    return state->surfaces[id].renderer->pixel_byte_length();
+}
+
+std::uint32_t surface_frame(std::uint32_t id) noexcept
+{
+    if (!state || id >= kSurfaceCount) return 0;
+    return state->surfaces[id].frame;
 }
 
 void shutdown() noexcept

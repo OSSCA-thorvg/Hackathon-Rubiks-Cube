@@ -48,6 +48,12 @@ solve_test = executable(
   dependencies: [application_dep, catch2_dep],
 )
 
+surface_test = executable(
+  'surface-test',
+  files('SurfaceTest.cpp'),
+  dependencies: [application_dep, catch2_dep],
+)
+
 canvas_theme_test = executable(
   'canvas-theme-test',
   files('CanvasThemeTest.cpp'),
@@ -89,6 +95,7 @@ test('rendered scene contract', render_contract_test)
 test('lit scene composition', lighting_render_test)
 test('net lift composition', net_lift_render_test)
 test('canvas theme ground', canvas_theme_test)
+test('surfaces', surface_test)
 test('input validation', input_validation_test)
 
 # A measurement rather than a test: frame time at the largest cube, half way

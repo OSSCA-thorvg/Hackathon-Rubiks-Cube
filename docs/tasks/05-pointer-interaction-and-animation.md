@@ -327,7 +327,7 @@ Drag 좌표는 contract의 cube viewport 비율에서 유도하므로, camera나
   - 반영 완료: `kCommitDegrees`는 30°로 확정되었고, known-answer 표는 30°와 120°를
     straddle하는 쌍으로 재고정되었으며, canonical drag 상수는 한 칸 구간의 중앙인
     75°로 옮겼습니다. Snap-back e2e는 27°에서 13.5°로 내렸습니다.
-- **누름은 surface를 말합니다 ([Scenes and surfaces](./scenes-and-surfaces.md)의 결정, 2026-09-26).** `pointer_down_on(id, x, y)`는 그 surface의 픽셀로 받고, 그 surface에 보이는 것에만 닿습니다. `pointer_down(x, y)`는 surface 0에 대한 이 호출입니다. 이 문서의 "resize 시 Dragging을 취소한다"는 **그 드래그가 시작된 surface의 resize**로 좁아졌습니다. capture한 camera와 viewport는 시작한 surface의 것이라, 다른 surface의 크기가 바뀌어도 stale해지지 않습니다. 브라우저에서는 캔버스마다 포인터 컨트롤러가 하나씩 있고, 모두 lock 하나를 공유해 제스처는 한 번에 하나입니다. 넷과 링 캔버스에서 엔진이 거절한 누름은 큐브 캔버스의 픽셀로 옮겨 다시 건넵니다. 그래서 빈 곳을 끌면 시점이 돈다는 규칙이 캔버스가 나뉜 뒤에도 그대로입니다.
+- **누름은 surface를 말합니다 ([Scenes and surfaces](./scenes-and-surfaces.md)의 결정, 2026-09-26).** `pointer_down_on(id, x, y)`는 그 surface의 픽셀로 받고, 그 surface에 보이는 것에만 닿습니다. `pointer_down(x, y)`는 surface 0에 대한 이 호출입니다. 이 문서의 "resize 시 Dragging을 취소한다"는 **그 드래그가 시작된 surface의 resize**로 좁아졌습니다. capture한 camera와 viewport는 시작한 surface의 것이라, 다른 surface의 크기가 바뀌어도 stale해지지 않습니다. 브라우저에서는 캔버스마다 포인터 컨트롤러가 하나씩 있고, 모두 lock 하나를 공유해 제스처는 한 번에 하나입니다. 넷과 링 캔버스에서 엔진이 거절한 누름은 큐브 캔버스의 픽셀로 옮겨 다시 건넵니다. 그래서 빈 곳을 끌면 시점이 돈다는 규칙이 캔버스가 나뉜 뒤에도 그대로입니다. 또 페이지는 제스처가 진행되는 동안 캔버스 크기 조정을 미루고, 끝나는 순간 적용합니다(2026-09-27). 그래서 "resize 시 Dragging을 취소한다"는 엔진의 규칙은 여전히 참이지만, 페이지에서는 드래그 도중에 resize가 일어나지 않습니다.
 
 ## Verification commands
 

@@ -549,6 +549,34 @@ describe('startApp', () => {
     expect(harness.hasPendingFrame()).toBe(false);
   });
 
+  it('resizes nothing under a gesture, and catches up when it ends', async () => {
+    const harness = createHarness();
+    await harness.start();
+    harness.engine.resizeSurface.mockClear();
+
+    // A box that changes under a finger: the drag's directions were read off
+    // the old size, and resizing the surface would drop it.
+    harness.dispatchPointer('pointerdown', {});
+    harness.canvasState.clientWidth = 60;
+    harness.triggerObserver();
+    harness.dispatch('resize', new Event('resize'));
+    expect(harness.engine.resizeSurface).not.toHaveBeenCalled();
+
+    // Let go, and the size it is owed arrives, with a frame at it.
+    harness.dispatchPointer('pointerup', {});
+    expect(harness.engine.resizeSurface).toHaveBeenCalledWith(CubeSurface.Cube, {
+      width: 60,
+      height: 50,
+    });
+    expect(harness.engine.render).toHaveBeenCalledTimes(2);
+
+    // Nothing owed, nothing done at the end of the next one.
+    harness.engine.resizeSurface.mockClear();
+    harness.dispatchPointer('pointerdown', {});
+    harness.dispatchPointer('pointerup', {});
+    expect(harness.engine.resizeSurface).not.toHaveBeenCalled();
+  });
+
   it('takes a frame the controller asked for as the next one, clock and all', async () => {
     const harness = createHarness();
     await harness.start();

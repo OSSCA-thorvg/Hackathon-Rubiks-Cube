@@ -46,7 +46,13 @@ function createHarness() {
   } satisfies PointerTarget;
 
   const onGestureStart = vi.fn();
-  const controller = attachPointer({ canvas, engine, onGestureStart });
+  const onGestureEnd = vi.fn();
+  const controller = attachPointer({
+    canvas,
+    engine,
+    onGestureStart,
+    onGestureEnd,
+  });
 
   const dispatch = (type: string, event: Partial<PointerEvent> = {}): void => {
     const full = {
@@ -72,6 +78,7 @@ function createHarness() {
     canvasState,
     engine,
     onGestureStart,
+    onGestureEnd,
     controller,
     dispatch,
     listenerCount,
@@ -182,6 +189,36 @@ describe('attachPointer', () => {
 
     expect(harness.engine.pointerCancel).toHaveBeenCalledTimes(1);
     expect(harness.engine.pointerUp).not.toHaveBeenCalled();
+  });
+
+  it('says when a gesture has ended, however it ended, after the engine hears', () => {
+    const harness = createHarness();
+    harness.engine.pointerUp.mockImplementation(() => {
+      expect(harness.onGestureEnd).not.toHaveBeenCalled();
+    });
+
+    harness.dispatch('pointerdown');
+    harness.dispatch('pointerup');
+    expect(harness.onGestureEnd).toHaveBeenCalledTimes(1);
+
+    harness.dispatch('pointerdown');
+    harness.dispatch('pointercancel');
+    expect(harness.onGestureEnd).toHaveBeenCalledTimes(2);
+
+    harness.dispatch('pointerdown');
+    harness.dispatch('lostpointercapture');
+    expect(harness.onGestureEnd).toHaveBeenCalledTimes(3);
+
+    // A press the engine turned down began nothing, so nothing ends.
+    harness.engine.pointerDown.mockReturnValueOnce(false);
+    harness.dispatch('pointerdown');
+    harness.dispatch('pointerup');
+    expect(harness.onGestureEnd).toHaveBeenCalledTimes(3);
+
+    // Teardown ends everything anyway, and says nothing of it.
+    harness.dispatch('pointerdown');
+    harness.controller.teardown();
+    expect(harness.onGestureEnd).toHaveBeenCalledTimes(3);
   });
 
   it('releases everything on teardown, cancelling a gesture in flight', () => {

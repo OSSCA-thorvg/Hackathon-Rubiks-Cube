@@ -447,6 +447,13 @@ export async function startApp(
   // Whether a frame is being drawn this moment, which is what tells a loop
   // asked for from inside one from a loop starting afresh.
   let drawing = false;
+  // One gesture at a time across every canvas, as the engine follows it --
+  // and, while it is held, no canvas is resized under it.
+  const lock: GestureLock = { held: false };
+  let sizeOwed = false;
+  const onGestureEnd = (): void => {
+    if (sizeOwed) applySize();
+  };
   // Whether a loop was taken away by the tab going out of sight, and so is
   // owed back when it returns. Nothing else may set it: a loop that ended
   // because the cube stopped moving is not owed anything.
@@ -504,8 +511,23 @@ export async function startApp(
     frameHandle = requestFrame(drawFrame);
   };
 
+  /**
+   * Brings the canvases to their boxes -- or, while a gesture is in hand,
+   * notes that they are owed it.
+   *
+   * Resizing a surface drops a drag begun on it, since the drag's screen
+   * directions were read off the old size. So a box that changes under a
+   * finger -- a window resized, a line of text growing, anything at all --
+   * waits for the finger: the size is applied the moment the gesture ends,
+   * and until then the canvas is only scaled to its new box by the browser.
+   */
   const applySize = (): void => {
     if (!active) return;
+    if (lock.held) {
+      sizeOwed = true;
+      return;
+    }
+    sizeOwed = false;
 
     try {
       if (fitSurfaces()) engine.render();
@@ -599,14 +621,13 @@ export async function startApp(
   // The engine is live from here on, so the remaining setup runs as one
   // transaction: any failure unwinds whatever was already installed.
   try {
-    // One gesture at a time across every canvas, as the engine follows it.
-    const lock: GestureLock = { held: false };
     const cube = pressingSurface(engine, CubeSurface.Cube);
     pointers.push(
       attachPointer({
         canvas,
         engine: cube,
         onGestureStart: startFrameLoop,
+        onGestureEnd,
         lock,
       }),
     );
@@ -621,6 +642,7 @@ export async function startApp(
           // in its pixels, once this one's engine has turned it down.
           fallback: { canvas, engine: cube },
           onGestureStart: startFrameLoop,
+          onGestureEnd,
           lock,
         }),
       );

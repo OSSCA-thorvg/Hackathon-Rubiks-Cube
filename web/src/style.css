@@ -796,10 +796,11 @@ kbd {
  * The dot beside the line is lit while a solve is being timed.
  *
  * Every box around the stage keeps its height whatever it says, because the
- * canvas is sized by what they leave -- and a canvas that changes size drops
- * the drag in progress, since a drag's directions were read off the old one.
+ * canvas is sized by what they leave, and a cube that grows and shrinks as
+ * the words under it change is a cube that will not sit still to be played.
  * So the line holds room for two lines of text whether it has one or two,
- * and never grows a third.
+ * and never grows a third. (A drag no longer depends on it: the page holds a
+ * canvas's new size until the drag in progress is let go.)
  */
 .clock {
   display: grid;

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import {
+  assertDrawingBufferMatchesCss,
   assertFacesAndCorners,
   assertSceneContract,
   assertVisibleFaces,
@@ -213,6 +214,29 @@ test('dragging the right column turns the cube and the net follows', async ({
   assertFacesAndCorners(await probeCanvas(page));
 
   expect(pageErrors).toEqual([]);
+});
+
+test('a drag survives the window changing size under it', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+
+  const atRest = await probeCanvas(page);
+  const grab = await grabRightColumn(page, atRest);
+  await page.mouse.move(grab.x, grab.y - dragFor(atRest, 0.5), { steps: 6 });
+
+  // The window narrows with the finger still down, so the cube's canvas has
+  // a new box. Resizing its surface now would drop the drag -- its screen
+  // directions were read off the old size -- so the page holds the new size
+  // until the drag is let go, and the turn is made all the same.
+  await page.setViewportSize({ width: VIEWPORT.width - 40, height: VIEWPORT.height });
+  await page.mouse.move(grab.x, grab.y - dragFor(atRest, 1), { steps: 6 });
+  await page.mouse.up();
+
+  await expect.poll(async () => (await probeCanvas(page)).net).toEqual(
+    NET_AFTER_R,
+  );
+  // And the canvas has its new size once the drag is over.
+  assertDrawingBufferMatchesCss(await probeCanvas(page));
 });
 
 test('a short drag past the threshold turns the cube', async ({ page }) => {

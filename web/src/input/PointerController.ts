@@ -47,6 +47,12 @@ export type PointerControllerOptions = {
   readonly engine: PointerTarget;
   /** Called when a press begins a gesture, so a frame loop can start. */
   readonly onGestureStart: () => void;
+  /**
+   * Called once a gesture has ended -- let go, cancelled, or its capture
+   * taken away -- after the engine has been told. Not at teardown, which
+   * ends everything anyway.
+   */
+  readonly onGestureEnd?: () => void;
   /** Where a press this canvas's engine turns down is offered next. */
   readonly fallback?: PointerFallback;
   /** Shared with the other canvases of the same engine; one of its own if absent. */
@@ -161,6 +167,7 @@ export function attachPointer(
     letGo();
     releaseCapture(event.pointerId);
     target.pointerUp();
+    options.onGestureEnd?.();
   };
 
   const onPointerCancel = (event: PointerEvent): void => {
@@ -169,6 +176,7 @@ export function attachPointer(
     letGo();
     releaseCapture(event.pointerId);
     target.pointerCancel();
+    options.onGestureEnd?.();
   };
 
   const onLostPointerCapture = (event: PointerEvent): void => {
@@ -177,6 +185,7 @@ export function attachPointer(
     // Capture taken away mid-drag: the user never let go, so nothing commits.
     letGo();
     target.pointerCancel();
+    options.onGestureEnd?.();
   };
 
   canvas.addEventListener('pointerdown', onPointerDown);

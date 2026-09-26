@@ -7,7 +7,7 @@ import {
   pagePointInNet,
   probeCanvas,
 } from './sceneContract.ts';
-import { fillInSettings } from './shell.ts';
+import { fillInSettings, openPanel, stageSettled } from './shell.ts';
 
 /** A viewport large enough to keep the desktop HUD beside the canvas. */
 const DESKTOP = { width: 1200, height: 1200 };
@@ -40,8 +40,10 @@ async function chooseSize(page: Page, size: number): Promise<void> {
 
 /** Opens the panel the face buttons and the depth controls live in. */
 async function openMoveControls(page: Page): Promise<void> {
-  await page.locator('.advanced summary').click();
+  await openPanel(page, 'turn');
   await expect(page.locator('#turn-depth')).toBeVisible();
+  // The stage makes room for the panel, and is read once it has.
+  await stageSettled(page);
 }
 
 /** Sets how deep the face controls reach. */

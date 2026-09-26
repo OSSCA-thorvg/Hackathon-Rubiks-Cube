@@ -7,7 +7,7 @@ import {
   probeCanvas,
   QUARTER_TURN_DRAG,
 } from './sceneContract.ts';
-import { pressInSettings } from './shell.ts';
+import { openPanel, pressInSettings, stageSettled } from './shell.ts';
 
 /** A viewport large enough to keep the desktop HUD beside the canvas. */
 const DESKTOP = { width: 1200, height: 1200 };
@@ -185,6 +185,11 @@ test('a move button ends watching and turns the cube it gave back', async ({
   page,
 }) => {
   const watch = page.locator('#ambient');
+
+  // The panel the buttons are in first: opening it makes room beside the
+  // stage, and the cube is read at the size it will be read at afterwards.
+  await openPanel(page, 'turn');
+  await stageSettled(page);
   const solved = await probeCanvas(page);
 
   await watch.click();
@@ -192,7 +197,6 @@ test('a move button ends watching and turns the cube it gave back', async ({
 
   // The move buttons stay live through watching, because pressing one is a
   // way out of it -- the same as the letter it carries on the keyboard.
-  await page.locator('.advanced summary').click();
   const right = page.locator('[data-face="r"][data-turn="1"]');
   await expect(right).toBeEnabled();
   await right.click();

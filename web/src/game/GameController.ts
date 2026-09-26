@@ -16,6 +16,8 @@ import {
 } from '../wasm/CubeEngine.ts';
 import { createClickSound, type ClickSound } from './ClickSound.ts';
 import { MoveLog } from './MoveLog.ts';
+import { parseMoves, type FaceLetter, type TypedTurn } from './notation.ts';
+import { Timeline, type TimelineUi } from './Timeline.ts';
 import {
   GameSession,
   type EngineFrame,
@@ -114,8 +116,14 @@ export type GameUi = {
   readonly recordBest: HTMLElement;
   /** The latest few solves, newest first. */
   readonly recordList: HTMLOListElement;
+  /** How many solves the sitting has had, beside the board's title. */
+  readonly recordTally: HTMLElement;
   /** Where the record is written out; the log owns everything inside it. */
   readonly moveLogList: HTMLOListElement;
+  /** The record laid flat under the stage, and the scramble in the panel. */
+  readonly timeline: TimelineUi;
+  /** Where the size of the cube in hand is written, beside the title. */
+  readonly cubeSizeLabel: HTMLElement;
   /** Starts and stops watching; pressed while a pattern is running. */
   readonly ambientButton: HTMLButtonElement;
   /** Opens and closes a draft of the cube to colour; pressed while one is open. */
@@ -195,6 +203,21 @@ export type GameControllerOptions = {
   readonly sound?: ClickSound;
 };
 
+/**
+ * The event a line of typed moves arrives on, dispatched at `GameUi.root`.
+ *
+ * An event rather than a method, because what types the moves -- the command
+ * menu -- is the page's and exists before any controller does. A line sent
+ * while no controller is attached reaches nobody, which is the same as a
+ * button pressed on a page whose engine never arrived.
+ */
+export const PLAY_MOVES_EVENT = 'thorvg-rubiks:play-moves';
+
+/** What a `PLAY_MOVES_EVENT` carries: the line, exactly as it was typed. */
+export type PlayMovesDetail = {
+  readonly text: string;
+};
+
 /** Controller surface consumed by AppLifecycle. */
 export type GameController = {
   readonly state: GameState;
@@ -212,6 +235,16 @@ const FACE_BY_LETTER: Readonly<Record<string, CubeFace>> = {
   d: CubeFace.Down,
   f: CubeFace.Front,
   b: CubeFace.Back,
+};
+
+/** The same faces by the letter typed notation writes them with. */
+const FACE_BY_NOTATION: Readonly<Record<FaceLetter, CubeFace>> = {
+  R: CubeFace.Right,
+  L: CubeFace.Left,
+  U: CubeFace.Up,
+  D: CubeFace.Down,
+  F: CubeFace.Front,
+  B: CubeFace.Back,
 };
 
 const VIEW_BY_NAME: Readonly<Record<string, CubeViewMode>> = {
@@ -245,6 +278,23 @@ const PALETTE_BY_NAME: Readonly<Record<string, CubePalette>> = {
   classic: CubePalette.Classic,
   'high-contrast': CubePalette.HighContrast,
 };
+
+const PALETTE_NAME_BY_VALUE: Readonly<Record<CubePalette, string>> = {
+  [CubePalette.Classic]: 'classic',
+  [CubePalette.HighContrast]: 'high-contrast',
+};
+
+/**
+ * Somewhere the page is walking the cube, one engine command at a time.
+ *
+ * The engine plays one sequence at a time and has no command for "go to move
+ * twelve" or "turn these five", so both are walked from here: every step is
+ * an ordinary undo, redo or face turn, asked for once the one before it has
+ * landed. The turns are a queue the walk eats from the front of.
+ */
+type Walk =
+  | { readonly kind: 'seek'; readonly target: number }
+  | { readonly kind: 'turns'; readonly turns: TypedTurn[] };
 
 /**
  * What each refusal reads as, one sentence apiece.
@@ -401,9 +451,18 @@ export function attachGameController(
     }
   };
 
-  const moveLog = setup(() => new MoveLog(ui.moveLogList, engine));
+  // A move pressed on either list is a place to take the cube to: the cursor
+  // just past it, so that move is the last one on. The walk is declared
+  // further down; nothing can be pressed before this function has returned.
+  const pickMove = (index: number): void => {
+    seekTo(index + 1);
+  };
+  const moveLog = setup(
+    () => new MoveLog(ui.moveLogList, engine, { onPick: pickMove }),
+  );
+  const timeline = setup(() => new Timeline(ui.timeline, engine, pickMove));
   const records = setup(
-    () => new SessionRecords(ui.recordBest, ui.recordList),
+    () => new SessionRecords(ui.recordBest, ui.recordList, ui.recordTally),
   );
   const session = setup(
     () =>
@@ -502,6 +561,9 @@ export function attachGameController(
       const value = paletteOf(button);
       button.setAttribute('aria-pressed', String(value === selected));
     }
+    // The move chips show each face in the shade the cube is drawn in, and
+    // the stylesheet picks those shades by this.
+    ui.root.dataset.stickerPalette = PALETTE_NAME_BY_VALUE[selected];
   };
 
   /**
@@ -604,6 +666,9 @@ export function attachGameController(
    */
   let rewinding = false;
 
+  /** The walk under way, or null. Any other command drops it. */
+  let walk: Walk | null = null;
+
   /**
    * Whether there is a state to send, from the numbers a frame already has.
    *
@@ -705,22 +770,27 @@ export function attachGameController(
     // sometimes unavailable but one that only exists while there is a rewind
     // to break off, and the two attributes are how that is said to a person
     // looking and to a person tabbing.
+    //
+    // A walk is stoppable the whole way along, between its steps as well as
+    // during them: Stop drops what is left of it.
     if (!now.busy) rewinding = false;
-    ui.stopButton.hidden = !rewinding;
-    ui.stopButton.disabled = !rewinding;
+    const stoppable = rewinding || walk !== null;
+    ui.stopButton.hidden = !stoppable;
+    ui.stopButton.disabled = !stoppable;
 
     // Stop takes Scramble's place rather than appearing beside it: the dock
     // has one obvious thing in the middle of it, and while a rewind is
     // playing the obvious thing is the way out of it. Only the rewind family
-    // reaches here -- a scramble and a watched pattern are not stoppable, so
-    // Scramble stays where it is through both of those.
-    ui.scrambleButton.hidden = rewinding;
+    // and a walk reach here -- a scramble and a watched pattern are not
+    // stoppable, so Scramble stays where it is through both of those.
+    ui.scrambleButton.hidden = stoppable;
 
-    // The same reading the controls are set from, so the list can never be
-    // describing a different moment than the buttons above it. It draws only
-    // when the record has changed, which is what makes calling it every frame
-    // and after every command the simple thing to do.
+    // The same reading the controls are set from, so the lists can never be
+    // describing a different moment than the buttons above them. They draw
+    // only when the record has changed, which is what makes calling them
+    // every frame and after every command the simple thing to do.
     moveLog.update(now);
+    timeline.update(now);
 
     ui.ambientButton.setAttribute('aria-pressed', String(now.watching));
     ui.ambientButton.disabled =
@@ -763,6 +833,9 @@ export function attachGameController(
    */
   const cubeCommand = (action: () => void): void => {
     run((): void => {
+      // Whatever was being walked to is not where this command is going. A
+      // step already landing finishes; the ones after it are not asked for.
+      walk = null;
       leaveAmbient();
       action();
       updateEngineControls();
@@ -890,7 +963,9 @@ export function attachGameController(
   };
 
   const updateCubeSizeControl = (): void => {
-    ui.cubeSizeInput.value = String(engine.cubeSize());
+    const size = engine.cubeSize();
+    ui.cubeSizeInput.value = String(size);
+    ui.cubeSizeLabel.textContent = `${size}×${size}×${size}`;
   };
 
   /**
@@ -1004,10 +1079,107 @@ export function attachGameController(
    */
   const onStop = (): void => {
     run((): void => {
+      walk = null;
       engine.stopPlayback();
       rewinding = false;
       session.announce('Stopped.');
       updateEngineControls();
+    });
+  };
+
+  /**
+   * Asks for the next step of the walk, if the last one has landed.
+   *
+   * Called when a walk begins and again after every frame, so each step goes
+   * in on the first idle frame after the one before it. A step the engine
+   * refuses ends the walk there rather than being retried: the cube is
+   * somewhere a person has taken it -- a drag, a colouring -- and walking on
+   * past that would be walking over them.
+   */
+  const stepWalk = (): void => {
+    if (walk === null || engine.isBusy()) return;
+
+    if (walk.kind === 'seek') {
+      const cursor = engine.timelineCursor();
+      if (cursor === walk.target) {
+        walk = null;
+        return;
+      }
+      // One move at a time, played the way Undo and Redo play it, so a walk
+      // back through twelve moves is watched as twelve moves coming off.
+      if (!(cursor > walk.target ? engine.undo() : engine.redo())) {
+        walk = null;
+        return;
+      }
+      rewinding = true;
+      startFrameLoop();
+      return;
+    }
+
+    const next = walk.turns.shift();
+    if (next === undefined) {
+      walk = null;
+      return;
+    }
+    if (
+      !engine.turnFace(
+        FACE_BY_NOTATION[next.face],
+        next.firstDepth,
+        next.lastDepth,
+        next.turns,
+      )
+    ) {
+      walk = null;
+      return;
+    }
+    startFrameLoop();
+  };
+
+  /**
+   * Sets off on a walk, breaking off whatever rewind was playing.
+   *
+   * A cube command like any other, so watching gives way first. The newest
+   * request is the one the cube follows: a rewind still playing is stopped
+   * where it stands, and a scramble -- which cannot be stopped -- is waited
+   * out, the first step going in on the frame it finishes.
+   */
+  const startWalk = (next: Walk): void => {
+    cubeCommand((): void => {
+      if (engine.isPainting()) {
+        session.announce('Finish or cancel the colouring first.');
+        return;
+      }
+      if (rewinding) {
+        engine.stopPlayback();
+        rewinding = false;
+      }
+      walk = next;
+      stepWalk();
+    });
+  };
+
+  /** Walks the cube to the point in the record just past `cursor` moves. */
+  const seekTo = (cursor: number): void => {
+    if (cursor === engine.timelineCursor() && !engine.isBusy()) return;
+    startWalk({ kind: 'seek', target: cursor });
+  };
+
+  /** Reads a line of typed moves and walks through them, or says why not. */
+  const onPlayMoves = (event: Event): void => {
+    const detail = (event as CustomEvent<PlayMovesDetail>).detail;
+    run((): void => {
+      const typed = parseMoves(detail?.text ?? '', engine.cubeSize());
+      if (!typed.ok) {
+        session.announce(typed.reason);
+        return;
+      }
+      if (typed.turns.length === 0) return;
+
+      const count = typed.turns.length;
+      startWalk({ kind: 'turns', turns: [...typed.turns] });
+      if (walk !== null) {
+        session.announce(`Playing ${count} ${count === 1 ? 'move' : 'moves'}.`);
+      }
     });
   };
 
@@ -1271,6 +1443,7 @@ export function attachGameController(
   // `input` rather than `change`, so the reading follows the handle while it
   // is being dragged. Nothing in flight is re-timed, so the stream is safe.
   ui.speedInput.addEventListener('input', onSpeedChange);
+  ui.root.addEventListener(PLAY_MOVES_EVENT, onPlayMoves);
   keyboardTarget.addEventListener('keydown', onKeyDown);
 
   setup((): void => {
@@ -1299,7 +1472,17 @@ export function attachGameController(
         // state this frame may just have moved it to.
         const now = engineNow();
         session.observe(now);
-        updateEngineControls(now);
+
+        // A walk takes its next step as soon as the last one has landed, and
+        // before the controls are read, so Stop does not blink out for the
+        // one idle frame between two steps. The step changed the engine, so
+        // the controls take a fresh reading rather than this frame's.
+        if (walk !== null && !now.busy) {
+          stepWalk();
+          updateEngineControls();
+        } else {
+          updateEngineControls(now);
+        }
 
         // The tallies follow the colouring, and a press on the net is the one
         // thing that changes it without coming through a command. A press asks
@@ -1313,7 +1496,10 @@ export function attachGameController(
     teardown(): void {
       if (!active) return;
       active = false;
+      walk = null;
       session.teardown();
+      moveLog.teardown();
+      timeline.teardown();
       setCommandsDisabled(true);
       // The one moment the move buttons, the rewinds and the watch toggle are
       // not the engine's and the session's to decide.
@@ -1365,6 +1551,7 @@ export function attachGameController(
       ui.homeViewButton.removeEventListener('click', onHomeView);
       ui.muteButton.removeEventListener('click', onMute);
       ui.speedInput.removeEventListener('input', onSpeedChange);
+      ui.root.removeEventListener(PLAY_MOVES_EVENT, onPlayMoves);
       for (const [button, listener] of choiceListeners) {
         button.removeEventListener('click', listener);
       }

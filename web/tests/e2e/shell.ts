@@ -66,3 +66,49 @@ export async function fillInSettings(
   await field.blur();
   await closeSettings(page);
 }
+
+/** The three detail panels, by the name their buttons carry. */
+export type PanelName = 'moves' | 'session' | 'turn';
+
+/**
+ * Opens one of the detail panels, if it is not open already.
+ *
+ * The face buttons and the depth live in Turn, the move list in Moves and the
+ * records in Session. A panel stays open until its own button is pressed
+ * again, so this looks before it presses rather than toggling blind.
+ */
+export async function openPanel(
+  page: Page,
+  name: PanelName,
+  options: { readonly tap?: boolean } = {},
+): Promise<void> {
+  const toggle = page.locator(`#details-${name}`);
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') {
+    if (options.tap === true) await toggle.tap();
+    else await toggle.click();
+  }
+  await expect(page.locator(`#panel-${name}`)).toBeVisible();
+}
+
+/**
+ * Waits for the stage to stop changing size.
+ *
+ * Opening or closing a panel on a wide screen slides the stage over and may
+ * resize the canvas while it does, so a reading taken during the slide is a
+ * reading of a canvas that is about to be a different size. Two looks a
+ * tenth of a second apart that agree are a stage at rest.
+ */
+export async function stageSettled(page: Page): Promise<void> {
+  let last = '';
+  await expect
+    .poll(
+      async () => {
+        const now = JSON.stringify(await page.locator('#view').boundingBox());
+        const same = now === last;
+        last = now;
+        return same;
+      },
+      { intervals: [100] },
+    )
+    .toBe(true);
+}

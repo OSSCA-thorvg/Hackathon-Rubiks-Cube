@@ -309,8 +309,15 @@ export async function startApp(
 
       // One frame is drawn after the engine stops asking for them, so the
       // final state of a turn always reaches the canvas.
-      if (moreFrames) frameHandle = requestFrame(drawFrame);
-      else previousTimestamp = null;
+      //
+      // The controller may already have asked for the next frame above -- a
+      // walk puts its next step in from afterEngineFrame -- and a second
+      // request here would run two frames per tick, each advancing the clock.
+      if (moreFrames) {
+        if (frameHandle === null) frameHandle = requestFrame(drawFrame);
+      } else if (frameHandle === null) {
+        previousTimestamp = null;
+      }
     } catch (error) {
       teardown();
       onError(error);

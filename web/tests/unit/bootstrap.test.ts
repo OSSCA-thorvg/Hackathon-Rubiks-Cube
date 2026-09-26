@@ -63,12 +63,30 @@ describe('bootstrap', () => {
     );
     expect(app.querySelector('#record-list')?.children).toHaveLength(0);
 
-    // Moves first, and the session board still in the document behind it.
-    expect(app.querySelector('#activity-panel-moves')?.hasAttribute('hidden')).toBe(false);
-    expect(app.querySelector('#activity-panel-session')?.hasAttribute('hidden')).toBe(true);
+    // The three detail panels start closed, each behind its own button, and
+    // everything they hold is in the document already.
+    for (const name of ['moves', 'session', 'turn']) {
+      expect(app.querySelector(`#panel-${name}`)?.hasAttribute('hidden')).toBe(
+        true,
+      );
+      expect(
+        app.querySelector(`[aria-controls="panel-${name}"]`)?.getAttribute(
+          'aria-expanded',
+        ),
+      ).toBe('false');
+    }
+    expect(app.querySelector('#move-log')?.closest('#panel-moves')).not.toBeNull();
+    expect(app.querySelector('#record-best')?.closest('#panel-session')).not.toBeNull();
+    expect(app.querySelector('#turn-depth')?.closest('#panel-turn')).not.toBeNull();
+
+    // A panel opens from its button and stays until the same button.
+    app.querySelector<HTMLButtonElement>('#details-moves')?.click();
+    expect(app.querySelector('#panel-moves')?.hasAttribute('hidden')).toBe(false);
+    document.body.click();
+    expect(app.querySelector('#panel-moves')?.hasAttribute('hidden')).toBe(false);
 
     // Watch sits with Scene and Diagram rather than in the action dock.
-    expect(app.querySelector('#ambient')?.closest('.view-bar')).not.toBeNull();
+    expect(app.querySelector('#ambient')?.closest('.view-rail')).not.toBeNull();
     expect(app.querySelector('#ambient')?.getAttribute('aria-pressed')).toBe(
       'false',
     );
@@ -89,6 +107,9 @@ describe('bootstrap', () => {
       app.querySelector<HTMLButtonElement>('[data-theme-choice="system"]')
         ?.disabled,
     ).toBe(false);
+    for (const id of ['#command-trigger', '#cube-size-chip', '#details-turn']) {
+      expect(app.querySelector<HTMLButtonElement>(id)?.disabled).toBe(false);
+    }
     expect(app.dataset.state).toBe('ready');
     expect(app.querySelector('#status')?.textContent).toBe(
       'ThorVG software renderer',

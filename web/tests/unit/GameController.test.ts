@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   attachGameController,
+  PLAY_MOVES_EVENT,
   type GameEngine,
   type GameUi,
   type KeyboardTarget,
+  type PlayMovesDetail,
 } from '../../src/game/GameController.ts';
 import { decodeSession } from '../../src/game/shareCode.ts';
 import type { TimerEnvironment } from '../../src/game/SolveTimer.ts';
@@ -83,6 +85,14 @@ function createUi(): GameUi {
     <ol id="move-log"></ol>
     <p id="record-best"></p>
     <ol id="record-list"></ol>
+    <span id="record-tally"></span>
+    <span id="cube-size-label"></span>
+    <ol id="timeline-moves"></ol>
+    <div id="timeline-track"></div>
+    <span id="timeline-scramble"></span>
+    <span id="timeline-progress"></span>
+    <p id="scramble-text"></p>
+    <span id="moves-progress"></span>
   `;
   document.body.replaceChildren(root);
 
@@ -106,7 +116,17 @@ function createUi(): GameUi {
     shareButton: root.querySelector<HTMLButtonElement>('#share')!,
     recordBest: root.querySelector<HTMLParagraphElement>('#record-best')!,
     recordList: root.querySelector<HTMLOListElement>('#record-list')!,
+    recordTally: root.querySelector<HTMLElement>('#record-tally')!,
+    cubeSizeLabel: root.querySelector<HTMLElement>('#cube-size-label')!,
     moveLogList: root.querySelector<HTMLOListElement>('#move-log')!,
+    timeline: {
+      strip: root.querySelector<HTMLOListElement>('#timeline-moves')!,
+      track: root.querySelector<HTMLElement>('#timeline-track')!,
+      scrambleLabel: root.querySelector<HTMLElement>('#timeline-scramble')!,
+      progressLabel: root.querySelector<HTMLElement>('#timeline-progress')!,
+      scrambleText: root.querySelector<HTMLElement>('#scramble-text')!,
+      panelProgress: root.querySelector<HTMLElement>('#moves-progress')!,
+    },
     ambientButton: root.querySelector<HTMLButtonElement>('#ambient')!,
     homeViewButton: root.querySelector<HTMLButtonElement>('#home-view')!,
     viewButtons: [...root.querySelectorAll<HTMLButtonElement>('[data-view]')],
@@ -2016,3 +2036,185 @@ describe('colouring a real cube onto the net', () => {
     );
   });
 })
+
+describe('walking the cube along its record', () => {
+  /** A scramble played out, then `count` moves of the user's own. */
+  function withMoves(count: number) {
+    const harness = createHarness();
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+    for (let made = 0; made < count; made += 1) {
+      harness.dispatchKey({ key: 'r' });
+      harness.commitMove();
+      harness.controller.afterEngineFrame();
+    }
+    return harness;
+  }
+
+  /** The chip for one of the user's own moves, counting from one. */
+  function chip(harness: ReturnType<typeof createHarness>, ordinal: number) {
+    return harness.ui.moveLogList.querySelectorAll<HTMLButtonElement>(
+      'button[data-index]',
+    )[ordinal - 1]!;
+  }
+
+  it('walks back to a move pressed on the list, one undo at a time', () => {
+    const harness = withMoves(3);
+    expect(harness.engine.timelineCursor()).toBe(6);
+
+    // The first of the three: two to take back.
+    chip(harness, 1).click();
+    expect(harness.engine.undo).toHaveBeenCalledTimes(1);
+    expect(harness.ui.stopButton.hidden).toBe(false);
+
+    harness.finishRewind();
+    expect(harness.engine.undo).toHaveBeenCalledTimes(2);
+    // Stop stays up between the steps, not only during them.
+    expect(harness.ui.stopButton.hidden).toBe(false);
+
+    harness.finishRewind();
+    expect(harness.engine.timelineCursor()).toBe(4);
+    expect(harness.engine.undo).toHaveBeenCalledTimes(2);
+    expect(harness.ui.stopButton.hidden).toBe(true);
+    expect(harness.ui.scrambleButton.hidden).toBe(false);
+  });
+
+  it('walks forward to a move that was taken back', () => {
+    const harness = withMoves(3);
+    chip(harness, 1).click();
+    harness.finishRewind();
+    harness.finishRewind();
+
+    chip(harness, 3).click();
+    expect(harness.engine.redo).toHaveBeenCalledTimes(1);
+    harness.finishRewind();
+    harness.finishRewind();
+    expect(harness.engine.timelineCursor()).toBe(6);
+    expect(harness.engine.redo).toHaveBeenCalledTimes(2);
+  });
+
+  it('draws the timeline from the same record', () => {
+    const harness = withMoves(2);
+    const { timeline } = harness.ui;
+
+    expect(timeline.scrambleLabel.textContent).toBe('Scramble · 3');
+    expect(timeline.progressLabel.textContent).toBe('2 / 2');
+    expect(timeline.panelProgress.textContent).toBe('2 / 2');
+    expect(timeline.strip.querySelectorAll('li')).toHaveLength(2);
+    expect(timeline.track.style.getPropertyValue('--scramble')).toBe('60%');
+    expect(timeline.track.style.getPropertyValue('--cursor')).toBe('100%');
+
+    // The fake scrambles with R, U and F.
+    expect(timeline.scrambleText.textContent).toBe('R U F');
+
+    // A chip on the strip goes to the same place as one in the panel.
+    timeline.strip
+      .querySelector<HTMLButtonElement>('button[data-index="3"]')!
+      .click();
+    expect(harness.engine.undo).toHaveBeenCalledTimes(1);
+  });
+
+  it('breaks off a rewind that is playing to follow a pressed move', () => {
+    const harness = withMoves(3);
+
+    harness.ui.rewindButton.click();
+    expect(harness.engine.solveRewind).toHaveBeenCalled();
+
+    // Stopping keeps the turn in flight, which leaves the cube one move down
+    // from six; the first of the user's moves is one further.
+    chip(harness, 1).click();
+    expect(harness.engine.stopPlayback).toHaveBeenCalled();
+    expect(harness.engine.undo).toHaveBeenCalledTimes(1);
+    harness.finishRewind();
+    expect(harness.engine.timelineCursor()).toBe(4);
+  });
+
+  it('drops the rest of a walk on Stop, and on any other command', () => {
+    const harness = withMoves(3);
+
+    chip(harness, 1).click();
+    harness.ui.stopButton.click();
+    harness.finishRewind();
+    expect(harness.engine.undo).toHaveBeenCalledTimes(1);
+    expect(harness.ui.stopButton.hidden).toBe(true);
+
+    chip(harness, 1).click();
+    // A turn of the user's own is somewhere else the cube is going.
+    harness.finishRewind();
+    harness.engine.undo.mockClear();
+    harness.dispatchKey({ key: 'u' });
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.engine.undo).not.toHaveBeenCalled();
+  });
+
+  it('plays a line of typed moves one turn at a time', () => {
+    const harness = withMoves(0);
+    harness.engine.turnFace.mockClear();
+
+    const detail: PlayMovesDetail = { text: "R U' 2F2" };
+    harness.ui.root.dispatchEvent(
+      new CustomEvent(PLAY_MOVES_EVENT, { detail }),
+    );
+    expect(harness.ui.status.textContent).toBe('Playing 3 moves.');
+    expect(harness.engine.turnFace).toHaveBeenCalledTimes(1);
+    expect(harness.engine.turnFace).toHaveBeenLastCalledWith(
+      CubeFace.Right,
+      1,
+      1,
+      1,
+    );
+    expect(harness.ui.stopButton.hidden).toBe(false);
+
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.engine.turnFace).toHaveBeenLastCalledWith(
+      CubeFace.Up,
+      1,
+      1,
+      -1,
+    );
+
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.engine.turnFace).toHaveBeenLastCalledWith(
+      CubeFace.Front,
+      2,
+      2,
+      2,
+    );
+
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.engine.turnFace).toHaveBeenCalledTimes(3);
+    expect(harness.ui.stopButton.hidden).toBe(true);
+    // The first of them started the clock, as a turn by hand would.
+    expect(harness.controller.state).toBe('running');
+  });
+
+  it('says why a typed line was refused, and plays none of it', () => {
+    const harness = withMoves(0);
+    harness.engine.turnFace.mockClear();
+
+    harness.ui.root.dispatchEvent(
+      new CustomEvent(PLAY_MOVES_EVENT, { detail: { text: 'R Q' } }),
+    );
+    expect(harness.ui.status.textContent).toBe(`Can't read "Q" as a move.`);
+    expect(harness.engine.turnFace).not.toHaveBeenCalled();
+  });
+
+  it('writes the size and the palette where the page shows them', () => {
+    const harness = createHarness();
+    expect(harness.ui.cubeSizeLabel.textContent).toBe('3×3×3');
+    expect(harness.ui.root.dataset.stickerPalette).toBe('classic');
+
+    harness.ui.paletteButtons
+      .find((button) => button.dataset.palette === 'high-contrast')!
+      .click();
+    expect(harness.ui.root.dataset.stickerPalette).toBe('high-contrast');
+
+    harness.ui.cubeSizeInput.value = '5';
+    harness.ui.cubeSizeInput.dispatchEvent(new Event('change'));
+    expect(harness.ui.cubeSizeLabel.textContent).toBe('5×5×5');
+  });
+});

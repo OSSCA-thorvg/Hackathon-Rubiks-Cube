@@ -36,7 +36,10 @@ export const RECENT_LIMIT = 5;
 export class SessionRecords {
   private readonly bestLine: HTMLElement;
   private readonly list: HTMLElement;
+  private readonly tally: HTMLElement | null;
   private readonly entries: SolveRecord[] = [];
+  /** Every solve of the sitting, including the ones the list has let go of. */
+  private solved = 0;
   /**
    * The fastest solve of each cube, kept apart because they cannot be
    * compared: a 2x2 in twelve seconds is not better than a 5x5 in five
@@ -44,9 +47,14 @@ export class SessionRecords {
    */
   private readonly bestBySize = new Map<number, SolveRecord>();
 
-  constructor(bestLine: HTMLElement, list: HTMLElement) {
+  /**
+   * @param tally where the count of the sitting's solves is written, beside
+   *              the panel's title; absent on a page without one.
+   */
+  constructor(bestLine: HTMLElement, list: HTMLElement, tally?: HTMLElement) {
     this.bestLine = bestLine;
     this.list = list;
+    this.tally = tally ?? null;
     this.draw();
   }
 
@@ -57,6 +65,7 @@ export class SessionRecords {
    *          says as part of itself rather than in a second announcement.
    */
   add(record: SolveRecord): boolean {
+    this.solved += 1;
     this.entries.unshift(record);
     if (this.entries.length > RECENT_LIMIT) {
       this.entries.length = RECENT_LIMIT;
@@ -81,27 +90,62 @@ export class SessionRecords {
     const bests = [...this.bestBySize.entries()].sort(
       ([left], [right]) => left - right,
     );
-    this.bestLine.textContent =
-      bests.length === 0
-        ? 'No solves yet.'
-        : bests
-            .map(
-              ([size, record]) =>
-                `Best ${size}×${size} ${formatElapsed(record.elapsedMs)}`,
-            )
-            .join(' · ');
+    if (bests.length === 0) {
+      this.bestLine.textContent = 'No solves yet.';
+    } else {
+      // In parts, so the time can be drawn large beside its label, and with
+      // the words between them kept as text: what the line says, read or
+      // heard, is the same sentence either way.
+      const parts: (Node | string)[] = [];
+      for (const [size, record] of bests) {
+        if (parts.length > 0) parts.push(' · ');
+        const entry = document.createElement('span');
+        entry.className = 'records__best-entry';
+        entry.append(
+          span('records__best-label', `Best ${size}×${size}`),
+          ' ',
+          span('records__best-time', formatElapsed(record.elapsedMs)),
+        );
+        parts.push(entry);
+      }
+      this.bestLine.replaceChildren(...parts);
+    }
 
     this.list.replaceChildren(
       ...this.entries.map((record) => {
         const item = document.createElement('li');
         item.className = 'records__item';
-        item.textContent =
-          `${formatElapsed(record.elapsedMs)} · ` +
-          `${record.cubeSize}×${record.cubeSize} · ` +
-          `${record.userMoveCount} moves · ` +
-          `${record.scrambleLength}-move scramble`;
+        // Marked rather than labelled: the stylesheet draws the tag, so the
+        // entry still reads as the one sentence it has always been.
+        if (this.bestBySize.get(record.cubeSize) === record) {
+          item.dataset.best = 'true';
+        }
+        item.append(
+          span('records__time', formatElapsed(record.elapsedMs)),
+          span('records__sep', ' · '),
+          span('records__size', `${record.cubeSize}×${record.cubeSize}`),
+          span('records__sep', ' · '),
+          span('records__moves', `${record.userMoveCount} moves`),
+          span('records__sep', ' · '),
+          span('records__scramble', `${record.scrambleLength}-move scramble`),
+        );
         return item;
       }),
     );
+
+    if (this.tally !== null) {
+      this.tally.textContent =
+        this.solved === 0
+          ? 'No solves'
+          : `${this.solved} ${this.solved === 1 ? 'solve' : 'solves'}`;
+    }
   }
+}
+
+/** One run of text with a class, for the parts the stylesheet sets apart. */
+function span(className: string, text: string): HTMLSpanElement {
+  const element = document.createElement('span');
+  element.className = className;
+  element.textContent = text;
+  return element;
 }

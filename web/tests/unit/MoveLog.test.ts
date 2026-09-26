@@ -137,3 +137,86 @@ describe('MoveLog', () => {
     expect(timelineMove).not.toHaveBeenCalled();
   });
 });
+
+describe('MoveLog with somewhere to go', () => {
+  /** A middle slice, which only a drag makes. */
+  const M = 0x20;
+
+  function createPickable(moves: readonly number[]) {
+    const list = document.createElement('ol');
+    document.body.replaceChildren(list);
+    const onPick = vi.fn();
+    const log = new MoveLog(
+      list,
+      { timelineMove: (index) => moves[index] ?? 0, cubeSize: () => 3 },
+      { onPick },
+    );
+    const buttons = (): HTMLButtonElement[] => [
+      ...list.querySelectorAll<HTMLButtonElement>('button'),
+    ];
+    return { list, log, onPick, buttons };
+  }
+
+  it('makes each entry a button that hands back its record index', () => {
+    const { log, onPick, buttons, list } = createPickable([R, U, F, R_PRIME]);
+    log.update(frame(4, 4, 2));
+
+    // The entries still read as the moves and nothing else.
+    expect(entries(list)).toEqual(['F applied', "R' current"]);
+
+    buttons()[0]!.click();
+    expect(onPick).toHaveBeenCalledWith(2);
+    expect(buttons()[1]!.getAttribute('aria-current')).toBe('step');
+    expect(buttons()[0]!.getAttribute('aria-label')).toBe('Move 1, F');
+  });
+
+  it('shows each move in the colour of the face its letter names', () => {
+    const { log, list } = createPickable([R, U, F, R_PRIME, M]);
+    log.update(frame(5, 5, 0));
+
+    const dots = [...list.querySelectorAll<HTMLElement>('.move-dot')].map(
+      (dot) => dot.dataset.dot,
+    );
+    // A slice sits between two colours and is drawn in neither.
+    expect(dots).toEqual(['r', 'u', 'f', 'r', 'slice']);
+  });
+
+  it('has one tab stop, on the move the cube is at, and walks with the arrows', () => {
+    const { log, buttons } = createPickable([R, U, F]);
+    log.update(frame(3, 2, 0));
+
+    expect(buttons().map((button) => button.tabIndex)).toEqual([-1, 0, -1]);
+
+    buttons()[1]!.focus();
+    buttons()[1]!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }),
+    );
+    expect(document.activeElement).toBe(buttons()[2]);
+    expect(buttons().map((button) => button.tabIndex)).toEqual([-1, -1, 0]);
+
+    buttons()[2]!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Home', bubbles: true }),
+    );
+    expect(document.activeElement).toBe(buttons()[0]);
+  });
+
+  it('keeps focus on the same move when the list is redrawn under it', () => {
+    const { log, buttons } = createPickable([R, U, F]);
+    log.update(frame(3, 3, 0));
+
+    buttons()[0]!.focus();
+    // A walk back is under way, and each step redraws the whole list.
+    log.update(frame(3, 2, 0));
+    expect(document.activeElement).toBe(buttons()[0]);
+    expect((document.activeElement as HTMLElement).dataset.index).toBe('0');
+  });
+
+  it('stops answering presses at teardown', () => {
+    const { log, onPick, buttons } = createPickable([R, U]);
+    log.update(frame(2, 2, 0));
+
+    log.teardown();
+    buttons()[0]!.click();
+    expect(onPick).not.toHaveBeenCalled();
+  });
+});

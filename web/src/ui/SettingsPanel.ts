@@ -26,7 +26,11 @@ export type SettingsPanelOptions = {
 
 export type SettingsPanel = {
   isOpen(): boolean;
-  open(): void;
+  /**
+   * Opens, with focus on `focus` when given -- the size beside the title
+   * opens the panel at the size field -- and on the first control otherwise.
+   */
+  open(options?: { readonly focus?: HTMLElement }): void;
   /** Closes and, unless told otherwise, gives focus back to the trigger. */
   close(options?: { readonly restoreFocus?: boolean }): void;
   teardown(): void;
@@ -82,7 +86,7 @@ export function attachSettingsPanel(
     if (settings.restoreFocus !== false) trigger.focus();
   };
 
-  const openPanel = (): void => {
+  const openPanel = (settings: { readonly focus?: HTMLElement } = {}): void => {
     if (open) return;
     open = true;
 
@@ -91,8 +95,15 @@ export function attachSettingsPanel(
     trigger.setAttribute('aria-expanded', 'true');
 
     // The first thing inside, so a keyboard arrives in the panel rather than
-    // continuing through the page behind it.
-    const first = focusable()[0] ?? closeButton;
+    // continuing through the page behind it -- or the one control it was
+    // opened for, when it was opened for one and can take focus now. A size
+    // field put out while no engine is up is not somewhere to land.
+    const stops = focusable();
+    const wanted =
+      settings.focus !== undefined && stops.includes(settings.focus)
+        ? settings.focus
+        : null;
+    const first = wanted ?? stops[0] ?? closeButton;
     first.focus();
   };
 

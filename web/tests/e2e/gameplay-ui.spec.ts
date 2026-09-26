@@ -11,6 +11,7 @@ import {
 } from './sceneContract.ts';
 import {
   fillInSettings,
+  openPanel,
   openSettings,
   pressInSettings,
   tapInSettings,
@@ -152,32 +153,87 @@ test('Both is default and 3D, 2D, and Home view controls preserve gameplay', asy
   assertSceneContract(await probeCanvas(page));
 });
 
-test('the desktop stage keeps the page to itself, with no side rails', async ({
+/** Where an element is on the page, which it has to be for this to ask. */
+async function boxOf(
+  page: Page,
+  selector: string,
+): Promise<{ x: number; y: number; width: number; height: number }> {
+  const box = await page.locator(selector).boundingBox();
+  expect(box, selector).not.toBeNull();
+  return box!;
+}
+
+test('the desktop stage stands between two rails, with the record and the dock under it', async ({
   page,
 }) => {
-  const canvas = await page.locator('#view').boundingBox();
-  const header = await page.locator('.app-header').boundingBox();
-  const dock = await page.locator('.action-dock').boundingBox();
-  const viewBar = await page.locator('.view-bar').boundingBox();
+  const canvas = await boxOf(page, '#view');
+  const header = await boxOf(page, '.app-header');
+  const timeline = await boxOf(page, '.timeline');
+  const dock = await boxOf(page, '.action-dock');
+  const viewRail = await boxOf(page, '.view-rail');
+  const detailsRail = await boxOf(page, '.details-rail');
 
-  expect(canvas).not.toBeNull();
-  expect(header).not.toBeNull();
-  expect(dock).not.toBeNull();
-  expect(viewBar).not.toBeNull();
+  // The header above; the timeline and then the commands below.
+  expect(header.y + header.height).toBeLessThanOrEqual(canvas.y + 1);
+  expect(timeline.y).toBeGreaterThanOrEqual(canvas.y + canvas.height - 1);
+  expect(dock.y).toBeGreaterThanOrEqual(timeline.y + timeline.height - 1);
 
-  // Header above, commands below, and nothing beside. The rails this
-  // replaced sat outside the canvas on both edges and made the stage look
-  // like a preview panel between two toolbars.
-  expect(header!.y + header!.height).toBeLessThanOrEqual(canvas!.y + 1);
-  expect(dock!.y).toBeGreaterThanOrEqual(canvas!.y + canvas!.height - 1);
-  expect(viewBar!.y).toBeGreaterThanOrEqual(dock!.y + dock!.height - 1);
+  // The two rails beside the canvas and clear of it: they float at the
+  // edges of the window rather than framing the cube as toolbars.
+  expect(viewRail.x + viewRail.width).toBeLessThanOrEqual(canvas.x);
+  expect(detailsRail.x).toBeGreaterThanOrEqual(canvas.x + canvas.width);
 
   // One column, one centre. Half a pixel of rounding either way is the
   // browser's, not the layout's.
   const centre = (box: { x: number; width: number }): number =>
     box.x + box.width / 2;
-  expect(Math.abs(centre(dock!) - centre(canvas!))).toBeLessThan(2);
-  expect(Math.abs(centre(viewBar!) - centre(canvas!))).toBeLessThan(2);
+  expect(Math.abs(centre(dock) - centre(canvas))).toBeLessThan(2);
+  expect(Math.abs(centre(timeline) - centre(canvas))).toBeLessThan(2);
+
+  // The page is the colour the engine clears the canvas to, so the stage
+  // has no edge to it.
+  const grounds = await page.evaluate(() => ({
+    page: getComputedStyle(document.body).backgroundColor,
+    canvas: getComputedStyle(document.querySelector('#view')!).backgroundColor,
+  }));
+  expect(grounds.page).toBe(grounds.canvas);
+});
+
+test('a detail panel stays open until its own button, and the stage makes room', async ({
+  page,
+}) => {
+  const moves = page.locator('#panel-moves');
+  await expect(moves).toBeHidden();
+
+  await page.locator('#details-moves').click();
+  await expect(moves).toBeVisible();
+  await expect(page.locator('#details-moves')).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
+
+  // Not a popup: a key and a press somewhere else leave it where it is.
+  await page.keyboard.press('Escape');
+  await page.locator('.clock').click({ force: true });
+  await expect(moves).toBeVisible();
+
+  // Beside the stage rather than over it, once the column has opened.
+  await expect
+    .poll(async () => {
+      const canvas = await boxOf(page, '#view');
+      const panel = await boxOf(page, '#panel-moves');
+      return canvas.x + canvas.width <= panel.x + 1;
+    })
+    .toBe(true);
+
+  // A wide screen keeps any number of them open together.
+  await page.locator('#details-session').click();
+  await expect(page.locator('#panel-session')).toBeVisible();
+  await expect(moves).toBeVisible();
+
+  await page.locator('#details-moves').click();
+  await expect(moves).toBeHidden();
+  await expect(page.locator('#panel-session')).toBeVisible();
 });
 
 test('a scramble is turned into the cube where it can be watched', async ({
@@ -307,8 +363,8 @@ test.describe('on a phone', () => {
     await page.locator('#scramble').tap();
     await expect(root).toHaveAttribute('data-game-state', 'ready');
 
-    // The move controls are collapsed until asked for, on every viewport.
-    await page.locator('.advanced summary').tap();
+    // The move controls are in a panel until asked for, on every viewport.
+    await openPanel(page, 'turn', { tap: true });
     await page.locator('[data-face="r"][data-turn="1"]').tap();
 
     await expect(root).toHaveAttribute('data-game-state', 'running');

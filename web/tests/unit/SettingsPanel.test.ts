@@ -4,7 +4,6 @@ import {
   attachSettingsPanel,
   type KeyboardTarget,
 } from '../../src/ui/SettingsPanel.ts';
-import { attachActivityTabs } from '../../src/ui/ActivityTabs.ts';
 
 /** A keyboard whose events the test delivers itself. */
 function createKeyboard() {
@@ -120,6 +119,27 @@ describe('attachSettingsPanel', () => {
     expect(document.activeElement).toBe(close);
   });
 
+  it('opens onto the one control it was opened for', () => {
+    const { panel, last } = build();
+
+    panel.open({ focus: last });
+    expect(document.activeElement).toBe(last);
+
+    // Something outside the panel is not somewhere it can send focus, and
+    // neither is a control inside it that is out of reach.
+    panel.close();
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    panel.open({ focus: outside });
+    expect(document.activeElement).not.toBe(outside);
+
+    panel.close();
+    last.disabled = true;
+    panel.open({ focus: last });
+    expect(document.activeElement).not.toBe(last);
+    expect(panel.isOpen()).toBe(true);
+  });
+
   it('ignores keys while it is closed', () => {
     const { keyboard, panel } = build();
 
@@ -143,70 +163,5 @@ describe('attachSettingsPanel', () => {
 
     trigger.click();
     expect(panel.isOpen()).toBe(false);
-  });
-});
-
-describe('attachActivityTabs', () => {
-  function buildTabs() {
-    const host = document.createElement('div');
-    host.innerHTML = `
-      <button role="tab" data-activity="moves" aria-selected="true"></button>
-      <button role="tab" data-activity="session" aria-selected="false" tabindex="-1"></button>
-      <div role="tabpanel" data-activity="moves"></div>
-      <div role="tabpanel" data-activity="session" hidden></div>
-    `;
-    document.body.replaceChildren(host);
-    const tabs = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
-    const panels = [...host.querySelectorAll<HTMLElement>('[role="tabpanel"]')];
-    return { tabs, panels, controller: attachActivityTabs({ tabs, panels }) };
-  }
-
-  it('shows one panel at a time and keeps both in the document', () => {
-    const { tabs, panels, controller } = buildTabs();
-
-    expect(controller.selected()).toBe('moves');
-    expect(panels[0]!.hidden).toBe(false);
-    expect(panels[1]!.hidden).toBe(true);
-
-    tabs[1]!.click();
-    expect(controller.selected()).toBe('session');
-    expect(panels[0]!.hidden).toBe(true);
-    expect(panels[1]!.hidden).toBe(false);
-    expect(tabs[1]!.getAttribute('aria-selected')).toBe('true');
-    // The records are still there to be read, which is what keeps a hidden
-    // panel from being the same thing as a panel that was never drawn.
-    expect(panels[1]!.isConnected).toBe(true);
-  });
-
-  it('walks the list with the arrow keys', () => {
-    const { tabs, controller } = buildTabs();
-
-    tabs[0]!.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'ArrowRight', cancelable: true }),
-    );
-    expect(controller.selected()).toBe('session');
-    expect(tabs[1]!.tabIndex).toBe(0);
-    expect(tabs[0]!.tabIndex).toBe(-1);
-
-    // And wraps, so the list has no dead end at either side.
-    tabs[1]!.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'ArrowRight', cancelable: true }),
-    );
-    expect(controller.selected()).toBe('moves');
-  });
-
-  it('ignores a name no tab carries', () => {
-    const { controller } = buildTabs();
-
-    controller.select('nowhere');
-    expect(controller.selected()).toBe('moves');
-  });
-
-  it('stops answering at teardown', () => {
-    const { tabs, controller } = buildTabs();
-
-    controller.teardown();
-    tabs[1]!.click();
-    expect(controller.selected()).toBe('moves');
   });
 });

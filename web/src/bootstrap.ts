@@ -3,10 +3,17 @@ import {
   type AppState,
   type StartAppOptions,
 } from './AppLifecycle.ts';
-import type { GameUi } from './game/GameController.ts';
-import { attachActivityTabs } from './ui/ActivityTabs.ts';
-import { createGameShell } from './ui/GameShell.ts';
-import { attachSettingsPanel } from './ui/SettingsPanel.ts';
+import {
+  PLAY_MOVES_EVENT,
+  type GameUi,
+  type PlayMovesDetail,
+} from './game/GameController.ts';
+import { parseMoves } from './game/notation.ts';
+import { attachCommandPalette, type Command } from './ui/CommandPalette.ts';
+import { attachDetailPanels } from './ui/DetailPanels.ts';
+import { createGameShell, ICONS, type GameShell } from './ui/GameShell.ts';
+import { attachSettingsPanel, type SettingsPanel } from './ui/SettingsPanel.ts';
+import { DEFAULT_CUBE_SIZE } from './wasm/CubeEngine.ts';
 import {
   attachThemeController,
   attachThemeSelector,
@@ -63,6 +70,176 @@ function gameplayControls(
   ];
 }
 
+/**
+ * The width from which the rails sit beside the stage and the panels can be
+ * open side by side. Written once here and once in the stylesheet, which
+ * draws the same line with `min-width: 1024px`.
+ */
+const WIDE_QUERY = '(min-width: 1024px)';
+
+/**
+ * The media query for the wide layout, or null where there is none to ask.
+ *
+ * A test document has no media queries, and a page with none is read as the
+ * narrow one -- the single-column layout is the one that works everywhere.
+ */
+function wideQuery(): MediaQueryList | null {
+  return typeof window.matchMedia === 'function'
+    ? window.matchMedia(WIDE_QUERY)
+    : null;
+}
+
+/** Whether this is a Mac or an iPhone, whose menu shortcut is Command-K. */
+function isApple(): boolean {
+  return /Mac|iPhone|iPad|iPod/i.test(
+    navigator.platform === '' ? navigator.userAgent : navigator.platform,
+  );
+}
+
+/**
+ * Every command the menu offers, each one a press on a control already here.
+ *
+ * Nothing is run that the page could not run by hand, and nothing is offered
+ * that the page would not let a hand press: a command is available exactly
+ * while its button is enabled and on screen, and the controller that owns the
+ * button decides both, as it always has.
+ */
+function pageCommands(
+  shell: GameShell,
+  settings: SettingsPanel,
+): Command[] {
+  const { ui } = shell;
+  const press = (button: HTMLButtonElement) => (): void => button.click();
+  const usable = (button: HTMLButtonElement) => (): boolean =>
+    !button.disabled && !button.hidden;
+  const pressed = (button: HTMLButtonElement): boolean =>
+    button.getAttribute('aria-pressed') === 'true';
+  const chosen = (button: HTMLButtonElement) => (): string | null =>
+    pressed(button) ? 'Current' : null;
+  const button = (
+    label: string,
+    target: HTMLButtonElement,
+    icon: string,
+    keywords: string,
+  ): Command => ({
+    label: () => label,
+    keywords,
+    icon,
+    available: usable(target),
+    run: press(target),
+  });
+  const viewIcon: Readonly<Record<string, string>> = {
+    '3d': ICONS.cube,
+    both: ICONS.split,
+    '2d': ICONS.net,
+  };
+  const panelIcon: Readonly<Record<string, string>> = {
+    moves: ICONS.moves,
+    session: ICONS.session,
+    turn: ICONS.turn,
+  };
+
+  return [
+    button('Scramble', ui.scrambleButton, ICONS.scramble, 'shuffle mix new start'),
+    button('Stop', ui.stopButton, ICONS.stop, 'halt pause break off'),
+    button('Undo', ui.undoButton, ICONS.undo, 'back take previous'),
+    button('Redo', ui.redoButton, ICONS.redo, 'forward again next'),
+    button('Rewind to solved', ui.rewindButton, ICONS.rewind, 'rewind reverse back start'),
+    button('Solve', ui.solveButton, ICONS.solve, 'solver solution answer finish'),
+    {
+      label: () => (pressed(ui.ambientButton) ? 'Stop watching' : 'Watch the cube'),
+      keywords: 'ambient idle demo pattern',
+      icon: ICONS.watch,
+      available: usable(ui.ambientButton),
+      run: press(ui.ambientButton),
+    },
+    {
+      label: () =>
+        pressed(ui.paintButton) ? 'Stop colouring' : 'Colour your own cube',
+      keywords: 'paint color colour draw real',
+      icon: ICONS.paint,
+      available: usable(ui.paintButton),
+      run: press(ui.paintButton),
+    },
+    button('Copy a share link', ui.shareButton, ICONS.share, 'share link url copy send'),
+    ...ui.viewButtons.map(
+      (view): Command => ({
+        label: () => `View: ${view.textContent ?? ''}`,
+        keywords: 'scene show look split flat net cube',
+        icon: viewIcon[view.dataset.view ?? ''],
+        available: usable(view),
+        note: chosen(view),
+        run: press(view),
+      }),
+    ),
+    ...ui.flatButtons.map(
+      (flat): Command => ({
+        label: () => `Diagram: ${flat.textContent ?? ''}`,
+        keywords: 'flat drawing net rings',
+        icon: ICONS.net,
+        available: usable(flat),
+        note: chosen(flat),
+        run: press(flat),
+      }),
+    ),
+    ...shell.panelToggles.map(
+      (toggle): Command => ({
+        label: () =>
+          `${toggle.getAttribute('aria-expanded') === 'true' ? 'Hide' : 'Show'} ${
+            toggle.textContent ?? ''
+          } panel`,
+        keywords: 'details panel open close',
+        icon: panelIcon[toggle.dataset.panel ?? ''],
+        available: () => true,
+        run: press(toggle),
+      }),
+    ),
+    {
+      label: () => 'Settings',
+      keywords: 'preferences options',
+      icon: ICONS.settings,
+      available: () => true,
+      run: () => settings.open(),
+    },
+    {
+      label: () => 'Change cube size',
+      keywords: 'size layers bigger smaller 2x2 4x4',
+      icon: ICONS.cube,
+      available: () => !ui.cubeSizeInput.disabled,
+      run: () => settings.open({ focus: ui.cubeSizeInput }),
+    },
+    button('Home view', ui.homeViewButton, ICONS.home, 'camera reset view orbit'),
+    {
+      label: () => (pressed(ui.muteButton) ? 'Unmute turns' : 'Mute turns'),
+      keywords: 'sound audio click quiet',
+      icon: ICONS.sound,
+      available: usable(ui.muteButton),
+      run: press(ui.muteButton),
+    },
+    ...shell.themeButtons.map(
+      (theme): Command => ({
+        label: () => `Theme: ${theme.textContent ?? ''}`,
+        keywords: 'appearance dark light mode system',
+        icon: ICONS.sun,
+        available: usable(theme),
+        note: chosen(theme),
+        run: press(theme),
+      }),
+    ),
+    ...ui.paletteButtons.map(
+      (palette): Command => ({
+        label: () => `Stickers: ${palette.textContent ?? ''}`,
+        keywords: 'palette colors colours contrast',
+        icon: ICONS.paint,
+        available: usable(palette),
+        note: chosen(palette),
+        run: press(palette),
+      }),
+    ),
+    button('Reset session', ui.resetButton, ICONS.reset, 'clear fresh new cube'),
+  ];
+}
+
 /** Returns whether the browser has every primitive required by the app. */
 export function supportsBrowser(): boolean {
   if (
@@ -108,9 +285,10 @@ export function createPageTheme(): ThemeController {
  * page's own small controllers, reflects lifecycle states on the container,
  * and routes both startup rejections and post-ready failures to the error UI.
  *
- * What is left here is wiring. The markup moved to GameShell, the panel and
- * the tabs own their own behavior, and the theme is a controller this hands
- * to the lifecycle rather than something the lifecycle asks the page for.
+ * What is left here is wiring. The markup moved to GameShell, the settings
+ * drawer, the detail panels and the command menu own their own behavior, and
+ * the theme is a controller this hands to the lifecycle rather than something
+ * the lifecycle asks the page for.
  *
  * The returned promise settles when startup finished either way; it never
  * rejects, because failures are presented through the error state.
@@ -165,16 +343,63 @@ export function bootstrap(
     attachThemeSelector({ buttons: shell.themeButtons, controller: theme });
   }
 
-  attachSettingsPanel({
+  const settings = attachSettingsPanel({
     trigger: shell.settingsTrigger,
     panel: shell.settingsPanel,
     backdrop: shell.settingsBackdrop,
     close: shell.settingsClose,
   });
 
-  attachActivityTabs({
-    tabs: shell.activityTabs,
-    panels: shell.activityPanels,
+  // The size beside the title is a way into Settings, at the one field it
+  // names; the cube it shows is written there by the game controller.
+  shell.cubeSizeChip.addEventListener('click', () => {
+    settings.open({ focus: shell.ui.cubeSizeInput });
+  });
+
+  const wide = wideQuery();
+  attachDetailPanels({
+    toggles: shell.panelToggles,
+    root: shell.root,
+    oneAtATime: () => wide === null || !wide.matches,
+    watchWidth: (listener) => {
+      wide?.addEventListener('change', listener);
+      return () => wide?.removeEventListener('change', listener);
+    },
+  });
+
+  // The two buttons beside the depth field are a bigger way of doing what
+  // its own arrows do, and they end the same way: a change the controller
+  // reads and either keeps or puts back.
+  for (const stepper of shell.depthSteppers) {
+    stepper.addEventListener('click', () => {
+      const field = shell.ui.turnDepthInput;
+      if (field.disabled) return;
+      const next = Number(field.value) + Number(stepper.dataset.step);
+      if (next < Number(field.min) || next > Number(field.max)) return;
+      field.value = String(next);
+      field.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
+
+  attachCommandPalette({
+    shell: shell.command,
+    commands: () => pageCommands(shell, settings),
+    parse: (text) =>
+      parseMoves(
+        text,
+        Number(shell.ui.cubeSizeInput.value) || DEFAULT_CUBE_SIZE,
+      ),
+    // The controller enables the dock when it attaches and puts it out when
+    // it goes, so the dock says whether anybody is listening for the moves.
+    canPlay: () => !shell.ui.scrambleButton.disabled,
+    play: (text) => {
+      shell.root.dispatchEvent(
+        new CustomEvent<PlayMovesDetail>(PLAY_MOVES_EVENT, { detail: { text } }),
+      );
+    },
+    blocked: () => settings.isOpen(),
+    mac: isApple(),
+    playIcon: ICONS.play,
   });
 
   // The hint is a first-visit line and nothing else: the first gesture is

@@ -17,11 +17,16 @@
 :root {
   color-scheme: light dark;
 
-  --color-canvas: light-dark(#e7ebf0, #202020);
+  /* The light theme's ground and strongest ink, named on their own for the
+     one thing that is the same in both themes: the brand mark. */
+  --ground-light: #e7ebf0;
+  --ink-light: #0f1115;
+
+  --color-canvas: light-dark(var(--ground-light), #202020);
   --color-page: var(--color-canvas);
 
   --color-text: light-dark(#15171c, #f2f3f5);
-  --color-text-strong: light-dark(#0f1115, #f8f9fb);
+  --color-text-strong: light-dark(var(--ink-light), #f8f9fb);
   --color-text-soft: light-dark(#353b46, #c7ccd5);
   --color-text-muted: light-dark(#5a6170, #9aa1ad);
 
@@ -647,21 +652,21 @@ kbd {
  * The mark: the cube's face in black and grey, with the ThorVG bolt drawn
  * over its tiles as a white outline and nothing more.
  *
- * The same in both themes, and fixed rather than the theme's ink: it is the
- * light theme's face -- its ink, and that ink at 45% over its page for the
- * middle pair -- because a white line needs a dark tile under it whichever
- * ground the page is on.
+ * The same in both themes rather than the theme's ink: it is the light
+ * theme's face -- its ink, and that ink at 45% over its ground for the pair
+ * on one diagonal -- because a white line needs a dark tile under it
+ * whichever ground the page is on.
  */
 .brand__mark {
   display: block;
 }
 
 .brand__tile {
-  fill: #0f1115;
+  fill: var(--ink-light);
 }
 
 .brand__tile--dim {
-  fill: #86898d;
+  fill: color-mix(in srgb, var(--ink-light) 45%, var(--ground-light));
 }
 
 .brand__bolt {

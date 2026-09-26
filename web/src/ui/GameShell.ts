@@ -135,18 +135,55 @@ export const ICONS = {
 
 /**
  * The ThorVG bolt as the project's own logo draws it (thorvg/thorvg.site,
- * readme/logo): one outline, in the logo's units -- 172 across, 185 down.
+ * readme/logo): one outline, in the logo's units. public/favicon.svg draws
+ * the same outline, and a unit test holds the two to each other.
  */
-const THORVG_BOLT =
+export const THORVG_BOLT =
   'M164.743 10.1558C144.373 37.0515 112.597 52.8675 78.8633 52.9087H160.583L122.846 105.667H146.915L67.4805 184.849V146.468C67.4805 123.935 85.7476 105.668 108.281 105.667H39.2021L69.9531 52.9097H0L34.2998 0.150879H172.32L164.743 10.1558Z';
 
-/** The four tiles of the mark, two across and two down, the middle pair dim. */
-const BRAND_TILES: readonly (readonly [number, number])[] = [
-  [0, 0],
-  [14.5, 0],
-  [0, 14.5],
-  [14.5, 14.5],
+/** The box the outline above fills, in the same units. */
+const THORVG_BOLT_BOX = {
+  x: 0,
+  y: 0.150879,
+  width: 172.32,
+  height: 184.849 - 0.150879,
+} as const;
+
+/**
+ * The mark's measurements, in CSS pixels at the size it is drawn. Every
+ * number in its markup is worked out from these, so changing one of them is
+ * the whole of the change.
+ */
+export const BRAND_MARK = {
+  size: 28,
+  /** Between the four tiles. */
+  gap: 1,
+  radius: 3,
+  /** From the face's top and bottom to the bolt, which is taller than wide. */
+  margin: 5,
+  stroke: 1.5,
+} as const;
+
+/** The four tiles, two across and two down; the pair on one diagonal is dim. */
+const BRAND_TILES: readonly {
+  readonly column: number;
+  readonly row: number;
+  readonly dim: boolean;
+}[] = [
+  { column: 0, row: 0, dim: false },
+  { column: 1, row: 0, dim: true },
+  { column: 0, row: 1, dim: true },
+  { column: 1, row: 1, dim: false },
 ];
+
+/**
+ * A number for an attribute: six places at most, and no trailing zeros. Six
+ * rather than fewer because the scale is multiplied back up by the logo's own
+ * units, where a rounding in the fifth place is a hundredth of a pixel.
+ */
+function svgNumber(value: number): string {
+  return String(Number(value.toFixed(6)));
+}
 
 /**
  * The mark beside the title: the cube's grey face, with the ThorVG bolt drawn
@@ -154,18 +191,30 @@ const BRAND_TILES: readonly (readonly [number, number])[] = [
  *
  * An outline and no colour: the header stays grey, and the colours are the
  * favicon's. The bolt is clipped to the tiles, so each tile holds a piece of
- * it and the four together still read as the bolt. It stands 5px inside the
- * face on every side, the margin an icon keeps round its figure, which also
- * means the tiles' outer edge cuts none of its line. Its stroke is 1.5px at
- * this size, written in the logo's own units.
+ * it and the four together still read as the bolt. It stands a margin in from
+ * the face's top and bottom and is centred across -- the room an icon keeps
+ * round its figure, which also means the tiles' outer edge cuts none of its
+ * line. Its stroke is given in the logo's own units, so that it comes out at
+ * the stroke above once the outline is scaled down to the face.
  */
 function brandMark(): string {
-  const tile = ([x, y]: readonly [number, number], extra = ''): string =>
-    `<rect x="${x}" y="${y}" width="13.5" height="13.5" rx="3"${extra}/>`;
-  const tiles = BRAND_TILES.map((at, index) =>
-    tile(at, ` class="brand__tile${index === 1 || index === 2 ? ' brand__tile--dim' : ''}"`),
+  const { size, gap, radius, margin, stroke } = BRAND_MARK;
+  const side = (size - gap) / 2;
+  const tile = (
+    { column, row }: { readonly column: number; readonly row: number },
+    extra = '',
+  ): string =>
+    `<rect x="${svgNumber(column * (side + gap))}" y="${svgNumber(row * (side + gap))}" width="${svgNumber(side)}" height="${svgNumber(side)}" rx="${radius}"${extra}/>`;
+  const tiles = BRAND_TILES.map((at) =>
+    tile(at, ` class="brand__tile${at.dim ? ' brand__tile--dim' : ''}"`),
   ).join('');
-  return `<svg class="brand__mark" viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false"><defs><clipPath id="brand-tiles">${BRAND_TILES.map((at) => tile(at)).join('')}</clipPath></defs>${tiles}<g clip-path="url(#brand-tiles)"><path class="brand__bolt" transform="translate(5.6 4.99) scale(0.0975)" stroke-width="15.39" d="${THORVG_BOLT}"/></g></svg>`;
+
+  const scale = (size - 2 * margin) / THORVG_BOLT_BOX.height;
+  const x = (size - THORVG_BOLT_BOX.width * scale) / 2 - THORVG_BOLT_BOX.x * scale;
+  const y = margin - THORVG_BOLT_BOX.y * scale;
+  const bolt = `<path class="brand__bolt" transform="translate(${svgNumber(x)} ${svgNumber(y)}) scale(${svgNumber(scale)})" stroke-width="${svgNumber(stroke / scale)}" d="${THORVG_BOLT}"/>`;
+
+  return `<svg class="brand__mark" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true" focusable="false"><defs><clipPath id="brand-tiles">${BRAND_TILES.map((at) => tile(at)).join('')}</clipPath></defs>${tiles}<g clip-path="url(#brand-tiles)">${bolt}</g></svg>`;
 }
 
 /** One face-turn key: the letter, which way, and what a reader is told. */

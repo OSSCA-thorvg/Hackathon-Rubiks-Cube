@@ -20,6 +20,8 @@ import {
 export type GameShell = {
   readonly root: HTMLElement;
   readonly ui: GameUi;
+  /** The stage's canvases, one per view; where each sits is this page's. */
+  readonly views: StageCanvases;
   readonly settingsTrigger: HTMLButtonElement;
   readonly settingsPanel: HTMLElement;
   readonly settingsBackdrop: HTMLElement;
@@ -35,6 +37,15 @@ export type GameShell = {
   /** The two buttons either side of the depth field. */
   readonly depthSteppers: readonly HTMLButtonElement[];
   readonly command: CommandShell;
+};
+
+/** The canvas each view is drawn on. */
+export type StageCanvases = {
+  readonly cube: HTMLCanvasElement;
+  readonly net: HTMLCanvasElement;
+  readonly rings: HTMLCanvasElement;
+  /** The axes, as a badge in the cube's corner; only looked at. */
+  readonly axes: HTMLCanvasElement;
 };
 
 /** The command menu's elements. */
@@ -225,11 +236,20 @@ export function createGameShell(host: HTMLElement): GameShell {
     <p class="status-line" id="status" role="status" aria-live="polite">Loading engine…</p>
   </div>
 
-  <section class="game-stage" aria-labelledby="game-title">
-    <div class="stage-frame">
-      <canvas id="view" aria-label="Interactive Rubik's Cube. Drag a sticker to turn a layer, or drag empty space to orbit the view."></canvas>
-      <p class="interaction-hint" id="interaction-hint" aria-hidden="true">${icon(ICONS.pointer, 14)}<span>Drag a sticker to turn · drag empty space to orbit</span></p>
+  <section class="game-stage" id="stage" aria-labelledby="game-title" data-view-mode="both" data-flat-style="net">
+    <div class="stage-grid">
+      <div class="stage-view stage-view--cube">
+        <canvas id="view" aria-label="Interactive Rubik's Cube. Drag a sticker to turn a layer, or drag empty space to orbit the view."></canvas>
+        <canvas class="axes-badge" id="view-axes" aria-hidden="true"></canvas>
+      </div>
+      <div class="stage-view stage-view--net">
+        <canvas id="view-net" aria-label="The cube's faces laid flat. Drag a sticker to turn its layer."></canvas>
+      </div>
+      <div class="stage-view stage-view--rings">
+        <canvas id="view-rings" aria-label="The rings the layers turn on. Drag a sticker along a ring to turn it."></canvas>
+      </div>
     </div>
+    <p class="interaction-hint" id="interaction-hint" aria-hidden="true">${icon(ICONS.pointer, 14)}<span>Drag a sticker to turn · drag empty space to orbit</span></p>
   </section>
 
   <div class="view-rail" role="group" aria-label="View">
@@ -462,11 +482,10 @@ export function createGameShell(host: HTMLElement): GameShell {
 `;
 
   const root = requireElement<HTMLElement>(host, '.game-shell');
-  const canvas = requireElement<HTMLCanvasElement>(root, '#view');
 
   const ui: GameUi = {
     root,
-    canvas,
+    stage: requireElement<HTMLElement>(root, '#stage'),
     timer: requireElement<HTMLOutputElement>(root, '#timer'),
     status: requireElement<HTMLParagraphElement>(root, '#status'),
     scrambleButton: requireElement<HTMLButtonElement>(root, '#scramble'),
@@ -524,6 +543,12 @@ export function createGameShell(host: HTMLElement): GameShell {
   return {
     root,
     ui,
+    views: {
+      cube: requireElement<HTMLCanvasElement>(root, '#view'),
+      net: requireElement<HTMLCanvasElement>(root, '#view-net'),
+      rings: requireElement<HTMLCanvasElement>(root, '#view-rings'),
+      axes: requireElement<HTMLCanvasElement>(root, '#view-axes'),
+    },
     settingsTrigger: requireElement<HTMLButtonElement>(root, '#settings-trigger'),
     settingsPanel: requireElement<HTMLElement>(root, '#settings-panel'),
     settingsBackdrop: requireElement<HTMLElement>(root, '#settings-backdrop'),

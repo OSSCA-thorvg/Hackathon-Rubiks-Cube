@@ -4,6 +4,7 @@ import {
   startApp,
   type EngineLike,
   type ObserverLike,
+  type StageView,
 } from '../../src/AppLifecycle.ts';
 import type {
   GameController,
@@ -11,6 +12,11 @@ import type {
   GameUi,
 } from '../../src/game/GameController.ts';
 import { encodeSession } from '../../src/game/shareCode.ts';
+import {
+  CubeScene,
+  CubeSurface,
+  MAX_STAGE_PIXELS,
+} from '../../src/wasm/CubeEngine.ts';
 
 /**
  * The gameplay DOM the lifecycle forwards. GameController owns what the
@@ -20,7 +26,7 @@ function createGameUi(): GameUi {
   const button = (): HTMLButtonElement => document.createElement('button');
   return {
     root: document.createElement('main'),
-    canvas: document.createElement('canvas'),
+    stage: document.createElement('section'),
     timer: document.createElement('output'),
     status: document.createElement('p'),
     scrambleButton: button(),
@@ -47,6 +53,8 @@ function createHarness(overrides: {
   createGameController?: (options: GameControllerOptions) => GameController;
   /** What the address bar holds when the page opens. */
   hash?: string;
+  /** The canvases beside the cube's; none keeps every scene on it. */
+  views?: readonly StageView[];
 } = {}) {
   const canvasListeners = new Map<string, Set<(event: Event) => void>>();
 
@@ -71,6 +79,7 @@ function createHarness(overrides: {
     releasePointerCapture: vi.fn(),
   };
   const canvas = canvasState as unknown as HTMLCanvasElement;
+  const presented = new Map<number, HTMLCanvasElement>();
 
   const engine = {
     resize: vi.fn((size: { width: number; height: number }) => {
@@ -99,6 +108,22 @@ function createHarness(overrides: {
     pointerMove: vi.fn(),
     pointerUp: vi.fn(),
     pointerCancel: vi.fn(),
+    presentSurface: vi.fn((id: number, target: HTMLCanvasElement) => {
+      presented.set(id, target);
+    }),
+    setSurfaceScenes: vi.fn(),
+    // Commits the size to the canvas the way CubeEngine does; surface 0's
+    // canvas is the one the engine was made with.
+    resizeSurface: vi.fn(
+      (id: number, size: { width: number; height: number } | null) => {
+        if (size === null) return;
+        const target = id === 0 ? canvas : presented.get(id);
+        if (target === undefined) return;
+        target.width = size.width;
+        target.height = size.height;
+      },
+    ),
+    pointerDownOn: vi.fn(() => true),
   } satisfies EngineLike;
 
   // A hand-cranked animation frame queue, so tests decide when frames run.
@@ -175,6 +200,7 @@ function createHarness(overrides: {
   const start = () =>
     startApp({
       canvas,
+      views: overrides.views,
       gameUi,
       setState: (state, message) => states.push([state, message]),
       onError,
@@ -772,5 +798,231 @@ describe('startApp and a shared link', () => {
       'ready',
       'That shared link could not be read. Ready with a fresh cube.',
     ]);
+  });
+});
+
+/**
+ * A canvas beside the cube's: its CSS box, which a test changes the way a
+ * layout would, and its own listeners, so a press can land on it.
+ */
+function createViewCanvas(clientWidth: number, clientHeight: number, left: number) {
+  const listeners = new Map<string, Set<(event: Event) => void>>();
+  const state = {
+    width: 0,
+    height: 0,
+    clientWidth,
+    clientHeight,
+    addEventListener: vi.fn((type: string, listener: (event: Event) => void) => {
+      const bucket = listeners.get(type) ?? new Set();
+      bucket.add(listener);
+      listeners.set(type, bucket);
+    }),
+    removeEventListener: vi.fn(
+      (type: string, listener: (event: Event) => void) => {
+        listeners.get(type)?.delete(listener);
+      },
+    ),
+    getBoundingClientRect: () => ({
+      left,
+      top: 0,
+      width: state.clientWidth,
+      height: state.clientHeight,
+    }),
+    hasPointerCapture: vi.fn(() => true),
+    setPointerCapture: vi.fn(),
+    releasePointerCapture: vi.fn(),
+  };
+  const dispatch = (type: string, clientX: number, clientY: number): void => {
+    const event = {
+      pointerId: 1,
+      isPrimary: true,
+      button: 0,
+      clientX,
+      clientY,
+    } as PointerEvent;
+    for (const listener of listeners.get(type) ?? []) {
+      listener(event as unknown as Event);
+    }
+  };
+  const press = (clientX: number, clientY: number): void =>
+    dispatch('pointerdown', clientX, clientY);
+  const release = (): void => dispatch('pointerup', 0, 0);
+  const listenerCount = (): number => {
+    let total = 0;
+    for (const bucket of listeners.values()) total += bucket.size;
+    return total;
+  };
+  return {
+    canvas: state as unknown as HTMLCanvasElement,
+    state,
+    press,
+    release,
+    listenerCount,
+  };
+}
+
+/** A net beside the cube and the axes badge, as the page lays them out. */
+function createViews() {
+  const net = createViewCanvas(80, 60, 110);
+  const axes = createViewCanvas(20, 20, 0);
+  const views: StageView[] = [
+    { id: CubeSurface.Net, canvas: net.canvas, scenes: CubeScene.Net, pressable: true },
+    {
+      id: CubeSurface.Axes,
+      canvas: axes.canvas,
+      scenes: CubeScene.Axes,
+      pressable: false,
+    },
+  ];
+  return { net, axes, views };
+}
+
+describe('startApp with a canvas per view', () => {
+  it('gives each view its canvas and scenes, and the cube the rest', async () => {
+    const { net, axes, views } = createViews();
+    const harness = createHarness({ views });
+    await harness.start();
+
+    expect(harness.engine.presentSurface).toHaveBeenCalledWith(
+      CubeSurface.Net,
+      net.canvas,
+    );
+    expect(harness.engine.presentSurface).toHaveBeenCalledWith(
+      CubeSurface.Axes,
+      axes.canvas,
+    );
+    expect(harness.engine.setSurfaceScenes).toHaveBeenCalledWith(
+      CubeSurface.Net,
+      CubeScene.Net,
+    );
+    // Nobody took the rings, so they stay with the cube.
+    expect(harness.engine.setSurfaceScenes).toHaveBeenCalledWith(
+      CubeSurface.Cube,
+      CubeScene.Cube | CubeScene.Rings,
+    );
+  });
+
+  it('sizes every view before the first frame', async () => {
+    const { views } = createViews();
+    const harness = createHarness({ views });
+    await harness.start();
+
+    expect(harness.engine.resizeSurface).toHaveBeenCalledWith(CubeSurface.Net, {
+      width: 80,
+      height: 60,
+    });
+    expect(harness.engine.resizeSurface).toHaveBeenCalledWith(CubeSurface.Axes, {
+      width: 20,
+      height: 20,
+    });
+    // The cube's canvas was already the size of its box.
+    expect(harness.engine.resizeSurface).not.toHaveBeenCalledWith(
+      CubeSurface.Cube,
+      expect.anything(),
+    );
+    const lastResize = Math.max(
+      ...harness.engine.resizeSurface.mock.invocationCallOrder,
+    );
+    expect(lastResize).toBeLessThan(
+      harness.engine.render.mock.invocationCallOrder[0],
+    );
+    expect(harness.engine.render).toHaveBeenCalledTimes(1);
+  });
+
+  it('draws every view at one density once together they pass the budget', async () => {
+    const { net, views } = createViews();
+    net.state.clientWidth = 2000;
+    net.state.clientHeight = 1500;
+    const harness = createHarness({ views });
+    await harness.start();
+
+    const area = 100 * 50 + 2000 * 1500 + 20 * 20;
+    const density = Math.sqrt(MAX_STAGE_PIXELS / area);
+    expect(harness.engine.resizeSurface).toHaveBeenCalledWith(CubeSurface.Net, {
+      width: Math.round(2000 * density),
+      height: Math.round(1500 * density),
+    });
+    expect(harness.engine.resizeSurface).toHaveBeenCalledWith(CubeSurface.Cube, {
+      width: Math.round(100 * density),
+      height: Math.round(50 * density),
+    });
+  });
+
+  it('puts a view away when its canvas leaves the page, and back', async () => {
+    const { net, views } = createViews();
+    const harness = createHarness({ views });
+    await harness.start();
+    harness.engine.resizeSurface.mockClear();
+
+    net.state.clientWidth = 0;
+    net.state.clientHeight = 0;
+    harness.triggerObserver();
+    expect(harness.engine.resizeSurface).toHaveBeenCalledWith(CubeSurface.Net, null);
+    expect(harness.engine.render).toHaveBeenCalledTimes(2);
+
+    // Nothing moved since, so nothing is asked of the engine.
+    harness.triggerObserver();
+    expect(harness.engine.resizeSurface).toHaveBeenCalledTimes(1);
+    expect(harness.engine.render).toHaveBeenCalledTimes(2);
+
+    net.state.clientWidth = 80;
+    net.state.clientHeight = 60;
+    harness.triggerObserver();
+    expect(harness.engine.resizeSurface).toHaveBeenLastCalledWith(
+      CubeSurface.Net,
+      { width: 80, height: 60 },
+    );
+    expect(harness.engine.render).toHaveBeenCalledTimes(3);
+  });
+
+  it('watches every canvas for a new box', async () => {
+    const { net, axes, views } = createViews();
+    const harness = createHarness({ views });
+    await harness.start();
+
+    expect(harness.observer.observe).toHaveBeenCalledTimes(3);
+    expect(harness.observer.observe).toHaveBeenCalledWith(net.canvas);
+    expect(harness.observer.observe).toHaveBeenCalledWith(axes.canvas);
+  });
+
+  it('presses a view on its own surface, and passes its empty part to the cube', async () => {
+    const { net, views } = createViews();
+    const harness = createHarness({ views });
+    await harness.start();
+
+    net.press(130, 30);
+    expect(harness.engine.pointerDownOn).toHaveBeenCalledWith(
+      CubeSurface.Net,
+      20,
+      30,
+    );
+    expect(harness.engine.pointerDown).not.toHaveBeenCalled();
+    expect(harness.hasPendingFrame()).toBe(true);
+    net.release();
+    expect(harness.engine.pointerUp).toHaveBeenCalledTimes(1);
+
+    // Turned down there, the same press turns the viewpoint: offered to the
+    // cube's canvas in its own pixels, off its right-hand edge.
+    harness.engine.pointerDownOn.mockReturnValueOnce(false);
+    net.press(130, 30);
+    expect(harness.engine.pointerDown).toHaveBeenCalledWith(130, 30);
+  });
+
+  it('leaves a view that is only looked at alone', async () => {
+    const { axes, views } = createViews();
+    const harness = createHarness({ views });
+    await harness.start();
+
+    expect(axes.listenerCount()).toBe(0);
+  });
+
+  it('releases every canvas on teardown', async () => {
+    const { net, views } = createViews();
+    const harness = createHarness({ views });
+    const app = await harness.start();
+
+    expect(net.listenerCount()).toBeGreaterThan(0);
+    app.teardown();
+    expect(net.listenerCount()).toBe(0);
   });
 });

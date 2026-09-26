@@ -21,11 +21,36 @@ export type PointerTarget = {
   pointerCancel(): void;
 };
 
+/**
+ * Whether a gesture is in hand, shared by every canvas of one engine.
+ *
+ * The engine follows one gesture at a time, whichever canvas it began on, so
+ * a press on a second canvas while the first is held is somebody else's.
+ */
+export type GestureLock = { held: boolean };
+
+/**
+ * Another canvas a press is offered to when this one's engine turns it down.
+ *
+ * Measured in that canvas's pixels, press and drag alike, since those are the
+ * pixels its engine calls are in: the empty part of a flat view turns the
+ * cube's viewpoint the way the empty space round the cube does, and the cube
+ * is on a canvas of its own.
+ */
+export type PointerFallback = {
+  readonly canvas: HTMLCanvasElement;
+  readonly engine: PointerTarget;
+};
+
 export type PointerControllerOptions = {
   readonly canvas: HTMLCanvasElement;
   readonly engine: PointerTarget;
   /** Called when a press begins a gesture, so a frame loop can start. */
   readonly onGestureStart: () => void;
+  /** Where a press this canvas's engine turns down is offered next. */
+  readonly fallback?: PointerFallback;
+  /** Shared with the other canvases of the same engine; one of its own if absent. */
+  readonly lock?: GestureLock;
 };
 
 export type PointerController = {
@@ -66,8 +91,19 @@ export function attachPointer(
   options: PointerControllerOptions,
 ): PointerController {
   const { canvas, engine, onGestureStart } = options;
+  const lock: GestureLock = options.lock ?? { held: false };
 
   let activePointerId: number | null = null;
+  // Whose pixels and whose engine the gesture in hand is in: this canvas's,
+  // or the fallback's when the press was passed on to it.
+  let frame: HTMLCanvasElement = canvas;
+  let target: PointerTarget = engine;
+
+  /** Ends the gesture on this side, before the engine is told how it ended. */
+  const letGo = (): void => {
+    activePointerId = null;
+    lock.held = false;
+  };
 
   const releaseCapture = (pointerId: number): void => {
     // Capture may already be gone, which is exactly the case that brings us
@@ -76,19 +112,34 @@ export function attachPointer(
     canvas.releasePointerCapture(pointerId);
   };
 
+  /** Offers a press to one canvas's engine; true when a gesture began. */
+  const offer = (
+    on: HTMLCanvasElement,
+    to: PointerTarget,
+    event: PointerEvent,
+  ): boolean => {
+    const point = toBufferPixels(on, event);
+    if (point === null || !to.pointerDown(point.x, point.y)) return false;
+    frame = on;
+    target = to;
+    return true;
+  };
+
   const onPointerDown = (event: PointerEvent): void => {
-    if (activePointerId !== null) return;
+    if (activePointerId !== null || lock.held) return;
     // Secondary buttons and non-primary pointers are somebody else's gesture.
     if (!event.isPrimary || event.button !== 0) return;
 
-    const point = toBufferPixels(canvas, event);
-    if (point === null) return;
-
     // Capture and the frame loop start only for a press the engine turned
     // into a gesture, so a press it declines leaves the page alone.
-    if (!engine.pointerDown(point.x, point.y)) return;
+    const fallback = options.fallback;
+    const began =
+      offer(canvas, engine, event) ||
+      (fallback !== undefined && offer(fallback.canvas, fallback.engine, event));
+    if (!began) return;
 
     activePointerId = event.pointerId;
+    lock.held = true;
     canvas.setPointerCapture(event.pointerId);
     onGestureStart();
   };
@@ -96,10 +147,10 @@ export function attachPointer(
   const onPointerMove = (event: PointerEvent): void => {
     if (event.pointerId !== activePointerId) return;
 
-    const point = toBufferPixels(canvas, event);
+    const point = toBufferPixels(frame, event);
     if (point === null) return;
 
-    engine.pointerMove(point.x, point.y);
+    target.pointerMove(point.x, point.y);
   };
 
   const onPointerUp = (event: PointerEvent): void => {
@@ -107,25 +158,25 @@ export function attachPointer(
 
     // Cleared before releasing capture, so the lostpointercapture that
     // release triggers is not mistaken for a cancellation.
-    activePointerId = null;
+    letGo();
     releaseCapture(event.pointerId);
-    engine.pointerUp();
+    target.pointerUp();
   };
 
   const onPointerCancel = (event: PointerEvent): void => {
     if (event.pointerId !== activePointerId) return;
 
-    activePointerId = null;
+    letGo();
     releaseCapture(event.pointerId);
-    engine.pointerCancel();
+    target.pointerCancel();
   };
 
   const onLostPointerCapture = (event: PointerEvent): void => {
     if (event.pointerId !== activePointerId) return;
 
     // Capture taken away mid-drag: the user never let go, so nothing commits.
-    activePointerId = null;
-    engine.pointerCancel();
+    letGo();
+    target.pointerCancel();
   };
 
   canvas.addEventListener('pointerdown', onPointerDown);
@@ -145,9 +196,9 @@ export function attachPointer(
       if (activePointerId === null) return;
 
       const pointerId = activePointerId;
-      activePointerId = null;
+      letGo();
       releaseCapture(pointerId);
-      engine.pointerCancel();
+      target.pointerCancel();
     },
   };
 }

@@ -12,7 +12,7 @@ const GREEN = '4';
 /** Puts the mouse on one cell of the net's front face. */
 async function pressFrontCell(page: Page, col: number, row: number) {
   const probe = await probeCanvas(page);
-  const point = pagePointInNet(probe, 'net', FRONT_BLOCK, col, row);
+  const point = pagePointInNet(probe, FRONT_BLOCK, col, row);
   await page.mouse.click(point.x, point.y);
 }
 
@@ -66,8 +66,8 @@ test('colouring the net does not turn the cube', async ({ page }) => {
   await page.locator(`[data-sticker="${RED}"]`).click();
 
   const probe = await probeCanvas(page);
-  const from = pagePointInNet(probe, 'net', FRONT_BLOCK, 0, 1);
-  const to = pagePointInNet(probe, 'net', FRONT_BLOCK, 2, 1);
+  const from = pagePointInNet(probe, FRONT_BLOCK, 0, 1);
+  const to = pagePointInNet(probe, FRONT_BLOCK, 2, 1);
 
   // A drag across the net is a stroke of the brush and not a turn of a layer.
   await page.mouse.move(from.x, from.y);

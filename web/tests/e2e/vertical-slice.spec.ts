@@ -3,8 +3,9 @@ import { expect, test } from '@playwright/test';
 import {
   assertDrawingBufferMatchesCss,
   assertSceneContract,
+  cubeRegionSide,
   probeCanvas,
-  SEAM_MIN_SIZE,
+  SEAM_MIN_REGION,
 } from './sceneContract.ts';
 
 test('renders the scene contract and re-verifies it after resize', async ({
@@ -49,13 +50,13 @@ test('renders the scene contract and re-verifies it after resize', async ({
   assertDrawingBufferMatchesCss(resized);
   assertSceneContract(resized);
 
-  // The canvas is min(80vw, 70vh), so a tall viewport is what makes the
-  // seams wide enough to sample. Asserting the size first keeps that branch
-  // from silently skipping if the stylesheet changes.
-  await page.setViewportSize({ width: 1600, height: 1600 });
+  // A large window is what makes the seams wide enough to sample. Asserting
+  // the size first keeps that branch from silently skipping if the
+  // stylesheet changes.
+  await page.setViewportSize({ width: 2000, height: 1600 });
   await expect
-    .poll(async () => (await probeCanvas(page)).width)
-    .toBeGreaterThanOrEqual(SEAM_MIN_SIZE);
+    .poll(async () => cubeRegionSide(await probeCanvas(page)))
+    .toBeGreaterThanOrEqual(SEAM_MIN_REGION);
 
   const enlarged = await probeCanvas(page);
   assertDrawingBufferMatchesCss(enlarged);

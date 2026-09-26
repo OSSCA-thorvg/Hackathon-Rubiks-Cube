@@ -38,6 +38,34 @@ export const CubeFace = {
 /** One stable external face value. */
 export type CubeFace = (typeof CubeFace)[keyof typeof CubeFace];
 
+/**
+ * The surfaces a page with a canvas per view hands its canvases to.
+ *
+ * Surface 0 is the one the engine is created with; it holds every scene until
+ * it is told otherwise, which is all a page with one canvas needs.
+ */
+export const CubeSurface = {
+  Cube: 0,
+  Net: 1,
+  Rings: 2,
+  Axes: 3,
+} as const;
+
+/** One surface id. */
+export type CubeSurface = (typeof CubeSurface)[keyof typeof CubeSurface];
+
+/** The scenes a surface can show, as the bits the C ABI takes. */
+export const CubeScene = {
+  Cube: 1,
+  Net: 2,
+  Rings: 4,
+  Axes: 8,
+} as const;
+
+/** Every scene bit: what surface 0 holds until it is told otherwise. */
+export const ALL_SCENES =
+  CubeScene.Cube | CubeScene.Net | CubeScene.Rings | CubeScene.Axes;
+
 /** Render regions available to the browser UI. */
 export const CubeViewMode = {
   Cube3D: 0,
@@ -228,6 +256,35 @@ export const DEFAULT_SCRAMBLE_MOVES = 20;
 export const MAX_SHARED_MOVES = 4096;
 
 /**
+ * The most pixels the views are drawn at, all of them together.
+ *
+ * A software renderer's frame costs what its pixels cost, and a large stage
+ * on a dense screen asks for more of them than anyone can see: past about two
+ * and a half million a frame, the views are drawn at a lower density and
+ * scaled up to their boxes, which on a screen that dense is not a difference
+ * an eye makes out.
+ */
+export const MAX_STAGE_PIXELS = 2_600_000;
+
+/**
+ * The pixel density every view is drawn at, the same for all of them.
+ *
+ * The device's own ratio, until the boxes together would ask for more pixels
+ * than the budget; past it they come down together, so no view is drawn
+ * sharper than the one beside it.
+ */
+export function stageDensity(
+  boxes: readonly CubeEngineSize[],
+  devicePixelRatio: number,
+  pixelBudget: number = MAX_STAGE_PIXELS,
+): number {
+  const area = boxes.reduce((sum, box) => sum + box.width * box.height, 0);
+  const pixels = area * devicePixelRatio * devicePixelRatio;
+  if (!Number.isFinite(pixels) || pixels <= pixelBudget) return devicePixelRatio;
+  return devicePixelRatio * Math.sqrt(pixelBudget / pixels);
+}
+
+/**
  * Computes the drawing buffer size for a CSS size and device pixel ratio.
  *
  * Non-finite inputs normalize to one pixel; the result is clamped to at
@@ -282,7 +339,30 @@ export function isUint32(value: number): boolean {
 }
 
 /**
- * Owns one engine module instance and presents its pixel buffer on a canvas.
+ * One canvas showing one engine surface.
+ *
+ * Holds the view over that surface's pixels and the last frame it copied out,
+ * so a surface the engine did not draw again is not copied again either.
+ */
+type Presentation = {
+  readonly id: CubeSurface;
+  readonly canvas: HTMLCanvasElement;
+  readonly context: CanvasRenderingContext2D;
+  width: number;
+  height: number;
+  pointer: number;
+  byteLength: number;
+  view: Uint8ClampedArray<ArrayBuffer> | null;
+  image: ImageData | null;
+  /** The engine frame the canvas shows, or -1 for none yet. */
+  shown: number;
+};
+
+/**
+ * Owns one engine module instance and presents its surfaces on canvases.
+ *
+ * The canvas it is created with shows surface 0; a page with a canvas per
+ * view hands the others over with presentSurface().
  */
 export class CubeEngine {
   private readonly module: ThorvgRubiksModule;
@@ -295,6 +375,12 @@ export class CubeEngine {
   private view: Uint8ClampedArray<ArrayBuffer> | null = null;
   private image: ImageData | null = null;
   private disposed = false;
+  /** The canvases beyond the first, by surface. */
+  private readonly presentations = new Map<CubeSurface, Presentation>();
+  /** Surface 0's own presentation state, for what the first canvas shows. */
+  private firstShown = -1;
+  /** Whether surface 0 has been put away, which only resizeSurface() does. */
+  private firstAway = false;
 
   /**
    * Loads the WASM module, initializes the engine to the canvas CSS size,
@@ -313,10 +399,13 @@ export class CubeEngine {
       throw new Error('CubeEngine requires a 2D canvas context.');
     }
 
+    // At the density a stage of this one canvas would be drawn at; a page
+    // with more views fits them all afterwards.
+    const box = { width: canvas.clientWidth, height: canvas.clientHeight };
     const size = computeDrawingBufferSize(
-      canvas.clientWidth,
-      canvas.clientHeight,
-      window.devicePixelRatio,
+      box.width,
+      box.height,
+      stageDensity([box], window.devicePixelRatio),
     );
 
     if (module._thorvg_rubiks_initialize(size.width, size.height) === 0) {
@@ -380,6 +469,8 @@ export class CubeEngine {
     this.height = size.height;
     this.canvas.width = size.width;
     this.canvas.height = size.height;
+    this.firstAway = false;
+    this.firstShown = -1;
 
     try {
       this.refreshPixelSource();
@@ -392,7 +483,137 @@ export class CubeEngine {
   }
 
   /**
-   * Renders one frame and presents the pixel buffer on the canvas.
+   * Hands a canvas to one of the other surfaces, to show what it draws.
+   *
+   * The surface has no size until resizeSurface() gives it one; until then
+   * there is nothing on it to show.
+   *
+   * @throws Error when disposed, for surface 0 -- which shows on the canvas
+   *         the engine was created with -- or without a 2D context.
+   */
+  presentSurface(id: CubeSurface, canvas: HTMLCanvasElement): void {
+    this.assertUsable();
+    if (id === CubeSurface.Cube || !Object.values(CubeSurface).includes(id)) {
+      throw new Error(`Surface ${id} cannot be given a canvas.`);
+    }
+    const context = canvas.getContext('2d');
+    if (context === null) {
+      throw new Error('CubeEngine requires a 2D canvas context.');
+    }
+    this.presentations.set(id, {
+      id,
+      canvas,
+      context,
+      width: 0,
+      height: 0,
+      pointer: 0,
+      byteLength: 0,
+      view: null,
+      image: null,
+      shown: -1,
+    });
+  }
+
+  /**
+   * Says which scenes a surface shows, as a set of CubeScene bits.
+   *
+   * @throws Error when disposed or when the engine refuses the set.
+   */
+  setSurfaceScenes(id: CubeSurface, scenes: number): void {
+    this.assertUsable();
+    if (!Number.isInteger(scenes) || (scenes & ~ALL_SCENES) !== 0 || scenes < 0) {
+      throw new Error(`Invalid scene set ${scenes}.`);
+    }
+    if (this.module._thorvg_rubiks_set_surface_scenes(id, scenes) === 0) {
+      throw new Error(`Engine refused scenes ${scenes} for surface ${id}.`);
+    }
+  }
+
+  /**
+   * Resizes one surface and its canvas, or puts it away with null.
+   *
+   * A surface put away draws nothing and holds no buffer: what a canvas the
+   * page is not showing needs. A size equal to the current one returns
+   * without calling the engine.
+   *
+   * @throws Error when disposed or when the engine rejects the size.
+   */
+  resizeSurface(id: CubeSurface, size: CubeEngineSize | null): void {
+    this.assertUsable();
+
+    if (
+      size !== null &&
+      (!isValidDimension(size.width) || !isValidDimension(size.height))
+    ) {
+      throw new Error(
+        `Invalid drawing buffer size ${size.width}x${size.height}.`,
+      );
+    }
+
+    if (id === CubeSurface.Cube) {
+      if (size === null) {
+        if (this.firstAway) return;
+        if (this.module._thorvg_rubiks_resize_surface(0, 0, 0) === 0) {
+          throw new Error('Engine could not put surface 0 away.');
+        }
+        this.firstAway = true;
+        this.firstShown = -1;
+        return;
+      }
+      if (this.firstAway) {
+        // Coming back from away: the old size may match, but the buffer is
+        // gone, so the engine is asked whatever the size.
+        this.width = 0;
+        this.height = 0;
+      }
+      this.resize(size);
+      return;
+    }
+
+    const shown = this.presentations.get(id);
+    if (shown === undefined) {
+      throw new Error(`Surface ${id} has no canvas.`);
+    }
+
+    const width = size?.width ?? 0;
+    const height = size?.height ?? 0;
+    if (width === shown.width && height === shown.height) return;
+
+    if (this.module._thorvg_rubiks_resize_surface(id, width, height) === 0) {
+      throw new Error(`Engine resize failed for surface ${id} at ${width}x${height}.`);
+    }
+    shown.width = width;
+    shown.height = height;
+    shown.shown = -1;
+    shown.view = null;
+    shown.image = null;
+    if (size === null) {
+      shown.pointer = 0;
+      shown.byteLength = 0;
+      return;
+    }
+
+    shown.canvas.width = width;
+    shown.canvas.height = height;
+    const pointer = this.module._thorvg_rubiks_surface_pixel_buffer(id);
+    const length = this.module._thorvg_rubiks_surface_pixel_byte_length(id);
+    if (length !== width * height * 4 || !this.heapRegionUsable(pointer, length)) {
+      this.dispose();
+      throw new Error(
+        `Engine returned an invalid pixel buffer for surface ${id} at ` +
+          `${width}x${height}: pointer ${pointer}, byte length ${length}.`,
+      );
+    }
+    shown.pointer = pointer;
+    shown.byteLength = length;
+  }
+
+  /**
+   * Draws what changed and copies out the surfaces that were drawn.
+   *
+   * The engine skips a surface whose picture would not change, and says how
+   * many frames each has had; a canvas is written only when that count has
+   * moved since it was last written.
    *
    * @throws Error when disposed or when the engine rendering fails.
    */
@@ -403,7 +624,21 @@ export class CubeEngine {
       throw new Error('Engine rendering failed.');
     }
 
-    this.context.putImageData(this.imageData(), 0, 0);
+    if (!this.firstAway) {
+      const frame = this.module._thorvg_rubiks_surface_frame(0);
+      if (frame !== this.firstShown) {
+        this.context.putImageData(this.imageData(), 0, 0);
+        this.firstShown = frame;
+      }
+    }
+
+    for (const shown of this.presentations.values()) {
+      if (shown.byteLength === 0) continue;
+      const frame = this.module._thorvg_rubiks_surface_frame(shown.id);
+      if (frame === shown.shown) continue;
+      shown.context.putImageData(this.presentationImage(shown), 0, 0);
+      shown.shown = frame;
+    }
   }
 
   /**
@@ -418,6 +653,22 @@ export class CubeEngine {
     this.assertUsable();
 
     return this.module._thorvg_rubiks_pointer_down(x, y) !== 0;
+  }
+
+  /**
+   * Begins a gesture on one surface, at a point in its drawing buffer pixels.
+   *
+   * What it can start is what that surface shows. A point outside a surface
+   * showing the cube still sweeps the viewpoint, which is how a press beside
+   * the cube's canvas reaches it.
+   *
+   * @returns true when a gesture began.
+   * @throws Error when disposed.
+   */
+  pointerDownOn(id: CubeSurface, x: number, y: number): boolean {
+    this.assertUsable();
+
+    return this.module._thorvg_rubiks_pointer_down_on(id, x, y) !== 0;
   }
 
   /** Continues the active gesture. @throws Error when disposed. */
@@ -1144,6 +1395,7 @@ export class CubeEngine {
     this.disposed = true;
     this.view = null;
     this.image = null;
+    this.presentations.clear();
     this.module._thorvg_rubiks_shutdown();
   }
 
@@ -1212,6 +1464,27 @@ export class CubeEngine {
     this.pixelByteLength = length;
     this.view = null;
     this.image = null;
+  }
+
+  /** The same view as imageData(), for one of the other surfaces. */
+  private presentationImage(shown: Presentation): ImageData {
+    const heapBuffer = this.module.HEAPU8.buffer;
+    const stale =
+      shown.view === null ||
+      shown.image === null ||
+      shown.view.buffer !== heapBuffer ||
+      shown.view.buffer.byteLength === 0;
+
+    if (stale) {
+      shown.view = new Uint8ClampedArray(
+        heapBuffer,
+        shown.pointer,
+        shown.byteLength,
+      );
+      shown.image = new ImageData(shown.view, shown.width, shown.height);
+    }
+
+    return shown.image as ImageData;
   }
 
   /**

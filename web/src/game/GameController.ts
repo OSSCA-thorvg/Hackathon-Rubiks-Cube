@@ -87,7 +87,11 @@ export type GameEngine = SessionEngine & {
 /** Typed DOM elements owned by the gameplay controller. */
 export type GameUi = {
   readonly root: HTMLElement;
-  readonly canvas: HTMLCanvasElement;
+  /**
+   * The box the views sit in, which is told what is on show so the page can
+   * lay the canvases out for it.
+   */
+  readonly stage: HTMLElement;
   readonly timer: HTMLOutputElement;
   readonly status: HTMLParagraphElement;
   readonly scrambleButton: HTMLButtonElement;
@@ -520,7 +524,7 @@ export function attachGameController(
       const mode = viewModeOf(button);
       button.setAttribute('aria-pressed', String(mode === selected));
     }
-    ui.canvas.dataset.viewMode = VIEW_NAME_BY_MODE[selected];
+    ui.stage.dataset.viewMode = VIEW_NAME_BY_MODE[selected];
 
     const style = engine.flatStyle();
     for (const button of ui.flatButtons) {
@@ -529,7 +533,7 @@ export function attachGameController(
       // The toggle only means something while the flat region is on screen.
       button.hidden = selected === CubeViewMode.Cube3D;
     }
-    ui.canvas.dataset.flatStyle = FLAT_NAME_BY_STYLE[style];
+    ui.stage.dataset.flatStyle = FLAT_NAME_BY_STYLE[style];
   };
 
   /**

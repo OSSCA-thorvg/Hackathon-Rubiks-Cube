@@ -13,7 +13,11 @@ import { attachCommandPalette, type Command } from './ui/CommandPalette.ts';
 import { attachDetailPanels } from './ui/DetailPanels.ts';
 import { createGameShell, ICONS, type GameShell } from './ui/GameShell.ts';
 import { attachSettingsPanel, type SettingsPanel } from './ui/SettingsPanel.ts';
-import { DEFAULT_CUBE_SIZE } from './wasm/CubeEngine.ts';
+import {
+  CubeScene,
+  CubeSurface,
+  DEFAULT_CUBE_SIZE,
+} from './wasm/CubeEngine.ts';
 import {
   attachThemeController,
   attachThemeSelector,
@@ -409,10 +413,33 @@ export function bootstrap(
   const dismissHint = (): void => {
     shell.interactionHint.hidden = true;
   };
-  shell.ui.canvas.addEventListener('pointerdown', dismissHint, { once: true });
+  shell.ui.stage.addEventListener('pointerdown', dismissHint, { once: true });
 
+  // A canvas for each view, so the page lays them out and the engine only
+  // fits each drawing to the box it is given. The cube's canvas keeps the
+  // scenes none of these take, which here is the cube alone.
   return start({
-    canvas: shell.ui.canvas,
+    canvas: shell.views.cube,
+    views: [
+      {
+        id: CubeSurface.Net,
+        canvas: shell.views.net,
+        scenes: CubeScene.Net,
+        pressable: true,
+      },
+      {
+        id: CubeSurface.Rings,
+        canvas: shell.views.rings,
+        scenes: CubeScene.Rings,
+        pressable: true,
+      },
+      {
+        id: CubeSurface.Axes,
+        canvas: shell.views.axes,
+        scenes: CubeScene.Axes,
+        pressable: false,
+      },
+    ],
     gameUi: shell.ui,
     lightingUi: shell.lightingUi,
     setState,

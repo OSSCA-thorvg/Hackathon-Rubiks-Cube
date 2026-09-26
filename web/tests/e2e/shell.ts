@@ -94,8 +94,8 @@ export async function openPanel(
  * Waits for the stage to stop changing size.
  *
  * Opening or closing a panel on a wide screen slides the stage over and may
- * resize the canvas while it does, so a reading taken during the slide is a
- * reading of a canvas that is about to be a different size. Two looks a
+ * resize the canvases while it does, so a reading taken during the slide is a
+ * reading of canvases that are about to be a different size. Two looks a
  * tenth of a second apart that agree are a stage at rest.
  */
 export async function stageSettled(page: Page): Promise<void> {
@@ -103,7 +103,7 @@ export async function stageSettled(page: Page): Promise<void> {
   await expect
     .poll(
       async () => {
-        const now = JSON.stringify(await page.locator('#view').boundingBox());
+        const now = JSON.stringify(await page.locator('#stage').boundingBox());
         const same = now === last;
         last = now;
         return same;

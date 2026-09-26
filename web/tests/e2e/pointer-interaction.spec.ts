@@ -13,19 +13,18 @@ import {
   FRONT_BLOCK,
   FRONT_RIGHT_COLUMN,
   GREEN,
+  cubeDragFor,
   netDragFor,
   ORANGE,
   pagePointInCube,
   pagePointInNet,
   probeCanvas,
-  QUARTER_TURN_DRAG,
   RED,
   RIGHT_LIT,
   UP_LIT,
   WHITE,
   YELLOW,
   type CanvasProbe,
-  type NetView,
 } from './sceneContract.ts';
 
 // The net after R, block by block in probe order, written out rather than
@@ -159,7 +158,7 @@ async function grabRightColumn(
  * the fraction applies directly to the canvas box.
  */
 function dragFor(probe: CanvasProbe, quarterTurns: number): number {
-  return QUARTER_TURN_DRAG * probe.box.width * quarterTurns;
+  return cubeDragFor(probe, quarterTurns);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -260,12 +259,11 @@ test('two drags in quick succession both turn the cube', async ({ page }) => {
 async function dragNetTopRowLeft(
   page: Page,
   probe: CanvasProbe,
-  view: NetView,
 ): Promise<void> {
-  const grab = pagePointInNet(probe, view, FRONT_BLOCK, 1, 0);
+  const grab = pagePointInNet(probe, FRONT_BLOCK, 1, 0);
   await page.mouse.move(grab.x, grab.y);
   await page.mouse.down();
-  await page.mouse.move(grab.x - netDragFor(probe, view, SHORT_TURN), grab.y, {
+  await page.mouse.move(grab.x - netDragFor(probe, SHORT_TURN), grab.y, {
     steps: 8,
   });
   await page.mouse.up();
@@ -281,7 +279,7 @@ test('dragging a net cell turns the cube', async ({ page }) => {
   const atRest = await probeCanvas(page);
   assertSceneContract(atRest);
 
-  await dragNetTopRowLeft(page, atRest, 'both');
+  await dragNetTopRowLeft(page, atRest);
 
   await expect.poll(async () => (await probeCanvas(page)).net).toEqual(
     NET_AFTER_U,
@@ -307,11 +305,8 @@ test('the net is draggable when it is the only view', async ({ page }) => {
   );
 
   const netOnly = await probeCanvas(page);
-  await dragNetTopRowLeft(page, netOnly, 'net');
+  await dragNetTopRowLeft(page, netOnly);
 
-  // Read the result back in the shared layout, which is where the probe's
-  // sample points are; the net-only layout puts the same cells elsewhere.
-  await page.locator('button[data-view="both"]').click();
   await expect.poll(async () => (await probeCanvas(page)).net).toEqual(
     NET_AFTER_U,
   );

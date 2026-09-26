@@ -1,11 +1,15 @@
 import {
   attachPointer,
+  type GestureLock,
   type PointerController,
   type PointerTarget,
 } from './input/PointerController.ts';
 import {
+  ALL_SCENES,
   computeDrawingBufferSize,
   CubeEngine,
+  CubeSurface,
+  stageDensity,
   type CubeCanvasTheme,
   type CubeEngineSize,
 } from './wasm/CubeEngine.ts';
@@ -41,6 +45,14 @@ export type AppState = 'loading' | 'ready' | 'unsupported' | 'error';
 export type EngineLike = PointerTarget &
   GameEngine & {
     resize(size: CubeEngineSize): void;
+    /** Hands one of the surfaces beyond the first a canvas of its own. */
+    presentSurface(id: CubeSurface, canvas: HTMLCanvasElement): void;
+    /** Which scenes a surface shows, as CubeScene bits. */
+    setSurfaceScenes(id: CubeSurface, scenes: number): void;
+    /** Null puts a surface away, for a canvas that is not on the page. */
+    resizeSurface(id: CubeSurface, size: CubeEngineSize | null): void;
+    /** A press on one surface, in that surface's pixels. */
+    pointerDownOn(id: CubeSurface, x: number, y: number): boolean;
     render(): void;
     dispose(): void;
     /** @returns true while further frames still have to be drawn. */
@@ -118,8 +130,29 @@ export type ThemeSource = {
   subscribe(listener: ThemeListener): () => void;
 };
 
-export type StartAppOptions = {
+/**
+ * One canvas beside the cube's, and the scenes the engine draws on it.
+ *
+ * The page decides where each canvas goes and how big it is; the engine is
+ * told only the size, and fits its scenes to it.
+ */
+export type StageView = {
+  readonly id: CubeSurface;
   readonly canvas: HTMLCanvasElement;
+  /** CubeScene bits. */
+  readonly scenes: number;
+  /** Whether a press on it reaches the engine; the axes are only looked at. */
+  readonly pressable: boolean;
+};
+
+export type StartAppOptions = {
+  /** The cube's canvas, which the engine is created with. */
+  readonly canvas: HTMLCanvasElement;
+  /**
+   * The canvases beside it. The cube's canvas keeps every scene none of them
+   * shows, so without any it shows them all.
+   */
+  readonly views?: readonly StageView[];
   /** Gameplay controls the lifecycle hands to the game controller. */
   readonly gameUi: GameUi;
   /** The lighting sliders; absent on a page without them. */
@@ -216,6 +249,21 @@ function openSharedState(
   return 'shared';
 }
 
+/** The engine as a press on one surface's canvas reaches it. */
+function pressingSurface(engine: EngineLike, id: CubeSurface): PointerTarget {
+  return {
+    pointerDown: (x, y) => engine.pointerDownOn(id, x, y),
+    pointerMove: (x, y) => engine.pointerMove(x, y),
+    pointerUp: () => engine.pointerUp(),
+    pointerCancel: () => engine.pointerCancel(),
+  };
+}
+
+function sameSize(a: CubeEngineSize | null, b: CubeEngineSize | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.width === b.width && a.height === b.height;
+}
+
 /**
  * Owns the page lifecycle around one engine instance: initial render,
  * resize handling, BFCache transitions, and a single teardown path.
@@ -251,9 +299,84 @@ export async function startApp(
   const engine = await createEngine(canvas);
 
   const theme: ThemeSource | null = options.theme ?? null;
+  const views = options.views ?? [];
+
+  // Every canvas the engine draws on, the cube's first, and the size each was
+  // last given -- null for one put away, which is how the others start.
+  const surfaces: readonly { id: CubeSurface; canvas: HTMLCanvasElement }[] = [
+    { id: CubeSurface.Cube, canvas },
+    ...views,
+  ];
+  const sizes = new Map<CubeSurface, CubeEngineSize | null>([
+    [CubeSurface.Cube, { width: canvas.width, height: canvas.height }],
+    ...views.map((view) => [view.id, null] as const),
+  ]);
+
+  /**
+   * Brings every drawing buffer to its canvas's box.
+   *
+   * All at one density, so a view is never sharper than the one beside it. A
+   * canvas with no box is not on the page -- its view is not the one being
+   * looked at -- and its surface is put away rather than drawn at a pixel.
+   *
+   * @returns true when any of them changed, so a frame is owed.
+   */
+  const fitSurfaces = (): boolean => {
+    const density = stageDensity(
+      surfaces.map((surface) => ({
+        width: surface.canvas.clientWidth,
+        height: surface.canvas.clientHeight,
+      })),
+      win.devicePixelRatio,
+    );
+
+    if (views.length === 0) {
+      // One canvas, which is never put away: the page has nothing else.
+      const size = computeDrawingBufferSize(
+        canvas.clientWidth,
+        canvas.clientHeight,
+        density,
+      );
+      // Only an actual drawing buffer change reaches the engine.
+      if (size.width === canvas.width && size.height === canvas.height) {
+        return false;
+      }
+      engine.resize(size);
+      return true;
+    }
+
+    let changed = false;
+    for (const { id, canvas: target } of surfaces) {
+      const size =
+        target.clientWidth === 0 || target.clientHeight === 0
+          ? null
+          : computeDrawingBufferSize(
+              target.clientWidth,
+              target.clientHeight,
+              density,
+            );
+      if (sameSize(sizes.get(id) ?? null, size)) continue;
+      engine.resizeSurface(id, size);
+      sizes.set(id, size);
+      changed = true;
+    }
+    return changed;
+  };
 
   let opening: OpeningState = 'fresh';
   try {
+    if (views.length > 0) {
+      let elsewhere = 0;
+      for (const view of views) {
+        engine.presentSurface(view.id, view.canvas);
+        engine.setSurfaceScenes(view.id, view.scenes);
+        elsewhere |= view.scenes;
+      }
+      engine.setSurfaceScenes(CubeSurface.Cube, ALL_SCENES & ~elsewhere);
+    }
+    // Every view at its size before anything is drawn, so the first frame is
+    // the whole stage rather than the cube's canvas alone.
+    fitSurfaces();
     // Ahead of the first render as well, and for the same reason the restore
     // is: a frame drawn on the engine's default ground would show a dark
     // rectangle on a light page for exactly as long as it takes the first
@@ -281,7 +404,7 @@ export async function startApp(
   // already queued by the observer or the event loop become no-ops.
   let active = true;
   let observer: ObserverLike | null = null;
-  let pointer: PointerController | null = null;
+  const pointers: PointerController[] = [];
   let game: GameController | null = null;
   let lighting: LightingControls | null = null;
   let frameHandle: number | null = null;
@@ -340,18 +463,8 @@ export async function startApp(
   const applySize = (): void => {
     if (!active) return;
 
-    const size = computeDrawingBufferSize(
-      canvas.clientWidth,
-      canvas.clientHeight,
-      win.devicePixelRatio,
-    );
-
-    // Only an actual drawing buffer change reaches the engine.
-    if (size.width === canvas.width && size.height === canvas.height) return;
-
     try {
-      engine.resize(size);
-      engine.render();
+      if (fitSurfaces()) engine.render();
     } catch (error) {
       // Whether the native side survived the failure is not observable
       // from here, so tear everything down instead of retrying.
@@ -422,7 +535,7 @@ export async function startApp(
     // Before the engine is disposed: cancelling a gesture calls into it,
     // and so does every control the game controller still has wired up.
     attempt(() => unsubscribeTheme?.());
-    attempt(() => pointer?.teardown());
+    for (const pointer of pointers) attempt(() => pointer.teardown());
     attempt(() => game?.teardown());
     attempt(() => lighting?.teardown());
     attempt(() => observer?.disconnect());
@@ -442,11 +555,26 @@ export async function startApp(
   // The engine is live from here on, so the remaining setup runs as one
   // transaction: any failure unwinds whatever was already installed.
   try {
-    pointer = attachPointer({
-      canvas,
-      engine,
-      onGestureStart: startFrameLoop,
-    });
+    // One gesture at a time across every canvas, as the engine follows it.
+    const lock: GestureLock = { held: false };
+    pointers.push(
+      attachPointer({ canvas, engine, onGestureStart: startFrameLoop, lock }),
+    );
+    for (const view of views) {
+      if (!view.pressable) continue;
+      pointers.push(
+        attachPointer({
+          canvas: view.canvas,
+          engine: pressingSurface(engine, view.id),
+          // A press on the empty part of a flat view turns the viewpoint, as
+          // empty space round the cube does: offered to the cube's canvas,
+          // in its pixels, once this one's engine has turned it down.
+          fallback: { canvas, engine },
+          onGestureStart: startFrameLoop,
+          lock,
+        }),
+      );
+    }
     game = createGameController({
       engine,
       ui: options.gameUi,
@@ -486,7 +614,7 @@ export async function startApp(
         }
       }) ?? null;
     observer = createObserver(applySize);
-    observer.observe(canvas);
+    for (const surface of surfaces) observer.observe(surface.canvas);
     // Device pixel ratio changes arrive with window resize events.
     win.addEventListener('resize', applySize);
     win.addEventListener('pagehide', onPageHide);

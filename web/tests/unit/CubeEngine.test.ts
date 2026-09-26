@@ -7,10 +7,14 @@ import {
   CubeCanvasTheme,
   CubeFlatStyle,
   CubePalette,
+  CubeScene,
+  CubeSurface,
   CubeViewMode,
   MAX_DIMENSION,
   MAX_SCRAMBLE_MOVES,
   MAX_SHARED_MOVES,
+  MAX_STAGE_PIXELS,
+  stageDensity,
 } from '../../src/wasm/CubeEngine.ts';
 import type { ThorvgRubiksModule } from '../../src/wasm/generated/thorvg-rubiks.js';
 
@@ -25,6 +29,11 @@ function createFakeModule() {
   let width = 0;
   let height = 0;
   let initialized = false;
+  // The other surfaces, as the engine would hold them, and how many frames
+  // each has had drawn -- surface 0 first.
+  let firstAway = false;
+  const surfaces = new Map<number, { width: number; height: number; pointer: number }>();
+  const frames = [0, 0, 0, 0];
 
   const behavior = {
     initializeResult: 1,
@@ -71,6 +80,10 @@ function createFakeModule() {
     lighting: [0.75, 1, 1.25, 2.6, 7, 4, 0.38, 0.6, 12] as number[],
     lightingBufferResult: 1,
     setLightingResult: 1,
+    resizeSurfaceResult: 1,
+    setSurfaceScenesResult: 1,
+    // Whether a render draws anything, so a skipped frame can be staged.
+    drawsFrames: true,
   };
 
   // Where the engine hands out its lighting buffer, and how long the last
@@ -101,11 +114,20 @@ function createFakeModule() {
       if (behavior.resizeResult === 0) return 0;
       width = w;
       height = h;
-      // A real resize replaces the buffer, so the pointer moves.
+      // A real resize replaces the buffer, so the pointer moves -- and brings
+      // surface 0 back if it had been put away.
       pointer += 1024;
+      firstAway = false;
       return 1;
     }),
-    _thorvg_rubiks_render: vi.fn((): number => behavior.renderResult),
+    _thorvg_rubiks_render: vi.fn((): number => {
+      if (behavior.renderResult === 0) return 0;
+      if (behavior.drawsFrames) {
+        if (!firstAway) frames[0] += 1;
+        for (const id of surfaces.keys()) frames[id] = (frames[id] ?? 0) + 1;
+      }
+      return 1;
+    }),
     _thorvg_rubiks_pixel_buffer: vi.fn((): number => {
       if (behavior.pixelBufferOverride !== null) {
         return behavior.pixelBufferOverride;
@@ -229,6 +251,41 @@ function createFakeModule() {
     }),
     _thorvg_rubiks_reset_view: vi.fn((): void => {}),
     _thorvg_rubiks_is_busy: vi.fn((): number => behavior.busyResult),
+    _thorvg_rubiks_resize_surface: vi.fn(
+      (id: number, w: number, h: number): number => {
+        if (behavior.resizeSurfaceResult === 0) return 0;
+        if (id === 0) {
+          firstAway = w === 0 && h === 0;
+          if (!firstAway) {
+            width = w;
+            height = h;
+            pointer += 1024;
+          }
+          return 1;
+        }
+        if (w === 0 && h === 0) {
+          surfaces.delete(id);
+        } else {
+          surfaces.set(id, { width: w, height: h, pointer: (1 << 18) + id * (1 << 16) });
+        }
+        return 1;
+      },
+    ),
+    _thorvg_rubiks_set_surface_scenes: vi.fn(
+      (): number => behavior.setSurfaceScenesResult,
+    ),
+    _thorvg_rubiks_surface_scenes: vi.fn((): number => 0),
+    _thorvg_rubiks_surface_pixel_buffer: vi.fn((id: number): number =>
+      id === 0 ? (initialized && !firstAway ? pointer : 0) : (surfaces.get(id)?.pointer ?? 0),
+    ),
+    _thorvg_rubiks_surface_pixel_byte_length: vi.fn((id: number): number => {
+      const surface = surfaces.get(id);
+      return surface === undefined ? 0 : surface.width * surface.height * 4;
+    }),
+    _thorvg_rubiks_surface_frame: vi.fn((id: number): number => frames[id] ?? 0),
+    _thorvg_rubiks_pointer_down_on: vi.fn(
+      (): number => behavior.pointerDownResult,
+    ),
   } satisfies ThorvgRubiksModule;
 
   /** Simulates WASM memory growth: the old ArrayBuffer is replaced. */
@@ -890,5 +947,122 @@ describe('CubeEngine lighting', () => {
       module.HEAPU8.byteLength - 4,
     );
     expect(() => engine.lighting()).toThrow('invalid lighting buffer');
+  });
+});
+
+describe('CubeEngine surfaces', () => {
+  it('shows another surface on a canvas of its own, copied only when drawn', async () => {
+    const { engine, module, behavior, putImageData } = await createEngine();
+    const net = createFakeCanvas();
+
+    engine.presentSurface(CubeSurface.Net, net.canvas);
+    engine.setSurfaceScenes(CubeSurface.Net, CubeScene.Net);
+    engine.resizeSurface(CubeSurface.Net, { width: 40, height: 30 });
+
+    expect(module._thorvg_rubiks_set_surface_scenes).toHaveBeenCalledWith(1, 2);
+    expect(module._thorvg_rubiks_resize_surface).toHaveBeenCalledWith(1, 40, 30);
+    expect(net.canvas.width).toBe(40);
+    expect(net.canvas.height).toBe(30);
+
+    engine.render();
+    expect(putImageData).toHaveBeenCalledTimes(1);
+    expect(net.putImageData).toHaveBeenCalledTimes(1);
+
+    // A frame the engine skipped is not copied out again.
+    behavior.drawsFrames = false;
+    engine.render();
+    expect(putImageData).toHaveBeenCalledTimes(1);
+    expect(net.putImageData).toHaveBeenCalledTimes(1);
+
+    // The same size again does not reach the engine.
+    engine.resizeSurface(CubeSurface.Net, { width: 40, height: 30 });
+    expect(module._thorvg_rubiks_resize_surface).toHaveBeenCalledTimes(1);
+
+    engine.dispose();
+  });
+
+  it('puts a surface away and brings it back', async () => {
+    const { engine, module, putImageData } = await createEngine();
+    const net = createFakeCanvas();
+    engine.presentSurface(CubeSurface.Net, net.canvas);
+    engine.resizeSurface(CubeSurface.Net, { width: 40, height: 30 });
+
+    engine.resizeSurface(CubeSurface.Net, null);
+    expect(module._thorvg_rubiks_resize_surface).toHaveBeenLastCalledWith(1, 0, 0);
+    engine.render();
+    expect(net.putImageData).not.toHaveBeenCalled();
+
+    // Surface 0 can be put away as well, and is asked again on the way back
+    // even at the size it had.
+    engine.resizeSurface(CubeSurface.Cube, null);
+    expect(module._thorvg_rubiks_resize_surface).toHaveBeenLastCalledWith(0, 0, 0);
+    putImageData.mockClear();
+    engine.render();
+    expect(putImageData).not.toHaveBeenCalled();
+
+    engine.resizeSurface(CubeSurface.Cube, { width: 100, height: 50 });
+    expect(module._thorvg_rubiks_resize).toHaveBeenLastCalledWith(100, 50);
+    engine.render();
+    expect(putImageData).toHaveBeenCalledTimes(1);
+
+    engine.dispose();
+  });
+
+  it('presses a surface by its id', async () => {
+    const { engine, module } = await createEngine();
+
+    expect(engine.pointerDownOn(CubeSurface.Rings, 5, 6)).toBe(true);
+    expect(module._thorvg_rubiks_pointer_down_on).toHaveBeenCalledWith(2, 5, 6);
+
+    engine.dispose();
+  });
+
+  it('refuses what the engine does not have', async () => {
+    const { engine, behavior } = await createEngine();
+    const canvas = createFakeCanvas();
+
+    expect(() => engine.presentSurface(CubeSurface.Cube, canvas.canvas)).toThrow();
+    expect(() => engine.setSurfaceScenes(CubeSurface.Net, 16)).toThrow('Invalid scene set');
+    expect(() => engine.resizeSurface(CubeSurface.Axes, { width: 10, height: 10 })).toThrow(
+      'has no canvas',
+    );
+
+    engine.presentSurface(CubeSurface.Axes, canvas.canvas);
+    behavior.resizeSurfaceResult = 0;
+    expect(() => engine.resizeSurface(CubeSurface.Axes, { width: 10, height: 10 })).toThrow(
+      'resize failed',
+    );
+
+    behavior.setSurfaceScenesResult = 0;
+    expect(() => engine.setSurfaceScenes(CubeSurface.Axes, CubeScene.Axes)).toThrow(
+      'refused',
+    );
+
+    engine.dispose();
+  });
+});
+
+describe('stageDensity', () => {
+  it('keeps the device ratio while the views fit the budget', () => {
+    expect(stageDensity([{ width: 100, height: 50 }], 2)).toBe(2);
+    expect(stageDensity([], 3)).toBe(3);
+  });
+
+  it('brings every view down together past the budget', () => {
+    const boxes = [
+      { width: 1000, height: 1000 },
+      { width: 600, height: 400 },
+    ];
+    const density = stageDensity(boxes, 2);
+    expect(density).toBeLessThan(2);
+    const pixels = boxes.reduce(
+      (sum, box) => sum + box.width * density * box.height * density,
+      0,
+    );
+    expect(pixels).toBeCloseTo(MAX_STAGE_PIXELS, -2);
+  });
+
+  it('takes a budget of its own', () => {
+    expect(stageDensity([{ width: 100, height: 100 }], 1, 2_500)).toBe(0.5);
   });
 });

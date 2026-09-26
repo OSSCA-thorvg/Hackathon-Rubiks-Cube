@@ -752,30 +752,140 @@ kbd {
 }
 
 /*
- * The stage: a square cell the canvas fills, as large as the cell allows in
- * both directions. The engine draws into a square region, so a wide short
- * canvas would only be adding margin around the same picture.
+ * The stage: a canvas for each view, laid out here and nowhere else. The
+ * engine is told each canvas's size and fits its drawing to it -- the cube
+ * square in the middle, the net and the rings as large as their shapes
+ * allow -- so where the views go and how large they are is this sheet's.
+ *
+ * Every canvas fills its cell. The cube's shadow, and the empty space a drag
+ * turns the viewpoint from, reach out to the cell's edges; a flat view's
+ * margin is still the stage.
  */
 .game-stage {
-  container-type: size;
-  display: grid;
-  place-items: center;
+  container: stage / size;
+  position: relative;
   min-width: 0;
   min-height: 0;
 }
 
-.stage-frame {
-  position: relative;
-  width: min(100cqw, 100cqh);
-  aspect-ratio: 1;
+/* Inside the stage rather than the stage itself, because a container query
+   can only style what is inside its container. */
+.stage-grid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template: "cube" minmax(0, 1fr) / minmax(0, 1fr);
+  gap: 12px;
 }
 
-#view {
+.stage-view {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.stage-view--cube {
+  grid-area: cube;
+}
+
+.stage-view--net {
+  grid-area: net;
+}
+
+.stage-view--rings {
+  grid-area: rings;
+}
+
+/* Out of flow, so a drawing buffer's own size never reaches the grid. */
+.stage-view > canvas {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
   background: var(--color-canvas);
   touch-action: none;
+}
+
+/* A view that is not on show has no box, and the engine puts its surface
+   away rather than drawing it. */
+.game-stage[data-view-mode="3d"] :is(.stage-view--net, .stage-view--rings),
+.game-stage[data-view-mode="2d"] .stage-view--cube,
+.game-stage[data-flat-style="net"] .stage-view--rings,
+.game-stage[data-flat-style="rings"] .stage-view--net {
+  display: none;
+}
+
+/* One diagram at a time takes the one flat cell. */
+.game-stage:not([data-flat-style="both"]) :is(.stage-view--net, .stage-view--rings) {
+  grid-area: flat;
+}
+
+/* Split on a stage too narrow for two across: the cube over the diagram. */
+.game-stage[data-view-mode="both"] .stage-grid {
+  grid-template:
+    "cube" minmax(0, 11fr)
+    "flat" minmax(0, 9fr) / minmax(0, 1fr);
+}
+
+.game-stage[data-view-mode="both"][data-flat-style="both"] .stage-grid {
+  grid-template:
+    "cube cube" minmax(0, 3fr)
+    "net rings" minmax(0, 2fr) / minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.game-stage[data-view-mode="2d"] .stage-grid {
+  grid-template: "flat" minmax(0, 1fr) / minmax(0, 1fr);
+}
+
+.game-stage[data-view-mode="2d"][data-flat-style="both"] .stage-grid {
+  grid-template:
+    "net" minmax(0, 1fr)
+    "rings" minmax(0, 1fr) / minmax(0, 1fr);
+}
+
+/* Wide enough for two across, which past about six to five draws both views
+   larger than stacking them does: side by side. */
+@container stage (min-aspect-ratio: 6 / 5) {
+  .game-stage[data-view-mode="both"] .stage-grid {
+    grid-template: "cube flat" minmax(0, 1fr) / minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  /* The cube keeps the full height; the two diagrams share the column
+     beside it, which their shapes fill by height long before by width. */
+  .game-stage[data-view-mode="both"][data-flat-style="both"] .stage-grid {
+    grid-template:
+      "cube net" minmax(0, 1fr)
+      "cube rings" minmax(0, 1fr) / minmax(0, 3fr) minmax(0, 2fr);
+  }
+
+  .game-stage[data-view-mode="2d"][data-flat-style="both"] .stage-grid {
+    grid-template: "net rings" minmax(0, 1fr) / minmax(0, 13fr) minmax(0, 11fr);
+  }
+}
+
+/* So wide that a column of two diagrams is left half empty: three across. */
+@container stage (min-aspect-ratio: 11 / 5) {
+  .game-stage[data-view-mode="both"][data-flat-style="both"] .stage-grid {
+    grid-template:
+      "cube net rings" minmax(0, 1fr) / minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+/* Which way the axes point from here, in the top corner of the cube's view:
+   the bottom of the stage is where the hint sits on a first visit. Round,
+   because the canvas under it is the page's colour and a square of it laid
+   over the cube's shadow would read as a hole; looked at, never pressed, so
+   a press there reaches the cube beneath. */
+.stage-view > .axes-badge {
+  inset: 12px auto auto 12px;
+  width: clamp(44px, 11cqmin, 84px);
+  height: clamp(44px, 11cqmin, 84px);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 1px var(--color-line),
+    0 8px 20px rgb(0 0 0 / 0.18);
+  pointer-events: none;
 }
 
 /* Over the stage rather than under it, so it is read where the gesture it
@@ -2222,7 +2332,7 @@ kbd {
 
 /* Page states */
 
-#app[data-state="loading"] #view {
+#app[data-state="loading"] .game-stage canvas {
   visibility: hidden;
 }
 

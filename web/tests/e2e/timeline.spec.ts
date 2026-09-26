@@ -103,7 +103,7 @@ test('the command menu runs the page commands and says what it cannot read', asy
   ).toContainText('View: 2D');
   await page.keyboard.press('Enter');
   await expect(page.locator('#command-palette')).toBeHidden();
-  await expect(page.locator('#view')).toHaveAttribute('data-view-mode', '2d');
+  await expect(page.locator('#stage')).toHaveAttribute('data-view-mode', '2d');
 
   // Escape closes it without running anything.
   await page.keyboard.press('ControlOrMeta+k');

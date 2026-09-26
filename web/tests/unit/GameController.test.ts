@@ -26,7 +26,7 @@ import {
 function createUi(): GameUi {
   const root = document.createElement('main');
   root.innerHTML = `
-    <canvas id="view"></canvas>
+    <section id="stage"><canvas id="view"></canvas></section>
     <output id="timer"></output>
     <p id="status"></p>
     <input id="scramble-moves" type="number" min="1" max="100" value="20">
@@ -105,7 +105,7 @@ function createUi(): GameUi {
 
   return {
     root,
-    canvas: root.querySelector<HTMLCanvasElement>('#view')!,
+    stage: root.querySelector<HTMLElement>('#stage')!,
     timer: root.querySelector<HTMLOutputElement>('#timer')!,
     status: root.querySelector<HTMLParagraphElement>('#status')!,
     scrambleButton: root.querySelector<HTMLButtonElement>('#scramble')!,
@@ -1132,7 +1132,8 @@ describe('attachGameController', () => {
     );
     expect(rings.getAttribute('aria-pressed')).toBe('true');
     expect(flat.getAttribute('aria-pressed')).toBe('true');
-    expect(harness.ui.canvas.dataset.flatStyle).toBe('rings');
+    expect(harness.ui.stage.dataset.flatStyle).toBe('rings');
+    expect(harness.ui.stage.dataset.viewMode).toBe('2d');
 
     // And it survives the flat view going away and coming back, while the
     // toggle itself is put out of the way meanwhile.

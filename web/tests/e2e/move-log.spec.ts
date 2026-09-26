@@ -6,7 +6,6 @@ import {
   pagePointInNet,
   probeCanvas,
   type CanvasProbe,
-  type NetView,
 } from './sceneContract.ts';
 import { pressInSettings } from './shell.ts';
 
@@ -29,13 +28,12 @@ const NOTATION = /^[RLUDFBMES](['2])?$/;
 async function dragNetRowLeft(
   page: Page,
   probe: CanvasProbe,
-  view: NetView,
   row: number,
 ): Promise<void> {
-  const grab = pagePointInNet(probe, view, FRONT_BLOCK, 1, row);
+  const grab = pagePointInNet(probe, FRONT_BLOCK, 1, row);
   await page.mouse.move(grab.x, grab.y);
   await page.mouse.down();
-  await page.mouse.move(grab.x - netDragFor(probe, view, SHORT_TURN), grab.y, {
+  await page.mouse.move(grab.x - netDragFor(probe, SHORT_TURN), grab.y, {
     steps: 8,
   });
   await page.mouse.up();
@@ -78,7 +76,7 @@ test('your own moves are written out in notation as you make them', async ({
   // And a middle slice, which only a drag can make: the top row of the front
   // face turns the way U does, so the row below it is E the other way round.
   const probe = await probeCanvas(page);
-  await dragNetRowLeft(page, probe, 'both', 1);
+  await dragNetRowLeft(page, probe, 1);
   await expect(entries).toHaveCount(3);
   await expect(entries.nth(2)).toHaveText("E'");
   await expect(entries.nth(2)).toHaveAttribute('data-state', 'current');

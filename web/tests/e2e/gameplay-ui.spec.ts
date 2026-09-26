@@ -2,11 +2,11 @@ import { expect, test, type Page } from '@playwright/test';
 
 import {
   assertSceneContract,
+  cubeDragFor,
   CUT_SHARE_MARGIN,
   FRONT_RIGHT_COLUMN,
   pagePointInCube,
   probeCanvas,
-  QUARTER_TURN_DRAG,
   WHITE,
 } from './sceneContract.ts';
 import {
@@ -26,11 +26,9 @@ async function orbitOnce(page: Page): Promise<void> {
   const corner = pagePointInCube(probe, [0.94, 0.06]);
   await page.mouse.move(corner.x, corner.y);
   await page.mouse.down();
-  await page.mouse.move(
-    corner.x - QUARTER_TURN_DRAG * probe.box.width,
-    corner.y,
-    { steps: 12 },
-  );
+  await page.mouse.move(corner.x - cubeDragFor(probe, 1), corner.y, {
+    steps: 12,
+  });
   await page.mouse.up();
 }
 
@@ -103,28 +101,38 @@ test('scramble starts a session on first committed move and Reset restores it', 
 test('Both is default and 3D, 2D, and Home view controls preserve gameplay', async ({
   page,
 }) => {
+  const stage = page.locator('#stage');
   const canvas = page.locator('#view');
+  const flatCanvas = page.locator('#view-net');
   const both = page.locator('[data-view="both"]');
   const cube = page.locator('[data-view="3d"]');
   const net = page.locator('[data-view="2d"]');
 
   await expect(both).toHaveAttribute('aria-pressed', 'true');
-  await expect(canvas).toHaveAttribute('data-view-mode', 'both');
+  await expect(stage).toHaveAttribute('data-view-mode', 'both');
+  await expect(canvas).toBeVisible();
+  await expect(flatCanvas).toBeVisible();
 
+  // Each mode is the canvases it shows, and the page lays them out.
   await cube.click();
   await expect(cube).toHaveAttribute('aria-pressed', 'true');
-  await expect(canvas).toHaveAttribute('data-view-mode', '3d');
+  await expect(stage).toHaveAttribute('data-view-mode', '3d');
+  await expect(canvas).toBeVisible();
+  await expect(flatCanvas).toBeHidden();
 
   await net.click();
   await expect(net).toHaveAttribute('aria-pressed', 'true');
-  await expect(canvas).toHaveAttribute('data-view-mode', '2d');
+  await expect(stage).toHaveAttribute('data-view-mode', '2d');
+  await expect(canvas).toBeHidden();
+  await expect(flatCanvas).toBeVisible();
 
   // The net is something to work on rather than to look at: a drag across a
   // cell turns a layer here just as one on the cube does.
-  const before = await canvas.evaluate(
+  await probeCanvas(page);
+  const before = await flatCanvas.evaluate(
     (element) => (element as HTMLCanvasElement).toDataURL(),
   );
-  const box = await canvas.boundingBox();
+  const box = await flatCanvas.boundingBox();
   expect(box).not.toBeNull();
   await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
   await page.mouse.down();
@@ -132,7 +140,9 @@ test('Both is default and 3D, 2D, and Home view controls preserve gameplay', asy
   await page.mouse.up();
   await expect
     .poll(async () =>
-      canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL()),
+      flatCanvas.evaluate((element) =>
+        (element as HTMLCanvasElement).toDataURL(),
+      ),
     )
     .not.toBe(before);
 
@@ -166,7 +176,7 @@ async function boxOf(
 test('the desktop stage stands between two rails, with the record and the dock under it', async ({
   page,
 }) => {
-  const canvas = await boxOf(page, '#view');
+  const canvas = await boxOf(page, '#stage');
   const header = await boxOf(page, '.app-header');
   const timeline = await boxOf(page, '.timeline');
   const dock = await boxOf(page, '.action-dock');
@@ -220,7 +230,7 @@ test('a detail panel stays open until its own button, and the stage makes room',
   // Beside the stage rather than over it, once the column has opened.
   await expect
     .poll(async () => {
-      const canvas = await boxOf(page, '#view');
+      const canvas = await boxOf(page, '#stage');
       const panel = await boxOf(page, '#panel-moves');
       return canvas.x + canvas.width <= panel.x + 1;
     })
@@ -289,11 +299,9 @@ test('a drag over the cube while a scramble plays only sweeps the view', async (
   const grab = pagePointInCube(probe, FRONT_RIGHT_COLUMN);
   await page.mouse.move(grab.x, grab.y);
   await page.mouse.down();
-  await page.mouse.move(
-    grab.x - QUARTER_TURN_DRAG * probe.box.width,
-    grab.y,
-    { steps: 12 },
-  );
+  await page.mouse.move(grab.x - cubeDragFor(probe, 1), grab.y, {
+    steps: 12,
+  });
   await page.mouse.up();
   await expect(root).toHaveAttribute('data-game-state', 'ready');
 
@@ -384,7 +392,7 @@ test('mobile layout moves actions below the canvas without horizontal overflow',
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
 
-  const canvas = await page.locator('#view').boundingBox();
+  const canvas = await page.locator('#stage').boundingBox();
   const actions = await page.locator('.action-dock').boundingBox();
   expect(canvas).not.toBeNull();
   expect(actions).not.toBeNull();
@@ -421,10 +429,13 @@ test('mobile layout moves actions below the canvas without horizontal overflow',
  */
 async function faceStickers(
   page: Page,
+  selector: string,
   color: readonly number[],
 ): Promise<{ x: number; y: number }[]> {
-  return page.evaluate((wanted) => {
-    const canvas = document.querySelector('canvas')!;
+  // Whatever the canvas's box has just become, its buffer has caught up.
+  await probeCanvas(page);
+  return page.evaluate(([from, wanted]) => {
+    const canvas = document.querySelector<HTMLCanvasElement>(from)!;
     const context = canvas.getContext('2d')!;
     const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
 
@@ -478,13 +489,15 @@ async function faceStickers(
       });
     }
     return found;
-  }, color);
+  }, [selector, color] as const);
 }
 
 test('the flat view toggles between net and rings in every region mode', async ({
   page,
 }) => {
-  const canvas = page.locator('#view');
+  const stage = page.locator('#stage');
+  const netCanvas = page.locator('#view-net');
+  const ringsCanvas = page.locator('#view-rings');
   const both = page.locator('[data-view="both"]');
   const cube = page.locator('[data-view="3d"]');
   const flat = page.locator('[data-view="2d"]');
@@ -492,61 +505,65 @@ test('the flat view toggles between net and rings in every region mode', async (
   const rings = page.locator('[data-flat="rings"]');
 
   const frame = async (): Promise<string> =>
-    canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL());
+    netCanvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL());
 
-  await expect(canvas).toHaveAttribute('data-view-mode', 'both');
-  await expect(canvas).toHaveAttribute('data-flat-style', 'net');
+  await expect(stage).toHaveAttribute('data-view-mode', 'both');
+  await expect(stage).toHaveAttribute('data-flat-style', 'net');
+  await expect(ringsCanvas).toBeHidden();
+  await probeCanvas(page);
   const bothNet = await frame();
 
   // Both follows the toggle, so the cube keeps its place and the drawing
-  // under it changes.
+  // beside it changes.
   await rings.click();
   await expect(rings).toHaveAttribute('aria-pressed', 'true');
-  await expect(canvas).toHaveAttribute('data-view-mode', 'both');
-  await expect(canvas).toHaveAttribute('data-flat-style', 'rings');
-  const bothRings = await frame();
-  expect(bothRings).not.toBe(bothNet);
+  await expect(stage).toHaveAttribute('data-view-mode', 'both');
+  await expect(stage).toHaveAttribute('data-flat-style', 'rings');
+  await expect(netCanvas).toBeHidden();
+  await expect(ringsCanvas).toBeVisible();
 
   // The style is the other axis: it survives the flat region going away and
   // coming back, and the toggle is out of the way while it means nothing.
   await cube.click();
   await expect(rings).toBeHidden();
+  await expect(ringsCanvas).toBeHidden();
   await flat.click();
   await expect(rings).toBeVisible();
   await expect(rings).toHaveAttribute('aria-pressed', 'true');
-  await expect(canvas).toHaveAttribute('data-flat-style', 'rings');
+  await expect(stage).toHaveAttribute('data-flat-style', 'rings');
+  await expect(ringsCanvas).toBeVisible();
 
+  // And the net put away and brought back is drawn again as it was.
   await net.click();
-  await expect(canvas).toHaveAttribute('data-flat-style', 'net');
+  await expect(stage).toHaveAttribute('data-flat-style', 'net');
   await both.click();
-  expect(await frame()).toBe(bothNet);
+  await expect(netCanvas).toBeVisible();
+  await expect.poll(frame).toBe(bothNet);
 });
 
 test('the flat view can show the net over the rings, and both take drags', async ({
   page,
 }) => {
-  const canvas = page.locator('#view');
+  const stage = page.locator('#stage');
+  const netCanvas = page.locator('#view-net');
 
   await page.locator('[data-view="2d"]').click();
   await page.locator('[data-flat="both"]').click();
-  await expect(canvas).toHaveAttribute('data-flat-style', 'both');
+  await expect(stage).toHaveAttribute('data-flat-style', 'both');
 
-  // Nine white stickers in each drawing, the net's above the rings'.
-  const white = await faceStickers(page, WHITE);
-  expect(white).toHaveLength(18);
-
-  const split = Math.max(...white.map((s) => s.y)) / 2;
-  const onRings = white
-    .filter((s) => s.y > split)
-    .sort((a, b) => a.x - b.x || a.y - b.y);
+  // Nine white stickers in each drawing, each on a canvas of its own.
+  expect(await faceStickers(page, '#view-net', WHITE)).toHaveLength(9);
+  const onRings = (await faceStickers(page, '#view-rings', WHITE)).sort(
+    (a, b) => a.x - b.x || a.y - b.y,
+  );
   expect(onRings).toHaveLength(9);
 
   const frame = async (): Promise<string> =>
-    canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL());
+    netCanvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL());
   const resting = await frame();
 
-  // A drag on the lower drawing turns the cube, so the upper one moves too:
-  // one gesture, one rotation, every view that is up showing it.
+  // A drag on one drawing turns the cube, so the other moves too: one
+  // gesture, one rotation, every view that is up showing it.
   await page.mouse.move(onRings[0]!.x, onRings[0]!.y);
   await page.mouse.down();
   await page.mouse.move(onRings[4]!.x, onRings[4]!.y, { steps: 16 });
@@ -554,27 +571,32 @@ test('the flat view can show the net over the rings, and both take drags', async
 
   await expect.poll(frame).not.toBe(resting);
   await expect
-    .poll(async () => (await faceStickers(page, WHITE)).length)
-    .toBe(18);
+    .poll(async () => (await faceStickers(page, '#view-net', WHITE)).length)
+    .toBe(9);
+  await expect
+    .poll(async () => (await faceStickers(page, '#view-rings', WHITE)).length)
+    .toBe(9);
 
   await pressInSettings(page, '#reset');
 });
 
 test('dragging a sticker round its ring turns the cube', async ({ page }) => {
-  const canvas = page.locator('#view');
+  const canvas = page.locator('#view-rings');
 
   await page.locator('[data-view="2d"]').click();
   await page.locator('[data-flat="rings"]').click();
-  await expect(canvas).toHaveAttribute('data-flat-style', 'rings');
-
-  const frame = async (): Promise<string> =>
-    canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL());
-  const resting = await frame();
+  await expect(page.locator('#stage')).toHaveAttribute(
+    'data-flat-style',
+    'rings',
+  );
 
   // The nine stickers of one face sit on a three-by-three patch of crossings,
   // so two of them a step apart share a ring: dragging between them is a drag
   // along that ring, and two slots is past the point a release commits.
-  const white = await faceStickers(page, WHITE);
+  const white = await faceStickers(page, '#view-rings', WHITE);
+  const frame = async (): Promise<string> =>
+    canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL());
+  const resting = await frame();
   expect(white).toHaveLength(9);
   white.sort((a, b) => a.x - b.x || a.y - b.y);
 
@@ -589,7 +611,7 @@ test('dragging a sticker round its ring turns the cube', async ({ page }) => {
   // settled picture one the resting builder could have drawn: nine of each
   // color, none of them part way round a loop.
   await expect
-    .poll(async () => (await faceStickers(page, WHITE)).length)
+    .poll(async () => (await faceStickers(page, '#view-rings', WHITE)).length)
     .toBe(9);
 
   await pressInSettings(page, '#reset');

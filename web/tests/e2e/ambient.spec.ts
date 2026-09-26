@@ -2,10 +2,10 @@ import { expect, test, type Page } from '@playwright/test';
 
 import {
   assertSceneContract,
+  cubeDragFor,
   FRONT_RIGHT_COLUMN,
   pagePointInCube,
   probeCanvas,
-  QUARTER_TURN_DRAG,
 } from './sceneContract.ts';
 import { openPanel, pressInSettings, stageSettled } from './shell.ts';
 
@@ -79,7 +79,7 @@ test('a drag looks around a watched pattern instead of ending it', async ({
   await page.mouse.move(grab.x, grab.y);
   await page.mouse.down();
   await page.mouse.move(
-    grab.x - QUARTER_TURN_DRAG * spinning.box.width,
+    grab.x - cubeDragFor(spinning, 1),
     grab.y,
     { steps: 12 },
   );
@@ -104,7 +104,7 @@ test('a drag looks around a watched pattern instead of ending it', async ({
 test('switching views leaves a watched pattern running, as it does a scramble', async ({
   page,
 }) => {
-  const canvas = page.locator('#view');
+  const stage = page.locator('#stage');
   const watch = page.locator('#ambient');
   const solved = await probeCanvas(page);
 
@@ -124,8 +124,8 @@ test('switching views leaves a watched pattern running, as it does a scramble', 
   await pressInSettings(page, '#home-view');
   await expect(watch).toHaveAttribute('aria-pressed', 'true');
 
-  await expect(canvas).toHaveAttribute('data-view-mode', 'both');
-  await expect(canvas).toHaveAttribute('data-flat-style', 'rings');
+  await expect(stage).toHaveAttribute('data-view-mode', 'both');
+  await expect(stage).toHaveAttribute('data-flat-style', 'rings');
 
   // Still turning after all of it, and still with nothing of its own left
   // behind once it is stopped.

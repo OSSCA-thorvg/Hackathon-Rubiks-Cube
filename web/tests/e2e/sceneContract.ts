@@ -1,9 +1,9 @@
 import { expect, type Page } from '@playwright/test';
 
-// Rendered scene contract v4 as RGBA tuples: the canvas holds a square 3D
-// region showing three differently colored faces of a cube under one light,
-// and below it a net showing all six faces flat and unlit, over a solid
-// background. A winding, culling, channel-order, or domain regression shows up
+// Rendered scene contract v4 as RGBA tuples: the cube's canvas holds a square
+// 3D region showing three differently colored faces of a cube under one
+// light, and the net's canvas beside it all six faces flat and unlit, each
+// over a solid background. A winding, culling, channel-order, or domain regression shows up
 // as the wrong color here rather than as a plausible picture -- and since v4
 // a normal the wrong way round shows up as the wrong brightness too.
 export const BACKGROUND = [32, 32, 32, 255];
@@ -144,13 +144,14 @@ export const FRONT_RIGHT_COLUMN = [0.433, 0.694] as const;
 
 // Gaps between neighbouring stickers. The cubie body shows there, painted
 // under the stickers, so they read as BODY — but only once the gap is
-// comfortably wider than the anti-aliased edges around it.
+// comfortably wider than the anti-aliased edges around it, which it is from
+// a region this many pixels across.
 export const SEAM_SAMPLES = [
   [0.377, 0.645],
   [0.313, 0.534],
   [0.564, 0.321],
 ] as const;
-export const SEAM_MIN_SIZE = 1024;
+export const SEAM_MIN_REGION = 594;
 
 /**
  * Where a cut face shows part way through a turn, as fractions of the 3D
@@ -183,33 +184,42 @@ export const NET_ROWS = 3;
 export const NET_ONLY_WIDTH = 0.88;
 export const NET_ONLY_HEIGHT = 0.78;
 
-// Layout fractions of the shorter canvas side, matching
-// docs/tasks/04-rubiks-cube-domain.md. Repeated here on purpose so a layout
-// change has to be made deliberately in both places.
-export const CUBE_REGION_SIDE = 0.58;
-export const CUBE_REGION_TOP = 0.01;
-export const NET_FACE_SIDE = 0.12;
-export const NET_TOP = 0.62;
+/**
+ * Side of the 3D region as a fraction of its canvas's shorter side, centred
+ * both ways: the cube is alone on a canvas of its own. Matching
+ * engine/src/graphics/Layout.hpp, and repeated here on purpose so a layout
+ * change has to be made deliberately in both places.
+ */
+export const CUBE_REGION_SIDE = 0.84;
 
 /**
  * Fraction of the 3D region's width a drag has to cover for a quarter turn,
- * mirroring the engine's own drag sensitivity. On a square canvas this works
- * out to the same fraction of the canvas in CSS pixels, because the device
- * pixel ratio cancels between the drag and the region.
+ * mirroring the engine's own drag sensitivity.
  */
 export const QUARTER_TURN_FRACTION = 0.5;
-export const QUARTER_TURN_DRAG = CUBE_REGION_SIDE * QUARTER_TURN_FRACTION;
 
 /** Resolution of the coarse grid used to tell two renderings apart. */
 const SIGNATURE_STEPS = 12;
 
-export type CanvasProbe = {
+/** A canvas's drawing buffer and where its box is on the page. */
+export type CanvasFrame = {
   readonly width: number;
   readonly height: number;
   readonly cssWidth: number;
   readonly cssHeight: number;
-  readonly devicePixelRatio: number;
   readonly box: { left: number; top: number; width: number; height: number };
+};
+
+/**
+ * What the contract reads: the cube's canvas and what is on it, and the net's.
+ *
+ * The frame fields at the top level are the cube's canvas, which is what
+ * most of the contract is about; the net's canvas has its own.
+ */
+export type CanvasProbe = CanvasFrame & {
+  readonly devicePixelRatio: number;
+  /** The net's canvas, all zeros while the net is not on show. */
+  readonly netCanvas: CanvasFrame;
   readonly top: number[];
   readonly left: number[];
   readonly right: number[];
@@ -217,6 +227,7 @@ export type CanvasProbe = {
   /** The two cut-face probes: a lit body mid-turn, a sticker at rest. */
   readonly cutR: number[];
   readonly cutU: number[];
+  /** The net's cells in NET_BLOCKS order, or none while it is not on show. */
   readonly net: number[][];
   readonly corners: number[][];
   /** A coarse sweep of the 3D region, for comparing two frames. */
@@ -240,41 +251,77 @@ export async function probeCanvas(
   page: Page,
   size: number = CUBE_SIZE,
 ): Promise<CanvasProbe> {
+  // Two frames first. A canvas whose box has just changed -- a view switched
+  // on, a panel opened beside the stage -- gets its new buffer in the
+  // rendering step after, and a reading taken before it would measure the
+  // new box against the old buffer.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
   return page.evaluate(
     (config) => {
-      const canvas = document.querySelector('canvas');
-      if (!canvas) throw new Error('Canvas element is missing.');
-
-      const context = canvas.getContext('2d');
-      if (!context) throw new Error('2D context is missing.');
-
-      const read = (x: number, y: number): number[] => {
-        const column = Math.min(Math.max(Math.round(x), 0), canvas.width - 1);
-        const row = Math.min(Math.max(Math.round(y), 0), canvas.height - 1);
-        return Array.from(context.getImageData(column, row, 1, 1).data);
+      const canvasOf = (selector: string) => {
+        const element = document.querySelector<HTMLCanvasElement>(selector);
+        if (!element) throw new Error(`${selector} is missing.`);
+        const context = element.getContext('2d');
+        if (!context) throw new Error(`${selector} has no 2D context.`);
+        const read = (x: number, y: number): number[] => {
+          const column = Math.min(Math.max(Math.round(x), 0), element.width - 1);
+          const row = Math.min(Math.max(Math.round(y), 0), element.height - 1);
+          return Array.from(context.getImageData(column, row, 1, 1).data);
+        };
+        const box = element.getBoundingClientRect();
+        const frame = {
+          width: element.width,
+          height: element.height,
+          cssWidth: element.clientWidth,
+          cssHeight: element.clientHeight,
+          box: {
+            left: box.left,
+            top: box.top,
+            width: box.width,
+            height: box.height,
+          },
+        };
+        return { canvas: element, context, read, frame };
       };
+
+      const cube = canvasOf('#view');
+      const { canvas, context, read } = cube;
 
       const unit = Math.min(canvas.width, canvas.height);
 
       const cubeSide = config.cubeRegionSide * unit;
       const cubeX = (canvas.width - cubeSide) / 2;
-      const cubeY = config.cubeRegionTop * unit;
+      const cubeY = (canvas.height - cubeSide) / 2;
       const inCube = ([fx, fy]: readonly number[]): number[] =>
         read(cubeX + fx * cubeSide, cubeY + fy * cubeSide);
 
-      const faceSide = config.netFaceSide * unit;
-      const netX = (canvas.width - faceSide * 4) / 2;
-      const netY = config.netTop * unit;
+      // The net alone on its canvas, grown until one extent runs out first.
+      const flat = canvasOf('#view-net');
+      const shown = flat.frame.cssWidth > 0 && flat.frame.cssHeight > 0;
+      const faceSide = Math.min(
+        (config.netOnlyWidth * flat.canvas.width) / 4,
+        (config.netOnlyHeight * flat.canvas.height) / 3,
+      );
+      const netX = (flat.canvas.width - faceSide * 4) / 2;
+      const netY = (flat.canvas.height - faceSide * 3) / 2;
       const cell = faceSide / config.cubeSize;
 
       const net: number[][] = [];
-      for (const block of config.netBlocks) {
+      for (const block of shown ? config.netBlocks : []) {
         const originX = netX + block.column * faceSide;
         const originY = netY + block.row * faceSide;
         for (let row = 0; row < config.cubeSize; row += 1) {
           for (let col = 0; col < config.cubeSize; col += 1) {
             net.push(
-              read(originX + (col + 0.5) * cell, originY + (row + 0.5) * cell),
+              flat.read(
+                originX + (col + 0.5) * cell,
+                originY + (row + 0.5) * cell,
+              ),
             );
           }
         }
@@ -318,20 +365,18 @@ export async function probeCanvas(
         }
       }
 
-      const box = canvas.getBoundingClientRect();
+      const zero = {
+        width: 0,
+        height: 0,
+        cssWidth: 0,
+        cssHeight: 0,
+        box: { left: 0, top: 0, width: 0, height: 0 },
+      };
 
       return {
-        width: canvas.width,
-        height: canvas.height,
-        cssWidth: canvas.clientWidth,
-        cssHeight: canvas.clientHeight,
+        ...cube.frame,
         devicePixelRatio: window.devicePixelRatio,
-        box: {
-          left: box.left,
-          top: box.top,
-          width: box.width,
-          height: box.height,
-        },
+        netCanvas: shown ? flat.frame : zero,
         top: inCube(config.topSample),
         left: inCube(config.leftSample),
         right: inCube(config.rightSample),
@@ -359,9 +404,8 @@ export async function probeCanvas(
       netBlocks: NET_BLOCKS,
       cubeSize: size,
       cubeRegionSide: CUBE_REGION_SIDE,
-      cubeRegionTop: CUBE_REGION_TOP,
-      netFaceSide: NET_FACE_SIDE,
-      netTop: NET_TOP,
+      netOnlyWidth: NET_ONLY_WIDTH,
+      netOnlyHeight: NET_ONLY_HEIGHT,
       signatureSteps: SIGNATURE_STEPS,
     },
   );
@@ -378,15 +422,19 @@ export function expectedNet(size: number = CUBE_SIZE): number[][] {
   return cells;
 }
 
+/** Side of the 3D region in drawing buffer pixels. */
+export function cubeRegionSide(probe: CanvasProbe): number {
+  return CUBE_REGION_SIDE * Math.min(probe.width, probe.height);
+}
+
 /** Turns a point in the 3D region into page coordinates for the mouse. */
 export function pagePointInCube(
   probe: CanvasProbe,
   [fx, fy]: readonly number[],
 ): { x: number; y: number } {
-  const unit = Math.min(probe.width, probe.height);
-  const side = CUBE_REGION_SIDE * unit;
+  const side = cubeRegionSide(probe);
   const bufferX = (probe.width - side) / 2 + fx * side;
-  const bufferY = CUBE_REGION_TOP * unit + fy * side;
+  const bufferY = (probe.height - side) / 2 + fy * side;
 
   return {
     x: probe.box.left + (bufferX * probe.box.width) / probe.width,
@@ -394,31 +442,35 @@ export function pagePointInCube(
   };
 }
 
-/** Which layout the net is drawn with; the two view modes place it apart. */
-export type NetView = 'both' | 'net';
+/**
+ * Drag distance in CSS pixels for a number of quarter turns on the cube, or
+ * of quarter sweeps of the viewpoint: a fraction of the 3D region, measured
+ * in the canvas box rather than in the drawing buffer.
+ */
+export function cubeDragFor(probe: CanvasProbe, quarterTurns: number): number {
+  const side = (cubeRegionSide(probe) * probe.box.width) / probe.width;
+  return side * QUARTER_TURN_FRACTION * quarterTurns;
+}
 
-/** The net's rectangle in drawing buffer pixels. */
-export function netLayout(
-  probe: CanvasProbe,
-  view: NetView,
-): { x: number; y: number; faceSide: number } {
-  if (view === 'net') {
-    // Alone on the canvas the net grows until one extent runs out first.
-    const faceSide = Math.min(
-      (NET_ONLY_WIDTH * probe.width) / NET_COLUMNS,
-      (NET_ONLY_HEIGHT * probe.height) / NET_ROWS,
-    );
-    return {
-      x: (probe.width - faceSide * NET_COLUMNS) / 2,
-      y: (probe.height - faceSide * NET_ROWS) / 2,
-      faceSide,
-    };
-  }
-
-  const faceSide = NET_FACE_SIDE * Math.min(probe.width, probe.height);
+/**
+ * The net's rectangle in its canvas's drawing buffer pixels.
+ *
+ * The net is alone on its canvas in every mode that shows it, so it grows
+ * until one extent runs out first.
+ */
+export function netLayout(probe: CanvasProbe): {
+  x: number;
+  y: number;
+  faceSide: number;
+} {
+  const { width, height } = probe.netCanvas;
+  const faceSide = Math.min(
+    (NET_ONLY_WIDTH * width) / NET_COLUMNS,
+    (NET_ONLY_HEIGHT * height) / NET_ROWS,
+  );
   return {
-    x: (probe.width - faceSide * NET_COLUMNS) / 2,
-    y: NET_TOP * Math.min(probe.width, probe.height),
+    x: (width - faceSide * NET_COLUMNS) / 2,
+    y: (height - faceSide * NET_ROWS) / 2,
     faceSide,
   };
 }
@@ -426,20 +478,20 @@ export function netLayout(
 /** Turns a net cell into page coordinates for the mouse. */
 export function pagePointInNet(
   probe: CanvasProbe,
-  view: NetView,
   block: { readonly column: number; readonly row: number },
   col: number,
   row: number,
   size: number = CUBE_SIZE,
 ): { x: number; y: number } {
-  const net = netLayout(probe, view);
+  const net = netLayout(probe);
+  const frame = probe.netCanvas;
   const cell = net.faceSide / size;
   const bufferX = net.x + block.column * net.faceSide + (col + 0.5) * cell;
   const bufferY = net.y + block.row * net.faceSide + (row + 0.5) * cell;
 
   return {
-    x: probe.box.left + (bufferX * probe.box.width) / probe.width,
-    y: probe.box.top + (bufferY * probe.box.height) / probe.height,
+    x: frame.box.left + (bufferX * frame.box.width) / frame.width,
+    y: frame.box.top + (bufferY * frame.box.height) / frame.height,
   };
 }
 
@@ -449,13 +501,10 @@ export function pagePointInNet(
  * The net's sensitivity is one face across, so this is that face measured in
  * the canvas box rather than in the drawing buffer.
  */
-export function netDragFor(
-  probe: CanvasProbe,
-  view: NetView,
-  quarterTurns: number,
-): number {
-  const net = netLayout(probe, view);
-  return (net.faceSide * probe.box.width * quarterTurns) / probe.width;
+export function netDragFor(probe: CanvasProbe, quarterTurns: number): number {
+  const net = netLayout(probe);
+  const frame = probe.netCanvas;
+  return (net.faceSide * frame.box.width * quarterTurns) / frame.width;
 }
 
 /** The faces showing at the three screen positions, whatever the viewpoint. */
@@ -486,7 +535,7 @@ export function assertFacesAndCorners(probe: CanvasProbe): void {
 
   // A seam is only a few pixels wide, so below this size anti-aliasing
   // reaches the sample point and the check is not meaningful.
-  if (Math.min(probe.width, probe.height) >= SEAM_MIN_SIZE) {
+  if (cubeRegionSide(probe) >= SEAM_MIN_REGION) {
     for (const seam of probe.seams) {
       expect(seam).toEqual(BODY);
     }
@@ -501,11 +550,15 @@ export function assertSceneContract(probe: CanvasProbe): void {
   expect(probe.net).toEqual(expectedNet());
 }
 
+/** Every canvas on show is drawn at the page's density, box for box. */
 export function assertDrawingBufferMatchesCss(probe: CanvasProbe): void {
-  expect(probe.width).toBe(
-    Math.max(1, Math.round(probe.cssWidth * probe.devicePixelRatio)),
-  );
-  expect(probe.height).toBe(
-    Math.max(1, Math.round(probe.cssHeight * probe.devicePixelRatio)),
-  );
+  for (const frame of [probe, probe.netCanvas]) {
+    if (frame.cssWidth === 0) continue;
+    expect(frame.width).toBe(
+      Math.max(1, Math.round(frame.cssWidth * probe.devicePixelRatio)),
+    );
+    expect(frame.height).toBe(
+      Math.max(1, Math.round(frame.cssHeight * probe.devicePixelRatio)),
+    );
+  }
 }

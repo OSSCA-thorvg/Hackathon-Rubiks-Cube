@@ -101,10 +101,10 @@ test('a bigger cube is drawn, scrambled, and turned like any other', async ({
   // A drag on an inner row of the net turns that inner layer: nothing about
   // dragging asks whether a layer is on the outside.
   const before = await probeCanvas(page, SIZE);
-  const grab = pagePointInNet(before, 'both', FRONT_BLOCK, 2, 2, SIZE);
+  const grab = pagePointInNet(before, FRONT_BLOCK, 2, 2, SIZE);
   await page.mouse.move(grab.x, grab.y);
   await page.mouse.down();
-  await page.mouse.move(grab.x - netDragFor(before, 'both', SHORT_TURN), grab.y, {
+  await page.mouse.move(grab.x - netDragFor(before, SHORT_TURN), grab.y, {
     steps: 8,
   });
   await page.mouse.up();
@@ -143,7 +143,7 @@ test('the face controls reach as deep as the depth box says', async ({
     'aria-pressed',
     'true',
   );
-  await page.locator('canvas').press('r');
+  await page.locator('#view').press('r');
   await expect(entries).toHaveCount(3);
   await expect(entries.nth(2)).toHaveText('Rw');
 

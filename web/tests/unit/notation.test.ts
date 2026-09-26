@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  faceOfNotation,
+  MAX_TYPED_MOVES,
   MoveAxis,
   moveNotation,
+  parseMoves,
   unpackMove,
   type QuarterTurns,
+  type TypedTurn,
 } from '../../src/game/notation.ts';
 
 /** The only cube this notation is for. */
@@ -244,5 +248,186 @@ describe('moveNotation on a cube with layers inside', () => {
 
     // Both layers at once is the whole cube, which is a rotation.
     expect(moveNotation(packRun(MoveAxis.X, 0b11, 1), 2)).toBeNull();
+  });
+});
+
+/** The turns a line was read as, or the reason it was refused. */
+function read(text: string, size = SIZE): readonly TypedTurn[] | string {
+  const result = parseMoves(text, size);
+  return result.ok ? result.turns : result.reason;
+}
+
+/** One typed turn, written the short way round. */
+function turn(
+  face: TypedTurn['face'],
+  firstDepth: number,
+  lastDepth: number,
+  turns: QuarterTurns,
+): TypedTurn {
+  return { face, firstDepth, lastDepth, turns };
+}
+
+/**
+ * The word the engine records for a typed turn.
+ *
+ * The inverse of what the engine's face command does, written out here so the
+ * round trip below compares words rather than this module with itself: a
+ * face at the positive end of its axis counts its depths down from the top
+ * index and turns the way the axis does, and the face opposite counts up from
+ * zero and turns against it.
+ */
+function packTyped(typed: TypedTurn, size: number): number {
+  const axis = { R: 0, L: 0, U: 1, D: 1, F: 2, B: 2 }[typed.face];
+  const positive = 'RUF'.includes(typed.face);
+  let layers = 0;
+  for (let depth = typed.firstDepth; depth <= typed.lastDepth; depth += 1) {
+    layers |= 1 << (positive ? size - depth : depth - 1);
+  }
+  const quarter: QuarterTurns =
+    typed.turns === 2 ? 2 : positive ? typed.turns : typed.turns === 1 ? -1 : 1;
+  return packRun(axis, layers, quarter) >>> 0;
+}
+
+describe('parseMoves', () => {
+  it('reads the six faces and their three turns', () => {
+    expect(read("R U' F2 L D2 B'")).toEqual([
+      turn('R', 1, 1, 1),
+      turn('U', 1, 1, -1),
+      turn('F', 1, 1, 2),
+      turn('L', 1, 1, 1),
+      turn('D', 1, 1, 2),
+      turn('B', 1, 1, -1),
+    ]);
+
+    // A half turn is a half turn whichever way it is marked.
+    expect(read("R2' R'2")).toEqual([turn('R', 1, 1, 2), turn('R', 1, 1, 2)]);
+  });
+
+  it('reads a line the way it arrives from a scramble sheet', () => {
+    // No spaces, curly and typographic primes, commas: the same four moves.
+    const plain = read("R U R' U'");
+    expect(read("RUR'U'")).toEqual(plain);
+    expect(read('R U R\u2019 U\u2032')).toEqual(plain);
+    expect(read("R, U, R', U'")).toEqual(plain);
+    expect(read("  R\tU  R'\nU'  ")).toEqual(plain);
+
+    // The suffix is taken greedily, so R2R is a half turn and a quarter.
+    expect(read('R2R')).toEqual([turn('R', 1, 1, 2), turn('R', 1, 1, 1)]);
+  });
+
+  it('reads wide and numbered moves as depths from the face', () => {
+    expect(read('Rw 3Rw 2R 2-3Rw 2-3R', 5)).toEqual([
+      turn('R', 1, 2, 1),
+      turn('R', 1, 3, 1),
+      turn('R', 2, 2, 1),
+      turn('R', 2, 3, 1),
+      turn('R', 2, 3, 1),
+    ]);
+
+    // Letters are read in either case, and lower case is not a wide move:
+    // the log writes Rw, and r on a keyboard is R.
+    expect(read("r u' 3f2 rw 2-3rW", 5)).toEqual([
+      turn('R', 1, 1, 1),
+      turn('U', 1, 1, -1),
+      turn('F', 3, 3, 2),
+      turn('R', 1, 2, 1),
+      turn('R', 2, 3, 1),
+    ]);
+  });
+
+  it('gives each move back in the spelling the log uses', () => {
+    const typed = parseMoves("r u\u2019 2-3rw m2", 5);
+    expect(typed.ok && typed.written).toEqual(['R', "U'", '2-3Rw', 'M2']);
+  });
+
+  it('reads a slice as the face it follows, one layer in', () => {
+    expect(read("M E' S2")).toEqual([
+      turn('L', 2, 2, 1),
+      turn('D', 2, 2, -1),
+      turn('F', 2, 2, 2),
+    ]);
+
+    // The middle of a bigger odd cube is further in, and an even cube has
+    // no middle at all.
+    expect(read('M', 5)).toEqual([turn('L', 3, 3, 1)]);
+    expect(read('M', 4)).toBe(
+      '"M" needs a middle layer, which a 4×4 does not have.',
+    );
+  });
+
+  it('refuses the whole line for one move the cube cannot make', () => {
+    expect(read('R Q U')).toBe(`Can't read "Q" as a move.`);
+    expect(read('R x')).toBe(
+      '"x" turns the whole cube. Only layers can be turned here.',
+    );
+    expect(read('4R')).toBe('"4R" reaches past a 3×3.');
+    expect(read('3Rw')).toBe(
+      '"3Rw" turns the whole cube. Only layers can be turned here.',
+    );
+    expect(read('Rw', 2)).toBe(
+      '"Rw" turns the whole cube. Only layers can be turned here.',
+    );
+
+    // Things that look like moves and are not.
+    expect(read('Rww')).toBe(`Can't read "w" as a move.`);
+    expect(read('2M')).toBe(`Can't read "2M" as a move.`);
+    expect(read('0R')).toBe(`Can't read "0R" as a move.`);
+    expect(read('3-2Rw', 5)).toBe(`Can't read "3-2Rw" as a move.`);
+    expect(read('R3')).toBe(`Can't read "3" as a move.`);
+  });
+
+  it('has no moves in an empty line, and a limit to a long one', () => {
+    expect(read('')).toEqual([]);
+    expect(read('   ')).toEqual([]);
+
+    expect(read('R '.repeat(MAX_TYPED_MOVES))).toHaveLength(MAX_TYPED_MOVES);
+    expect(read('R '.repeat(MAX_TYPED_MOVES + 1))).toBe(
+      `That is more than ${MAX_TYPED_MOVES} moves at once.`,
+    );
+  });
+
+  it('reads back every move the log writes, on every size it writes them', () => {
+    let checked = 0;
+    for (let size = 2; size <= 7; size += 1) {
+      for (const axis of [MoveAxis.X, MoveAxis.Y, MoveAxis.Z]) {
+        for (let from = 0; from < size; from += 1) {
+          for (let to = from; to < size; to += 1) {
+            if (to - from + 1 === size) continue;
+            let layers = 0;
+            for (let index = from; index <= to; index += 1) layers |= 1 << index;
+
+            for (const turns of [-1, 1, 2] as const) {
+              const packed = packRun(axis, layers, turns);
+              const written = moveNotation(packed, size);
+              expect(written, `${size} ${axis} ${layers} ${turns}`).not.toBeNull();
+
+              const typed = parseMoves(written!, size);
+              expect(typed.ok, written!).toBe(true);
+              if (!typed.ok) continue;
+              expect(typed.turns, written!).toHaveLength(1);
+              expect(packTyped(typed.turns[0]!, size), written!).toBe(packed);
+              checked += 1;
+            }
+          }
+        }
+      }
+    }
+
+    // Every one of them, so the loops above cannot have skipped their way to
+    // green: n(n+1)/2 - 1 runs on each of three axes, three ways each, for
+    // n from 2 to 7.
+    expect(checked).toBe(693);
+  });
+});
+
+describe('faceOfNotation', () => {
+  it('names the face a move is written after, and none for a slice', () => {
+    expect(faceOfNotation('R')).toBe('R');
+    expect(faceOfNotation("U'")).toBe('U');
+    expect(faceOfNotation("2-3Lw'")).toBe('L');
+    expect(faceOfNotation('3Bw2')).toBe('B');
+    expect(faceOfNotation('M')).toBeNull();
+    expect(faceOfNotation("E'")).toBeNull();
+    expect(faceOfNotation('S2')).toBeNull();
   });
 });

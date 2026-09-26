@@ -1,10 +1,12 @@
 /**
- * How a packed move is read, and how it is written down.
+ * How a packed move is read, how it is written down, and how a written one is
+ * read back.
  *
- * Pure functions over numbers: nothing here touches the DOM and nothing here
- * asks the engine anything. Notation is a way of writing a move rather than a
- * property of it, so this module is where a change of notation stops -- the
- * engine hands over the same word whichever letters end up on the screen.
+ * Pure functions over numbers and strings: nothing here touches the DOM and
+ * nothing here asks the engine anything. Notation is a way of writing a move
+ * rather than a property of it, so this module is where a change of notation
+ * stops -- the engine hands over the same word whichever letters end up on the
+ * screen, and takes the same face command whichever letters were typed.
  */
 
 /** Axis values, in the same stable order as the C++ cube domain. */
@@ -249,4 +251,227 @@ export function moveNotation(packed: number, size: number): string | null {
   }
 
   return numberedNotation(move, run, size);
+}
+
+/** The six faces by the letter a face turn is written with. */
+export type FaceLetter = 'R' | 'L' | 'U' | 'D' | 'F' | 'B';
+
+/**
+ * One typed turn, in the terms the engine's face command takes.
+ *
+ * Depths count inwards from the face, which is how `turnFace` counts them and
+ * how the numbered notation above reads: `R` is 1 to 1, `Rw` is 1 to 2 and
+ * `2R` is 2 to 2. The turns are the face's own, so `L` is `+1` here even
+ * though the engine records it as a negative quarter about its axis.
+ */
+export type TypedTurn = {
+  readonly face: FaceLetter;
+  readonly firstDepth: number;
+  readonly lastDepth: number;
+  readonly turns: QuarterTurns;
+};
+
+/** What a line of typed moves turned out to be. */
+export type TypedMoves =
+  | {
+      readonly ok: true;
+      readonly turns: readonly TypedTurn[];
+      /** Each move as it was read, in the one spelling the log uses. */
+      readonly written: readonly string[];
+    }
+  | { readonly ok: false; readonly reason: string };
+
+/**
+ * The most turns one line may ask for.
+ *
+ * Every one of them is played, so a line is a sequence somebody sits through.
+ * Two hundred is ten scrambles of the longest kind, which is more than anyone
+ * types and less than anyone would wait for.
+ */
+export const MAX_TYPED_MOVES = 200;
+
+/**
+ * The slices a 3x3 names, and the face each one follows.
+ *
+ * M turns the way L does, E the way D does and S the way F does -- the same
+ * three the notation table above marks as reading their axis backwards or
+ * not -- so a slice is that face's command, one layer further in.
+ */
+const SLICE_FACE: Readonly<Record<string, FaceLetter>> = {
+  M: 'L',
+  E: 'D',
+  S: 'F',
+};
+
+/**
+ * One token: an optional depth or range, a letter, a wide mark, and a suffix.
+ *
+ * Sticky rather than anchored, so a line typed without spaces -- `RUR'U'` --
+ * is read the same as one typed with them. The suffix is greedy, which is
+ * what settles `R2R` as a half turn and a quarter rather than as two moves
+ * with a depth between them.
+ *
+ * Letters are read in either case. Lower case means a wide move in one
+ * notation, but not in the one this log writes -- it writes `Rw` -- and a
+ * person typing `r u r' u'` into a search box means the four moves on the
+ * keys, which is also what those keys turn.
+ */
+const TOKEN = /(?:(\d+)(?:-(\d+))?)?([RLUDFBMES])([wW]?)(2'|'2|2|'|)/iy;
+
+/** The primes a keyboard or a copied scramble may carry, all read as one. */
+const PRIMES = /[\u2019\u2032`]/g;
+
+/** A size said the way the rest of the page says it. */
+function sizeName(size: number): string {
+  return `${size}×${size}`;
+}
+
+/** A token that was read: the turn, and the token as the log would spell it. */
+type ReadToken = {
+  readonly turn: TypedTurn;
+  readonly written: string;
+};
+
+/**
+ * Reads one token that TOKEN matched, or says what is wrong with it.
+ *
+ * Everything a range can get wrong is checked here against the cube in hand,
+ * with the same two rules the engine applies to a face command: a run stays
+ * on the cube, and it is never the whole of it.
+ */
+function readToken(match: RegExpExecArray, size: number): ReadToken | string {
+  // The two numbers are optional groups, so either may be missing even though
+  // the array's type says every entry is a string.
+  const token = match[0];
+  const first: string | undefined = match[1];
+  const last: string | undefined = match[2];
+  const letter = (match[3] ?? '').toUpperCase();
+  const wide = match[4] ?? '';
+  const suffix = match[5] ?? '';
+
+  const turns: QuarterTurns =
+    suffix === '' ? 1 : suffix === "'" ? -1 : 2;
+
+  // The token again in the log's own spelling: upper case, a lower-case w,
+  // and one way of writing each turn. What is shown back to a person before
+  // it is played should read the way it will read on the list afterwards.
+  const range = first === undefined ? '' : last === undefined ? first : `${first}-${last}`;
+  const written = `${range}${letter}${wide === '' ? '' : 'w'}${
+    turns === 2 ? '2' : turns === -1 ? "'" : ''
+  }`;
+
+  const slice = SLICE_FACE[letter];
+  if (slice !== undefined) {
+    if (first !== undefined || wide !== '') {
+      return `Can't read "${token}" as a move.`;
+    }
+    // Only a cube with a middle has one, and it is the same layer from
+    // either face: halfway in, counted from the face the slice follows.
+    if (size % 2 === 0 || size < 3) {
+      return `"${token}" needs a middle layer, which a ${sizeName(size)} does not have.`;
+    }
+    const middle = (size + 1) / 2;
+    return {
+      turn: { face: slice, firstDepth: middle, lastDepth: middle, turns },
+      written,
+    };
+  }
+
+  const face = letter as FaceLetter;
+  const isWide = wide !== '';
+
+  const from = first === undefined ? null : Number(first);
+  const to = last === undefined ? null : Number(last);
+
+  let firstDepth: number;
+  let lastDepth: number;
+  if (to !== null) {
+    // A numbered run, `2-3Rw`. The w is how the log writes it; without one
+    // the range still says which layers, so it is read the same.
+    firstDepth = from ?? 1;
+    lastDepth = to;
+  } else if (isWide) {
+    // `Rw` is the face and the layer behind it; `3Rw` goes three deep.
+    firstDepth = 1;
+    lastDepth = from ?? 2;
+  } else {
+    // `R` is the face and `2R` is the one layer two deep.
+    firstDepth = from ?? 1;
+    lastDepth = firstDepth;
+  }
+
+  if (firstDepth < 1 || lastDepth < firstDepth) {
+    return `Can't read "${token}" as a move.`;
+  }
+  if (lastDepth > size) {
+    return `"${token}" reaches past a ${sizeName(size)}.`;
+  }
+  if (lastDepth - firstDepth + 1 >= size) {
+    return `"${token}" turns the whole cube. Only layers can be turned here.`;
+  }
+  return { turn: { face, firstDepth, lastDepth, turns }, written };
+}
+
+/**
+ * Reads a line of typed moves for a cube of `size` layers.
+ *
+ * Takes what the move log writes -- `R`, `U'`, `2-3Rw2`, `M'` -- and what a
+ * person types from a scramble sheet: spaces or none, commas, curly primes,
+ * either case. Every token is checked against the cube in hand, and
+ * the whole line is refused for one bad token rather than played up to it: a
+ * sequence stopped short is a cube nobody asked for.
+ *
+ * An empty line is a line with no moves, not an error.
+ */
+export function parseMoves(text: string, size: number): TypedMoves {
+  const line = text.replace(PRIMES, "'");
+  const turns: TypedTurn[] = [];
+  const written: string[] = [];
+
+  for (const chunk of line.split(/[\s,]+/)) {
+    let at = 0;
+    while (at < chunk.length) {
+      TOKEN.lastIndex = at;
+      const match = TOKEN.exec(chunk);
+      if (match === null) {
+        const rest = chunk.slice(at);
+        // Rotations are the one thing somebody may reasonably type that has
+        // no face command at all, so they get a sentence of their own.
+        return /^[xyz]/i.test(rest)
+          ? {
+              ok: false,
+              reason: `"${rest}" turns the whole cube. Only layers can be turned here.`,
+            }
+          : { ok: false, reason: `Can't read "${rest}" as a move.` };
+      }
+
+      const read = readToken(match, size);
+      if (typeof read === 'string') return { ok: false, reason: read };
+      turns.push(read.turn);
+      written.push(read.written);
+      if (turns.length > MAX_TYPED_MOVES) {
+        return {
+          ok: false,
+          reason: `That is more than ${MAX_TYPED_MOVES} moves at once.`,
+        };
+      }
+      at = TOKEN.lastIndex;
+    }
+  }
+
+  return { ok: true, turns, written };
+}
+
+/**
+ * The face whose colour a written move is shown in, or null for a slice.
+ *
+ * Read off the letter rather than the packed word, because the letter is
+ * what a person sees next to the colour: `2R` is shown red because it says R.
+ * M, E and S follow a face in direction only and sit between two colours, so
+ * they are shown in neither.
+ */
+export function faceOfNotation(notation: string): FaceLetter | null {
+  const letter = /[RLUDFBMES]/.exec(notation)?.[0];
+  if (letter === undefined || SLICE_FACE[letter] !== undefined) return null;
+  return letter as FaceLetter;
 }

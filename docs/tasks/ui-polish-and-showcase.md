@@ -4,6 +4,14 @@
 
 `Completed`
 
+**2026-09-26 개정.** [Stage and panels](./stage-and-panels.md)가 이 문서의 화면 구성을 바꿨습니다.
+
+- **Rail이 돌아왔습니다.** 다만 도구 패널이 아니라 무대 위에 뜬 유리 면입니다. 페이지 배경이 캔버스와 같은 색이어서, 무대가 두 도구 모음 사이의 미리보기처럼 보이던 이유가 사라졌습니다.
+- **Activity tab이 토글 패널로 바뀌었습니다.** Moves와 Session은 Turn과 함께, 각자의 버튼으로 여닫는 패널입니다.
+- **Advanced controls `<details>`가 Turn 패널이 되었습니다.**
+- **View bar가 View rail이 되었습니다.**
+- **그대로인 것들이 있습니다.** Scramble/Stop 자리 교체, state visibility 표, 모든 element id와 `GameUi`의 의미, canvas theme 경계는 이 문서 그대로입니다.
+
 Phase 번호를 붙이지 않는 횡단 작업입니다. 상위 계획의 Phase 17은 이미 **Solve hint and step-through**로 예약되어 있으므로 그 의미와 번호를 바꾸지 않습니다. 이 문서는 완성된 기능을 다시 설계하는 phase가 아니라, Phase 6~16에서 하나씩 추가된 UI를 ThorVG showcase에 맞는 하나의 제품 화면으로 재편하는 작업을 다룹니다.
 
 ## Objective

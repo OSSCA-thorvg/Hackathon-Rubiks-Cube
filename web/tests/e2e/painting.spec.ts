@@ -111,14 +111,16 @@ test('keys and commands leave the cube alone while a draft is open', async ({
   await expect(page.locator('#undo')).toBeDisabled();
   await expect(page.locator('#solve')).toBeDisabled();
   await expect(page.locator('#rewind')).toBeDisabled();
+
+  // Rewind comes back only once nothing is turning, so a turn taken behind
+  // the draft would have landed in the record by the time it does.
+  await page.locator('#paint-cancel').click();
+  await expect(page.locator('#rewind')).toBeEnabled();
   await expect(page.locator('#timeline-progress')).toHaveText('0 / 0');
   await expect(page.locator('.game-shell')).toHaveAttribute(
     'data-game-state',
     'ready',
   );
-
-  await page.locator('#paint-cancel').click();
-  await expect(page.locator('#rewind')).toBeEnabled();
 });
 
 test('a new cube puts the paint bar away with the draft', async ({ page }) => {

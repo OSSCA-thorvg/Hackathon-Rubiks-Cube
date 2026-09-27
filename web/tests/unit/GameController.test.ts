@@ -2454,13 +2454,31 @@ describe('colouring a real cube onto the net', () => {
       );
     }
 
-    // A view chosen while colouring is one somebody meant, and stays.
+    // A view chosen while colouring is one somebody meant, and stays -- and
+    // only that half of it: the other goes back to what it was.
     const harness = createHarness();
     harness.ui.viewButtons.find((b) => b.dataset.view === '3d')!.click();
     harness.ui.paintButton.click();
     harness.ui.viewButtons.find((b) => b.dataset.view === '2d')!.click();
     harness.ui.paintCancelButton.click();
     expect(harness.engine.viewMode()).toBe(CubeViewMode.Flat);
+
+    const rings = createHarness();
+    rings.ui.flatButtons.find((b) => b.dataset.flat === 'rings')!.click();
+    rings.ui.viewButtons.find((b) => b.dataset.view === '3d')!.click();
+    rings.ui.paintButton.click();
+    rings.ui.viewButtons.find((b) => b.dataset.view === '3d')!.click();
+    rings.ui.paintCancelButton.click();
+    expect(rings.engine.viewMode()).toBe(CubeViewMode.Cube3D);
+    expect(rings.engine.flatStyle()).toBe(CubeFlatStyle.Rings);
+
+    const both = createHarness();
+    both.ui.viewButtons.find((b) => b.dataset.view === '3d')!.click();
+    both.ui.paintButton.click();
+    both.ui.flatButtons.find((b) => b.dataset.flat === 'both')!.click();
+    both.ui.paintCancelButton.click();
+    expect(both.engine.viewMode()).toBe(CubeViewMode.Cube3D);
+    expect(both.engine.flatStyle()).toBe(CubeFlatStyle.Both);
   });
 
   it('lets the keyboard onto the net only while a draft is open', () => {

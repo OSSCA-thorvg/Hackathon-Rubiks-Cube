@@ -618,10 +618,12 @@ kbd {
   cursor: pointer;
 }
 
+/* Measured from inside the border, which is where an absolute box starts:
+   hence the extra pixel each way, without which the target is 42. */
 .move-chip::after {
   content: "";
   position: absolute;
-  inset: calc((var(--target) - 32px) / -2) 0;
+  inset: calc((var(--target) - 32px) / -2 - 1px) 0;
 }
 
 .move-chip:hover {
@@ -2302,6 +2304,10 @@ kbd {
   .view-rail .rail-button,
   .details-rail .rail-button {
     min-height: 46px;
+  }
+
+  .view-rail .rail-button--text {
+    min-height: var(--target);
   }
 
   .action-dock {

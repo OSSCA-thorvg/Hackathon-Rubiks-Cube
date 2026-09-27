@@ -387,10 +387,10 @@ void ambient_stop() noexcept;
  * Whether the solver this application holds solves the cube in hand.
  *
  * The size and nothing else. Whether a solve may be started *now* is the same
- * question every other command answers with is_busy(), and the screen reads
- * both to decide whether the control is live -- so this one does not have to
- * know about gestures or sequences to be the honest answer to "is there a
- * solver for this cube".
+ * question every command that moves the cube answers with is_busy() and
+ * is_painting(), and the screen reads them all to decide whether the control
+ * is live -- so this one does not have to know about gestures, sequences or
+ * drafts to be the honest answer to "is there a solver for this cube".
  */
 [[nodiscard]] bool can_solve() noexcept;
 

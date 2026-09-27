@@ -686,7 +686,7 @@ export class CubeEngine {
    * Begins watching a repeating pattern, picked by `choice`.
    *
    * Every uint32 names a pattern, so this cannot be refused for the value --
-   * only for watching having already begun, which is what false means. The
+   * false means watching had already begun, or a colouring draft is open. The
    * caller has to run frames, the same as for a scramble; unlike a scramble
    * they never stop coming until watching does.
    */
@@ -768,8 +768,9 @@ export class CubeEngine {
   /**
    * Whether the engine holds a solver for the size of cube in hand.
    *
-   * The size alone. Whether a solve may begin at this moment is `isBusy()`,
-   * the same question every other command is gated on.
+   * The size alone. Whether a solve may begin at this moment is `isBusy()` and
+   * `isPainting()`, the same questions every command that moves the cube is
+   * gated on.
    */
   canSolve(): boolean {
     this.assertUsable();
@@ -860,7 +861,10 @@ export class CubeEngine {
     return packed >>> 0;
   }
 
-  /** Starts one animated face turn, returning false while the engine is busy. */
+  /**
+   * Starts one animated face turn, returning false while the engine is busy or
+   * a colouring draft is open.
+   */
   turnFace(
     face: CubeFace,
     firstDepth: number,

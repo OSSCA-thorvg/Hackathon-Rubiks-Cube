@@ -811,11 +811,12 @@ export function attachGameController(
    * solve stopped inside the scramble -- a state the payload has no shape for.
    *
    * A cursor of nothing used to be refused here on the grounds that a link
-   * would have opened that cube anyway. That is true, and it is a reason to
-   * hand over the plain address rather than a reason to hand over nothing: a
-   * button that cannot be pressed on the screen somebody wants to send is a
-   * button they have to work out an explanation for. What travels then is the
-   * page, which opens the cube they are looking at.
+   * would have opened that cube anyway. That is true of the opening size, and
+   * it is a reason to hand over something small rather than nothing: a button
+   * that cannot be pressed on the screen somebody wants to send is a button
+   * they have to work out an explanation for. What travels then is the page
+   * for the opening size, or a link carrying only the size for any other, and
+   * either opens the cube they are looking at.
    */
   const canShare = (now: EngineFrame): boolean =>
     (!now.busy || now.watching) && now.cursor >= now.scrambleEnd;
@@ -1406,9 +1407,9 @@ export function attachGameController(
    * On the way in the net is put on the stage if the view had left it off --
    * the cube alone, or the rings -- since a draft is coloured nowhere else,
    * and its canvas joins the tab order under a name that says how the keys
-   * colour it. On the way out both are undone: the view only if it is still
-   * the one put up here, since a view somebody chose while colouring is one
-   * they meant.
+   * colour it. On the way out both are undone, the scene and the diagram each
+   * on its own and each only if it is still what was put up here: one chosen
+   * while colouring is one somebody meant, and the other is not.
    *
    * Called on every change of the paint bar and doing anything only when the
    * draft has opened or closed since, which is what `paintView` remembers.
@@ -1440,14 +1441,12 @@ export function attachGameController(
     if (!painting && paintView !== null) {
       const { before, shown } = paintView;
       paintView = null;
-      const changed = shown.mode !== before.mode || shown.style !== before.style;
-      if (
-        changed &&
-        engine.viewMode() === shown.mode &&
-        engine.flatStyle() === shown.style
-      ) {
-        engine.setViewMode(before.mode);
-        engine.setFlatStyle(before.style);
+      const mode = shown.mode !== before.mode && engine.viewMode() === shown.mode;
+      const style =
+        shown.style !== before.style && engine.flatStyle() === shown.style;
+      if (mode) engine.setViewMode(before.mode);
+      if (style) engine.setFlatStyle(before.style);
+      if (mode || style) {
         engine.render();
         updateViewControls();
       }

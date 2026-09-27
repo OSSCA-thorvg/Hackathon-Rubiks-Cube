@@ -214,9 +214,11 @@ function isSharableSize(size: number): boolean {
  * Writes one session as a base64url string, or returns null.
  *
  * Null for the sessions there is no link for: a record longer than the far end
- * can take back, and one holding a word this version cannot carry. The share
- * control never offers either, so this is the assembly side agreeing with the
- * reading side rather than a path a person walks down.
+ * can take back, and one holding a word this version cannot carry. The first
+ * is reachable -- nothing caps a record, and a Solve on a large cube writes
+ * thousands of moves -- and the page says the cube cannot be written into a
+ * link. The second the page never produces, so refusing it is the assembly
+ * side agreeing with the reading side.
  *
  * An empty record is a session: a cube of that size with nothing done to it.
  * The page sends its plain address for the size every page opens on, and this

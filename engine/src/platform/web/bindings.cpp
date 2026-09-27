@@ -254,7 +254,8 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_restore_apply(
  * Every value is a valid choice, so this is where the arbitrariness comes in:
  * the browser has a random source and the engine has none.
  *
- * @return one when watching began; zero when it had already begun.
+ * @return one when watching began; zero when it had already begun, or while
+ *         a colouring draft is open.
  */
 EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_ambient_start(
     std::uint32_t choice) noexcept
@@ -300,7 +301,7 @@ thorvg_rubiks_committed_move_count() noexcept
  * Turns the user's last move back.
  *
  * @return one when a rewind began; zero with nothing of the user's own on the
- *         cube, or while anything else owns it.
+ *         cube, while anything else owns it, or while a draft is open.
  */
 EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_undo() noexcept
 {
@@ -310,7 +311,8 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_undo() noexcept
 /**
  * Plays back the move a rewind took off.
  *
- * @return one when a replay began; zero when nothing has been rewound.
+ * @return one when a replay began; zero when nothing has been rewound, while
+ *         anything else owns the cube, or while a draft is open.
  */
 EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_redo() noexcept
 {
@@ -320,7 +322,8 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_redo() noexcept
 /**
  * Rewinds every applied move, leaving a solved cube.
  *
- * @return one when a rewind began; zero with nothing applied.
+ * @return one when a rewind began; zero with nothing applied, while anything
+ *         else owns the cube, or while a draft is open.
  */
 EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_solve_rewind() noexcept
 {
@@ -330,8 +333,8 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_solve_rewind() noexcept
 /**
  * Whether a solver here handles the size of cube in hand.
  *
- * The size alone; whether a solve may begin right now is is_busy(), the same
- * as for every other command.
+ * The size alone; whether a solve may begin right now is is_busy() and
+ * is_painting(), the same as for every other command that moves the cube.
  *
  * @return one when this cube can be solved.
  */

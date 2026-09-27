@@ -473,6 +473,10 @@ test('every control is a whole target across, wherever it is put', async ({
   // on the paint bar and in the command menu, on a phone and on a wide window
   // both tall and short. The sliders are the exception: a range input is a
   // track to drag along, and its thumb is the target.
+  //
+  // Measured as what a press lands on: the box, and an absolute ::after that
+  // reaches past it -- which is how a move chip is a target taller than it is
+  // drawn.
   const small = async (): Promise<string[]> =>
     page.evaluate(() =>
       [
@@ -480,16 +484,38 @@ test('every control is a whole target across, wherever it is put', async ({
           'button, input:not([type="range"]), [role="option"]',
         ),
       ]
-        .filter((element) => {
-          const box = element.getBoundingClientRect();
-          return box.width > 0 && box.height > 0 && Math.min(box.width, box.height) < 44;
-        })
         .map((element) => {
           const box = element.getBoundingClientRect();
-          const name = element.id || element.getAttribute('aria-label') || element.textContent;
-          return `${name?.trim()} ${Math.round(box.width)}x${Math.round(box.height)}`;
+          let { top, bottom, left, right } = box;
+          const after = getComputedStyle(element, '::after');
+          if (after.position === 'absolute' && after.content !== 'none') {
+            const own = getComputedStyle(element);
+            const edge = (side: string): number =>
+              parseFloat(own.getPropertyValue(`border-${side}-width`));
+            const inset = (side: string): number =>
+              parseFloat(after.getPropertyValue(side));
+            top = Math.min(top, box.top + edge('top') + inset('top'));
+            bottom = Math.max(bottom, box.bottom - edge('bottom') - inset('bottom'));
+            left = Math.min(left, box.left + edge('left') + inset('left'));
+            right = Math.max(right, box.right - edge('right') - inset('right'));
+          }
+          return { element, width: right - left, height: bottom - top, box };
+        })
+        .filter(
+          ({ box, width, height }) =>
+            box.width > 0 && box.height > 0 && Math.min(width, height) < 43.99,
+        )
+        .map(({ element, width, height }) => {
+          const name =
+            element.id || element.getAttribute('aria-label') || element.textContent;
+          return `${name?.trim()} ${Math.round(width)}x${Math.round(height)}`;
         }),
     );
+
+  // One move of the user's own, so the chips on the timeline and in the
+  // Moves list are there to be measured.
+  await page.keyboard.press('r');
+  await expect(page.locator('#timeline-moves .move-chip')).toHaveCount(1);
 
   for (const viewport of [
     { width: 390, height: 844 },
@@ -500,9 +526,11 @@ test('every control is a whole target across, wherever it is put', async ({
     const at = `${viewport.width}x${viewport.height}`;
     expect(await small(), at).toEqual([]);
 
-    await page.locator('#details-turn').click();
-    expect(await small(), `${at} Turn`).toEqual([]);
-    await page.locator('#details-turn').click();
+    for (const panel of ['moves', 'session', 'turn']) {
+      await page.locator(`#details-${panel}`).click();
+      expect(await small(), `${at} ${panel}`).toEqual([]);
+      await page.locator(`#details-${panel}`).click();
+    }
 
     await page.locator('#paint').click();
     expect(await small(), `${at} Paint`).toEqual([]);

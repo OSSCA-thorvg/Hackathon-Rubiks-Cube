@@ -205,7 +205,7 @@ describe('MoveLog with somewhere to go', () => {
     log.update(frame(3, 3, 0));
 
     buttons()[0]!.focus();
-    // A walk back is under way, and each step redraws the whole list.
+    // A walk back is under way; a step keeps the entries and moves the marks.
     log.update(frame(3, 2, 0));
     expect(document.activeElement).toBe(buttons()[0]);
     expect((document.activeElement as HTMLElement).dataset.index).toBe('0');
@@ -214,6 +214,29 @@ describe('MoveLog with somewhere to go', () => {
     // walked to -- a second stop further on would be where Tab went next,
     // rather than out of the list.
     expect(buttons().map((button) => button.tabIndex)).toEqual([0, -1, -1]);
+  });
+
+  it('hands focus to the entry that replaces the one holding it', () => {
+    const moves = [R, U, F];
+    const { log, buttons } = createPickable(moves);
+    log.update(frame(3, 3, 0));
+    log.update(frame(3, 1, 0));
+    const old = buttons()[1]!;
+    old.focus();
+
+    // A move made here cuts the tail the focused entry was in.
+    moves.splice(1, 2, R_PRIME, U);
+    log.update(frame(3, 3, 0));
+    expect(buttons()[1]).not.toBe(old);
+    expect(document.activeElement).toBe(buttons()[1]);
+    expect(buttons().map((button) => button.tabIndex)).toEqual([-1, 0, -1]);
+
+    // An index that is gone altogether sends it to where the cube is.
+    buttons()[2]!.focus();
+    moves.splice(1, 2, F);
+    log.update(frame(2, 2, 0));
+    expect(document.activeElement).toBe(buttons()[1]);
+    expect(buttons().map((button) => button.tabIndex)).toEqual([-1, 0]);
   });
 
   it('moves the stop back to the cursor once the keyboard is elsewhere', () => {

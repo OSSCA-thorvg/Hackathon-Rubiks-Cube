@@ -328,6 +328,7 @@ Drag 좌표는 contract의 cube viewport 비율에서 유도하므로, camera나
     straddle하는 쌍으로 재고정되었으며, canonical drag 상수는 한 칸 구간의 중앙인
     75°로 옮겼습니다. Snap-back e2e는 27°에서 13.5°로 내렸습니다.
 - **누름은 surface를 말합니다 ([Scenes and surfaces](./scenes-and-surfaces.md)의 결정, 2026-09-26).** `pointer_down_on(id, x, y)`는 그 surface의 픽셀로 받고, 그 surface에 보이는 것에만 닿습니다. `pointer_down(x, y)`는 surface 0에 대한 이 호출입니다. 이 문서의 "resize 시 Dragging을 취소한다"는 **그 드래그가 시작된 surface의 resize**로 좁아졌습니다. capture한 camera와 viewport는 시작한 surface의 것이라, 다른 surface의 크기가 바뀌어도 stale해지지 않습니다. 브라우저에서는 캔버스마다 포인터 컨트롤러가 하나씩 있고, 모두 lock 하나를 공유해 제스처는 한 번에 하나입니다. 넷과 링 캔버스에서 엔진이 거절한 누름은 큐브 캔버스의 픽셀로 옮겨 다시 건넵니다. 그래서 빈 곳을 끌면 시점이 돈다는 규칙이 캔버스가 나뉜 뒤에도 그대로입니다. 또 페이지는 제스처가 진행되는 동안 캔버스 크기 조정을 미루고, 끝나는 순간 적용합니다(2026-09-27). 그래서 "resize 시 Dragging을 취소한다"는 엔진의 규칙은 여전히 참이지만, 페이지에서는 드래그 도중에 resize가 일어나지 않습니다.
+- **버튼이 떼어진 채 오는 `lostpointercapture`는 놓음입니다 (2026-09-28).** 위의 "capture 중의 `lostpointercapture`는 `pointer_cancel`"은 이제 버튼을 누르고 있을 때만 참입니다. 앱에 내장된 Chromium에서 빠르게 연속으로 돌리면, 놓는 순간 `pointerup`보다 `lostpointercapture`(`buttons=0`)가 먼저 오는 것이 실제 입력 기록으로 확인되었습니다. 이를 취소로 받으면 문턱을 넘긴 회전이 애니메이션 없이 원위치로 튀어 "돌리다 씹힌" 것처럼 보였습니다. `PointerController.ts`는 이제 그 이벤트의 `buttons`에서 주 버튼이 떼어져 있으면 `pointer_up`을, 눌려 있으면 지금처럼 `pointer_cancel`을 보냅니다. 뒤늦게 오는 `pointerup`은 이미 끝난 gesture의 것이라 무시됩니다.
 
 ## Verification commands
 

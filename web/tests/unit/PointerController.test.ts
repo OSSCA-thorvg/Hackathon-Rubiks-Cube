@@ -185,10 +185,27 @@ describe('attachPointer', () => {
     const harness = createHarness();
     harness.dispatch('pointerdown');
 
-    harness.dispatch('lostpointercapture');
+    harness.dispatch('lostpointercapture', { buttons: 1 });
 
     expect(harness.engine.pointerCancel).toHaveBeenCalledTimes(1);
     expect(harness.engine.pointerUp).not.toHaveBeenCalled();
+  });
+
+  it('releases the gesture when capture goes with the button already up', () => {
+    // Ahead of the pointerup, or in place of it: a browser embedded in
+    // another app sends this. The button is up, so the user let go, and the
+    // turn they carried past the commit has to land rather than vanish.
+    const harness = createHarness();
+    harness.dispatch('pointerdown');
+
+    harness.dispatch('lostpointercapture', { buttons: 0 });
+
+    expect(harness.engine.pointerUp).toHaveBeenCalledTimes(1);
+    expect(harness.engine.pointerCancel).not.toHaveBeenCalled();
+
+    // The pointerup arriving after it belongs to a gesture already over.
+    harness.dispatch('pointerup');
+    expect(harness.engine.pointerUp).toHaveBeenCalledTimes(1);
   });
 
   it('says when a gesture has ended, however it ended, after the engine hears', () => {
@@ -206,7 +223,7 @@ describe('attachPointer', () => {
     expect(harness.onGestureEnd).toHaveBeenCalledTimes(2);
 
     harness.dispatch('pointerdown');
-    harness.dispatch('lostpointercapture');
+    harness.dispatch('lostpointercapture', { buttons: 1 });
     expect(harness.onGestureEnd).toHaveBeenCalledTimes(3);
 
     // A press the engine turned down began nothing, so nothing ends.

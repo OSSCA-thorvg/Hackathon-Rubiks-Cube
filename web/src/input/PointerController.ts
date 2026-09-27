@@ -90,8 +90,8 @@ function toBufferPixels(
  * One gesture at a time: the first primary pointer the engine accepts owns
  * the canvas until it ends, and every other pointer is ignored meanwhile.
  * Everything that ends a gesture without a deliberate release — a cancelled
- * pointer, lost capture, teardown — goes to pointerCancel(), so the engine
- * can tell those apart from letting go.
+ * pointer, capture lost while the button is held, teardown — goes to
+ * pointerCancel(), so the engine can tell those apart from letting go.
  */
 export function attachPointer(
   options: PointerControllerOptions,
@@ -182,9 +182,14 @@ export function attachPointer(
   const onLostPointerCapture = (event: PointerEvent): void => {
     if (event.pointerId !== activePointerId) return;
 
-    // Capture taken away mid-drag: the user never let go, so nothing commits.
+    // Capture can go ahead of the pointerup that should have ended the drag,
+    // with the button already up: a browser embedded in another app has been
+    // seen to send it in place of the release. A button that is up was let
+    // go of, so that is a release. Only capture taken away while the button
+    // is still held is a drag the user never finished, and commits nothing.
     letGo();
-    target.pointerCancel();
+    if ((event.buttons & 1) === 0) target.pointerUp();
+    else target.pointerCancel();
     options.onGestureEnd?.();
   };
 

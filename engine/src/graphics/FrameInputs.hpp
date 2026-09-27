@@ -73,17 +73,19 @@ struct CubeDrawing {
  * A colouring being made, which the net draws in place of the cube.
  *
  * With the squares the last refusal blamed, kept on it while they are being
- * mended.
+ * mended, and the keyboard's place on it while the net has the keyboard.
  */
 struct NetPainting {
     std::vector<cube::FaceColor> stickers;
     std::vector<int> blamed;
+    std::optional<NetPosition> cursor;
 };
 
 [[nodiscard]] inline bool operator==(const NetPainting& a,
                                      const NetPainting& b) noexcept
 {
-    return a.stickers == b.stickers && a.blamed == b.blamed;
+    return a.stickers == b.stickers && a.blamed == b.blamed &&
+           a.cursor == b.cursor;
 }
 
 /**

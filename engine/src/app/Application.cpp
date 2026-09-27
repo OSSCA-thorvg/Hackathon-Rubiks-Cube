@@ -282,6 +282,13 @@ struct ApplicationState {
         // cell it crosses, which is how a face gets copied off a real cube
         // without lifting the finger between squares.
         bool stroking = false;
+
+        // Where the keyboard is on the net, once it has been there, and
+        // whether that place is drawn -- only while the net has the focus.
+        // Kept for the life of the draft, so a trip to the colours and back
+        // finds it where it was left.
+        std::optional<interaction::NetPick> cursor;
+        bool cursor_shown = false;
     };
     std::optional<PaintDraft> paint;
 
@@ -1224,8 +1231,14 @@ void note_cube_change() noexcept
     if ((drawn & kSceneNet) != 0) {
         std::optional<graphics::NetPainting> painting;
         if (state->paint) {
+            std::optional<graphics::NetPosition> cursor;
+            if (state->paint->cursor_shown && state->paint->cursor) {
+                const auto& at = *state->paint->cursor;
+                cursor = graphics::NetPosition{at.face, at.col, at.row};
+            }
             painting = graphics::NetPainting{state->paint->stickers,
-                                             state->paint->reading.blamed};
+                                             state->paint->reading.blamed,
+                                             cursor};
         }
         frame.net = graphics::NetDrawing{cube, rotation, state->palette,
                                          state->interaction.net_guides(),
@@ -1412,19 +1425,41 @@ namespace {
     return interaction::pick_net(x, y, surface.placement.net, size_of_cube());
 }
 
+/**
+ * Lays the brush on one cell of the draft.
+ *
+ * Where a press and a key both end up, so the two colour a cell the same way:
+ * they differ only in how they found it.
+ */
+[[nodiscard]] bool paint_cell(const interaction::NetPick& pick) noexcept
+{
+    const int slot = painted_slot(pick, size_of_cube());
+    if (slot < 0) return false;
+
+    state->paint->stickers[static_cast<std::size_t>(slot)] =
+        state->paint->brush;
+    return true;
+}
+
+/** Lays the brush on every cell of one face of the draft. */
+bool fill_face(cube::Face face) noexcept
+{
+    const int size = size_of_cube();
+    for (int row = 0; row < size; ++row) {
+        for (int col = 0; col < size; ++col) {
+            static_cast<void>(paint_cell(interaction::NetPick{face, col, row}));
+        }
+    }
+    return true;
+}
+
 bool paint_on(std::uint32_t id, float x, float y) noexcept
 {
     if (!state || !state->paint) return false;
 
     const auto pick = net_cell_on(id, x, y);
     if (!pick) return false;
-
-    const int slot = painted_slot(*pick, size_of_cube());
-    if (slot < 0) return false;
-
-    state->paint->stickers[static_cast<std::size_t>(slot)] =
-        state->paint->brush;
-    return true;
+    return paint_cell(*pick);
 }
 
 bool fill_on(std::uint32_t id, float x, float y) noexcept
@@ -1433,18 +1468,18 @@ bool fill_on(std::uint32_t id, float x, float y) noexcept
 
     const auto pick = net_cell_on(id, x, y);
     if (!pick) return false;
+    return fill_face(pick->face);
+}
 
-    const int size = size_of_cube();
-    for (int row = 0; row < size; ++row) {
-        for (int col = 0; col < size; ++col) {
-            const int slot =
-                painted_slot(interaction::NetPick{pick->face, col, row}, size);
-            if (slot < 0) continue;
-            state->paint->stickers[static_cast<std::size_t>(slot)] =
-                state->paint->brush;
-        }
+/** The face drawn in one block of the cross, or nothing for an empty one. */
+[[nodiscard]] std::optional<cube::Face> face_in_block(int column,
+                                                      int row) noexcept
+{
+    for (const auto face : graphics::net_faces()) {
+        const auto block = graphics::net_block(face);
+        if (block.column == column && block.row == row) return face;
     }
-    return true;
+    return std::nullopt;
 }
 
 }  // namespace
@@ -1517,6 +1552,58 @@ bool is_filling() noexcept
 bool fill_face_at(float x, float y) noexcept
 {
     return fill_on(0, x, y);
+}
+
+bool paint_cursor_step(int columns, int rows) noexcept
+{
+    if (!state || !state->paint) return false;
+    auto& draft = *state->paint;
+    const int size = size_of_cube();
+
+    // The first step places it rather than moves it: in the middle of the
+    // front face, which is the one somebody copying their cube looks at first.
+    if (!draft.cursor) {
+        draft.cursor = interaction::NetPick{cube::Face::Front, size / 2, size / 2};
+        return true;
+    }
+
+    // Counted across the whole cross, so a step off one face's edge lands on
+    // the face drawn beside it -- which the net draws there because it is the
+    // face that shares that edge on the cube.
+    const auto block = graphics::net_block(draft.cursor->face);
+    const int column = block.column * size + draft.cursor->col + columns;
+    const int row = block.row * size + draft.cursor->row + rows;
+    if (column < 0 || row < 0) return false;
+
+    const auto face = face_in_block(column / size, row / size);
+    if (!face) return false;
+
+    draft.cursor = interaction::NetPick{*face, column % size, row % size};
+    return true;
+}
+
+bool paint_at_cursor() noexcept
+{
+    if (!state || !state->paint || !state->paint->cursor) return false;
+
+    const auto& at = *state->paint->cursor;
+    return state->paint->filling ? fill_face(at.face) : paint_cell(at);
+}
+
+void set_paint_cursor_shown(bool shown) noexcept
+{
+    if (state && state->paint) state->paint->cursor_shown = shown;
+}
+
+std::optional<PaintCursor> paint_cursor() noexcept
+{
+    if (!state || !state->paint || !state->paint->cursor) return std::nullopt;
+
+    const auto& at = *state->paint->cursor;
+    const int slot = painted_slot(at, size_of_cube());
+    if (slot < 0) return std::nullopt;
+    return PaintCursor{at.face, at.col, at.row,
+                       state->paint->stickers[static_cast<std::size_t>(slot)]};
 }
 
 int painted_count(cube::FaceColor colour) noexcept

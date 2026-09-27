@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "cube/Assembly.hpp"
@@ -582,6 +583,48 @@ void cancel_painting() noexcept;
  * not.
  */
 [[nodiscard]] bool fill_face_at(float x, float y) noexcept;
+
+/**
+ * The keyboard's way onto the net: a place on the draft, moved a cell at a
+ * time, that the brush can be laid at.
+ *
+ * Kept by the engine rather than the page, because only the engine knows how
+ * the cross is laid out and where on the canvas it is drawn -- a page walking
+ * its own copy of the net would be one more thing to keep in step.
+ */
+struct PaintCursor {
+    cube::Face face;
+    int col;
+    int row;
+    /** The colour the draft has there now. */
+    cube::FaceColor colour;
+};
+
+/**
+ * Moves the place a cell at a time across the net, or puts it down.
+ *
+ * The first call puts it in the middle of the front face, whatever it is
+ * asked. After that a step goes the given number of cells across and down the
+ * whole cross, so stepping off one face lands on the face drawn beside it.
+ *
+ * @return false without a draft, and for a step into an empty corner of the
+ *         cross or off the net, which leaves the place where it was.
+ */
+[[nodiscard]] bool paint_cursor_step(int columns, int rows) noexcept;
+
+/**
+ * Lays the brush where the place is: the one cell, or its whole face while
+ * filling -- the same two things a press does.
+ *
+ * @return false without a draft or before the place has been put down.
+ */
+[[nodiscard]] bool paint_at_cursor() noexcept;
+
+/** Whether the place is drawn: while the net has the keyboard, and not after. */
+void set_paint_cursor_shown(bool shown) noexcept;
+
+/** Where the place is, and what colour is there; nothing before it is put down. */
+[[nodiscard]] std::optional<PaintCursor> paint_cursor() noexcept;
 
 /** How many of a colour the draft carries, against the N^2 it needs. */
 [[nodiscard]] int painted_count(cube::FaceColor colour) noexcept;

@@ -78,7 +78,8 @@ RenderScene compose(const FrameInputs& frame)
             // is nowhere for a guide to promise.
             append_scene(scene, build_net_painting(net.painting->stickers, size,
                                                    placement.net, net.palette,
-                                                   net.painting->blamed));
+                                                   net.painting->blamed,
+                                                   net.painting->cursor));
         } else {
             // The net is already screen-space, so it only has to be appended.
             // It gets the same rotation as the 3D scene, which is what makes

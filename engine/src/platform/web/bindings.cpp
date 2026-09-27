@@ -555,6 +555,38 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_fill(float x, float y) noexcept
     return rubiks::app::fill_face_at(x, y) ? 1 : 0;
 }
 
+/** Moves the keyboard's place on the net, or puts it down the first time. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_cursor_step(int columns,
+                                                         int rows) noexcept
+{
+    return rubiks::app::paint_cursor_step(columns, rows) ? 1 : 0;
+}
+
+/** Lays the brush at the keyboard's place: the cell, or its face while filling. */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_at_cursor() noexcept
+{
+    return rubiks::app::paint_at_cursor() ? 1 : 0;
+}
+
+/** Whether the place is drawn, which it is while the net has the focus. */
+EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_set_paint_cursor_shown(int shown) noexcept
+{
+    rubiks::app::set_paint_cursor_shown(shown != 0);
+}
+
+/**
+ * Where the place is and what is there, packed as one number, or -1 before it
+ * is put down: face * 0x1000000 + colour * 0x10000 + row * 0x100 + column. A
+ * row and column fit a byte each at every size built here.
+ */
+EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_cursor() noexcept
+{
+    const auto at = rubiks::app::paint_cursor();
+    if (!at) return -1;
+    return static_cast<int>(at->face) * 0x1000000 +
+           static_cast<int>(at->colour) * 0x10000 + at->row * 0x100 + at->col;
+}
+
 /** Whether a press covers the whole face it lands on. */
 EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_paint_filling(int whole_face) noexcept
 {

@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 #include "graphics/Layout.hpp"
@@ -478,7 +479,8 @@ RenderScene build_net_scene(const cube::CubeState& state, const Rect& rect,
 
 RenderScene build_net_painting(const std::vector<cube::FaceColor>& painting,
                                int size, const Rect& rect, Palette palette,
-                               const std::vector<int>& blamed)
+                               const std::vector<int>& blamed,
+                               const std::optional<NetPosition>& cursor)
 {
     const auto all = cube::surface_stickers(size);
     if (painting.size() != all.size()) return {};
@@ -546,6 +548,33 @@ RenderScene build_net_painting(const std::vector<cube::FaceColor>& painting,
             ring.segments.push_back(RenderSegment{corner, corner, corner});
         }
         scene.strokes.push_back(std::move(ring));
+    }
+
+    // The keyboard's place, round the whole cell: in the gap between stickers
+    // rather than on the sticker's edge where a complaint goes. Twice, dark
+    // under light, so it reads on white and yellow as well as on blue.
+    if (cursor) {
+        const float cell = net_cell_side(rect, size);
+        const Vec2 middle =
+            net_cell_center(cursor->face, cursor->col, cursor->row, rect, size);
+        const float half = 0.5f * cell;
+        for (const auto& [share, color] :
+             {std::pair{kNetCursorEdgeCells, cursor_edge_color()},
+              std::pair{kNetCursorWidthCells, cursor_color()}}) {
+            RenderStroke ring;
+            ring.start = Vec2{middle.x - half, middle.y - half};
+            ring.closed = true;
+            ring.width = share * cell;
+            ring.color = color;
+            for (const auto& corner :
+                 {Vec2{middle.x + half, middle.y - half},
+                  Vec2{middle.x + half, middle.y + half},
+                  Vec2{middle.x - half, middle.y + half},
+                  Vec2{middle.x - half, middle.y - half}}) {
+                ring.segments.push_back(RenderSegment{corner, corner, corner});
+            }
+            scene.strokes.push_back(std::move(ring));
+        }
     }
     return scene;
 }

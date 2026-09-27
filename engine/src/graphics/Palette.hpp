@@ -65,4 +65,15 @@ inline constexpr Color kPaperWhite{216, 216, 216, 255};
  */
 [[nodiscard]] Color blame_color() noexcept;
 
+/**
+ * The colours the keyboard's place on a painting is ringed in: the page's own
+ * focus blue, over a dark edge.
+ *
+ * The blue is the one a focused control on the page is outlined in, so the
+ * place reads as where the keyboard is. The edge under it is what lets it read
+ * on white and yellow stickers as well as on blue ones.
+ */
+[[nodiscard]] Color cursor_color() noexcept;
+[[nodiscard]] Color cursor_edge_color() noexcept;
+
 }  // namespace rubiks::graphics

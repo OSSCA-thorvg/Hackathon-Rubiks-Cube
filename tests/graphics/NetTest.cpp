@@ -11,6 +11,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "cube/Assembly.hpp"
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
 #include "graphics/Layout.hpp"
@@ -1153,4 +1154,31 @@ TEST_CASE("a ring runs dead straight between slots that share a face")
             require_straight(net_ring(axis, index, rect, kSize));
         }
     }
+}
+
+TEST_CASE("a painting rings the keyboard's place round the whole cell")
+{
+    const Rect rect = test_rect();
+    const auto painting = rubiks::cube::painting_of(CubeState(kSize));
+
+    const auto plain = build_net_painting(painting, kSize, rect,
+                                          Palette::Classic, {});
+    const auto placed =
+        build_net_painting(painting, kSize, rect, Palette::Classic, {},
+                           NetPosition{Face::Front, 1, 1});
+
+    // Two rings, dark under light, over the same stickers.
+    REQUIRE(placed.faces.size() == plain.faces.size());
+    REQUIRE(placed.strokes.size() == plain.strokes.size() + 2);
+
+    // Round the cell rather than the sticker, so it sits in the gap a
+    // complaint's ring does not.
+    const float cell = net_cell_side(rect, kSize);
+    const auto middle = net_cell_center(Face::Front, 1, 1, rect, kSize);
+    const auto& ring = placed.strokes.back();
+    REQUIRE(ring.start.x == Approx(middle.x - 0.5f * cell));
+    REQUIRE(ring.start.y == Approx(middle.y - 0.5f * cell));
+    REQUIRE(ring.color == cursor_color());
+    REQUIRE(placed.strokes[placed.strokes.size() - 2].color ==
+            cursor_edge_color());
 }

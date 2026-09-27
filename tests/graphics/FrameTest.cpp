@@ -80,7 +80,7 @@ TEST_CASE("a frame is the same as another only when all it is drawn from is")
         [](FrameInputs& f) { f.net->guides.clear(); },
         [](FrameInputs& f) { f.net->guides[0].cell.x += 1; },
         [](FrameInputs& f) {
-            f.net->painting = NetPainting{{FaceColor::Red}, {}};
+            f.net->painting = NetPainting{{FaceColor::Red}, {}, std::nullopt};
         },
 
         [](FrameInputs& f) { f.rings.reset(); },
@@ -104,11 +104,13 @@ TEST_CASE("a painting is compared by what is painted on it")
 {
     const CubeState cube(3);
     FrameInputs before = every_drawing(cube);
-    before.net->painting = NetPainting{{FaceColor::White, FaceColor::Red}, {}};
+    before.net->painting =
+        NetPainting{{FaceColor::White, FaceColor::Red}, {}, std::nullopt};
 
     // The same squares, arrived at again, are the frame already drawn.
     FrameInputs again = before;
-    again.net->painting = NetPainting{{FaceColor::White, FaceColor::Red}, {}};
+    again.net->painting =
+        NetPainting{{FaceColor::White, FaceColor::Red}, {}, std::nullopt};
     REQUIRE(again == before);
 
     FrameInputs stroked = before;
@@ -118,6 +120,14 @@ TEST_CASE("a painting is compared by what is painted on it")
     FrameInputs blamed = before;
     blamed.net->painting->blamed = {1};
     REQUIRE_FALSE(blamed == before);
+
+    // The keyboard's place is drawn on it too, so a step is a new frame.
+    FrameInputs placed = before;
+    placed.net->painting->cursor = NetPosition{Face::Front, 1, 1};
+    REQUIRE_FALSE(placed == before);
+    FrameInputs stepped = placed;
+    stepped.net->painting->cursor->col = 2;
+    REQUIRE_FALSE(stepped == placed);
 }
 
 TEST_CASE("a cube is the cube it was for as long as its revision is")

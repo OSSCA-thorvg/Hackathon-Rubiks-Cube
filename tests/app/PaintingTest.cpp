@@ -268,6 +268,109 @@ TEST_CASE("the cube does not move behind an open draft")
     CHECK(rubiks::app::timeline_cursor() == 2);
 }
 
+TEST_CASE("the keyboard's place walks the cross a cell at a time")
+{
+    using rubiks::cube::Face;
+    const EngineLifecycle engine(kCanvas, kCanvas);
+
+    // Nothing to walk without a draft.
+    CHECK_FALSE(rubiks::app::paint_cursor_step(1, 0));
+    CHECK_FALSE(rubiks::app::paint_cursor().has_value());
+
+    REQUIRE(rubiks::app::begin_painting());
+    CHECK_FALSE(rubiks::app::paint_cursor().has_value());
+    CHECK_FALSE(rubiks::app::paint_at_cursor());
+
+    // Put down in the middle of the front face, whatever the first step says.
+    REQUIRE(rubiks::app::paint_cursor_step(-1, 0));
+    auto at = rubiks::app::paint_cursor();
+    REQUIRE(at.has_value());
+    CHECK(at->face == Face::Front);
+    CHECK(at->col == 1);
+    CHECK(at->row == 1);
+    CHECK(at->colour == rubiks::cube::FaceColor::Green);
+
+    // Off the front's right edge onto R, which the cross draws beside it.
+    REQUIRE(rubiks::app::paint_cursor_step(2, 0));
+    at = rubiks::app::paint_cursor();
+    CHECK(at->face == Face::Right);
+    CHECK(at->col == 0);
+    CHECK(at->row == 1);
+
+    // Back, and up off the front's top onto U.
+    REQUIRE(rubiks::app::paint_cursor_step(-2, -2));
+    at = rubiks::app::paint_cursor();
+    CHECK(at->face == Face::Up);
+    CHECK(at->col == 1);
+    CHECK(at->row == 2);
+
+    // Left from U's first column is an empty corner of the cross: refused,
+    // and the place stays where it was.
+    REQUIRE(rubiks::app::paint_cursor_step(-1, 0));
+    CHECK_FALSE(rubiks::app::paint_cursor_step(-1, 0));
+    at = rubiks::app::paint_cursor();
+    CHECK(at->face == Face::Up);
+    CHECK(at->col == 0);
+
+    // And off the top of the net altogether.
+    REQUIRE(rubiks::app::paint_cursor_step(0, -2));
+    CHECK_FALSE(rubiks::app::paint_cursor_step(0, -1));
+    CHECK(rubiks::app::paint_cursor()->row == 0);
+}
+
+TEST_CASE("a key colours what a press on the same cell colours")
+{
+    const EngineLifecycle engine(kCanvas, kCanvas);
+    REQUIRE(rubiks::app::begin_painting());
+    REQUIRE(rubiks::app::set_brush(rubiks::cube::FaceColor::Red));
+
+    // The front's middle by key, and the cell beside it by press.
+    REQUIRE(rubiks::app::paint_cursor_step(0, 0));
+    REQUIRE(rubiks::app::paint_at_cursor());
+    const auto beside = front_cell(2, 1, 3);
+    REQUIRE(rubiks::app::paint_at(beside.x, beside.y));
+    CHECK(carried(rubiks::cube::FaceColor::Red) == 11);
+    CHECK(carried(rubiks::cube::FaceColor::Green) == 7);
+    CHECK(rubiks::app::paint_cursor()->colour ==
+          rubiks::cube::FaceColor::Red);
+
+    // Filling, the key covers the face the place is on.
+    REQUIRE(rubiks::app::set_filling(true));
+    REQUIRE(rubiks::app::set_brush(rubiks::cube::FaceColor::Blue));
+    REQUIRE(rubiks::app::paint_at_cursor());
+    CHECK(carried(rubiks::cube::FaceColor::Green) == 0);
+    CHECK(carried(rubiks::cube::FaceColor::Blue) == 18);
+
+    // A new draft starts with no place: it is the draft's, and goes with it.
+    rubiks::app::cancel_painting();
+    REQUIRE(rubiks::app::begin_painting());
+    CHECK_FALSE(rubiks::app::paint_cursor().has_value());
+}
+
+TEST_CASE("the place is drawn only while it is shown")
+{
+    const EngineLifecycle engine(kCanvas, kCanvas);
+    REQUIRE(rubiks::app::begin_painting());
+    REQUIRE(rubiks::app::paint_cursor_step(0, 0));
+    REQUIRE(rubiks::app::render());
+    const auto hidden = rubiks::app::surface_frame(0);
+
+    // A place nobody is looking at from the keyboard is not drawn; shown, it
+    // is, and hiding it again is a frame of its own.
+    rubiks::app::set_paint_cursor_shown(true);
+    REQUIRE(rubiks::app::render());
+    CHECK(rubiks::app::surface_frame(0) == hidden + 1);
+    REQUIRE(rubiks::app::paint_cursor_step(1, 0));
+    REQUIRE(rubiks::app::render());
+    CHECK(rubiks::app::surface_frame(0) == hidden + 2);
+    rubiks::app::set_paint_cursor_shown(false);
+    REQUIRE(rubiks::app::render());
+    CHECK(rubiks::app::surface_frame(0) == hidden + 3);
+    REQUIRE(rubiks::app::paint_cursor_step(1, 0));
+    REQUIRE(rubiks::app::render());
+    CHECK(rubiks::app::surface_frame(0) == hidden + 3);
+}
+
 TEST_CASE("nothing about painting answers before the engine is up")
 {
     CHECK_FALSE(rubiks::app::is_painting());

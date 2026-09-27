@@ -113,4 +113,14 @@ Color blame_color() noexcept
     return Color{250, 250, 250, 245};
 }
 
+Color cursor_color() noexcept
+{
+    return Color{124, 180, 255, 255};
+}
+
+Color cursor_edge_color() noexcept
+{
+    return Color{17, 19, 24, 255};
+}
+
 }  // namespace rubiks::graphics

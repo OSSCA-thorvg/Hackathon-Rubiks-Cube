@@ -67,6 +67,12 @@ struct NetPosition {
     int row;
 };
 
+[[nodiscard]] constexpr bool operator==(const NetPosition& a,
+                                        const NetPosition& b) noexcept
+{
+    return a.face == b.face && a.col == b.col && a.row == b.row;
+}
+
 [[nodiscard]] std::optional<NetPosition> net_position(const NetCell& cell,
                                                       int size) noexcept;
 
@@ -115,10 +121,18 @@ struct NetGuide {
  * `blamed` is outlined rather than filled over: the colour of a square that is
  * being complained about is exactly what its owner needs to see while mending
  * it.
+ *
+ * `cursor` is where the keyboard is, ringed round the whole cell rather than
+ * round the sticker, so it reads apart from a complaint on the same square.
  */
 [[nodiscard]] RenderScene build_net_painting(
     const std::vector<cube::FaceColor>& painting, int size, const Rect& rect,
-    Palette palette, const std::vector<int>& blamed);
+    Palette palette, const std::vector<int>& blamed,
+    const std::optional<NetPosition>& cursor = std::nullopt);
+
+/** Keyboard place ring thickness, as a share of one cell: dark, then light. */
+inline constexpr float kNetCursorEdgeCells = 0.16f;
+inline constexpr float kNetCursorWidthCells = 0.08f;
 
 /** Blamed-square outline thickness, as a share of one cell. */
 inline constexpr float kNetBlameWidthCells = 0.12f;

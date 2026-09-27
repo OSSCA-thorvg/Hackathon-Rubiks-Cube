@@ -255,7 +255,15 @@ function openSharedState(
   const shared = decodeSession(encoded);
   if (shared === null) return 'unreadable';
 
-  if (!engine.restoreSession(shared.size, shared.scramble, shared.user)) {
+  // A record of nothing is an untouched cube of a size other than the one
+  // every page opens on, and putting that size on the table is the whole of
+  // opening it. The engine's restore is for a record, and refuses an empty
+  // one.
+  const restored =
+    shared.scramble.length + shared.user.length === 0
+      ? engine.setCubeSize(shared.size)
+      : engine.restoreSession(shared.size, shared.scramble, shared.user);
+  if (!restored) {
     engine.resetCube();
     return 'unreadable';
   }

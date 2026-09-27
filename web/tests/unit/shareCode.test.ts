@@ -6,6 +6,7 @@ import {
   encodePainting,
   encodeSession,
   MAX_ENCODED_LENGTH,
+  MAX_PAINTED_ENCODED_LENGTH,
   SHARE_PAINTED_VERSION,
   SHARE_VERSION,
   type SharedPainting,
@@ -14,6 +15,7 @@ import {
 import {
   MAX_CUBE_SIZE,
   MAX_SHARED_MOVES,
+  MIN_CUBE_SIZE,
 } from '../../src/wasm/CubeEngine.ts';
 
 /** R, U and F packed, which are the words the engine writes for those turns. */
@@ -107,8 +109,14 @@ describe('encodeSession and decodeSession', () => {
     ]);
   });
 
-  it('has no session to write for a cube nothing has happened to', () => {
-    expect(encodeSession({ size: 3, scramble: [], user: [] })).toBeNull();
+  it('writes a cube nothing has happened to as its size alone', () => {
+    // How an untouched cube of any but the opening size is sent: both counts,
+    // no moves, and the size in front of them.
+    const encoded = encodeSession({ size: 4, scramble: [], user: [] });
+    expect(bytesOf(encoded!)).toEqual(
+      new Uint8Array([SHARE_VERSION, 4, 0, 0, 0, 0, 0, 0, 0, 0]),
+    );
+    expect(decodeSession(encoded!)).toEqual({ size: 4, scramble: [], user: [] });
   });
 
   it('refuses a record longer than the far side would take back', () => {
@@ -160,11 +168,12 @@ describe('decodeSession refusals', () => {
       .toBeNull();
   });
 
-  it('refuses a payload holding no moves at all', () => {
-    // The counts are well formed and the payload is whole; it just describes
-    // nothing. Keeping it out here is what lets the engine treat "was a
-    // buffer asked for" as an unambiguous question.
-    expect(decodeSession(payload(SHARE_VERSION, [], []))).toBeNull();
+  it('reads a payload of no moves as a cube of its size', () => {
+    expect(decodeSession(payload(SHARE_VERSION, [], [], [], 5))).toEqual({
+      size: 5,
+      scramble: [],
+      user: [],
+    });
   });
 
   it('refuses the one axis code that names no axis', () => {
@@ -335,6 +344,35 @@ describe('a link that carries somebody\u2019s own cube', () => {
     expect(decodePainting(`${good}AAAA`)).toBeNull();
     expect(decodePainting('not base64url!')).toBeNull();
     expect(decodePainting('')).toBeNull();
-    expect(decodePainting('A'.repeat(MAX_ENCODED_LENGTH + 1))).toBeNull();
+    expect(
+      decodePainting('A'.repeat(MAX_PAINTED_ENCODED_LENGTH + 1)),
+    ).toBeNull();
+  });
+
+  it('reads back every painted link it writes, at every size', () => {
+    // The colours come on top of the moves, so a reader measuring by the
+    // moves' own bound turned away links this writer had made.
+    // A turn of layer 0 on X, the one layer every size has; R is layer 2.
+    const outer = 0x14;
+    for (let size = MIN_CUBE_SIZE; size <= MAX_CUBE_SIZE; size += 1) {
+      const session: SharedPainting = {
+        size,
+        painting: solvedPainting(size),
+        user: new Array<number>(MAX_SHARED_MOVES).fill(outer),
+      };
+      const encoded = encodePainting(session);
+      expect(encoded, `size ${size}`).not.toBeNull();
+      expect(encoded!.length).toBeLessThanOrEqual(MAX_PAINTED_ENCODED_LENGTH);
+      expect(decodePainting(encoded!), `size ${size}`).toEqual(session);
+    }
+
+    // One move past the engine's bound is not written at all.
+    expect(
+      encodePainting({
+        size: 3,
+        painting: solvedPainting(3),
+        user: new Array<number>(MAX_SHARED_MOVES + 1).fill(R),
+      }),
+    ).toBeNull();
   });
 });

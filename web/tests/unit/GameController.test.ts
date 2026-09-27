@@ -1765,6 +1765,109 @@ describe('attachGameController', () => {
 });
 
 describe('sharing the cube', () => {
+  /** A copy the test finishes when it chooses, the way a slow clipboard would. */
+  function held(): {
+    promise: Promise<void>;
+    resolve: () => void;
+    reject: () => void;
+  } {
+    let resolve = (): void => {};
+    let reject = (): void => {};
+    const promise = new Promise<void>((done, fail) => {
+      resolve = (): void => done();
+      reject = (): void => fail(new Error('No clipboard.'));
+    });
+    return { promise, resolve, reject };
+  }
+
+  /** Lets every promise that has settled run its callbacks. */
+  const settle = async (): Promise<void> => {
+    for (let turn = 0; turn < 5; turn += 1) await Promise.resolve();
+  };
+
+  it('shows nothing for a copy that finishes after the cube has moved on', async () => {
+    for (const ending of ['resolve', 'reject'] as const) {
+      const harness = createHarness();
+      harness.commitMove();
+      harness.controller.afterEngineFrame();
+
+      const copy = held();
+      harness.shareTarget.copy.mockImplementationOnce(() => copy.promise);
+      harness.ui.shareButton.click();
+
+      // Reset starts no frame, so nothing else would take a card down again.
+      harness.ui.resetButton.click();
+      const said = harness.ui.status.textContent;
+      copy[ending]();
+      await settle();
+
+      expect(harness.ui.shareCard.card.hidden, ending).toBe(true);
+      expect(harness.ui.status.textContent, ending).toBe(said);
+      expect(document.activeElement, ending).not.toBe(
+        harness.ui.shareCard.link,
+      );
+    }
+  });
+
+  it('shows the newest of two copies, whichever finishes first', async () => {
+    const harness = createHarness();
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+
+    const first = held();
+    harness.shareTarget.copy.mockImplementationOnce(() => first.promise);
+    harness.ui.shareButton.click();
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    const second = held();
+    harness.shareTarget.copy.mockImplementationOnce(() => second.promise);
+    harness.ui.shareButton.click();
+
+    second.resolve();
+    await settle();
+    first.resolve();
+    await settle();
+
+    // Two of the user's own moves: the second link, and still up a frame on.
+    const link = harness.ui.shareCard.link.value;
+    expect(harness.ui.shareCard.card.hidden).toBe(false);
+    expect(decodeSession(link.split('#s=')[1]!)?.user).toHaveLength(2);
+    harness.controller.afterEngineFrame();
+    expect(harness.ui.shareCard.card.hidden).toBe(false);
+  });
+
+  it('carries the size of an untouched cube that is not the opening one', async () => {
+    const harness = createHarness();
+    harness.ui.cubeSizeInput.value = '4';
+    harness.ui.cubeSizeInput.dispatchEvent(new Event('change'));
+
+    harness.ui.shareButton.click();
+    await vi.waitFor(() => expect(harness.copied).toHaveLength(1));
+
+    // The plain address would open a three by three.
+    expect(decodeSession(harness.copied[0]!.split('#s=')[1]!)).toEqual({
+      size: 4,
+      scramble: [],
+      user: [],
+    });
+    expect(harness.ui.status.textContent).toBe(
+      'Link copied. It opens this cube.',
+    );
+  });
+
+  it('takes the card down when a colouring becomes the cube', async () => {
+    const harness = createHarness();
+    harness.ui.shareButton.click();
+    await vi.waitFor(() =>
+      expect(harness.ui.shareCard.card.hidden).toBe(false),
+    );
+
+    harness.ui.paintButton.click();
+    harness.ui.paintApplyButton.click();
+    expect(harness.engine.isPainting()).toBe(false);
+    expect(harness.ui.shareCard.card.hidden).toBe(true);
+  });
+
   it('sends the plain address for a cube nothing has happened to', async () => {
     const harness = createHarness();
 

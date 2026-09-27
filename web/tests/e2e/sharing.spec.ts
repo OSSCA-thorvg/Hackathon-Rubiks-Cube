@@ -123,6 +123,26 @@ test('a link opens the same cube somewhere else', async ({ page, context }) => {
   await expect(other.locator('#move-log li')).toHaveCount(0);
 });
 
+test('an untouched cube of another size opens at that size', async ({
+  page,
+  context,
+}) => {
+  // The plain address would open the three by three every page opens on, so
+  // a four by four nobody has turned yet travels as its size.
+  await fillInSettings(page, '#cube-size', '4');
+  await expect(page.locator('#cube-size-label')).toHaveText('4×4×4');
+  const link = await share(page);
+  expect(link).toContain('#s=');
+
+  const other = await context.newPage();
+  await other.goto(link);
+  await expect(other.locator('#app')).toHaveAttribute('data-state', 'ready');
+  await expect(other.locator('#status')).toHaveText(
+    'Ready. This cube came from a shared link.',
+  );
+  await expect(other.locator('#cube-size-label')).toHaveText('4×4×4');
+});
+
 test('a damaged link opens a fresh cube and does not repeat itself', async ({
   context,
 }) => {

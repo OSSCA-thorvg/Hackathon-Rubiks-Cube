@@ -107,6 +107,7 @@ function createHarness(overrides: {
     resetView: vi.fn(),
     isBusy: vi.fn(() => false),
     restoreSession: vi.fn(() => true),
+    setCubeSize: vi.fn(() => true),
     pointerMove: vi.fn(),
     pointerUp: vi.fn(),
     pointerCancel: vi.fn(),
@@ -831,6 +832,23 @@ describe('startApp and a shared link', () => {
       [0x45],
     );
     expect(order).toEqual(['restore', 'render']);
+    expect(harness.states.at(-1)).toEqual([
+      'ready',
+      'Ready. This cube came from a shared link.',
+    ]);
+  });
+
+  it('opens a link of no moves as a cube of its size', async () => {
+    // How an untouched cube of any but the opening size travels. Putting the
+    // size on the table is the whole of opening it; the engine's restore is
+    // for a record, and is not asked about an empty one.
+    const harness = createHarness({
+      hash: `#s=${encodeSession({ size: 4, scramble: [], user: [] })}`,
+    });
+    await harness.start();
+
+    expect(harness.engine.setCubeSize).toHaveBeenCalledWith(4);
+    expect(harness.engine.restoreSession).not.toHaveBeenCalled();
     expect(harness.states.at(-1)).toEqual([
       'ready',
       'Ready. This cube came from a shared link.',

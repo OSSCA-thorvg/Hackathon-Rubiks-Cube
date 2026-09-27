@@ -463,7 +463,8 @@ void stop_playback() noexcept;
  * Far past anything a session reaches -- a scramble is capped at a hundred and
  * a solve by hand is a few dozen more -- and chosen instead by what a link can
  * still be: at this bound the encoded fragment is about twenty thousand
- * characters, which a browser carries and a person can still paste.
+ * characters -- twenty-eight with the colours of the largest painted cube --
+ * which a browser carries and a person can still paste.
  */
 inline constexpr std::uint32_t kMaxRestoreMoves = 4096;
 

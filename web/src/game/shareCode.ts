@@ -113,19 +113,26 @@ const SIZE_BYTES = 1;
 const COUNT_BYTES = 4;
 const MOVE_BYTES = 4;
 
-/** The smallest payload that could still be a session: both counts, no moves. */
+/**
+ * The smallest session: both counts, no moves -- which is a cube of that size
+ * and nothing done to it.
+ */
 const MIN_PAYLOAD_BYTES = VERSION_BYTES + SIZE_BYTES + COUNT_BYTES * 2;
 
 /** The largest, at the bound the engine's restore buffer takes. */
 const MAX_PAYLOAD_BYTES = MIN_PAYLOAD_BYTES + MOVE_BYTES * MAX_SHARED_MOVES;
 
 /**
- * The longest encoded string that could still be a payload.
+ * The longest encoded string that could still be a session of moves.
  *
  * Measured before anything is decoded, which is the point of having it: a
  * fragment of any size can be pasted into the address bar, and measuring the
  * text first means an enormous one is refused as text rather than being
  * unpacked into memory to be measured as bytes.
+ *
+ * This layout's alone. A painted one carries its colours as well and has its
+ * own, below; each reader measures by its own layout, or a link the writer
+ * made would be one the reader turns away.
  */
 export const MAX_ENCODED_LENGTH = Math.ceil((MAX_PAYLOAD_BYTES * 4) / 3);
 
@@ -155,6 +162,25 @@ const COLOUR_BYTES = 1;
 function stickerCount(size: number): number {
   return 6 * size * size;
 }
+
+/** The largest painted payload: the largest cube's colours and every move. */
+const MAX_PAINTED_PAYLOAD_BYTES =
+  VERSION_BYTES +
+  SIZE_BYTES +
+  COLOUR_BYTES * stickerCount(MAX_CUBE_SIZE) +
+  COUNT_BYTES +
+  MOVE_BYTES * MAX_SHARED_MOVES;
+
+/**
+ * The longest encoded string that could still be a painted session.
+ *
+ * One bound for every size, at the largest: it only has to stop an enormous
+ * fragment before it is unpacked, and once the size byte is read the reader
+ * holds the payload to exactly the length that size takes.
+ */
+export const MAX_PAINTED_ENCODED_LENGTH = Math.ceil(
+  (MAX_PAINTED_PAYLOAD_BYTES * 4) / 3,
+);
 
 /** The alphabet base64url uses, which is the whole of what may appear. */
 const ENCODED_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -187,15 +213,19 @@ function isSharableSize(size: number): boolean {
 /**
  * Writes one session as a base64url string, or returns null.
  *
- * Null for the sessions there is no link for: an empty record, one longer than
- * the far end can take back, and one holding a word this version cannot carry.
- * The share control never offers any of them, so this is the assembly side
- * agreeing with the reading side rather than a path a person walks down.
+ * Null for the sessions there is no link for: a record longer than the far end
+ * can take back, and one holding a word this version cannot carry. The share
+ * control never offers either, so this is the assembly side agreeing with the
+ * reading side rather than a path a person walks down.
+ *
+ * An empty record is a session: a cube of that size with nothing done to it.
+ * The page sends its plain address for the size every page opens on, and this
+ * for any other.
  */
 export function encodeSession(session: SharedSession): string | null {
   const moves = [...session.scramble, ...session.user];
   if (!isSharableSize(session.size)) return null;
-  if (moves.length === 0 || moves.length > MAX_SHARED_MOVES) return null;
+  if (moves.length > MAX_SHARED_MOVES) return null;
   if (!moves.every((packed) => isSharableMove(packed, session.size))) {
     return null;
   }
@@ -278,7 +308,9 @@ export function encodePainting(session: SharedPainting): string | null {
  * thing this cannot know.
  */
 export function decodePainting(encoded: string): SharedPainting | null {
-  if (encoded.length === 0 || encoded.length > MAX_ENCODED_LENGTH) return null;
+  if (encoded.length === 0 || encoded.length > MAX_PAINTED_ENCODED_LENGTH) {
+    return null;
+  }
   if (!ENCODED_PATTERN.test(encoded)) return null;
 
   const bytes = base64urlDecode(encoded);
@@ -376,13 +408,11 @@ export function decodeSession(encoded: string): SharedSession | null {
   const user = readSection();
   if (user === null) return null;
 
-  // A session of nothing is not a state anybody shared, and it is also the
-  // count the engine's buffer refuses -- so keeping it out here is what makes
-  // "was a buffer asked for at all" an unambiguous question over there. The
-  // other end of that range needs nothing here: the text was measured before
-  // it was decoded, and a payload that fits under MAX_ENCODED_LENGTH cannot
-  // describe more than MAX_SHARED_MOVES moves between its two counts.
-  if (scramble.length + user.length === 0) return null;
+  // Two stretches of nothing are a cube of this size and nothing more, which
+  // is how an untouched cube of any but the opening size is sent. The other
+  // end of the range needs nothing here: the text was measured before it was
+  // decoded, and a payload that fits under MAX_ENCODED_LENGTH cannot describe
+  // more than MAX_SHARED_MOVES moves between its two counts.
 
   // Nothing may follow the second stretch.
   if (offset !== bytes.length) return null;

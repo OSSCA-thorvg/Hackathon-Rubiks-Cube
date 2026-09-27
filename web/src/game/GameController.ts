@@ -6,6 +6,7 @@ import {
   CubeStickerColour,
   CubeViewMode,
   STICKER_COLOURS,
+  DEFAULT_CUBE_SIZE,
   DEFAULT_SCRAMBLE_MOVES,
   isValidScrambleMoves,
   MAX_CUBE_SIZE,
@@ -548,10 +549,12 @@ export function attachGameController(
       }),
   );
 
-  // Where the record stood when the link on the card was read from it. The
-  // card comes down once the cube is somewhere else, since it says the link
-  // opens this cube: a command takes it down as it runs, and a drag -- which
-  // comes through no command -- shows as a record that has moved.
+  // Where the record stood when the link on the card -- or on its way to it,
+  // while the clipboard is still thinking -- was read from it. The card comes
+  // down once the cube is somewhere else, since it says the link opens this
+  // cube: a command takes it down as it runs, and a drag -- which comes
+  // through no command -- shows as a record that has moved. A copy that
+  // finishes after either finds this gone and shows nothing.
   let sharedAt: { readonly cursor: number; readonly length: number } | null =
     null;
   const hideShareCard = (): void => {
@@ -761,14 +764,18 @@ export function attachGameController(
     (!now.busy || now.watching) && now.cursor >= now.scrambleEnd;
 
   /**
-   * Whether the record has anything a link would have to carry.
+   * Whether the cube is anything the plain address would not open.
    *
-   * False only for the untouched cube, which the guard above has already
-   * narrowed this to: a cursor at nothing with no scramble behind it is the
-   * cube the engine was made with, and every page opens on one of those.
+   * False only for the untouched cube of the opening size, which the guard
+   * above has already narrowed this to: a cursor at nothing with no scramble
+   * behind it, at the size every page opens on. An untouched cube of another
+   * size is something a link has to say, since that size is on this table and
+   * not on a fresh one.
    */
   const hasStateToShare = (now: EngineFrame): boolean =>
-    now.cursor > 0 || engine.originPainting().length > 0;
+    now.cursor > 0 ||
+    engine.originPainting().length > 0 ||
+    engine.cubeSize() !== DEFAULT_CUBE_SIZE;
 
   /**
    * The session a link carries, read off the record when one is asked for.
@@ -1382,6 +1389,8 @@ export function attachGameController(
   const onPaintApply = (): void => {
     run((): void => {
       if (engine.applyPainting()) {
+        // A different cube, which is not what a link on the card opens.
+        hideShareCard();
         session.announce('That is your cube now. Press Solve to work it out.');
       } else {
         session.announce('That colouring is not a cube yet.');
@@ -1427,9 +1436,9 @@ export function attachGameController(
       const now = engineNow();
       if (!canShare(now)) return;
 
-      // The plain address for an untouched cube: there is no record to encode
-      // and a fragment carrying an empty one would only be a longer way of
-      // saying the same thing.
+      // The plain address for an untouched cube of the opening size: there is
+      // no record to encode and nothing about the size to say, so a fragment
+      // would only be a longer way of saying the same thing.
       let link: string = pageUrl(shareTarget.currentUrl());
       let opens = 'It opens a fresh cube.';
 
@@ -1458,22 +1467,26 @@ export function attachGameController(
 
       // Guarded on the way back rather than on the way out: a controller torn
       // down while the clipboard was thinking has no status line left to
-      // write to, and the elements are no longer this controller's.
+      // write to, and the elements are no longer this controller's. Nor is a
+      // link overtaken while it was on its way -- by a command, a drag or a
+      // newer share, each of which leaves `sharedAt` somewhere else -- one to
+      // show or announce: the cube it opens is not this one, and whatever
+      // overtook it has had its own say.
       //
       // Either way the link goes up on the card by the button. Copied, it is
       // there to read and to copy again; refused, it is there to be copied
       // by hand, which is the only way it still reaches anybody.
+      const pending = { cursor: now.cursor, length: now.length };
+      sharedAt = pending;
       void shareTarget.copy(link).then(
         (): void => {
-          if (!active) return;
+          if (!active || sharedAt !== pending) return;
           session.announce(`Link copied. ${opens}`);
-          sharedAt = { cursor: now.cursor, length: now.length };
           shareCard.show({ link, copied: true, opens });
         },
         (): void => {
-          if (!active) return;
+          if (!active || sharedAt !== pending) return;
           session.announce('Could not copy the link.');
-          sharedAt = { cursor: now.cursor, length: now.length };
           shareCard.show({ link, copied: false, opens });
         },
       );

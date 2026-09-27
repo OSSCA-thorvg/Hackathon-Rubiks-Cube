@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import {
   assertSceneContract,
+  cssColour,
   cubeDragFor,
   CUT_SHARE_MARGIN,
   FRONT_RIGHT_COLUMN,
@@ -201,12 +202,11 @@ test('the desktop stage stands between two rails, with the record and the dock u
   expect(Math.abs(centre(timeline) - centre(canvas))).toBeLessThan(2);
 
   // The page is the colour the engine clears the canvas to, so the stage
-  // has no edge to it.
-  const grounds = await page.evaluate(() => ({
-    page: getComputedStyle(document.body).backgroundColor,
-    canvas: getComputedStyle(document.querySelector('#view')!).backgroundColor,
-  }));
-  expect(grounds.page).toBe(grounds.canvas);
+  // has no edge to it: the stylesheet's ground against a pixel the engine
+  // drew, since the two are written in two languages.
+  expect(await cssColour(page, 'body')).toEqual(
+    (await probeCanvas(page)).corners[0],
+  );
 });
 
 test('a detail panel stays open until its own button, and the stage makes room', async ({
@@ -463,20 +463,59 @@ test('mobile layout moves actions below the canvas without horizontal overflow',
     content: document.documentElement.scrollWidth,
   }));
   expect(geometry.content).toBeLessThanOrEqual(geometry.viewport);
+});
 
-  // On the page and in the drawer alike: a target too small to hit is too
-  // small wherever it was put.
-  for (const id of ['#scramble', '#ambient']) {
-    const box = await page.locator(id).boundingBox();
-    expect(box).not.toBeNull();
-    expect(box!.height).toBeGreaterThanOrEqual(44);
-  }
+test('every control is a whole target across, wherever it is put', async ({
+  page,
+}) => {
+  // 44 pixels both ways, the stylesheet's own --target, for everything that
+  // can be pressed or typed into -- on the page, in each panel, in the drawer,
+  // on the paint bar and in the command menu, on a phone and on a wide window
+  // both tall and short. The sliders are the exception: a range input is a
+  // track to drag along, and its thumb is the target.
+  const small = async (): Promise<string[]> =>
+    page.evaluate(() =>
+      [
+        ...document.querySelectorAll<HTMLElement>(
+          'button, input:not([type="range"]), [role="option"]',
+        ),
+      ]
+        .filter((element) => {
+          const box = element.getBoundingClientRect();
+          return box.width > 0 && box.height > 0 && Math.min(box.width, box.height) < 44;
+        })
+        .map((element) => {
+          const box = element.getBoundingClientRect();
+          const name = element.id || element.getAttribute('aria-label') || element.textContent;
+          return `${name?.trim()} ${Math.round(box.width)}x${Math.round(box.height)}`;
+        }),
+    );
 
-  await openSettings(page);
-  for (const id of ['#reset', '#home-view']) {
-    const box = await page.locator(id).boundingBox();
-    expect(box).not.toBeNull();
-    expect(box!.height).toBeGreaterThanOrEqual(44);
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 1200, height: 1000 },
+    { width: 1200, height: 700 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const at = `${viewport.width}x${viewport.height}`;
+    expect(await small(), at).toEqual([]);
+
+    await page.locator('#details-turn').click();
+    expect(await small(), `${at} Turn`).toEqual([]);
+    await page.locator('#details-turn').click();
+
+    await page.locator('#paint').click();
+    expect(await small(), `${at} Paint`).toEqual([]);
+    await page.locator('#paint-cancel').click();
+
+    await openSettings(page);
+    expect(await small(), `${at} Settings`).toEqual([]);
+    await page.keyboard.press('Escape');
+
+    await page.keyboard.press('ControlOrMeta+k');
+    await page.locator('#command-input').fill('r');
+    expect(await small(), `${at} menu`).toEqual([]);
+    await page.keyboard.press('Escape');
   }
 });
 

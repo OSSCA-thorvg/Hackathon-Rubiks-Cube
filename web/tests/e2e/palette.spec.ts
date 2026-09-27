@@ -1,11 +1,13 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 import {
   assertSceneContract,
   assertVisibleFaces,
   CUBE_SIZE,
+  cssColour,
   NET_BLOCKS,
   probeCanvas,
+  type CanvasProbe,
 } from './sceneContract.ts';
 import { fillInSettings, openSettings } from './shell.ts';
 
@@ -36,6 +38,32 @@ function highContrastNet(): number[][] {
 
 test.use({ viewport: DESKTOP });
 
+/**
+ * Where each colour chip's face sits in the net, by the chip's colour number:
+ * Red, Orange, White, Yellow, Green, Blue, as the engine counts them.
+ */
+const CHIP_BLOCKS = [3, 1, 0, 5, 2, 4];
+
+/**
+ * Holds every chip the page colours by hand to the face the engine drew.
+ *
+ * The chips' shades are the stylesheet's copy of the engine's, and nothing but
+ * this compares the two: the engine's own tests pin the engine's.
+ */
+async function assertChipsMatchNet(
+  page: Page,
+  probe: CanvasProbe,
+): Promise<void> {
+  const cells = CUBE_SIZE * CUBE_SIZE;
+  for (let colour = 0; colour < CHIP_BLOCKS.length; colour += 1) {
+    const drawn = probe.net[CHIP_BLOCKS[colour]! * cells];
+    expect(
+      await cssColour(page, `[data-sticker-chip="${colour}"]`),
+      `chip ${colour}`,
+    ).toEqual(drawn);
+  }
+}
+
 test('the palette changes both drawings at once and goes back', async ({
   page,
 }) => {
@@ -53,8 +81,11 @@ test('the palette changes both drawings at once and goes back', async ({
   await expect(classic).toHaveAttribute('aria-pressed', 'true');
   await expect(highContrast).toHaveAttribute('aria-pressed', 'false');
 
-  // The standard cube, in both the 3D region and the net.
-  assertSceneContract(await probeCanvas(page));
+  // The standard cube, in both the 3D region and the net, and the chips in
+  // the shades it was drawn in.
+  const standard = await probeCanvas(page);
+  assertSceneContract(standard);
+  await assertChipsMatchNet(page, standard);
 
   await highContrast.click();
   await expect(highContrast).toHaveAttribute('aria-pressed', 'true');
@@ -67,6 +98,7 @@ test('the palette changes both drawings at once and goes back', async ({
   // reached only one of them would mean they had stopped doing so.
   assertVisibleFaces(changed, HC_WHITE, HC_GREEN, HC_RED);
   expect(changed.net).toEqual(highContrastNet());
+  await assertChipsMatchNet(page, changed);
 
   // And back, so it is a toggle rather than a one-way door.
   await classic.click();

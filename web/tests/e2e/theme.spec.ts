@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { openSettings } from './shell.ts';
-import { probeCanvas } from './sceneContract.ts';
+import { cssColour, probeCanvas } from './sceneContract.ts';
 
 /** The two grounds, as the engine paints them. */
 const DARK_GROUND = [32, 32, 32, 255];
@@ -20,6 +20,7 @@ test('the machine decides when nothing has been chosen', async ({ page }) => {
   // the engine rather than only through CSS.
   await expect(page.locator('html')).not.toHaveAttribute('data-theme');
   expect((await probeCanvas(page)).corners[0]).toEqual(DARK_GROUND);
+  expect(await cssColour(page, 'body')).toEqual(DARK_GROUND);
 
   await openSettings(page);
   await expect(page.locator('[data-theme-choice="system"]')).toHaveAttribute(
@@ -37,6 +38,7 @@ test('a light machine gets a light page and a light canvas', async ({
 
   await expect(page.locator('html')).not.toHaveAttribute('data-theme');
   expect((await probeCanvas(page)).corners[0]).toEqual(LIGHT_GROUND);
+  expect(await cssColour(page, 'body')).toEqual(LIGHT_GROUND);
 });
 
 test('an explicit choice paints both surfaces and survives a reload', async ({

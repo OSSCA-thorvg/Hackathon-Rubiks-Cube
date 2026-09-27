@@ -593,3 +593,36 @@ export function assertDrawingBufferMatchesCss(probe: CanvasProbe): void {
     );
   }
 }
+
+/**
+ * A colour the stylesheet computed, as the RGBA the probe reads pixels in.
+ *
+ * For holding the page's copies of the engine's colours -- the ground, the
+ * sticker chips -- to what the engine actually drew, rather than to a third
+ * copy written into a test.
+ */
+export async function cssColour(
+  page: Page,
+  selector: string,
+  property = 'background-color',
+): Promise<number[]> {
+  const value = await page
+    .locator(selector)
+    .first()
+    .evaluate(
+      (element, name) => getComputedStyle(element).getPropertyValue(name),
+      property,
+    );
+  const match = /^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)$/.exec(
+    value.trim(),
+  );
+  if (match === null) throw new Error(`${selector} ${property} is ${value}`);
+  const alpha = match[4] === undefined ? 1 : Number(match[4]);
+  return [
+    Number(match[1]),
+    Number(match[2]),
+    Number(match[3]),
+    Math.round(alpha * 255),
+  ];
+}
+

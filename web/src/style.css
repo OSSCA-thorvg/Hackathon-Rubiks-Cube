@@ -1325,18 +1325,22 @@ kbd {
   font-size: 13px;
 }
 
+/* The hairline is an outline drawn inside the box rather than a border, so
+   the box stays one target tall -- level with Wide beside it -- and each of
+   the three inside is a whole target rather than a pixel short of one. */
 .stepper {
   display: flex;
   align-items: center;
-  border: 1px solid var(--color-line-strong);
   border-radius: var(--radius-control);
+  outline: 1px solid var(--color-line-strong);
+  outline-offset: -1px;
 }
 
 .stepper__button {
   display: grid;
   place-items: center;
   width: var(--target);
-  height: 42px;
+  height: var(--target);
   padding: 0;
   border: none;
   border-radius: var(--radius-control);
@@ -1350,8 +1354,8 @@ kbd {
 }
 
 .stepper__input {
-  width: 2.5rem;
-  min-height: 42px;
+  width: var(--target);
+  min-height: var(--target);
   padding: 0;
   border: none;
   background: transparent;
@@ -1893,7 +1897,7 @@ kbd {
 .command-palette__input {
   flex: 1;
   min-width: 0;
-  height: 40px;
+  height: var(--target);
   padding: 0;
   border: none;
   outline: none;
@@ -2163,8 +2167,11 @@ kbd {
     backdrop-filter: var(--blur);
   }
 
+  /* Stretched across the rail, so a button is the rail's width rather than
+     its label's: "3D" alone is half a target across. */
   .view-rail {
     grid-column: 1;
+    align-items: stretch;
   }
 
   .details-rail {
@@ -2295,10 +2302,6 @@ kbd {
   .view-rail .rail-button,
   .details-rail .rail-button {
     min-height: 46px;
-  }
-
-  .view-rail .rail-button--text {
-    min-height: 40px;
   }
 
   .action-dock {

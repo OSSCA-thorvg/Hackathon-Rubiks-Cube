@@ -14,6 +14,7 @@ import {
   MAX_SCRAMBLE_MOVES,
   MIN_CUBE_SIZE,
   type FaceTurns,
+  type PaintCursor,
 } from '../wasm/CubeEngine.ts';
 import { createClickSound, type ClickSound } from './ClickSound.ts';
 import { MoveLog } from './MoveLog.ts';
@@ -73,6 +74,10 @@ export type GameEngine = SessionEngine & {
   paintFault(): CubePaintFault;
   setFilling(wholeFace: boolean): boolean;
   isFilling(): boolean;
+  paintCursorStep(columns: number, rows: number): boolean;
+  paintAtCursor(): boolean;
+  setPaintCursorShown(shown: boolean): void;
+  paintCursor(): PaintCursor | null;
   setViewMode(mode: CubeViewMode): void;
   viewMode(): CubeViewMode;
   setFlatStyle(style: CubeFlatStyle): void;
@@ -138,6 +143,11 @@ export type GameUi = {
   readonly paintButton: HTMLButtonElement;
   /** Everything the colouring needs, shown only while a draft is open. */
   readonly paintBar: HTMLElement;
+  /**
+   * The net's canvas, which takes the keyboard while a draft is open: the one
+   * way to reach a square of it without a pointer.
+   */
+  readonly netCanvas: HTMLCanvasElement;
   readonly paintSwatches: readonly HTMLButtonElement[];
   readonly paintFillButton: HTMLButtonElement;
   readonly paintApplyButton: HTMLButtonElement;
@@ -466,6 +476,44 @@ export function controllerControls(
     ui.ambientButton,
     ui.paintButton,
   ];
+}
+
+/** A face as a sentence says it. */
+const FACE_NAMES: Readonly<Record<CubeFace, string>> = {
+  [CubeFace.Right]: 'Right',
+  [CubeFace.Left]: 'Left',
+  [CubeFace.Up]: 'Up',
+  [CubeFace.Down]: 'Down',
+  [CubeFace.Front]: 'Front',
+  [CubeFace.Back]: 'Back',
+};
+
+/** How far each arrow moves the keyboard's place on the net, in cells. */
+const NET_STEPS: Readonly<Record<string, readonly [number, number]>> = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+};
+
+/** What the net's canvas is called while it is being coloured. */
+const PAINT_NET_LABEL =
+  "Your cube's faces, to colour. Arrow keys move, Enter or Space colours " +
+  'the square, 1 to 6 choose a colour in the order of the colour bar.';
+
+/**
+ * Whether the focus arrived the way a keyboard brings it.
+ *
+ * A press on the net focuses it as well, and a place drawn for a mouse would
+ * be a ring nobody asked for. Browsers that cannot say are taken as keyboard,
+ * which shows the place rather than hiding it.
+ */
+function focusVisible(element: Element): boolean {
+  try {
+    return element.matches(':focus-visible');
+  } catch {
+    return true;
+  }
 }
 
 /** Parses a DOM move button into one typed face turn. */
@@ -1343,11 +1391,80 @@ export function attachGameController(
     });
   };
 
+  // What the net's canvas is called when nothing is being coloured, which is
+  // put back when a draft closes.
+  const netLabel = ui.netCanvas.getAttribute('aria-label') ?? '';
+
+  /** The view that was up when a draft opened, and the one it was changed to. */
+  type StageView = { readonly mode: CubeViewMode; readonly style: CubeFlatStyle };
+  let paintView: { readonly before: StageView; readonly shown: StageView } | null =
+    null;
+
+  /**
+   * Makes the net the place a draft is coloured, and stops it being one.
+   *
+   * On the way in the net is put on the stage if the view had left it off --
+   * the cube alone, or the rings -- since a draft is coloured nowhere else,
+   * and its canvas joins the tab order under a name that says how the keys
+   * colour it. On the way out both are undone: the view only if it is still
+   * the one put up here, since a view somebody chose while colouring is one
+   * they meant.
+   *
+   * Called on every change of the paint bar and doing anything only when the
+   * draft has opened or closed since, which is what `paintView` remembers.
+   */
+  const followDraft = (painting: boolean): void => {
+    if (painting && paintView === null) {
+      const before = { mode: engine.viewMode(), style: engine.flatStyle() };
+      const shown = {
+        mode:
+          before.mode === CubeViewMode.Cube3D ? CubeViewMode.Both : before.mode,
+        style:
+          before.style === CubeFlatStyle.Rings ? CubeFlatStyle.Net : before.style,
+      };
+      paintView = { before, shown };
+      if (shown.mode !== before.mode || shown.style !== before.style) {
+        engine.setViewMode(shown.mode);
+        engine.setFlatStyle(shown.style);
+        engine.render();
+        updateViewControls();
+      }
+
+      ui.netCanvas.tabIndex = 0;
+      ui.netCanvas.setAttribute('role', 'application');
+      ui.netCanvas.setAttribute('aria-roledescription', 'colouring net');
+      ui.netCanvas.setAttribute('aria-label', PAINT_NET_LABEL);
+      return;
+    }
+
+    if (!painting && paintView !== null) {
+      const { before, shown } = paintView;
+      paintView = null;
+      const changed = shown.mode !== before.mode || shown.style !== before.style;
+      if (
+        changed &&
+        engine.viewMode() === shown.mode &&
+        engine.flatStyle() === shown.style
+      ) {
+        engine.setViewMode(before.mode);
+        engine.setFlatStyle(before.style);
+        engine.render();
+        updateViewControls();
+      }
+
+      ui.netCanvas.removeAttribute('tabindex');
+      ui.netCanvas.removeAttribute('role');
+      ui.netCanvas.removeAttribute('aria-roledescription');
+      ui.netCanvas.setAttribute('aria-label', netLabel);
+    }
+  };
+
   /** How the paint bar reads right now, engine and page kept in one place. */
   const updatePaintControls = (): void => {
     const painting = engine.isPainting();
     ui.paintButton.setAttribute('aria-pressed', String(painting));
     ui.paintBar.hidden = !painting;
+    followDraft(painting);
 
     if (!painting) {
       ui.paintNote.textContent = '';
@@ -1374,6 +1491,81 @@ export function attachGameController(
 
     const fault = engine.paintFault();
     ui.paintNote.textContent = PAINT_FAULT_SENTENCE[fault];
+  };
+
+  /** The colour a number names, as the colour bar writes it. */
+  const colourName = (colour: CubeStickerColour): string =>
+    ui.paintSwatches
+      .find((swatch) => stickerOf(swatch) === colour)
+      ?.querySelector('.swatch__name')
+      ?.textContent?.trim() ?? '';
+
+  /** Says where the keyboard's place is, and what colour is there. */
+  const announceCursor = (): void => {
+    const at = engine.paintCursor();
+    if (at === null) return;
+    session.announce(
+      `${FACE_NAMES[at.face]} face, row ${at.row + 1}, column ${at.col + 1}: ` +
+        `${colourName(at.colour)}.`,
+    );
+  };
+
+  /**
+   * The keys the net takes while it is being coloured.
+   *
+   * The arrows walk a place across the net, Enter or Space lays the brush
+   * there -- on the square, or the whole face while filling -- and the digits
+   * pick a colour in the bar's order, so a face can be copied without the
+   * keyboard leaving the net. Anything else is left alone.
+   */
+  const onNetKeyDown = (event: KeyboardEvent): void => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (!active || !engine.isPainting()) return;
+
+    const step = NET_STEPS[event.key];
+    const swatch = /^[1-6]$/.test(event.key)
+      ? ui.paintSwatches[Number(event.key) - 1]
+      : undefined;
+    const lay = event.key === 'Enter' || event.key === ' ';
+    if (step === undefined && swatch === undefined && !lay) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    run((): void => {
+      engine.setPaintCursorShown(true);
+      if (step !== undefined) {
+        if (engine.paintCursorStep(step[0], step[1])) announceCursor();
+        else session.announce('The net ends there.');
+      } else if (swatch !== undefined) {
+        swatch.click();
+        session.announce(`${colourName(engine.brush())} brush.`);
+      } else if (engine.paintAtCursor()) {
+        updatePaintControls();
+        announceCursor();
+      }
+      startFrameLoop();
+    });
+  };
+
+  // The place is put down the first time the net is reached, and drawn while
+  // the keyboard is there -- and not for a press, which focuses the net too.
+  const onNetFocus = (): void => {
+    if (!active || !engine.isPainting()) return;
+    run((): void => {
+      if (engine.paintCursor() === null) engine.paintCursorStep(0, 0);
+      if (!focusVisible(ui.netCanvas)) return;
+      engine.setPaintCursorShown(true);
+      announceCursor();
+      startFrameLoop();
+    });
+  };
+
+  const onNetBlur = (): void => {
+    if (!active || !engine.isPainting()) return;
+    run((): void => {
+      engine.setPaintCursorShown(false);
+      startFrameLoop();
+    });
   };
 
   /**
@@ -1608,6 +1800,9 @@ export function attachGameController(
   // is being dragged. Nothing in flight is re-timed, so the stream is safe.
   ui.speedInput.addEventListener('input', onSpeedChange);
   ui.root.addEventListener(PLAY_MOVES_EVENT, onPlayMoves);
+  ui.netCanvas.addEventListener('keydown', onNetKeyDown);
+  ui.netCanvas.addEventListener('focus', onNetFocus);
+  ui.netCanvas.addEventListener('blur', onNetBlur);
   keyboardTarget.addEventListener('keydown', onKeyDown);
 
   /**
@@ -1657,6 +1852,9 @@ export function attachGameController(
     ui.muteButton.removeEventListener('click', onMute);
     ui.speedInput.removeEventListener('input', onSpeedChange);
     ui.root.removeEventListener(PLAY_MOVES_EVENT, onPlayMoves);
+    ui.netCanvas.removeEventListener('keydown', onNetKeyDown);
+    ui.netCanvas.removeEventListener('focus', onNetFocus);
+    ui.netCanvas.removeEventListener('blur', onNetBlur);
     for (const [button, listener] of choiceListeners) {
       button.removeEventListener('click', listener);
     }

@@ -620,6 +620,7 @@ export function createGameShell(host: HTMLElement): GameShell {
     paintApplyButton: requireElement<HTMLButtonElement>(root, '#paint-apply'),
     paintCancelButton: requireElement<HTMLButtonElement>(root, '#paint-cancel'),
     paintNote: requireElement<HTMLElement>(root, '#paint-note'),
+    netCanvas: requireElement<HTMLCanvasElement>(root, '#view-net'),
     flatButtons: requireAll<HTMLButtonElement>(root, '[data-flat]'),
     paletteButtons: requireAll<HTMLButtonElement>(root, '[data-palette]'),
     muteButton: requireElement<HTMLButtonElement>(root, '#mute'),

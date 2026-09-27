@@ -21,13 +21,14 @@ import {
   MAX_CUBE_SIZE,
   MIN_CUBE_SIZE,
   SOLVE_WARNING_CUBE_SIZE,
+  type PaintCursor,
 } from '../../src/wasm/CubeEngine.ts';
 
 /** Builds semantic controls matching bootstrap's production markup. */
 function createUi(): GameUi {
   const root = document.createElement('main');
   root.innerHTML = `
-    <section id="stage"><canvas id="view"></canvas></section>
+    <section id="stage"><canvas id="view"></canvas><canvas id="view-net" aria-label="The net"></canvas></section>
     <output id="timer"></output>
     <p id="status"></p>
     <input id="scramble-moves" type="number" min="1" max="100" value="20">
@@ -61,21 +62,27 @@ function createUi(): GameUi {
     <button id="paint" type="button" aria-pressed="false">Paint</button>
     <section id="paint-bar" hidden>
       <button data-sticker="2" type="button" aria-pressed="true">
+        <span class="swatch__name">White</span>
         <span data-sticker-tally="2">0/9</span>
       </button>
       <button data-sticker="3" type="button" aria-pressed="false">
+        <span class="swatch__name">Yellow</span>
         <span data-sticker-tally="3">0/9</span>
       </button>
       <button data-sticker="4" type="button" aria-pressed="false">
+        <span class="swatch__name">Green</span>
         <span data-sticker-tally="4">0/9</span>
       </button>
       <button data-sticker="5" type="button" aria-pressed="false">
+        <span class="swatch__name">Blue</span>
         <span data-sticker-tally="5">0/9</span>
       </button>
       <button data-sticker="0" type="button" aria-pressed="false">
+        <span class="swatch__name">Red</span>
         <span data-sticker-tally="0">0/9</span>
       </button>
       <button data-sticker="1" type="button" aria-pressed="false">
+        <span class="swatch__name">Orange</span>
         <span data-sticker-tally="1">0/9</span>
       </button>
       <button id="paint-fill" type="button" aria-pressed="false">Fill face</button>
@@ -163,6 +170,7 @@ function createUi(): GameUi {
     paintApplyButton: root.querySelector<HTMLButtonElement>('#paint-apply')!,
     paintCancelButton: root.querySelector<HTMLButtonElement>('#paint-cancel')!,
     paintNote: root.querySelector<HTMLElement>('#paint-note')!,
+    netCanvas: root.querySelector<HTMLCanvasElement>('#view-net')!,
   };
 }
 
@@ -195,6 +203,8 @@ function createHarness(
   let filling = false;
   let brush: CubeStickerColour = CubeStickerColour.White;
   let fault: CubePaintFault = CubePaintFault.None;
+  let paintPlace: { col: number; row: number } | null = null;
+  let cursorShown = false;
   // Clamped the way the engine clamps, so the control is tested against the
   // answer it will actually be given rather than the one it asked for.
   let speedScale = 1;
@@ -322,6 +332,7 @@ function createHarness(
       if (busy || painting) return false;
       painting = true;
       touched = false;
+      paintPlace = null;
       fault = CubePaintFault.None;
       return true;
     }),
@@ -353,6 +364,34 @@ function createHarness(
       return true;
     }),
     isFilling: vi.fn((): boolean => filling),
+    // The keyboard's place, walking the front face alone: the cross is the
+    // engine's to lay out, and what the page does with the answers is what
+    // these tests are about.
+    paintCursorStep: vi.fn((columns: number, rows: number): boolean => {
+      if (!painting) return false;
+      if (paintPlace === null) {
+        paintPlace = { col: 1, row: 1 };
+        return true;
+      }
+      const col = paintPlace.col + columns;
+      const row = paintPlace.row + rows;
+      if (col < 0 || row < 0 || col >= cubeSize || row >= cubeSize) return false;
+      paintPlace = { col, row };
+      return true;
+    }),
+    paintAtCursor: vi.fn((): boolean => {
+      if (!painting || paintPlace === null) return false;
+      touched = true;
+      return true;
+    }),
+    setPaintCursorShown: vi.fn((shown: boolean): void => {
+      cursorShown = shown;
+    }),
+    paintCursor: vi.fn((): PaintCursor | null =>
+      painting && paintPlace !== null
+        ? { face: CubeFace.Front, col: paintPlace.col, row: paintPlace.row, colour: brush }
+        : null,
+    ),
     isSolved: vi.fn((): boolean => solved),
     committedMoveCount: vi.fn((): number =>
       cursor > scrambleEnd ? cursor - scrambleEnd : 0,
@@ -545,6 +584,8 @@ function createHarness(
       callback?.(now);
     },
     keyListenerCount: (): number => keyListeners.size,
+    /** Whether the engine was last told to draw the keyboard's place. */
+    paintCursorShown: (): boolean => cursorShown,
   };
 }
 
@@ -2389,6 +2430,109 @@ describe('colouring a real cube onto the net', () => {
     watched.ui.ambientButton.click();
     expect(watched.engine.isAmbient()).toBe(true);
     expect(watched.ui.paintButton.disabled).toBe(false);
+  });
+
+  it('puts the net on the stage to be coloured, and the view back after', () => {
+    // From the cube alone, and from the rings: a draft is coloured on the net
+    // and nowhere else.
+    for (const [view, flat] of [
+      ['3d', 'net'],
+      ['both', 'rings'],
+    ] as const) {
+      const harness = createHarness();
+      harness.ui.flatButtons.find((b) => b.dataset.flat === flat)!.click();
+      harness.ui.viewButtons.find((b) => b.dataset.view === view)!.click();
+      const before = [harness.engine.viewMode(), harness.engine.flatStyle()];
+
+      harness.ui.paintButton.click();
+      expect(harness.engine.viewMode(), view).not.toBe(CubeViewMode.Cube3D);
+      expect(harness.engine.flatStyle(), view).toBe(CubeFlatStyle.Net);
+
+      harness.ui.paintCancelButton.click();
+      expect([harness.engine.viewMode(), harness.engine.flatStyle()]).toEqual(
+        before,
+      );
+    }
+
+    // A view chosen while colouring is one somebody meant, and stays.
+    const harness = createHarness();
+    harness.ui.viewButtons.find((b) => b.dataset.view === '3d')!.click();
+    harness.ui.paintButton.click();
+    harness.ui.viewButtons.find((b) => b.dataset.view === '2d')!.click();
+    harness.ui.paintCancelButton.click();
+    expect(harness.engine.viewMode()).toBe(CubeViewMode.Flat);
+  });
+
+  it('lets the keyboard onto the net only while a draft is open', () => {
+    const harness = createHarness();
+    const net = harness.ui.netCanvas;
+    expect(net.hasAttribute('tabindex')).toBe(false);
+
+    harness.ui.paintButton.click();
+    expect(net.tabIndex).toBe(0);
+    expect(net.getAttribute('role')).toBe('application');
+    expect(net.getAttribute('aria-label')).toContain('Arrow keys move');
+
+    // However the draft closes -- here by a scramble, inside the engine.
+    harness.ui.scrambleButton.click();
+    expect(net.hasAttribute('tabindex')).toBe(false);
+    expect(net.hasAttribute('role')).toBe(false);
+    expect(net.getAttribute('aria-label')).toBe('The net');
+  });
+
+  it('walks, colours and picks colours from the keyboard on the net', () => {
+    const harness = createHarness();
+    const net = harness.ui.netCanvas;
+    const key = (name: string): KeyboardEvent => {
+      const event = new KeyboardEvent('keydown', {
+        key: name,
+        bubbles: true,
+        cancelable: true,
+      });
+      net.dispatchEvent(event);
+      return event;
+    };
+
+    // Nothing is taken before there is a draft.
+    expect(key('ArrowRight').defaultPrevented).toBe(false);
+    expect(harness.engine.paintCursorStep).not.toHaveBeenCalled();
+
+    harness.ui.paintButton.click();
+    net.dispatchEvent(new FocusEvent('focus'));
+    // Put down in the middle of the front face on the way in.
+    expect(harness.engine.paintCursorStep).toHaveBeenCalledWith(0, 0);
+
+    expect(key('ArrowRight').defaultPrevented).toBe(true);
+    expect(harness.engine.paintCursorStep).toHaveBeenLastCalledWith(1, 0);
+    expect(harness.ui.status.textContent).toBe(
+      'Front face, row 2, column 3: White.',
+    );
+    expect(harness.paintCursorShown()).toBe(true);
+
+    key('ArrowRight');
+    expect(harness.ui.status.textContent).toBe('The net ends there.');
+
+    // The fifth colour of the bar is red.
+    key('5');
+    expect(harness.engine.setBrush).toHaveBeenLastCalledWith(
+      CubeStickerColour.Red,
+    );
+    expect(harness.ui.status.textContent).toBe('Red brush.');
+
+    key('Enter');
+    expect(harness.engine.paintAtCursor).toHaveBeenCalledTimes(1);
+    key(' ');
+    expect(harness.engine.paintAtCursor).toHaveBeenCalledTimes(2);
+    expect(harness.ui.status.textContent).toBe(
+      'Front face, row 2, column 3: Red.',
+    );
+
+    // Away from the net the place is not drawn.
+    net.dispatchEvent(new FocusEvent('blur'));
+    expect(harness.paintCursorShown()).toBe(false);
+
+    // And a letter is not the net's to take.
+    expect(key('r').defaultPrevented).toBe(false);
   });
 
   it('stops watching before it takes a copy of the cube', () => {

@@ -8,6 +8,7 @@ import {
   CubeFlatStyle,
   CubePalette,
   CubeScene,
+  CubeStickerColour,
   CubeSurface,
   CubeViewMode,
   MAX_DIMENSION,
@@ -83,6 +84,9 @@ function createFakeModule() {
     // so a skipped frame -- for all of them or for one -- can be staged.
     drawsFrames: true,
     skipped: new Set<number>(),
+    // The keyboard's place on a colouring, packed as the engine packs it.
+    paintCursor: -1,
+    paintCursorStepResult: 1,
   };
 
   // Where the engine hands out its lighting buffer, and how long the last
@@ -255,6 +259,12 @@ function createFakeModule() {
     _thorvg_rubiks_pointer_down_on: vi.fn(
       (): number => behavior.pointerDownResult,
     ),
+    _thorvg_rubiks_paint_cursor_step: vi.fn(
+      (): number => behavior.paintCursorStepResult,
+    ),
+    _thorvg_rubiks_paint_at_cursor: vi.fn((): number => 1),
+    _thorvg_rubiks_set_paint_cursor_shown: vi.fn(),
+    _thorvg_rubiks_paint_cursor: vi.fn((): number => behavior.paintCursor),
   } satisfies ThorvgRubiksModule;
 
   /** Simulates WASM memory growth: the old ArrayBuffer is replaced. */
@@ -1099,3 +1109,43 @@ describe('CubeEngine surfaces', () => {
     engine.dispose();
   });
 });
+
+describe('CubeEngine paint cursor', () => {
+  it('walks, lays and shows the place through the engine', async () => {
+    const { engine, module, behavior } = await createEngine();
+
+    expect(engine.paintCursorStep(1, -1)).toBe(true);
+    expect(module._thorvg_rubiks_paint_cursor_step).toHaveBeenCalledWith(1, -1);
+    behavior.paintCursorStepResult = 0;
+    expect(engine.paintCursorStep(1, 0)).toBe(false);
+    // Not a whole number of cells is not a step, and is not asked about.
+    expect(engine.paintCursorStep(0.5, 0)).toBe(false);
+    expect(module._thorvg_rubiks_paint_cursor_step).toHaveBeenCalledTimes(2);
+
+    expect(engine.paintAtCursor()).toBe(true);
+    engine.setPaintCursorShown(true);
+    expect(module._thorvg_rubiks_set_paint_cursor_shown).toHaveBeenCalledWith(1);
+  });
+
+  it('reads the place back from the one number it is packed in', async () => {
+    const { engine, behavior } = await createEngine();
+    expect(engine.paintCursor()).toBeNull();
+
+    // Back face, Blue, row 27, column 3: the largest row a cube here has.
+    behavior.paintCursor =
+      CubeFace.Back * 0x1000000 + CubeStickerColour.Blue * 0x10000 + 27 * 0x100 + 3;
+    expect(engine.paintCursor()).toEqual({
+      face: CubeFace.Back,
+      colour: CubeStickerColour.Blue,
+      row: 27,
+      col: 3,
+    });
+
+    // A face or a colour the engine does not have is the engine being wrong.
+    behavior.paintCursor = 6 * 0x1000000;
+    expect(() => engine.paintCursor()).toThrow(/invalid paint cursor/);
+    behavior.paintCursor = 7 * 0x10000;
+    expect(() => engine.paintCursor()).toThrow(/invalid paint cursor/);
+  });
+});
+

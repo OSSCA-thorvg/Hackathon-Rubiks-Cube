@@ -179,6 +179,15 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_set_paint_brush(colour: number): number;
   _thorvg_rubiks_paint_brush(): number;
   _thorvg_rubiks_set_paint_filling(wholeFace: number): number;
+  /** Moves the keyboard's place on the net; 0 for a step off the cross. */
+  _thorvg_rubiks_paint_cursor_step(columns: number, rows: number): number;
+  _thorvg_rubiks_paint_at_cursor(): number;
+  _thorvg_rubiks_set_paint_cursor_shown(shown: number): void;
+  /**
+   * The place packed as face * 0x1000000 + colour * 0x10000 + row * 0x100 +
+   * column, or -1 before it is put down.
+   */
+  _thorvg_rubiks_paint_cursor(): number;
   _thorvg_rubiks_is_paint_filling(): number;
   _thorvg_rubiks_painted_count(colour: number): number;
   _thorvg_rubiks_paint_apply(): number;

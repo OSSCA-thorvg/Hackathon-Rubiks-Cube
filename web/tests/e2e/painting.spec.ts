@@ -141,6 +141,52 @@ test('a new cube puts the paint bar away with the draft', async ({ page }) => {
   await expect(page.locator('#paint-bar')).toBeVisible();
 });
 
+test('a cube can be coloured from the keyboard alone', async ({ page }) => {
+  const stage = page.locator('#stage');
+  const net = page.locator('#view-net');
+
+  // From the cube alone, where the net is not on the stage at all.
+  await page.locator('[data-view="3d"]').click();
+  await expect(stage).toHaveAttribute('data-view-mode', '3d');
+
+  await page.locator('#paint').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#paint-bar')).toBeVisible();
+  await expect(stage).not.toHaveAttribute('data-view-mode', '3d');
+  await expect(net).toBeVisible();
+
+  // Back through the rail to the net, which takes the keyboard now.
+  for (let press = 0; press < 20; press += 1) {
+    if (await net.evaluate((element) => element === document.activeElement)) {
+      break;
+    }
+    await page.keyboard.press('Shift+Tab');
+  }
+  await expect(net).toBeFocused();
+  await expect(page.locator('#status')).toHaveText(
+    'Front face, row 2, column 2: Green.',
+  );
+
+  // Red is the fifth colour of the bar; one to the right, and lay it.
+  await page.keyboard.press('5');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Enter');
+  await expect(page.locator(`[data-sticker-tally="${RED}"]`)).toHaveText('10/9');
+  await expect(page.locator(`[data-sticker-tally="${GREEN}"]`)).toHaveText(
+    '8/9',
+  );
+  await expect(page.locator('#status')).toHaveText(
+    'Front face, row 2, column 3: Red.',
+  );
+
+  // Nothing turned, and leaving puts the view back as it was.
+  await expect(page.locator('#timeline-progress')).toHaveText('0 / 0');
+  await page.locator('#paint-cancel').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#paint-bar')).toBeHidden();
+  await expect(stage).toHaveAttribute('data-view-mode', '3d');
+});
+
 test('a painted cube travels in a link and comes back as itself', async ({
   page,
   context,

@@ -144,6 +144,17 @@ export const CubeStickerColour = {
 export type CubeStickerColour =
   (typeof CubeStickerColour)[keyof typeof CubeStickerColour];
 
+/**
+ * The keyboard's place on a colouring: which cell of the net, and what colour
+ * the draft has there now.
+ */
+export type PaintCursor = {
+  readonly face: CubeFace;
+  readonly col: number;
+  readonly row: number;
+  readonly colour: CubeStickerColour;
+};
+
 /** Every sticker colour, in the order the engine numbers them. */
 export const STICKER_COLOURS: readonly CubeStickerColour[] = [
   CubeStickerColour.Red,
@@ -1189,6 +1200,57 @@ export class CubeEngine {
   setFilling(wholeFace: boolean): boolean {
     this.assertUsable();
     return this.module._thorvg_rubiks_set_paint_filling(wholeFace ? 1 : 0) !== 0;
+  }
+
+  /**
+   * Moves the keyboard's place on the net a cell at a time, across the whole
+   * cross; the first call puts it in the middle of the front face.
+   *
+   * @returns false without a draft, and for a step into an empty corner of
+   *          the cross or off the net, which leaves the place where it was.
+   */
+  paintCursorStep(columns: number, rows: number): boolean {
+    this.assertUsable();
+    if (!Number.isInteger(columns) || !Number.isInteger(rows)) return false;
+    return this.module._thorvg_rubiks_paint_cursor_step(columns, rows) !== 0;
+  }
+
+  /** Lays the brush at the place: the cell, or its whole face while filling. */
+  paintAtCursor(): boolean {
+    this.assertUsable();
+    return this.module._thorvg_rubiks_paint_at_cursor() !== 0;
+  }
+
+  /** Whether the place is drawn, which it is while the net has the keyboard. */
+  setPaintCursorShown(shown: boolean): void {
+    this.assertUsable();
+    this.module._thorvg_rubiks_set_paint_cursor_shown(shown ? 1 : 0);
+  }
+
+  /** Where the place is and what colour is there, or null before it is put down. */
+  paintCursor(): PaintCursor | null {
+    this.assertUsable();
+    const packed = this.module._thorvg_rubiks_paint_cursor();
+    if (packed === -1) return null;
+
+    const face = Math.floor(packed / 0x1000000);
+    const colour = Math.floor(packed / 0x10000) % 0x100;
+    const row = Math.floor(packed / 0x100) % 0x100;
+    const col = packed % 0x100;
+    if (
+      !Number.isInteger(packed) ||
+      packed < 0 ||
+      !Object.values(CubeFace).includes(face as CubeFace) ||
+      !STICKER_COLOURS.includes(colour as CubeStickerColour)
+    ) {
+      throw new Error(`Engine returned an invalid paint cursor ${packed}.`);
+    }
+    return {
+      face: face as CubeFace,
+      colour: colour as CubeStickerColour,
+      row,
+      col,
+    };
   }
 
   isFilling(): boolean {

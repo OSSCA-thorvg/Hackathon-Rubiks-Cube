@@ -1014,6 +1014,101 @@ describe('attachGameController', () => {
     expect(sound.teardown).toHaveBeenCalledTimes(1);
   });
 
+  it('leaves nothing listening when the last step of setup fails', () => {
+    const harness = createHarness();
+    harness.controller.teardown();
+    for (const control of controllerControls(harness.ui)) {
+      control.disabled = true;
+    }
+
+    // Everything is wired by the time the controls are first read, so this
+    // is the failure with the most to leave behind: listeners on the keyboard
+    // and every control, and the controls just turned on.
+    const keys = new Set<(event: KeyboardEvent) => void>();
+    const sound = {
+      play: vi.fn(),
+      setMuted: vi.fn(),
+      isMuted: vi.fn((): boolean => false),
+      teardown: vi.fn(),
+    };
+    const broken = {
+      ...harness.engine,
+      palette: vi.fn((): CubePalette => {
+        throw new Error('engine gone');
+      }),
+    };
+    expect(() =>
+      attachGameController({
+        engine: broken,
+        ui: harness.ui,
+        startFrameLoop: vi.fn(),
+        onError: vi.fn(),
+        sound,
+        keyboardTarget: {
+          addEventListener: (_type, listener) => keys.add(listener),
+          removeEventListener: (_type, listener) => keys.delete(listener),
+        },
+      }),
+    ).toThrow('engine gone');
+
+    expect(keys.size).toBe(0);
+    expect(sound.teardown).toHaveBeenCalledTimes(1);
+    for (const control of controllerControls(harness.ui)) {
+      expect(control.disabled, control.id || control.textContent).toBe(true);
+    }
+    // Pressed anyway, nothing reaches the engine.
+    for (const method of [broken.resetCube, broken.scramble]) {
+      (method as ReturnType<typeof vi.fn>).mockClear();
+    }
+    harness.ui.resetButton.dispatchEvent(new MouseEvent('click'));
+    harness.ui.scrambleButton.dispatchEvent(new MouseEvent('click'));
+    harness.ui.root.dispatchEvent(
+      new CustomEvent(PLAY_MOVES_EVENT, { detail: { text: 'R' } }),
+    );
+    expect(broken.resetCube).not.toHaveBeenCalled();
+    expect(broken.scramble).not.toHaveBeenCalled();
+    expect(broken.turnFace).not.toHaveBeenCalled();
+  });
+
+  it('reports the setup failure, not the sound failing on the way out', () => {
+    const harness = createHarness();
+    harness.controller.teardown();
+
+    for (const failing of ['palette', 'timelineCursor'] as const) {
+      const sound = {
+        play: vi.fn(),
+        setMuted: vi.fn(),
+        isMuted: vi.fn((): boolean => false),
+        teardown: vi.fn((): void => {
+          throw new Error('sound broke');
+        }),
+      };
+      const broken = {
+        ...harness.engine,
+        [failing]: vi.fn(() => {
+          throw new Error('engine gone');
+        }),
+      };
+      // The palette fails in the last step, with everything wired; the
+      // cursor as the session is made, before anything is.
+      expect(
+        () =>
+          attachGameController({
+            engine: broken,
+            ui: harness.ui,
+            startFrameLoop: vi.fn(),
+            onError: vi.fn(),
+            sound,
+            keyboardTarget: {
+              addEventListener: vi.fn(),
+              removeEventListener: vi.fn(),
+            },
+          }),
+        failing,
+      ).toThrow('engine gone');
+    }
+  });
+
   it('finishes unhooking even when closing the sound fails', () => {
     const harness = createHarness();
     expect(harness.keyListenerCount()).toBe(1);

@@ -484,7 +484,10 @@ function moveOf(
  * Connects DOM controls, keyboard commands, timer state, and one engine.
  *
  * Every listener is installed here and removed by the returned controller,
- * keeping AppLifecycle's single teardown path intact.
+ * keeping AppLifecycle's single teardown path intact. A failure part way
+ * through leaves nothing behind either: the one step that can fail before
+ * any listener exists releases the sound, and the one after they all do
+ * unwinds through that same teardown.
  */
 export function attachGameController(
   options: GameControllerOptions,
@@ -520,47 +523,27 @@ export function attachGameController(
    * before there is a controller to hand back. So a step that throws leaves
    * nobody holding it: the caller sees an exception and has no teardown to
    * call, and the listeners would sit on the window for the life of the page
-   * waiting to open an audio context nothing would ever close.
+   * waiting to open an audio context nothing would ever close. A sound that
+   * fails to close as well is not what went wrong, so the step's own error is
+   * the one that is thrown.
    */
   const setup = <T>(step: () => T): T => {
     try {
       return step();
     } catch (error) {
-      sound.teardown();
+      try {
+        sound.teardown();
+      } catch {
+        // The step's failure is the one to report.
+      }
       throw error;
     }
   };
 
-  // A move pressed on either list is a place to take the cube to: the cursor
-  // just past it, so that move is the last one on. The walk is declared
-  // further down; nothing can be pressed before this function has returned.
-  const pickMove = (index: number): void => {
-    seekTo(index + 1);
-  };
-  const moveLog = setup(
-    () => new MoveLog(ui.moveLogList, engine, { onPick: pickMove }),
-  );
-  const timeline = setup(() => new Timeline(ui.timeline, engine, pickMove));
-  const shareCard = setup(
-    () =>
-      new ShareCard(ui.shareCard, {
-        copy: (text: string): Promise<void> => shareTarget.copy(text),
-        returnFocus: ui.shareButton,
-      }),
-  );
-
-  // Where the record stood when the link on the card -- or on its way to it,
-  // while the clipboard is still thinking -- was read from it. The card comes
-  // down once the cube is somewhere else, since it says the link opens this
-  // cube: a command takes it down as it runs, and a drag -- which comes
-  // through no command -- shows as a record that has moved. A copy that
-  // finishes after either finds this gone and shows nothing.
-  let sharedAt: { readonly cursor: number; readonly length: number } | null =
-    null;
-  const hideShareCard = (): void => {
-    sharedAt = null;
-    shareCard.hide();
-  };
+  // The session first: it is the one piece that reads the engine as it is
+  // made, and so the one that can fail, and nothing after it may be holding a
+  // listener when it does. Everything from the lists on listens from the
+  // moment it exists, and none of it can fail on its own.
   const records = setup(
     () => new SessionRecords(ui.recordBest, ui.recordList, ui.recordTally),
   );
@@ -574,6 +557,32 @@ export function attachGameController(
         recordSolve: (record: SolveRecord): boolean => records.add(record),
       }),
   );
+
+  // A move pressed on either list is a place to take the cube to: the cursor
+  // just past it, so that move is the last one on. The walk is declared
+  // further down; nothing can be pressed before this function has returned.
+  const pickMove = (index: number): void => {
+    seekTo(index + 1);
+  };
+  const moveLog = new MoveLog(ui.moveLogList, engine, { onPick: pickMove });
+  const timeline = new Timeline(ui.timeline, engine, pickMove);
+  const shareCard = new ShareCard(ui.shareCard, {
+    copy: (text: string): Promise<void> => shareTarget.copy(text),
+    returnFocus: ui.shareButton,
+  });
+
+  // Where the record stood when the link on the card -- or on its way to it,
+  // while the clipboard is still thinking -- was read from it. The card comes
+  // down once the cube is somewhere else, since it says the link opens this
+  // cube: a command takes it down as it runs, and a drag -- which comes
+  // through no command -- shows as a record that has moved. A copy that
+  // finishes after either finds this gone and shows nothing.
+  let sharedAt: { readonly cursor: number; readonly length: number } | null =
+    null;
+  const hideShareCard = (): void => {
+    sharedAt = null;
+    shareCard.hide();
+  };
 
   const updateViewControls = (): void => {
     const selected = engine.viewMode();
@@ -1045,20 +1054,22 @@ export function attachGameController(
   };
 
   const onTurnDepthChange = (): void => {
-    const typed = Number(ui.turnDepthInput.value);
-    const deepest = Math.max(1, engine.cubeSize() - 1);
-    if (Number.isInteger(typed) && typed >= 1 && typed <= deepest) {
-      turnDepth = typed;
-      delete ui.turnDepthInput.dataset.refused;
-      return;
-    }
+    run((): void => {
+      const typed = Number(ui.turnDepthInput.value);
+      const deepest = Math.max(1, engine.cubeSize() - 1);
+      if (Number.isInteger(typed) && typed >= 1 && typed <= deepest) {
+        turnDepth = typed;
+        delete ui.turnDepthInput.dataset.refused;
+        return;
+      }
 
-    ui.turnDepthInput.value = String(turnDepth);
-    flashRefusal(ui.turnDepthInput);
-    session.announce(
-      `A turn on this cube reaches 1 to ${deepest} layers deep. ` +
-        `Kept ${turnDepth}.`,
-    );
+      ui.turnDepthInput.value = String(turnDepth);
+      flashRefusal(ui.turnDepthInput);
+      session.announce(
+        `A turn on this cube reaches 1 to ${deepest} layers deep. ` +
+          `Kept ${turnDepth}.`,
+      );
+    });
   };
 
   const onTurnWide = (): void => {
@@ -1086,12 +1097,17 @@ export function attachGameController(
       typed < MIN_CUBE_SIZE ||
       typed > MAX_CUBE_SIZE
     ) {
-      ui.cubeSizeInput.value = String(engine.cubeSize());
-      flashRefusal(ui.cubeSizeInput);
-      session.announce(
-        `Cubes here are ${MIN_CUBE_SIZE} to ${MAX_CUBE_SIZE} layers. ` +
-          `Kept ${engine.cubeSize()}×${engine.cubeSize()}.`,
-      );
+      // Through `run` like any other read of the engine, so a failure here
+      // takes the same way out rather than escaping the page.
+      run((): void => {
+        const kept = engine.cubeSize();
+        ui.cubeSizeInput.value = String(kept);
+        flashRefusal(ui.cubeSizeInput);
+        session.announce(
+          `Cubes here are ${MIN_CUBE_SIZE} to ${MAX_CUBE_SIZE} layers. ` +
+            `Kept ${kept}×${kept}.`,
+        );
+      });
       return;
     }
 
@@ -1522,8 +1538,10 @@ export function attachGameController(
       });
     }),
     ...bindChoices(ui.paintSwatches, stickerOf, (colour) => {
-      engine.setBrush(colour);
-      updatePaintControls();
+      run((): void => {
+        engine.setBrush(colour);
+        updatePaintControls();
+      });
     }),
     ...bindChoices(ui.paletteButtons, paletteOf, (palette) => {
       run((): void => {
@@ -1592,7 +1610,70 @@ export function attachGameController(
   ui.root.addEventListener(PLAY_MOVES_EVENT, onPlayMoves);
   keyboardTarget.addEventListener('keydown', onKeyDown);
 
-  setup((): void => {
+  /**
+   * Lets go of everything this function took hold of, once.
+   *
+   * A name of its own rather than only a method of what is returned, because
+   * the last step of setting up can fail with everything already listening,
+   * and is unwound by this same call.
+   */
+  const teardown = (): void => {
+    if (!active) return;
+    active = false;
+    walk = null;
+    session.teardown();
+    moveLog.teardown();
+    timeline.teardown();
+    shareCard.teardown();
+    // The one moment none of them is the engine's or the session's to
+    // decide: there is nothing left to answer a press.
+    for (const control of controllerControls(ui)) control.disabled = true;
+    ui.scrambleMovesInput.removeEventListener(
+      'change',
+      onScrambleMovesChange,
+    );
+    ui.cubeSizeInput.removeEventListener('change', onCubeSizeChange);
+    ui.turnDepthInput.removeEventListener('change', onTurnDepthChange);
+    for (const box of refusalBoxes) {
+      for (const type of REFUSAL_FLASH_ENDS) {
+        box.removeEventListener(type, onRefusalFlashEnd);
+      }
+    }
+    ui.turnWideButton.removeEventListener('click', onTurnWide);
+    ui.scrambleButton.removeEventListener('click', onScramble);
+    ui.resetButton.removeEventListener('click', onReset);
+    ui.undoButton.removeEventListener('click', onUndo);
+    ui.redoButton.removeEventListener('click', onRedo);
+    ui.rewindButton.removeEventListener('click', onRewind);
+    ui.solveButton.removeEventListener('click', onSolve);
+    ui.stopButton.removeEventListener('click', onStop);
+    ui.shareButton.removeEventListener('click', onShare);
+    ui.ambientButton.removeEventListener('click', onAmbient);
+    ui.paintButton.removeEventListener('click', onPaint);
+    ui.paintFillButton.removeEventListener('click', onPaintFill);
+    ui.paintApplyButton.removeEventListener('click', onPaintApply);
+    ui.paintCancelButton.removeEventListener('click', onPaintCancel);
+    ui.homeViewButton.removeEventListener('click', onHomeView);
+    ui.muteButton.removeEventListener('click', onMute);
+    ui.speedInput.removeEventListener('input', onSpeedChange);
+    ui.root.removeEventListener(PLAY_MOVES_EVENT, onPlayMoves);
+    for (const [button, listener] of choiceListeners) {
+      button.removeEventListener('click', listener);
+    }
+    keyboardTarget.removeEventListener('keydown', onKeyDown);
+    // Last, because it is the only step here that can fail: closing an audio
+    // context is a browser call rather than a listener being unhooked, and
+    // one that threw from the middle of this sequence would take the
+    // removals below it down as well. The caller's own teardown catches it,
+    // so nothing above is left half-undone.
+    sound.teardown();
+  };
+
+  // The last step, and the first with every listener in place. A failure here
+  // goes back out through the teardown a caller would have called, which
+  // touches nothing of the engine's -- which may be what failed -- and turns
+  // back off the controls this step has just turned on.
+  try {
     for (const control of commandControls(ui)) control.disabled = false;
     updateCubeSizeControl();
     updateTurnDepthControl();
@@ -1602,7 +1683,14 @@ export function attachGameController(
     engine.setSpeedScale(initialSpeedScale());
     updateSpeedControl();
     updateEngineControls();
-  });
+  } catch (error) {
+    try {
+      teardown();
+    } catch {
+      // The setup's failure is the one to report.
+    }
+    throw error;
+  }
 
   return {
     get state(): GameState {
@@ -1645,56 +1733,6 @@ export function attachGameController(
       });
     },
 
-    teardown(): void {
-      if (!active) return;
-      active = false;
-      walk = null;
-      session.teardown();
-      moveLog.teardown();
-      timeline.teardown();
-      shareCard.teardown();
-      // The one moment none of them is the engine's or the session's to
-      // decide: there is nothing left to answer a press.
-      for (const control of controllerControls(ui)) control.disabled = true;
-      ui.scrambleMovesInput.removeEventListener(
-        'change',
-        onScrambleMovesChange,
-      );
-      ui.cubeSizeInput.removeEventListener('change', onCubeSizeChange);
-      ui.turnDepthInput.removeEventListener('change', onTurnDepthChange);
-      for (const box of refusalBoxes) {
-        for (const type of REFUSAL_FLASH_ENDS) {
-          box.removeEventListener(type, onRefusalFlashEnd);
-        }
-      }
-      ui.turnWideButton.removeEventListener('click', onTurnWide);
-      ui.scrambleButton.removeEventListener('click', onScramble);
-      ui.resetButton.removeEventListener('click', onReset);
-      ui.undoButton.removeEventListener('click', onUndo);
-      ui.redoButton.removeEventListener('click', onRedo);
-      ui.rewindButton.removeEventListener('click', onRewind);
-      ui.solveButton.removeEventListener('click', onSolve);
-      ui.stopButton.removeEventListener('click', onStop);
-      ui.shareButton.removeEventListener('click', onShare);
-      ui.ambientButton.removeEventListener('click', onAmbient);
-      ui.paintButton.removeEventListener('click', onPaint);
-      ui.paintFillButton.removeEventListener('click', onPaintFill);
-      ui.paintApplyButton.removeEventListener('click', onPaintApply);
-      ui.paintCancelButton.removeEventListener('click', onPaintCancel);
-      ui.homeViewButton.removeEventListener('click', onHomeView);
-      ui.muteButton.removeEventListener('click', onMute);
-      ui.speedInput.removeEventListener('input', onSpeedChange);
-      ui.root.removeEventListener(PLAY_MOVES_EVENT, onPlayMoves);
-      for (const [button, listener] of choiceListeners) {
-        button.removeEventListener('click', listener);
-      }
-      keyboardTarget.removeEventListener('keydown', onKeyDown);
-      // Last, because it is the only step here that can fail: closing an audio
-      // context is a browser call rather than a listener being unhooked, and
-      // one that threw from the middle of this sequence would take the
-      // removals below it down as well. The caller's own teardown catches it,
-      // so nothing above is left half-undone.
-      sound.teardown();
-    },
+    teardown,
   };
 }

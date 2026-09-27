@@ -233,6 +233,41 @@ TEST_CASE("a draft is not taken of a cube in motion, and does not outlive it")
     settle();
 }
 
+TEST_CASE("the cube does not move behind an open draft")
+{
+    const EngineLifecycle engine(kCanvas, kCanvas);
+
+    // Two moves and one of them taken back, so every command below has
+    // something it could do.
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1, 1, 1));
+    settle();
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Up, 1, 1, 1));
+    settle();
+    REQUIRE(rubiks::app::undo());
+    settle();
+    REQUIRE(rubiks::app::timeline_cursor() == 1);
+
+    // Backing out of a draft promises the cube as it was, so nothing may
+    // turn it while one is open -- a key, a button or a played sequence.
+    REQUIRE(rubiks::app::begin_painting());
+    CHECK_FALSE(rubiks::app::turn_face(rubiks::cube::Face::Front, 1, 1, 1));
+    CHECK_FALSE(rubiks::app::undo());
+    CHECK_FALSE(rubiks::app::redo());
+    CHECK_FALSE(rubiks::app::solve_rewind());
+    CHECK_FALSE(rubiks::app::solve());
+    CHECK_FALSE(rubiks::app::ambient_start(0));
+    settle();
+    CHECK(rubiks::app::is_painting());
+    CHECK(rubiks::app::timeline_cursor() == 1);
+    CHECK(rubiks::app::timeline_length() == 2);
+
+    // Put away, the same commands are answered again.
+    rubiks::app::cancel_painting();
+    CHECK(rubiks::app::redo());
+    settle();
+    CHECK(rubiks::app::timeline_cursor() == 2);
+}
+
 TEST_CASE("nothing about painting answers before the engine is up")
 {
     CHECK_FALSE(rubiks::app::is_painting());

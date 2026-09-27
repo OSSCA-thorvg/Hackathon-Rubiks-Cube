@@ -865,10 +865,24 @@ void advance_playback() noexcept
     return true;
 }
 
+/**
+ * Whether the cube is not to be moved by a command now.
+ *
+ * While anything owns it, and while a draft is open. A draft is a copy of this
+ * cube that somebody is mending, and the promise made of it is that backing
+ * out leaves the cube as it was -- which a turn made behind it would break.
+ * The commands that put a different cube there instead (a scramble, a reset,
+ * a new size) close the draft rather than wait for it.
+ */
+[[nodiscard]] bool cube_held() noexcept
+{
+    return busy() || state->paint.has_value();
+}
+
 /** Whether a rewind may be started at all, whatever it would rewind. */
 [[nodiscard]] bool can_rewind() noexcept
 {
-    return state && !busy();
+    return state && !cube_held();
 }
 
 /**
@@ -1784,6 +1798,9 @@ bool ambient_start(std::uint32_t choice) noexcept
     if (!state) return false;
     if (ambient_running()) return false;
 
+    // A pattern turns the cube, and nothing may turn it behind a draft.
+    if (state->paint) return false;
+
     // Whatever else was playing gives way, the way it does for a scramble.
     // Nothing is put back on the way in: the cube being watched is the cube
     // that was there, which is exactly what the snapshot below records.
@@ -1956,8 +1973,9 @@ bool turn_face(cube::Face face, int first_depth, int last_depth,
 
     // The controller does not know about playback, and between a sequence
     // being accepted and its first frame it is idle -- so without this the
-    // very next keypress would land in the middle of the sequence.
-    if (busy()) return false;
+    // very next keypress would land in the middle of the sequence. Nor does
+    // it know about a draft, which the cube may not turn behind.
+    if (cube_held()) return false;
 
     // Every refusal a range can earn is in here: off the cube, inside out, or
     // all of it at once.

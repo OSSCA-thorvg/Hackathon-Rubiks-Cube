@@ -315,8 +315,8 @@ inline constexpr int kAmbientMaxPeriod = 200;
  * are turned rather than applied and none of them is anybody's. It never runs
  * out, so the application stays busy and asking for frames until it is stopped.
  *
- * @return true when watching began; false before initialization and when it
- *         had already begun.
+ * @return true when watching began; false before initialization, when it had
+ *         already begun, and while a draft is open.
  */
 [[nodiscard]] bool ambient_start(std::uint32_t choice) noexcept;
 
@@ -353,9 +353,9 @@ void ambient_stop() noexcept;
  * The move is played as a sequence of one, so it settles on screen the way
  * every other turn does and the cursor follows the commit.
  *
- * Refused while anything else owns the cube, and refused once the cursor has
- * reached the end of the scramble: what is below that is not the user's to
- * take back. Use stop_playback() to break off a sequence rather than waiting
+ * Refused while anything else owns the cube or a draft is open, and refused
+ * once the cursor has reached the end of the scramble: what is below that is
+ * not the user's to take back. Use stop_playback() to break off a sequence rather than waiting
  * for one to end.
  *
  * @return true when a rewind began.
@@ -365,8 +365,8 @@ void ambient_stop() noexcept;
 /**
  * Plays back the move a rewind took off, exactly as it was made.
  *
- * @return true when a replay began; false when nothing has been rewound or
- *         something else owns the cube.
+ * @return true when a replay began; false when nothing has been rewound,
+ *         something else owns the cube, or a draft is open.
  */
 [[nodiscard]] bool redo() noexcept;
 
@@ -378,7 +378,7 @@ void ambient_stop() noexcept;
  * record and the cube agree.
  *
  * @return true when a rewind began; false with nothing applied, or while
- *         something else owns the cube.
+ *         something else owns the cube or a draft is open.
  */
 [[nodiscard]] bool solve_rewind() noexcept;
 
@@ -411,8 +411,8 @@ void ambient_stop() noexcept;
  * stays above the cursor, so redo() takes it up again a move at a time.
  *
  * @return true when a solve began; false before initialization, while
- *         something else owns the cube, for a size no solver here handles, and
- *         for a cube that is already solved.
+ *         something else owns the cube or a draft is open, for a size no
+ *         solver here handles, and for a cube that is already solved.
  */
 [[nodiscard]] bool solve() noexcept;
 
@@ -680,7 +680,8 @@ void cancel_painting() noexcept;
  * the letters this application writes, and refusing it here is what keeps
  * "every move that can be made can be written down" true.
  *
- * @return true when the command was accepted.
+ * @return true when the command was accepted; false while anything owns the
+ *         cube or a draft is open.
  */
 [[nodiscard]] bool turn_face(cube::Face face, int first_depth, int last_depth,
                              int face_turns) noexcept;

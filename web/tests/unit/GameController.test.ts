@@ -180,6 +180,8 @@ function createHarness(
      * is wired up, so this is the state the very first frame observes.
      */
     opened?: { readonly scrambleEnd: number; readonly moves: number[] };
+    /** Whether the page says a dialog is up. */
+    blocked?: () => boolean;
   } = {},
 ) {
   const ui = createUi();
@@ -460,6 +462,7 @@ function createHarness(
     sound,
     shareTarget,
     prefersReducedMotion: overrides.prefersReducedMotion ?? false,
+    blocked: overrides.blocked,
   });
 
   return {
@@ -905,6 +908,27 @@ describe('attachGameController', () => {
 
     // The same key with nothing in the way still reaches the cube, so the
     // guards above are what rejected it rather than a listener that is gone.
+    harness.dispatchKey({ key: 'r' });
+    expect(harness.engine.turnFace).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves the letters to a dialog that is up, wherever the focus is', () => {
+    let dialogUp = true;
+    const harness = createHarness({ blocked: () => dialogUp });
+
+    // On a button in the dialog, and on the page itself -- which is where a
+    // press on a dialog's label leaves the focus.
+    const onButton = harness.dispatchKey(
+      { key: 'r' },
+      document.createElement('button'),
+    );
+    const onPage = harness.dispatchKey({ key: 'u' });
+    expect(harness.engine.turnFace).not.toHaveBeenCalled();
+    expect(onButton.defaultPrevented).toBe(false);
+    expect(onPage.defaultPrevented).toBe(false);
+
+    // Closed, the same key turns: the guard refused it, not a missing listener.
+    dialogUp = false;
     harness.dispatchKey({ key: 'r' });
     expect(harness.engine.turnFace).toHaveBeenCalledTimes(1);
   });

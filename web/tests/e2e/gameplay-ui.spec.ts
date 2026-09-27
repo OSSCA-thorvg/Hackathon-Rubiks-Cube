@@ -269,6 +269,43 @@ for (const [screen, viewport] of [
   });
 }
 
+test('the cube keys do not reach under a dialog', async ({ page }) => {
+  const shell = page.locator('.game-shell');
+  const settings = page.locator('#settings-panel');
+  await page.locator('#scramble').click();
+  await expect(shell).toHaveAttribute('data-game-state', 'ready');
+
+  // With the focus on a button of the dialog, and after a press on a label
+  // of it, which leaves the focus on the page rather than in the dialog.
+  await page.locator('#settings-trigger').click();
+  await expect(settings).toBeVisible();
+  await page.keyboard.press('r');
+  await settings.locator('.settings__label', { hasText: 'Appearance' }).click();
+  await page.keyboard.press('u');
+  await expect(page.locator('#move-log li')).toHaveCount(0);
+  await expect(shell).toHaveAttribute('data-game-state', 'ready');
+  await expect(page.locator('#timer')).toHaveText('00:00.00');
+
+  // The command menu keeps its field focused through a press on a heading,
+  // so a letter types and Tab does not reach what the menu covers.
+  await page.keyboard.press('Escape');
+  await expect(settings).toBeHidden();
+  await page.keyboard.press('ControlOrMeta+k');
+  await page.locator('.command-group__label').first().click();
+  await expect(page.locator('#command-input')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('#command-input')).toBeFocused();
+  await page.keyboard.press('d');
+  await expect(page.locator('#command-input')).toHaveValue('d');
+  await expect(page.locator('#move-log li')).toHaveCount(0);
+
+  // Closed, the same letter turns the cube.
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('r');
+  await expect(shell).toHaveAttribute('data-game-state', 'running');
+  await expect(page.locator('#move-log li')).toHaveCount(1);
+});
+
 test('a scramble is turned into the cube where it can be watched', async ({
   page,
 }) => {

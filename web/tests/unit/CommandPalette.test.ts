@@ -45,6 +45,7 @@ function build(
     <div id="dialog" hidden>
       <input id="input">
       <p id="message"></p>
+      <p class="command-group__label" id="label">Commands</p>
       <div id="list" role="listbox"></div>
     </div>
   `;
@@ -241,6 +242,25 @@ describe('attachCommandPalette', () => {
     type('F2 B2');
     expect(options()).toHaveLength(0);
     expect(shell.message.textContent).toBe('The cube is not ready for moves yet.');
+  });
+
+  it('keeps the focus in its field when the rest of it is pressed', () => {
+    const { shell, keyboard } = build();
+    keyboard.press({ key: 'k', ctrlKey: true });
+
+    // A heading or the space round the list would otherwise take the focus to
+    // the page behind, where Tab reaches what the menu covers.
+    const press = (target: Element): MouseEvent => {
+      const event = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      target.dispatchEvent(event);
+      return event;
+    };
+    expect(press(shell.dialog.querySelector('#label')!).defaultPrevented).toBe(
+      true,
+    );
+    expect(press(shell.message).defaultPrevented).toBe(true);
+    // The field itself is still pressed as a field, to place the caret.
+    expect(press(shell.input).defaultPrevented).toBe(false);
   });
 
   it('does not open over another dialog', () => {

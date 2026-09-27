@@ -166,6 +166,8 @@ export type StartAppOptions = {
   readonly onError: (error: unknown) => void;
   /** Where the canvas ground comes from; absent leaves the engine default. */
   readonly theme?: ThemeSource;
+  /** Whether a dialog is up over the cube, which the game's keys stay out of. */
+  readonly blocked?: () => boolean;
   /**
    * Test seams; production uses CubeEngine and the real globals. The engine
    * is created at the size its canvas is first given, which is this
@@ -651,6 +653,7 @@ export async function startApp(
       engine,
       ui: options.gameUi,
       startFrameLoop,
+      blocked: options.blocked,
       // A failed gameplay command leaves the engine in an unknown state, so
       // it takes the same route out as a failed frame.
       onError: (error: unknown): void => {

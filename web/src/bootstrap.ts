@@ -343,7 +343,7 @@ export function bootstrap(
     });
   }
 
-  attachCommandPalette({
+  const palette = attachCommandPalette({
     shell: shell.command,
     commands: () => pageCommands(shell, settings),
     parse: (text) =>
@@ -400,6 +400,9 @@ export function bootstrap(
     ],
     gameUi: shell.ui,
     lightingUi: shell.lightingUi,
+    // Both of the page's dialogs are modal, so nothing they cover answers a
+    // key -- the cube included.
+    blocked: () => settings.isOpen() || palette.isOpen(),
     setState,
     onError: fail,
     theme: theme ?? undefined,

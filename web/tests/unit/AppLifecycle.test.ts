@@ -201,6 +201,7 @@ function createHarness(overrides: {
     teardown: vi.fn(),
   };
   let gameOptions: GameControllerOptions | null = null;
+  const blocked = (): boolean => false;
 
   const gameUi = createGameUi();
   const start = () =>
@@ -208,6 +209,7 @@ function createHarness(overrides: {
       canvas,
       views: overrides.views,
       gameUi,
+      blocked,
       setState: (state, message) => states.push([state, message]),
       onError,
       createEngine: async () => engine,
@@ -266,6 +268,7 @@ function createHarness(overrides: {
     game,
     gameUi,
     gameOptions: () => gameOptions,
+    blocked,
     triggerObserver: () => observerCallback(),
     dispatch,
     listenerCount,
@@ -658,6 +661,7 @@ describe('startApp', () => {
 
     expect(harness.gameOptions()?.engine).toBe(harness.engine);
     expect(harness.gameOptions()?.ui).toBe(harness.gameUi);
+    expect(harness.gameOptions()?.blocked).toBe(harness.blocked);
 
     // A command the engine accepted has to be able to animate.
     harness.gameOptions()?.startFrameLoop();

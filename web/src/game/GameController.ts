@@ -208,6 +208,14 @@ export type GameControllerOptions = {
    * so a test hears a counter and jsdom is never asked for an AudioContext.
    */
   readonly sound?: ClickSound;
+  /**
+   * Whether a dialog is up, which the face letters do not reach under.
+   *
+   * Asked rather than worked out, because which dialogs there are and whether
+   * one is open is the page's to know -- the same question the command menu
+   * is given. Absent, nothing is ever in the way.
+   */
+  readonly blocked?: () => boolean;
 };
 
 /**
@@ -1520,7 +1528,11 @@ export function attachGameController(
   ]);
 
   const onKeyDown = (event: KeyboardEvent): void => {
+    // Under a dialog the letters are the dialog's, wherever the focus is.
+    // Asking where the key landed would not do: a press on a dialog's label
+    // leaves the focus on the page itself, outside the dialog.
     if (
+      options.blocked?.() === true ||
       event.repeat ||
       event.altKey ||
       event.ctrlKey ||

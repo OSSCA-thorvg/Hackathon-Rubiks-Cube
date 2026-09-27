@@ -357,8 +357,19 @@ export function attachCommandPalette(
   const onTriggerClick = (): void => openMenu();
   const onBackdropPointerDown = (): void => closeMenu();
 
+  // The field keeps the focus, so a press anywhere else in the menu -- a
+  // group's heading, the message, the space around the list -- must not take
+  // it. Left to the browser, it goes to the page behind, where Tab reaches
+  // the controls the menu is covering. `mousedown` rather than `pointerdown`,
+  // because only the first moves the focus; the entries still get their
+  // click.
+  const onDialogMouseDown = (event: MouseEvent): void => {
+    if (event.target !== input) event.preventDefault();
+  };
+
   trigger.addEventListener('click', onTriggerClick);
   backdrop.addEventListener('pointerdown', onBackdropPointerDown);
+  dialog.addEventListener('mousedown', onDialogMouseDown);
   input.addEventListener('input', onInput);
   input.addEventListener('keydown', onFieldKeyDown);
   list.addEventListener('click', onListClick);
@@ -373,6 +384,7 @@ export function attachCommandPalette(
       closeMenu({ restoreFocus: false });
       trigger.removeEventListener('click', onTriggerClick);
       backdrop.removeEventListener('pointerdown', onBackdropPointerDown);
+      dialog.removeEventListener('mousedown', onDialogMouseDown);
       input.removeEventListener('input', onInput);
       input.removeEventListener('keydown', onFieldKeyDown);
       list.removeEventListener('click', onListClick);

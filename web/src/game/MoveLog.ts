@@ -3,7 +3,7 @@ import { faceOfNotation, moveNotation } from './notation.ts';
 /** What the log asks the engine: one question by index, and which cube. */
 export type MoveLogEngine = {
   timelineMove(index: number): number;
-  /** Read at every entry rather than remembered: the cube can be replaced. */
+  /** Read at every change rather than remembered: the cube can be replaced. */
   cubeSize(): number;
 };
 
@@ -36,10 +36,11 @@ export type MoveLogOptions = {
 /**
  * The moves you made, written out in standard notation.
  *
- * Owns one list element and nothing else. It holds no record of its own: the
- * engine's is the record, and this is a reading of it -- which is why undo,
- * redo, a scramble and a cut redo tail all arrive here as the same event, a
- * frame whose three numbers differ from the last one's.
+ * Owns one list element and nothing else. The engine's is the record and this
+ * is a reading of it -- which is why undo, redo, a scramble and a cut redo tail
+ * all arrive here as the same event, a frame whose three numbers differ from
+ * the last one's. What it keeps is only what it drew, so it can tell which of
+ * the entries on the screen are still right.
  *
  * The scramble is not written out here. It is the cube somebody was handed
  * rather than anything they did, and reading twenty moves of it to find your
@@ -59,6 +60,17 @@ export class MoveLog {
   /** What the list on the screen was drawn from, or null before anything was. */
   private drawn: MoveLogFrame | null = null;
 
+  /**
+   * The moves the entries were written from, packed, from the boundary up,
+   * and the size of the cube they were written for -- which a move's letters
+   * depend on.
+   */
+  private drawnMoves: readonly number[] = [];
+  private drawnSize = 0;
+
+  /** The one entry Tab stops on, or null with none to stop on. */
+  private stop: HTMLButtonElement | null = null;
+
   constructor(
     list: HTMLElement,
     engine: MoveLogEngine,
@@ -75,47 +87,96 @@ export class MoveLog {
   }
 
   /**
-   * Redraws the list, if this frame differs from the one on the screen.
+   * Brings the list up to this frame, if it differs from the one on the screen.
    *
-   * Whole rather than in part, and on any of the three numbers changing. The
-   * cheaper reading -- that only the cursor moved, so only the marks need
-   * moving -- is wrong: a move made after an undo cuts the tail off and puts
+   * By the moves rather than by the numbers. The numbers say that something
+   * changed and not what: a move made after an undo cuts the tail off and puts
    * one back in its place, which can leave the length exactly as it was with
-   * different moves under it.
+   * different moves under it. So the moves are read -- one integer each, far
+   * cheaper than an entry -- and the entries up to the first that differs are
+   * kept, with only those the cursor crossed marked again. A step of a long
+   * rewind touches two entries rather than rebuilding every one, and a move
+   * made at the end adds one.
    *
-   * A frame that says the same thing as the last one draws nothing, which is
-   * what keeps a watched pattern and an orbit from rebuilding the list at
-   * sixty frames a second.
+   * Everything is written again when the boundary or the cube changes: the
+   * first renumbers every entry, and the second can rewrite a move's letters.
+   *
+   * A frame that says the same thing as the last one reads nothing at all,
+   * which is what keeps a watched pattern and an orbit from reading the record
+   * at sixty frames a second.
    */
   update(frame: MoveLogFrame): void {
+    const previous = this.drawn;
     if (
-      this.drawn !== null &&
-      this.drawn.cursor === frame.cursor &&
-      this.drawn.length === frame.length &&
-      this.drawn.scrambleEnd === frame.scrambleEnd
+      previous !== null &&
+      previous.cursor === frame.cursor &&
+      previous.length === frame.length &&
+      previous.scrambleEnd === frame.scrambleEnd
     ) {
       return;
     }
     this.drawn = frame;
 
-    // A press on an entry is often what started the frames that redraw it, so
-    // the entry holding focus is about to be replaced. Which one it was is
-    // kept by its index and handed to the new one below, or the keyboard
-    // would drop back to the top of the page at every step of the walk.
+    // An entry holding focus may be about to go, when the tail it is in has
+    // changed. Which one it was is kept by its index and handed to the entry
+    // that replaces it, or the keyboard would drop back to the top of the
+    // page at every step of a walk.
     const focusedIndex = this.focusedIndex();
 
-    const items: HTMLLIElement[] = [];
+    const size = this.engine.cubeSize();
+    const moves: number[] = [];
     for (let index = frame.scrambleEnd; index < frame.length; index += 1) {
-      items.push(this.item(index, frame));
+      moves.push(this.engine.timelineMove(index));
     }
-    this.list.replaceChildren(...items);
+
+    let kept = 0;
+    if (
+      previous !== null &&
+      previous.scrambleEnd === frame.scrambleEnd &&
+      size === this.drawnSize
+    ) {
+      const limit = Math.min(moves.length, this.drawnMoves.length);
+      while (kept < limit && moves[kept] === this.drawnMoves[kept]) kept += 1;
+    }
+    this.drawnMoves = moves;
+    this.drawnSize = size;
+
+    const entries = this.list.children as HTMLCollectionOf<HTMLLIElement>;
+
+    // A kept entry changes only where it stands against the cursor, and only
+    // those between where the cursor was and where it is now stand anywhere
+    // new.
+    if (previous !== null) {
+      const from = Math.max(
+        0,
+        Math.min(previous.cursor, frame.cursor) - 1 - frame.scrambleEnd,
+      );
+      const to = Math.min(
+        kept,
+        Math.max(previous.cursor, frame.cursor) - frame.scrambleEnd,
+      );
+      for (let at = from; at < to; at += 1) {
+        this.mark(entries[at]!, at + frame.scrambleEnd, moves[at]!, size, frame);
+      }
+    }
+
+    const fresh: HTMLLIElement[] = [];
+    for (let at = kept; at < moves.length; at += 1) {
+      fresh.push(this.item(at + frame.scrambleEnd, moves[at]!, size, frame));
+    }
+    if (kept === 0) {
+      this.list.replaceChildren(...fresh);
+    } else {
+      while (entries.length > kept) this.list.lastElementChild!.remove();
+      this.list.append(...fresh);
+    }
 
     // The cursor is the point of the list, so it is what stays on screen: a
     // long solve runs past the end of the panel, and a rewind walking down
     // through it would otherwise leave the moving end out of sight. A cursor
     // that has been rewound into the scramble is below everything drawn here,
     // and lands outside the list rather than on its first entry.
-    const current = items[frame.cursor - 1 - frame.scrambleEnd];
+    const current = entries[frame.cursor - 1 - frame.scrambleEnd];
     if (current !== undefined) this.reveal(current);
 
     if (this.onPick === null) return;
@@ -125,18 +186,16 @@ export class MoveLog {
     // the cube is at -- unless the keyboard is already in the list, when it
     // stays on the entry holding focus. A stop anywhere else would be one
     // more place for Tab to land before it left.
-    const buttons = this.buttons();
-    const atCursor = (current ?? items[0])?.querySelector('button') ?? null;
+    const atCursor = (current ?? entries[0])?.querySelector('button') ?? null;
     const focused =
       focusedIndex === null
         ? null
-        : (buttons.find(
-            (button) => Number(button.dataset.index) === focusedIndex,
-          ) ?? atCursor);
-    const stop = focused ?? atCursor;
-    for (const button of buttons) button.tabIndex = button === stop ? 0 : -1;
-
-    focused?.focus({ preventScroll: true });
+        : (entries[focusedIndex - frame.scrambleEnd]?.querySelector('button') ??
+          atCursor);
+    this.setStop(focused ?? atCursor);
+    if (focused !== null && document.activeElement !== focused) {
+      focused.focus({ preventScroll: true });
+    }
   }
 
   /** Stops listening; the list itself is the caller's. */
@@ -146,27 +205,20 @@ export class MoveLog {
   }
 
   /** One entry: what the move is written as, and where it stands. */
-  private item(index: number, frame: MoveLogFrame): HTMLLIElement {
+  private item(
+    index: number,
+    packed: number,
+    size: number,
+    frame: MoveLogFrame,
+  ): HTMLLIElement {
     const item = document.createElement('li');
     item.className = 'move-log__item';
-
-    // Applied, the last of the applied, or waiting to be put back. The three
-    // are one attribute because no entry is ever two of them.
-    const state =
-      index < frame.cursor - 1
-        ? 'applied'
-        : index === frame.cursor - 1
-          ? 'current'
-          : 'pending';
-    item.dataset.state = state;
 
     // Assigned rather than tested. A move with no notation has no way of
     // getting into the record: turning, the commands and a shared link are all
     // held to the masks this writes, so a branch here would be for a case the
     // cube cannot reach, and the type is where that possibility is kept.
-    const written =
-      moveNotation(this.engine.timelineMove(index), this.engine.cubeSize()) ??
-      '';
+    const written = moveNotation(packed, size) ?? '';
 
     // The swatch is decoration for the letter beside it, so it carries no
     // text: an entry reads, and is read aloud, as the move and nothing else.
@@ -177,22 +229,56 @@ export class MoveLog {
 
     if (this.onPick === null) {
       item.append(dot, written);
-      return item;
+    } else {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'move-chip';
+      button.dataset.index = String(index);
+      // Off the tab order until it is the list's one stop.
+      button.tabIndex = -1;
+      button.append(dot, written);
+      item.append(button);
     }
+    this.mark(item, index, packed, size, frame);
+    return item;
+  }
 
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'move-chip';
-    button.dataset.index = String(index);
+  /** Where one entry stands against the cursor, which is what a step changes. */
+  private mark(
+    item: HTMLLIElement,
+    index: number,
+    packed: number,
+    size: number,
+    frame: MoveLogFrame,
+  ): void {
+    // Applied, the last of the applied, or waiting to be put back. The three
+    // are one attribute because no entry is ever two of them.
+    const state =
+      index < frame.cursor - 1
+        ? 'applied'
+        : index === frame.cursor - 1
+          ? 'current'
+          : 'pending';
+    item.dataset.state = state;
+
+    const button = item.firstElementChild;
+    if (!(button instanceof HTMLButtonElement)) return;
     const ordinal = index - frame.scrambleEnd + 1;
+    const written = moveNotation(packed, size) ?? '';
     button.setAttribute(
       'aria-label',
       `Move ${ordinal}, ${written}${state === 'pending' ? ', taken back' : ''}`,
     );
     if (state === 'current') button.setAttribute('aria-current', 'step');
-    button.append(dot, written);
-    item.append(button);
-    return item;
+    else button.removeAttribute('aria-current');
+  }
+
+  /** Moves the list's one tab stop, taking it off wherever it was. */
+  private setStop(button: HTMLButtonElement | null): void {
+    if (this.stop === button) return;
+    if (this.stop !== null) this.stop.tabIndex = -1;
+    this.stop = button;
+    if (button !== null) button.tabIndex = 0;
   }
 
   private buttons(): HTMLButtonElement[] {
@@ -237,7 +323,7 @@ export class MoveLog {
     event.preventDefault();
     const target = buttons[Math.max(0, Math.min(buttons.length - 1, next))];
     if (target === undefined) return;
-    for (const button of buttons) button.tabIndex = button === target ? 0 : -1;
+    this.setStop(target);
     target.focus();
     this.reveal(target.closest('li') ?? target);
   };

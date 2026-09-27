@@ -524,6 +524,29 @@ TEST_CASE("a ring runs along a drawn direction wherever a cell rests")
     }
 }
 
+TEST_CASE("a ring read a hair below a whole turn is read at its first slot")
+{
+    // -1e-7 wraps to 12 - 1e-7, which a float rounds to 12: one past the
+    // last slot. A drag of exactly one cell reaches it, and it once read
+    // past the end of the ring's table and stopped the engine.
+    using rubiks::cube::Axis;
+
+    const Rect rect = test_rect();
+    for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
+        const auto ring = net_ring(axis, 0, rect, kSize);
+        const float count = static_cast<float>(ring.slot_count());
+        REQUIRE(static_cast<float>(-1e-7f + count) == count);
+
+        const auto first = ring.at(0.0f);
+        for (const float slot : {-1e-7f, -count - 1e-7f, count - 1e-7f}) {
+            const auto point = ring.at(slot);
+            INFO("axis " << static_cast<int>(axis) << " slot " << slot);
+            REQUIRE(point.position.x == Approx(first.position.x).margin(0.001));
+            REQUIRE(point.position.y == Approx(first.position.y).margin(0.001));
+        }
+    }
+}
+
 /** The sharpest turn between neighbouring samples of a whole loop. */
 float worst_turn(const SlotRing& ring, int steps)
 {

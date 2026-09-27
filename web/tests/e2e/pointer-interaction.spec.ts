@@ -336,6 +336,34 @@ test('the net is draggable when it is the only view', async ({ page }) => {
   );
 });
 
+test('a drag of exactly one cell on the net turns the layer and nothing breaks', async ({
+  page,
+}) => {
+  // One cell is the commit threshold to the degree. Settling from there once
+  // read a ring a hair below its first slot, which a float rounds to one past
+  // its last, and stopped the engine: at 1024x768 from every cell tried.
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error)));
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.goto('./');
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+  await page.locator('button[data-view="2d"]').click();
+  await page.locator('button[data-flat="net"]').click();
+
+  const probe = await probeCanvas(page);
+  const grab = pagePointInNet(probe, FRONT_BLOCK, 1, 1);
+  await page.mouse.move(grab.x, grab.y);
+  await page.mouse.down();
+  await page.mouse.move(grab.x + netDragFor(probe, 1 / 3), grab.y, {
+    steps: 8,
+  });
+  await page.mouse.up();
+
+  await expect(page.locator('#timeline-progress')).toHaveText('1 / 1');
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+  expect(pageErrors).toEqual([]);
+});
+
 test('a drag too short to commit springs back', async ({ page }) => {
   await page.goto('./');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');

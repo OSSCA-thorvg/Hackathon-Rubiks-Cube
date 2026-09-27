@@ -139,6 +139,12 @@ TEST_CASE("yaw wraps instead of growing without bound")
     REQUIRE(view.yaw_degrees == Approx(340.0f));
     REQUIRE(view.yaw_degrees >= 0.0f);
     REQUIRE(view.yaw_degrees < 360.0f);
+
+    // A hair below zero, which a float would round up to 360 on the way back.
+    OrbitCamera edge{0.0f, 0.0f};
+    edge.turn(-1e-6f, 0.0f);
+    REQUIRE(edge.yaw_degrees >= 0.0f);
+    REQUIRE(edge.yaw_degrees < 360.0f);
 }
 
 TEST_CASE("the cube stays inside the viewport from every viewpoint")

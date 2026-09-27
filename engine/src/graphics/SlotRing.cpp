@@ -90,6 +90,10 @@ RingPoint SlotRing::at(float slot) const noexcept
     const auto slot_count = static_cast<float>(slots_.size());
     float position = std::fmod(slot, slot_count);
     if (position < 0.0f) position += slot_count;
+    // A position a hair below zero wraps to exactly the slot count once the
+    // sum is rounded to a float -- 12 - 1e-7 is 12 -- which is one past the
+    // last slot and would be read from beyond the table. It is the first.
+    if (position >= slot_count) position = 0.0f;
 
     const auto index = static_cast<std::size_t>(position);
     const float fraction = position - static_cast<float>(index);

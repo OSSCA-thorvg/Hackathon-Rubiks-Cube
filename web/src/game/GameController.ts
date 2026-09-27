@@ -401,6 +401,64 @@ function bindChoices<T>(
   return listeners;
 }
 
+/**
+ * The controls that are simply on while a controller is attached.
+ *
+ * The paint bar's own among them: the bar is out of sight whenever there is no
+ * draft for them to act on, so there is no moment they need to be out of
+ * reach as well.
+ */
+function commandControls(ui: GameUi): (HTMLButtonElement | HTMLInputElement)[] {
+  return [
+    ui.scrambleMovesInput,
+    ui.scrambleButton,
+    ui.resetButton,
+    ui.cubeSizeInput,
+    ui.homeViewButton,
+    ...ui.viewButtons,
+    ...ui.flatButtons,
+    // In here rather than among the controls that follow the engine: a
+    // palette is not a command to the cube, so it stays live while one is
+    // playing. Reading the board is most wanted exactly while it moves.
+    ...ui.paletteButtons,
+    ui.muteButton,
+    ui.speedInput,
+    ...ui.paintSwatches,
+    ui.paintFillButton,
+    ui.paintApplyButton,
+    ui.paintCancelButton,
+  ];
+}
+
+/**
+ * Every control a game controller owns the enabled state of.
+ *
+ * Off before one attaches, which the page sees to, and off again once it has
+ * gone, which its teardown does -- both from this list. In between, the ones
+ * above are on and the rest are set from the cube and the engine as those
+ * change: the move buttons and their depth, the rewinds, Stop, Share, Watch
+ * and Paint. One list for all three moments, so a control added to the shell
+ * cannot be switched on by one of them and left on by another.
+ */
+export function controllerControls(
+  ui: GameUi,
+): (HTMLButtonElement | HTMLInputElement)[] {
+  return [
+    ...commandControls(ui),
+    ...ui.moveButtons,
+    ui.turnDepthInput,
+    ui.turnWideButton,
+    ui.undoButton,
+    ui.redoButton,
+    ui.rewindButton,
+    ui.solveButton,
+    ui.stopButton,
+    ui.shareButton,
+    ui.ambientButton,
+    ui.paintButton,
+  ];
+}
+
 /** Parses a DOM move button into one typed face turn. */
 function moveOf(
   button: HTMLButtonElement,
@@ -505,35 +563,6 @@ export function attachGameController(
         recordSolve: (record: SolveRecord): boolean => records.add(record),
       }),
   );
-
-  /**
-   * Every control that is simply on while a controller is attached.
-   *
-   * The move buttons and the watch toggle are deliberately not here: whether a
-   * layer can be turned by hand is the engine's answer and whether a pattern
-   * can be watched is the session's, and `updateMoveAvailability` and
-   * `updateAmbientControl` are what carry them. Listed once so that adding a
-   * control cannot enable it without disabling it again at teardown.
-   */
-  const commands: readonly (HTMLButtonElement | HTMLInputElement)[] = [
-    ui.scrambleMovesInput,
-    ui.scrambleButton,
-    ui.resetButton,
-    ui.cubeSizeInput,
-    ui.homeViewButton,
-    ...ui.viewButtons,
-    ...ui.flatButtons,
-    // In here rather than among the controls that follow the engine: a
-    // palette is not a command to the cube, so it stays live while one is
-    // playing. Reading the board is most wanted exactly while it moves.
-    ...ui.paletteButtons,
-    ui.muteButton,
-    ui.speedInput,
-  ];
-
-  const setCommandsDisabled = (disabled: boolean): void => {
-    for (const control of commands) control.disabled = disabled;
-  };
 
   const updateViewControls = (): void => {
     const selected = engine.viewMode();
@@ -767,11 +796,16 @@ export function attachGameController(
    * command paths have nobody to take it from and ask here.
    */
   const updateEngineControls = (now = engineNow()): void => {
+    // A draft holds the cube still -- the engine refuses every command that
+    // would move it until the draft is applied or put away -- so the controls
+    // that move it go out with it.
+    const painting = engine.isPainting();
+
     // Watching makes the engine busy, but a press on a move button stops the
     // watching and then turns -- exactly as the same letter on the keyboard
     // does. So the buttons stay live for it, where anything else that made the
     // engine busy would put them out.
-    const movesOff = now.busy && !now.watching;
+    const movesOff = (now.busy && !now.watching) || painting;
     if (movesOff !== movesDisabled) {
       movesDisabled = movesOff;
       for (const button of ui.moveButtons) button.disabled = movesOff;
@@ -823,7 +857,18 @@ export function attachGameController(
 
     ui.ambientButton.setAttribute('aria-pressed', String(now.watching));
     ui.ambientButton.disabled =
-      !now.watching && !WATCHABLE.has(session.state);
+      painting || (!now.watching && !WATCHABLE.has(session.state));
+
+    // A draft is taken only of a cube at rest, and watching gives way to one;
+    // an open draft can always be put away, and nothing plays while it is.
+    ui.paintButton.disabled = now.busy && !now.watching;
+
+    // Whether the bar is up is the engine's to say, and it says so without
+    // being asked: a scramble, a reset and a new size each put a different
+    // cube there and close the draft on their way. Read here, where every
+    // command and every frame passes, rather than left to the bar's own
+    // buttons, which none of those is.
+    if (painting === ui.paintBar.hidden) updatePaintControls();
   };
 
   /**
@@ -1523,7 +1568,7 @@ export function attachGameController(
   keyboardTarget.addEventListener('keydown', onKeyDown);
 
   setup((): void => {
-    setCommandsDisabled(false);
+    for (const control of commandControls(ui)) control.disabled = false;
     updateCubeSizeControl();
     updateTurnDepthControl();
     updateViewControls();
@@ -1583,28 +1628,9 @@ export function attachGameController(
       moveLog.teardown();
       timeline.teardown();
       shareCard.teardown();
-      setCommandsDisabled(true);
-      // The one moment the move buttons, the rewinds and the watch toggle are
-      // not the engine's and the session's to decide.
-      for (const button of [
-        ...ui.moveButtons,
-        ui.turnDepthInput,
-        ui.turnWideButton,
-        ui.undoButton,
-        ui.redoButton,
-        ui.rewindButton,
-        ui.solveButton,
-        ui.stopButton,
-        ui.shareButton,
-        ui.ambientButton,
-        ui.paintButton,
-        ui.paintFillButton,
-        ui.paintApplyButton,
-        ui.paintCancelButton,
-        ...ui.paintSwatches,
-      ]) {
-        button.disabled = true;
-      }
+      // The one moment none of them is the engine's or the session's to
+      // decide: there is nothing left to answer a press.
+      for (const control of controllerControls(ui)) control.disabled = true;
       ui.scrambleMovesInput.removeEventListener(
         'change',
         onScrambleMovesChange,

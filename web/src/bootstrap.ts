@@ -4,14 +4,15 @@ import {
   type StartAppOptions,
 } from './AppLifecycle.ts';
 import {
+  controllerControls,
   PLAY_MOVES_EVENT,
-  type GameUi,
   type PlayMovesDetail,
 } from './game/GameController.ts';
 import { parseMoves } from './game/notation.ts';
 import { attachCommandPalette, type Command } from './ui/CommandPalette.ts';
 import { attachDetailPanels } from './ui/DetailPanels.ts';
 import { createGameShell, ICONS, type GameShell } from './ui/GameShell.ts';
+import { lightingControls } from './ui/LightingControls.ts';
 import { attachSettingsPanel, type SettingsPanel } from './ui/SettingsPanel.ts';
 import {
   CubeScene,
@@ -39,40 +40,6 @@ export type SupportCheckFn = () => boolean;
  * query and a storage.
  */
 export type ThemeFactory = () => ThemeController | null;
-
-/**
- * Every control the game controller owns, flattened out of the typed shell.
- *
- * Read off the fields rather than by querying the markup, so a control the
- * page adds beside them -- a tab, a theme button, the settings trigger --
- * cannot be switched off by a rule that was written for the cube.
- */
-function gameplayControls(
-  ui: GameUi,
-): (HTMLButtonElement | HTMLInputElement)[] {
-  return [
-    ui.scrambleButton,
-    ui.scrambleMovesInput,
-    ui.resetButton,
-    ui.cubeSizeInput,
-    ui.turnDepthInput,
-    ui.turnWideButton,
-    ui.undoButton,
-    ui.redoButton,
-    ui.rewindButton,
-    ui.solveButton,
-    ui.stopButton,
-    ui.shareButton,
-    ui.ambientButton,
-    ui.homeViewButton,
-    ui.muteButton,
-    ui.speedInput,
-    ...ui.viewButtons,
-    ...ui.flatButtons,
-    ...ui.paletteButtons,
-    ...ui.moveButtons,
-  ];
-}
 
 /**
  * The width from which the rails sit beside the stage and the panels can be
@@ -306,14 +273,10 @@ export function bootstrap(
   // selector and the detail panels are the page's own and work whether or
   // not an engine ever arrives -- a browser that cannot run the cube can
   // still be read in the theme its owner chose.
-  for (const control of gameplayControls(shell.ui)) control.disabled = true;
+  for (const control of controllerControls(shell.ui)) control.disabled = true;
   // The lighting sliders too: they write straight into the engine, so until
   // there is one they have nothing to write to.
-  for (const control of [
-    ...shell.lightingUi.inputs,
-    shell.lightingUi.resetButton,
-    shell.lightingUi.copyButton,
-  ]) {
+  for (const control of lightingControls(shell.lightingUi)) {
     control.disabled = true;
   }
 

@@ -116,6 +116,50 @@ describe('bootstrap', () => {
     );
   });
 
+  /** The game controls, and what the command menu offers, with no engine. */
+  function withoutEngine(app: HTMLElement): {
+    enabled: string[];
+    offered: string[];
+  } {
+    const shell = app.querySelector('.game-shell')!;
+    const enabled = [
+      ...shell.querySelectorAll<HTMLButtonElement | HTMLInputElement>(
+        '#paint, #paint-fill, #paint-apply, #paint-cancel, [data-sticker], #scramble, #reset, [data-face], #undo, #ambient, [data-lighting], #lighting-reset, #lighting-copy',
+      ),
+    ]
+      .filter((control) => !control.disabled)
+      .map((control) => control.id || control.outerHTML.slice(0, 40));
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }),
+    );
+    const offered = [
+      ...app.querySelectorAll('#command-list [role="option"]'),
+    ].map((option) => option.textContent ?? '');
+    // The menu did open, and offers what the page itself can still do.
+    expect(offered.some((label) => label.includes('Settings'))).toBe(true);
+    return { enabled, offered };
+  }
+
+  it('leaves every game control off while the engine loads', async () => {
+    const app = createApp();
+
+    void bootstrap(
+      app,
+      () => new Promise<never>(() => {}),
+      () => true,
+      () => null,
+    );
+    await Promise.resolve();
+
+    // Paint among them: a press on it would reach nothing, and the command
+    // menu, which offers only what can be pressed, would offer it too.
+    const { enabled, offered } = withoutEngine(app);
+    expect(enabled).toEqual([]);
+    expect(offered.some((label) => label.includes('Colour your own cube'))).toBe(
+      false,
+    );
+  });
+
   it('shows the error UI when startup rejects', async () => {
     const app = createApp();
 
@@ -131,6 +175,11 @@ describe('bootstrap', () => {
     expect(app.dataset.state).toBe('error');
     expect(app.querySelector('#status')?.textContent).toBe(
       'Failed to start the ThorVG engine.',
+    );
+    const { enabled, offered } = withoutEngine(app);
+    expect(enabled).toEqual([]);
+    expect(offered.some((label) => label.includes('Colour your own cube'))).toBe(
+      false,
     );
   });
 

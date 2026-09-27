@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   attachGameController,
+  controllerControls,
   PLAY_MOVES_EVENT,
   type GameEngine,
   type GameUi,
@@ -243,6 +244,8 @@ function createHarness(
       moves = [0x44, 0x45, 0x46];
       busy = true;
       watching = false;
+      // A different cube, so the draft describing the old one closes.
+      painting = false;
     }),
     resetCube: vi.fn((): void => {
       solved = true;
@@ -252,22 +255,24 @@ function createHarness(
       moves = [];
       busy = false;
       watching = false;
+      painting = false;
     }),
+    // Nothing moves the cube behind an open draft, as in the engine.
     undo: vi.fn((): boolean => {
-      if (busy || cursor <= scrambleEnd) return false;
+      if (busy || painting || cursor <= scrambleEnd) return false;
       return startRewind(cursor - 1);
     }),
     redo: vi.fn((): boolean => {
-      if (busy || cursor >= length) return false;
+      if (busy || painting || cursor >= length) return false;
       return startRewind(cursor + 1);
     }),
     solveRewind: vi.fn((): boolean => {
-      if (busy || cursor === 0) return false;
+      if (busy || painting || cursor === 0) return false;
       return startRewind(0);
     }),
     canSolve: vi.fn((): boolean => true),
     solve: vi.fn((): boolean => {
-      if (busy || solved) return false;
+      if (busy || painting || solved) return false;
 
       // A solution is written in above the cursor and then played forward,
       // so the record grows at once and the cursor walks up to its end.
@@ -295,7 +300,7 @@ function createHarness(
     timelineScrambleEnd: vi.fn((): number => scrambleEnd),
     timelineMove: vi.fn((index: number): number => moves[index] ?? 0),
     ambientStart: vi.fn((): boolean => {
-      if (watching) return false;
+      if (watching || painting) return false;
       // A pattern that never runs out: busy, and staying so.
       watching = true;
       busy = true;
@@ -357,7 +362,7 @@ function createHarness(
         lastDepth: number,
         _turns: number,
       ): boolean => {
-        if (busy) return false;
+        if (busy || painting) return false;
         if (firstDepth < 1 || lastDepth < firstDepth) return false;
         if (lastDepth - firstDepth + 1 >= cubeSize) return false;
 
@@ -439,6 +444,10 @@ function createHarness(
     isMuted: vi.fn((): boolean => muted),
     teardown: vi.fn((): void => {}),
   };
+
+  // Where the page leaves them before any controller attaches, so every test
+  // here is also a test that attaching turns on what it should.
+  for (const control of controllerControls(ui)) control.disabled = true;
 
   const controller = attachGameController({
     engine,
@@ -2028,6 +2037,32 @@ describe('a controller attached to a cube that was already restored', () => {
   });
 });
 
+describe('the controls a controller owns', () => {
+  it('are every button and field of the game UI, listed once', () => {
+    // Flattened out of the typed shell rather than out of the markup, so the
+    // next control added to GameUi cannot be missed from the list that turns
+    // it off before an engine arrives and after one has gone.
+    const ui = createUi();
+    const fields = Object.values(ui).flatMap((value: unknown) =>
+      Array.isArray(value) ? value : [value],
+    );
+    const controls = fields.filter(
+      (value): value is HTMLButtonElement | HTMLInputElement =>
+        value instanceof HTMLButtonElement || value instanceof HTMLInputElement,
+    );
+    expect(new Set(controllerControls(ui))).toEqual(new Set(controls));
+    expect(controllerControls(ui)).toHaveLength(controls.length);
+  });
+
+  it('are all off again once the controller has gone', () => {
+    const harness = createHarness();
+    harness.controller.teardown();
+    for (const control of controllerControls(harness.ui)) {
+      expect(control.disabled, control.id || control.textContent).toBe(true);
+    }
+  });
+});
+
 describe('colouring a real cube onto the net', () => {
   it('opens a draft, shows the picker, and puts it away again', () => {
     const harness = createHarness();
@@ -2046,6 +2081,92 @@ describe('colouring a real cube onto the net', () => {
 
     expect(harness.engine.cancelPainting).toHaveBeenCalled();
     expect(harness.ui.paintBar.hidden).toBe(true);
+  });
+
+  it('puts the bar away when a new cube closes the draft', () => {
+    // A scramble, a reset and a new size each put a different cube there,
+    // and the engine closes the draft on its own as they do. The bar and the
+    // toggle follow it, so one press on Paint afterwards opens a fresh draft
+    // rather than closing one that is already gone.
+    const cases: [string, (harness: ReturnType<typeof createHarness>) => void][] = [
+      ['a scramble', (harness): void => {
+        harness.ui.scrambleButton.click();
+        harness.finishScramble();
+      }],
+      ['a reset', (harness): void => harness.ui.resetButton.click()],
+      ['a new size', (harness): void => {
+        harness.ui.cubeSizeInput.value = '4';
+        harness.ui.cubeSizeInput.dispatchEvent(new Event('change'));
+      }],
+    ];
+
+    for (const [name, closeIt] of cases) {
+      const harness = createHarness();
+      harness.ui.paintButton.click();
+      expect(harness.ui.paintBar.hidden, name).toBe(false);
+
+      closeIt(harness);
+      expect(harness.engine.isPainting(), name).toBe(false);
+      expect(harness.ui.paintBar.hidden, name).toBe(true);
+      expect(harness.ui.paintButton.getAttribute('aria-pressed'), name).toBe(
+        'false',
+      );
+
+      harness.ui.paintButton.click();
+      expect(harness.engine.isPainting(), name).toBe(true);
+      expect(harness.ui.paintBar.hidden, name).toBe(false);
+    }
+  });
+
+  it('holds the cube still while a draft is open', () => {
+    const harness = createHarness();
+    harness.ui.scrambleButton.click();
+    harness.finishScramble();
+    harness.commitMove();
+    harness.controller.afterEngineFrame();
+    expect(harness.ui.undoButton.disabled).toBe(false);
+
+    harness.ui.paintButton.click();
+
+    // Everything that would turn the cube behind the draft is out of reach,
+    // since the engine would refuse it; Scramble stays, since it closes the
+    // draft instead.
+    for (const control of [
+      ...harness.ui.moveButtons,
+      harness.ui.undoButton,
+      harness.ui.redoButton,
+      harness.ui.rewindButton,
+      harness.ui.solveButton,
+      harness.ui.ambientButton,
+    ]) {
+      expect(control.disabled, control.id || control.textContent).toBe(true);
+    }
+    expect(harness.ui.scrambleButton.disabled).toBe(false);
+    expect(harness.ui.paintButton.disabled).toBe(false);
+
+    harness.dispatchKey({ key: 'r' });
+    expect(harness.engine.committedMoveCount()).toBe(1);
+
+    harness.ui.paintCancelButton.click();
+    expect(harness.ui.undoButton.disabled).toBe(false);
+    expect(harness.ui.moveButtons[0]!.disabled).toBe(false);
+  });
+
+  it('offers Paint only on a cube at rest', () => {
+    const harness = createHarness();
+    harness.ui.scrambleButton.click();
+
+    // The engine will not take a draft of a cube mid-scramble, so the press
+    // is not offered rather than answered with nothing.
+    expect(harness.ui.paintButton.disabled).toBe(true);
+    harness.finishScramble();
+    expect(harness.ui.paintButton.disabled).toBe(false);
+
+    // Watching gives way to a draft, so Paint stays live through it.
+    const watched = createHarness();
+    watched.ui.ambientButton.click();
+    expect(watched.engine.isAmbient()).toBe(true);
+    expect(watched.ui.paintButton.disabled).toBe(false);
   });
 
   it('stops watching before it takes a copy of the cube', () => {

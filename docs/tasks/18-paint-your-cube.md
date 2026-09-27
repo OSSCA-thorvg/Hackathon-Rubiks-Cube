@@ -162,6 +162,10 @@ ApplicationState
 칠하는 동안은 돌리기가 없습니다. `pointer_down`이 `net_pointer_down`으로 가기 전에 갈라지고, **탭(누른 자리에서 크게 벗어나지 않고 뗀 것)이 칠합니다.** 드래그로 여러 칸을 연달아 칠하는 것은 실물을 보고 옮겨 적는 일에 실제로 도움이 되므로 함께 넣습니다.
 
 > **개정 (2026-09-27)**: "돌리기가 없다"는 끌기에만 지켜지고 있었습니다. 면 글자 키, 면 버튼, Undo, Redo, Rewind, Solve, Watch는 초안 뒤의 실제 큐브를 그대로 돌렸고, 그 뒤 Cancel은 "The cube is as it was."라고 말했습니다. 이제 엔진이 초안이 열린 동안 큐브를 움직이는 명령을 모두 거절합니다(`cube_held()`: `turn_face`, `undo`, `redo`, `solve_rewind`, `solve`, `ambient_start`). 다른 큐브를 놓는 명령(Scramble, Reset, 크기 변경)은 전처럼 초안을 닫습니다. 외부 리뷰 검증 중에 찾았습니다.
+>
+> 페이지도 같은 규칙을 따릅니다. 초안이 열린 동안 면 버튼, Undo, Redo, Rewind, Solve, Watch를 끄고, 큐브가 바쁠 때는 Paint를 끕니다(엔진이 그때 초안을 거절하므로). 그리고 칠하기 막대와 Paint 토글이 이제 막대 자신의 버튼이 아니라 엔진을 따릅니다. 전에는 Scramble, Reset, 크기 변경이 엔진에서 초안을 닫아도 막대가 남아 있었고, Paint를 한 번 누르면 닫히는 대신 새 초안이 열렸습니다. 모든 명령과 프레임이 지나는 `updateEngineControls`에서 읽습니다.
+>
+> 컨트롤러가 켜고 끄는 컨트롤의 목록도 하나로 모았습니다(`controllerControls`). 전에는 bootstrap의 시작 전 목록, 붙을 때 켜는 목록, teardown 목록이 따로 있었고, 칠하기 컨트롤은 teardown 목록에만 있었습니다. 그래서 로딩 중과 시작에 실패한 페이지에서 Paint가 켜져 있었고 명령 메뉴가 "Colour your own cube"를 내놓았습니다. 조명 슬라이더도 teardown 뒤에 켜진 채 남던 것을 같은 식으로 고쳤습니다(`lightingControls`).
 
 ### 6. 규칙은 추측하지 않고 재서 정한다
 

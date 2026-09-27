@@ -4,6 +4,7 @@ import {
   attachLightingControls,
   formatLightingQuery,
   LIGHTING_FIELDS,
+  lightingControls,
   type LightingEngine,
   type LightingUi,
 } from '../../src/ui/LightingControls.ts';
@@ -281,6 +282,10 @@ describe('attachLightingControls', () => {
 
     expect(clock.pendingCount()).toBe(0);
     expect(ui.copyButton.textContent).toBe('Copy values');
+    // Off with nothing behind them, rather than live and changing nothing.
+    for (const control of lightingControls(ui)) {
+      expect(control.disabled).toBe(true);
+    }
     slide(slider(ui, 'ambient'), '0.1');
     ui.resetButton.click();
     expect(engine.setLighting).not.toHaveBeenCalled();

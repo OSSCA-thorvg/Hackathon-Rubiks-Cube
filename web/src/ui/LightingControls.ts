@@ -27,6 +27,19 @@ export type LightingUi = {
   readonly values: HTMLOutputElement;
 };
 
+/**
+ * Every lighting control that writes into the engine.
+ *
+ * Off until the lights are attached to one and off again once they are let
+ * go, both from this list: a slider live with no engine behind it moves and
+ * changes nothing.
+ */
+export function lightingControls(
+  ui: LightingUi,
+): (HTMLButtonElement | HTMLInputElement)[] {
+  return [...ui.inputs, ui.resetButton, ui.copyButton];
+}
+
 /** One slider's place in the engine's list, and how it is written out. */
 export type LightingField = {
   readonly name: string;
@@ -215,14 +228,10 @@ export function attachLightingControls(
     );
   };
 
-  for (const input of ui.inputs) {
-    input.addEventListener('input', onInput);
-    input.disabled = false;
-  }
+  for (const input of ui.inputs) input.addEventListener('input', onInput);
   ui.resetButton.addEventListener('click', onReset);
   ui.copyButton.addEventListener('click', onCopy);
-  ui.resetButton.disabled = false;
-  ui.copyButton.disabled = false;
+  for (const control of lightingControls(ui)) control.disabled = false;
   show();
 
   return {
@@ -239,6 +248,7 @@ export function attachLightingControls(
       }
       ui.resetButton.removeEventListener('click', onReset);
       ui.copyButton.removeEventListener('click', onCopy);
+      for (const control of lightingControls(ui)) control.disabled = true;
     },
   };
 }

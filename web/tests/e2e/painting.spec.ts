@@ -92,6 +92,55 @@ test('colouring the net does not turn the cube', async ({ page }) => {
   await expect(page.locator('#solve')).toBeDisabled();
 });
 
+test('keys and commands leave the cube alone while a draft is open', async ({
+  page,
+}) => {
+  await page.locator('#scramble').click();
+  await expect(page.locator('.game-shell')).toHaveAttribute(
+    'data-game-state',
+    'ready',
+  );
+  await page.locator('#paint').click();
+  await expect(page.locator('#paint-bar')).toBeVisible();
+
+  // A letter with the focus on a colour, and the dock's own buttons: none of
+  // them may turn the cube behind the draft, or Cancel would not be leaving
+  // it as it was.
+  await page.locator(`[data-sticker="${RED}"]`).focus();
+  await page.keyboard.press('r');
+  await expect(page.locator('#undo')).toBeDisabled();
+  await expect(page.locator('#solve')).toBeDisabled();
+  await expect(page.locator('#rewind')).toBeDisabled();
+  await expect(page.locator('#timeline-progress')).toHaveText('0 / 0');
+  await expect(page.locator('.game-shell')).toHaveAttribute(
+    'data-game-state',
+    'ready',
+  );
+
+  await page.locator('#paint-cancel').click();
+  await expect(page.locator('#rewind')).toBeEnabled();
+});
+
+test('a new cube puts the paint bar away with the draft', async ({ page }) => {
+  await page.locator('#paint').click();
+  await expect(page.locator('#paint-bar')).toBeVisible();
+
+  // Scramble closes the draft in the engine without a word to the bar, so the
+  // bar has to be following the engine rather than its own buttons.
+  await page.locator('#scramble').click();
+  await expect(page.locator('#paint-bar')).toBeHidden();
+  await expect(page.locator('#paint')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('.timeline')).toBeVisible();
+
+  // One press opens a fresh draft, rather than closing one already gone.
+  await expect(page.locator('.game-shell')).toHaveAttribute(
+    'data-game-state',
+    'ready',
+  );
+  await page.locator('#paint').click();
+  await expect(page.locator('#paint-bar')).toBeVisible();
+});
+
 test('a painted cube travels in a link and comes back as itself', async ({
   page,
   context,

@@ -467,8 +467,6 @@ TEST_CASE("a turn carried past a quarter keeps going round its loop")
 
 TEST_CASE("every band is one closed ring through its twelve resting slots")
 {
-    using rubiks::cube::Axis;
-
     const Rect rect = test_rect();
 
     for (const auto axis : rubiks::cube::axes()) {
@@ -498,8 +496,6 @@ TEST_CASE("every band is one closed ring through its twelve resting slots")
 
 TEST_CASE("a ring runs along a drawn direction wherever a cell rests")
 {
-    using rubiks::cube::Axis;
-
     const Rect rect = test_rect();
 
     for (const auto axis : rubiks::cube::axes()) {
@@ -533,7 +529,6 @@ TEST_CASE("a ring read a hair below a whole turn is read at its first slot")
     // -1e-7 wraps to 12 - 1e-7, which a float rounds to 12: one past the
     // last slot. A drag of exactly one cell reaches it, and it once read
     // past the end of the ring's table and stopped the engine.
-    using rubiks::cube::Axis;
 
     const Rect rect = test_rect();
     for (const auto axis : rubiks::cube::axes()) {
@@ -572,8 +567,6 @@ float worst_turn(const SlotRing& ring, int steps)
 
 TEST_CASE("a ring's direction never jumps")
 {
-    using rubiks::cube::Axis;
-
     const Rect rect = test_rect();
 
     // A cell's tilt follows the tangent, so a tangent that jumped at a join
@@ -851,7 +844,6 @@ TEST_CASE("the front ring stays inside the net rectangle")
 
 TEST_CASE("a turning cell keeps the color of its sticker, whole")
 {
-    using rubiks::cube::Axis;
     using rubiks::cube::layer;
 
     const Rect rect = test_rect();
@@ -896,7 +888,6 @@ TEST_CASE("a turning cell keeps the color of its sticker, whole")
 
 TEST_CASE("a turn leaves the drawing it is passing over exactly where it is")
 {
-    using rubiks::cube::Axis;
     using rubiks::cube::layer;
 
     const Rect rect = test_rect();
@@ -1080,7 +1071,6 @@ TEST_CASE("a guide line takes the color of the axis it turns about")
 
 TEST_CASE("a turning cell never strays far outside the drawing")
 {
-    using rubiks::cube::Axis;
     using rubiks::cube::layer;
 
     const Rect rect = test_rect();
@@ -1121,8 +1111,6 @@ TEST_CASE("a turning cell never strays far outside the drawing")
 
 TEST_CASE("a ring runs dead straight between slots that share a face")
 {
-    using rubiks::cube::Axis;
-
     const Rect rect = test_rect();
 
     // What makes a ring read as one clean shape: the slots sit on its straight

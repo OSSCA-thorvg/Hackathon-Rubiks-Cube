@@ -141,6 +141,14 @@ LayerMask depth_layers(Face face, int first_depth, int last_depth,
     return layers_through(first_depth - 1, last_depth - 1);
 }
 
+CubeMove face_move(Face face, int first_depth, int last_depth, int turns,
+                   int size) noexcept
+{
+    return CubeMove{axis_of(face),
+                    depth_layers(face, first_depth, last_depth, size),
+                    is_positive_face(face) ? turns : -turns};
+}
+
 int coordinate_on(Axis axis, const CubiePosition& p) noexcept
 {
     switch (axis) {

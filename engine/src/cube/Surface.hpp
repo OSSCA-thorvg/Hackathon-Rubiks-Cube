@@ -74,6 +74,22 @@ struct SurfaceSticker {
 [[nodiscard]] LayerMask depth_layers(Face face, int first_depth, int last_depth,
                                      int size) noexcept;
 
+/**
+ * The move a face makes, taken as deep as a run of depths says.
+ *
+ * `turns` counts quarter turns clockwise as seen from outside `face`, which
+ * is how a written move reads: `(Right, 1, 1, 1)` is R and `(Right, 1, 2, 1)`
+ * is Rw. Clockwise from outside is a positive turn about the axis only for
+ * the face at its far end; the face opposite reads the axis backwards, and
+ * this is the one place that says so.
+ *
+ * A run `depth_layers()` turns down comes back as a move with no layers.
+ * Whether the whole cube turned at once counts as a move is the caller's
+ * rule, and is not decided here.
+ */
+[[nodiscard]] CubeMove face_move(Face face, int first_depth, int last_depth,
+                                 int turns, int size) noexcept;
+
 [[nodiscard]] int coordinate_on(Axis axis, const CubiePosition& p) noexcept;
 [[nodiscard]] int coordinate_on(Axis axis, const SurfaceSticker& s) noexcept;
 

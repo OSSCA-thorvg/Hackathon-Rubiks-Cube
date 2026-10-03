@@ -340,11 +340,13 @@ std::unique_ptr<ApplicationState> state;
 }
 
 /**
- * The move a face names, taken as deep as a range of depths says.
+ * The move a face names, taken as deep as a range of depths says and turned
+ * `turns` quarters clockwise as seen from outside it.
  *
- * The one place a depth becomes a layer mask, so which end of an axis a face
- * sits at and which way it turns from outside are each written once. Depth 1
- * is the face; `(Right, 1, 1)` is R and `(Right, 1, 2)` is Rw.
+ * `cube::face_move()` with this application's refusals in front of it: which
+ * end of an axis a face sits at and which way it turns from outside are
+ * written there, once. Depth 1 is the face; `(Right, 1, 1, 1)` is R and
+ * `(Right, 1, 2, 1)` is Rw.
  *
  * Nothing for a range no move corresponds to: empty, reversed, off the far
  * side of the cube, or the whole of it -- the last being a rotation, which
@@ -353,17 +355,14 @@ std::unique_ptr<ApplicationState> state;
 [[nodiscard]] std::optional<cube::CubeMove> depth_move(cube::Face face,
                                                        int first_depth,
                                                        int last_depth,
+                                                       int turns,
                                                        int size) noexcept
 {
-    const cube::LayerMask layers =
-        cube::depth_layers(face, first_depth, last_depth, size);
-    if (layers == 0) return std::nullopt;
+    const cube::CubeMove move =
+        cube::face_move(face, first_depth, last_depth, turns, size);
+    if (move.layers == 0) return std::nullopt;
     if (last_depth - first_depth + 1 >= size) return std::nullopt;
-
-    // Clockwise from outside is a positive turn about the axis only for the
-    // face at its positive end; the face opposite reads the axis backwards.
-    const int direction = cube::outer_layer(face, size) == size - 1 ? 1 : -1;
-    return cube::CubeMove{cube::axis_of(face), layers, direction};
+    return move;
 }
 
 /**
@@ -504,12 +503,11 @@ constexpr std::array<std::array<AmbientStep, 4>, kAmbientPatternCount>
     // screen is what a cube with layers inside has to show.
     const bool wide = (index + pass) % 2 != 0;
 
-    auto move = depth_move(face, wide ? 1 : depth, depth, size);
-    if (!move) return std::nullopt;
+    int turns = 1;
+    if (index % 3 == 2) turns = -turns;
+    if (choice % 2 != 0) turns = -turns;
 
-    if (index % 3 == 2) move->quarter_turns = -move->quarter_turns;
-    if (choice % 2 != 0) move->quarter_turns = -move->quarter_turns;
-    return move;
+    return depth_move(face, wide ? 1 : depth, depth, turns, size);
 }
 
 /** The depth range one share of a cube of `size` stands for. */
@@ -1807,10 +1805,10 @@ std::vector<cube::CubeMove> ambient_pattern(std::uint32_t choice, int size)
         // face itself at these two sizes, which is what they have always been
         // watched with.
         const auto [first, last] = ambient_depths(step.depth, size);
-        auto move = depth_move(step.face, first, last, size);
+        const auto move =
+            depth_move(step.face, first, last, step.face_turns, size);
         if (!move) return {};
 
-        move->quarter_turns *= step.face_turns;
         pattern.push_back(*move);
     }
     return pattern;
@@ -2002,10 +2000,10 @@ bool turn_face(cube::Face face, int first_depth, int last_depth,
 
     // Every refusal a range can earn is in here: off the cube, inside out, or
     // all of it at once.
-    auto move = depth_move(face, first_depth, last_depth, size_of_cube());
+    const auto move =
+        depth_move(face, first_depth, last_depth, face_turns, size_of_cube());
     if (!move) return false;
 
-    move->quarter_turns *= face_turns;
     return state->interaction.start_move(*move);
 }
 

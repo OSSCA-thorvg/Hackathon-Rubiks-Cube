@@ -74,15 +74,12 @@ struct Turn {
  * The move a turn is.
  *
  * Clockwise from outside a face at the near end of its axis is
- * counter-clockwise about that axis, which is the whole of the conversion --
- * the same one `moves::L`, `D` and `B` make.
+ * counter-clockwise about that axis, which is the whole of the conversion,
+ * and the cube's own `face_move()` is where it is made.
  */
 [[nodiscard]] inline CubeMove to_move(const Turn& turn, int size) noexcept
 {
-    return CubeMove{
-        axis_of(turn.face),
-        depth_layers(turn.face, turn.depth, turn.depth, size),
-        positive_face(turn.face, size) ? turn.turns : -turn.turns};
+    return face_move(turn.face, turn.depth, turn.depth, turn.turns, size);
 }
 
 /** The same turn, taken back. */

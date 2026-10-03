@@ -304,3 +304,43 @@ TEST_CASE("depths are counted inwards from the face they are named after")
     REQUIRE(depth_layers(Face::Right, 1, kBig + 1, kBig) == 0);
     REQUIRE(depth_layers(Face::Right, 1, 1, 0) == 0);
 }
+
+TEST_CASE("a face, a run of depths and a turn count name one move")
+{
+    using rubiks::cube::face_move;
+    using rubiks::cube::layers_through;
+
+    constexpr int kBig = 5;
+
+    // The six face turns of a 3x3, each written out: the three faces at the
+    // far end of an axis turn about it, the three opposite turn against it.
+    REQUIRE(face_move(Face::Right, 1, 1, 1, kSize) ==
+            CubeMove{Axis::X, layer(2), 1});
+    REQUIRE(face_move(Face::Left, 1, 1, 1, kSize) ==
+            CubeMove{Axis::X, layer(0), -1});
+    REQUIRE(face_move(Face::Up, 1, 1, 1, kSize) ==
+            CubeMove{Axis::Y, layer(2), 1});
+    REQUIRE(face_move(Face::Down, 1, 1, 1, kSize) ==
+            CubeMove{Axis::Y, layer(0), -1});
+    REQUIRE(face_move(Face::Front, 1, 1, 1, kSize) ==
+            CubeMove{Axis::Z, layer(2), 1});
+    REQUIRE(face_move(Face::Back, 1, 1, 1, kSize) ==
+            CubeMove{Axis::Z, layer(0), -1});
+
+    // The turn count goes through as it was given, sign and all: L2 and L'.
+    REQUIRE(face_move(Face::Left, 1, 1, 2, kSize) ==
+            CubeMove{Axis::X, layer(0), -2});
+    REQUIRE(face_move(Face::Left, 1, 1, -1, kSize) ==
+            CubeMove{Axis::X, layer(0), 1});
+
+    // Rw and 2L' on a 5x5.
+    REQUIRE(face_move(Face::Right, 1, 2, 1, kBig) ==
+            CubeMove{Axis::X, layers_through(3, 4), 1});
+    REQUIRE(face_move(Face::Left, 2, 2, -1, kBig) ==
+            CubeMove{Axis::X, layer(1), 1});
+
+    // A run that starts outside the face or ends past the far side comes back
+    // with no layers, which is the caller's to refuse.
+    REQUIRE(face_move(Face::Right, 0, 1, 1, kSize).layers == 0);
+    REQUIRE(face_move(Face::Right, 1, 4, 1, kSize).layers == 0);
+}

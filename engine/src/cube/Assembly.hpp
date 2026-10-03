@@ -112,10 +112,6 @@ struct PaintReading {
      */
     std::vector<int> blamed;
 
-    /** For `ColourCount` and `OrbitCount`, how many there should be and are. */
-    int expected = 0;
-    int found = 0;
-
     /**
      * Which of the twenty-four ways up the reading is of.
      *

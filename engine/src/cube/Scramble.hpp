@@ -8,9 +8,6 @@
 
 namespace rubiks::cube {
 
-/** Number of moves in a normal 3x3 scramble. */
-inline constexpr std::size_t kScrambleMoveCount = 20;
-
 /**
  * Builds a reproducible scramble for an N x N x N cube.
  *
@@ -28,8 +25,7 @@ inline constexpr std::size_t kScrambleMoveCount = 20;
  *
  * Empty for a size below 2, which has no move that changes anything.
  */
-[[nodiscard]] std::vector<CubeMove> make_scramble(
-    int size, std::uint32_t seed,
-    std::size_t move_count = kScrambleMoveCount);
+[[nodiscard]] std::vector<CubeMove> make_scramble(int size, std::uint32_t seed,
+                                                  std::size_t move_count);
 
 }  // namespace rubiks::cube

@@ -73,6 +73,5 @@ private:
 };
 
 [[nodiscard]] bool operator==(const CubeState& a, const CubeState& b) noexcept;
-[[nodiscard]] bool operator!=(const CubeState& a, const CubeState& b) noexcept;
 
 }  // namespace rubiks::cube

@@ -390,8 +390,6 @@ PaintReading read_held(const Frame& frame,
         const int found = total[static_cast<std::size_t>(colour)];
         if (found == per_colour) continue;
         out.fault = PaintFault::ColourCount;
-        out.expected = per_colour;
-        out.found = found;
         for (std::size_t i = 0; i < painting.size(); ++i) {
             if (painting[i] == colour) out.blamed.push_back(static_cast<int>(i));
         }
@@ -424,8 +422,6 @@ PaintReading read_held(const Frame& frame,
         for (std::size_t c = 0; c < kFaceCount; ++c) {
             if (per_orbit[o][c] == wanted[o][c]) continue;
             out.fault = PaintFault::OrbitCount;
-            out.expected = wanted[o][c];
-            out.found = per_orbit[o][c];
             for (std::size_t i = 0; i < painting.size(); ++i) {
                 if (frame.orbit(static_cast<int>(i)) == static_cast<int>(o)) {
                     out.blamed.push_back(static_cast<int>(i));
@@ -454,8 +450,6 @@ PaintReading read_held(const Frame& frame,
         if (painting[i] == frame.home_colour(slot)) continue;
 
         out.fault = PaintFault::OrbitCount;
-        out.expected = 1;
-        out.found = 0;
         out.blamed.push_back(slot);
         return out;
     }

@@ -136,9 +136,4 @@ bool operator==(const CubeState& a, const CubeState& b) noexcept
     return a.size_ == b.size_ && a.cubies_ == b.cubies_;
 }
 
-bool operator!=(const CubeState& a, const CubeState& b) noexcept
-{
-    return !(a == b);
-}
-
 }  // namespace rubiks::cube

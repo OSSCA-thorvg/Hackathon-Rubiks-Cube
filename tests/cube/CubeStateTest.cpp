@@ -31,6 +31,9 @@ using rubiks::test::inverse_of;
 constexpr int kSize = 3;
 constexpr int kLast = kSize - 1;
 
+/** How long a scramble is here when its length is not what is being asked. */
+constexpr std::size_t kMoves = 20;
+
 /** Applies `move` `count` times to a fresh solved cube. */
 CubeState after(const CubeMove& move, int count, int size = kSize)
 {
@@ -146,10 +149,10 @@ TEST_CASE("every face move has order four")
 
     for (const auto& move : {R(kSize), L(kSize), U(kSize), D(kSize), F(kSize),
                              B(kSize)}) {
-        REQUIRE(after(move, 1) != solved);
+        REQUIRE_FALSE(after(move, 1) == solved);
         REQUIRE_FALSE(after(move, 1).is_solved());
-        REQUIRE(after(move, 2) != solved);
-        REQUIRE(after(move, 3) != solved);
+        REQUIRE_FALSE(after(move, 2) == solved);
+        REQUIRE_FALSE(after(move, 3) == solved);
         REQUIRE(after(move, 4) == solved);
         REQUIRE(after(move, 4).is_solved());
     }
@@ -199,7 +202,7 @@ TEST_CASE("the sexy move returns to solved after six repetitions")
 
     for (int i = 1; i <= 6; ++i) {
         apply_all(state, sequence);
-        if (i < 6) REQUIRE(state != CubeState(kSize));
+        if (i < 6) REQUIRE_FALSE(state == CubeState(kSize));
     }
     REQUIRE(state == CubeState(kSize));
 }
@@ -210,7 +213,7 @@ TEST_CASE("a whole-cube rotation has order four on every axis")
 
     for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
         const auto rotation = whole_cube(axis, kSize);
-        REQUIRE(after(rotation, 1) != solved);
+        REQUIRE_FALSE(after(rotation, 1) == solved);
         REQUIRE(after(rotation, 4) == solved);
     }
 }
@@ -229,8 +232,8 @@ TEST_CASE("wide and slice moves are built by naming layers")
 
     // Widening the layer set has to change the result, or `layers` is being
     // ignored and every move is secretly a face turn.
-    REQUIRE(after(wide, 1) != after(rubiks::test::moves::R(kSize), 1));
-    REQUIRE(after(slice, 1) != after(wide, 1));
+    REQUIRE_FALSE(after(wide, 1) == after(rubiks::test::moves::R(kSize), 1));
+    REQUIRE_FALSE(after(slice, 1) == after(wide, 1));
 }
 
 TEST_CASE("a scramble is undone by the reversed inverse sequence")
@@ -246,7 +249,7 @@ TEST_CASE("a scramble is undone by the reversed inverse sequence")
 
     CubeState state(kSize);
     apply_all(state, scramble);
-    REQUIRE(state != CubeState(kSize));
+    REQUIRE_FALSE(state == CubeState(kSize));
     REQUIRE_FALSE(state.is_solved());
 
     apply_all(state, inverse_of(scramble));
@@ -257,13 +260,14 @@ TEST_CASE("a scramble is undone by the reversed inverse sequence")
 TEST_CASE("seeded scrambles are reproducible and structurally valid")
 {
     constexpr std::uint32_t kSeed = 0x12345678U;
-    const auto first = rubiks::cube::make_scramble(kSize, kSeed);
-    const auto again = rubiks::cube::make_scramble(kSize, kSeed);
-    const auto different = rubiks::cube::make_scramble(kSize, kSeed + 1U);
+    const auto first = rubiks::cube::make_scramble(kSize, kSeed, kMoves);
+    const auto again = rubiks::cube::make_scramble(kSize, kSeed, kMoves);
+    const auto different =
+        rubiks::cube::make_scramble(kSize, kSeed + 1U, kMoves);
 
     REQUIRE(first == again);
     REQUIRE(first != different);
-    REQUIRE(first.size() == rubiks::cube::kScrambleMoveCount);
+    REQUIRE(first.size() == kMoves);
 
     // The count is the caller's, and asking for fewer moves gives the same
     // sequence cut short rather than a different one.
@@ -340,7 +344,7 @@ TEST_CASE("a run of layers is told apart from a set with a gap in it")
 
 TEST_CASE("a generated scramble is restored by its inverse")
 {
-    const auto scramble = rubiks::cube::make_scramble(kSize, 42U);
+    const auto scramble = rubiks::cube::make_scramble(kSize, 42U, kMoves);
     CubeState state(kSize);
 
     apply_all(state, scramble);
@@ -352,10 +356,10 @@ TEST_CASE("a generated scramble is restored by its inverse")
 
 TEST_CASE("zero seed is deterministic and invalid scramble sizes are empty")
 {
-    REQUIRE(rubiks::cube::make_scramble(kSize, 0U) ==
-            rubiks::cube::make_scramble(kSize, 0U));
-    REQUIRE(rubiks::cube::make_scramble(0, 7U).empty());
-    REQUIRE(rubiks::cube::make_scramble(-1, 7U).empty());
+    REQUIRE(rubiks::cube::make_scramble(kSize, 0U, kMoves) ==
+            rubiks::cube::make_scramble(kSize, 0U, kMoves));
+    REQUIRE(rubiks::cube::make_scramble(0, 7U, kMoves).empty());
+    REQUIRE(rubiks::cube::make_scramble(-1, 7U, kMoves).empty());
     REQUIRE(rubiks::cube::make_scramble(kSize, 7U, 0).empty());
 }
 
@@ -370,7 +374,7 @@ TEST_CASE("the move engine holds for an even cube size")
     const auto move = rubiks::test::moves::R(kSmall);
     REQUIRE(move.layers == layer(1));
 
-    REQUIRE(after(move, 1, kSmall) != solved);
+    REQUIRE_FALSE(after(move, 1, kSmall) == solved);
     REQUIRE(after(move, 4, kSmall) == solved);
 
     CubeState state(kSmall);
@@ -386,5 +390,5 @@ TEST_CASE("the move engine holds for an even cube size")
 
 TEST_CASE("cubes of different sizes are never equal")
 {
-    REQUIRE(CubeState(2) != CubeState(3));
+    REQUIRE_FALSE(CubeState(2) == CubeState(3));
 }

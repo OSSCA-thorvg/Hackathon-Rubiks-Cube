@@ -133,8 +133,7 @@ TEST_CASE("a colour on too many stickers is counted and named")
     const auto reading =
         read_painting(3, with_slip(cube, slot, FaceColor::White));
     REQUIRE(reading.fault == PaintFault::ColourCount);
-    CHECK(reading.expected == 9);
-    CHECK(reading.found != 9);
+    CHECK(reading.blamed.size() != 9);
     CHECK_FALSE(reading.blamed.empty());
     CHECK_FALSE(assembled(3, with_slip(cube, slot, FaceColor::White)));
 }

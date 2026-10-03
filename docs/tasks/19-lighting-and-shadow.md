@@ -208,7 +208,7 @@ Classic 흰색은 (255, 255, 255)입니다. 밝기 275인 윗면에서 255로 cl
 
 ## 상수 (확정)
 
-[`Light.hpp`](../../engine/src/graphics/Light.hpp)와 [`Palette.hpp`](../../engine/src/graphics/Palette.hpp)의 값입니다.
+[`Light.hpp`](../../engine/src/graphics/Light.hpp), [`RenderScene.hpp`](../../engine/src/graphics/RenderScene.hpp), [`Palette.hpp`](../../engine/src/graphics/Palette.hpp)의 값입니다.
 
 | 상수 | 값 | 뜻 |
 |---|---|---|

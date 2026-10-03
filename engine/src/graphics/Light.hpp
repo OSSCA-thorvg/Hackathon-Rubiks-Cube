@@ -156,33 +156,14 @@ inline constexpr float kGroundY = -1.5f;
 inline constexpr std::uint8_t kHighlightMinAlpha = 8;
 
 /**
- * The shadow's colour and strength. Darker and cooler than either ground
- * rather than grey, and multiplied into the ground's colour rather than
- * painted over it, so the same constants hold on the light theme and the
- * dark one. The renderer does the multiplication itself, once per frame.
+ * The shadow's strength. Its colour is multiplied into the ground's colour
+ * rather than painted over it, so the same strength holds on the light theme
+ * and the dark one.
  */
-inline constexpr Color kShadowColor{40, 48, 64, 255};
 inline constexpr std::uint8_t kShadowOpacity = 80;
 
-/**
- * Softness of the shadow edge, as a share of the cube region's side, and the
- * blur's quality. Quality here is how many box passes approximate the
- * Gaussian; one pass reads as a soft edge on a shadow and costs half of two.
- */
+/** Softness of the shadow edge, as a share of the cube region's side. */
 inline constexpr float kShadowBlurShare = 0.018f;
-inline constexpr int kShadowBlurQuality = 30;
-
-/**
- * How much of the shadow is left at its far tip. Nothing: a shadow that still
- * has a quarter of its strength where the clip cuts it shows the cut.
- */
-inline constexpr float kShadowFadeFloor = 0.0f;
-
-/** How much is left half way to the tip: the fade bends rather than runs straight. */
-inline constexpr float kShadowFadeMidway = 0.35f;
-
-/** A fade shorter than this in pixels has no direction and falls off radially. */
-inline constexpr float kShadowFadeMinLength = 4.0f;
 
 /**
  * The eye height above the ground over which the shadow thins to nothing.

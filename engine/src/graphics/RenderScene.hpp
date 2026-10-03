@@ -59,6 +59,33 @@ struct RenderFace {
 };
 
 /**
+ * The shadow's colour. Darker and cooler than either ground rather than grey,
+ * and multiplied into the ground's colour rather than painted over it, so the
+ * same constant holds on the light theme and the dark one. The renderer does
+ * the multiplication itself, once per frame.
+ */
+inline constexpr Color kShadowColor{40, 48, 64, 255};
+
+/**
+ * The quality of the blur on the shadow's edge. Quality here is how many box
+ * passes approximate the Gaussian; one pass reads as a soft edge on a shadow
+ * and costs half of two.
+ */
+inline constexpr int kShadowBlurQuality = 30;
+
+/**
+ * How much of the shadow is left at its far tip. Nothing: a shadow that still
+ * has a quarter of its strength where the clip cuts it shows the cut.
+ */
+inline constexpr float kShadowFadeFloor = 0.0f;
+
+/** How much is left half way to the tip: the fade bends rather than runs straight. */
+inline constexpr float kShadowFadeMidway = 0.35f;
+
+/** A fade shorter than this in pixels has no direction and falls off radially. */
+inline constexpr float kShadowFadeMinLength = 4.0f;
+
+/**
  * The ground shadow, ready for the renderer to compose.
  *
  * The pipeline has decided where it lies; what is left is how it is made to
@@ -138,6 +165,15 @@ struct RenderStroke {
     float width = 1.0f;
     Color color{};
 };
+
+/**
+ * Color of the cubie body: the cut surfaces exposed while a layer is turning,
+ * and the slab silhouettes the renderer paints under the stickers so that the
+ * seams between them show plastic rather than whatever is behind the cube.
+ * Kept clearly apart from the background and from all six sticker colors so
+ * a test can tell them apart.
+ */
+inline constexpr Color kBodyColor{70, 74, 82, 255};
 
 /**
  * Final output of the graphics pipeline and the only input a renderer takes.

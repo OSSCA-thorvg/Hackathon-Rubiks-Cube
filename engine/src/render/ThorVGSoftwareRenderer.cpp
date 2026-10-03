@@ -8,9 +8,6 @@
 #include <new>
 #include <vector>
 
-#include "graphics/CubeGeometry.hpp"
-#include "graphics/Light.hpp"
-
 namespace rubiks::render {
 namespace {
 

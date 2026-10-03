@@ -40,15 +40,6 @@ inline constexpr float kStickerScale = 0.92f;
 void append_sticker(WorldScene& scene, const math::Vec3& center,
                     float half_extent, cube::Face face, const Color& color);
 
-/**
- * Color of the cubie body: the cut surfaces exposed while a layer is turning,
- * and the slab silhouettes the renderer paints under the stickers so that the
- * seams between them show plastic rather than whatever is behind the cube.
- * Kept clearly apart from the background and from all six sticker colors so
- * a test can tell them apart.
- */
-inline constexpr Color kBodyColor{70, 74, 82, 255};
-
 /** Unit vector along the positive direction of an axis. */
 [[nodiscard]] math::Vec3 axis_direction(cube::Axis axis) noexcept;
 

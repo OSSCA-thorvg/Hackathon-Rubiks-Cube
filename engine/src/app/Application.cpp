@@ -340,6 +340,28 @@ std::unique_ptr<ApplicationState> state;
 }
 
 /**
+ * Whether a layer set is one this application turns and writes down, for a
+ * cube of `size`.
+ *
+ * One unbroken run of that cube's layers, short of all of them: exactly the
+ * moves this application can make and can write down. Every layer at once is
+ * a rotation of the whole cube, which it neither makes nor records.
+ *
+ * Asked where a move is made from a face and a range of depths, and asked
+ * again of every move that arrives in a shared record. The mask field of a
+ * packed move is wide enough for the slices of a much larger cube and for
+ * sets with gaps in them, and a word arriving from a link is free to name any
+ * of those -- but nothing here can make one, so letting one in would put a
+ * move on the record that has no notation to be written in and no command
+ * that could have produced it.
+ */
+[[nodiscard]] bool turnable_layers(cube::LayerMask layers, int size) noexcept
+{
+    return cube::is_layer_run(layers, size) &&
+           layers != cube::layers_through(0, size - 1);
+}
+
+/**
  * The move a face names, taken as deep as a range of depths says and turned
  * `turns` quarters clockwise as seen from outside it.
  *
@@ -360,8 +382,7 @@ std::unique_ptr<ApplicationState> state;
 {
     const cube::CubeMove move =
         cube::face_move(face, first_depth, last_depth, turns, size);
-    if (move.layers == 0) return std::nullopt;
-    if (last_depth - first_depth + 1 >= size) return std::nullopt;
+    if (!turnable_layers(move.layers, size)) return std::nullopt;
     return move;
 }
 
@@ -858,20 +879,23 @@ void advance_playback() noexcept
 }
 
 /**
- * Whether a layer set is one a shared record may carry, for a cube of `size`.
+ * The moves the words of a shared record stand for, on a cube of `size`.
  *
- * One unbroken run of that cube's layers, short of all of them: exactly the
- * moves this application can make and can write down. The mask field is wide
- * enough for the slices of a much larger cube and for sets with gaps in them,
- * and a word arriving from a link is free to name any of those -- but nothing
- * here can make one, so letting one in would put a move on the record that has
- * no notation to be written in and no command that could have produced it.
+ * Nothing when any one of them is not a move: a word that unpacks to none, or
+ * one whose layers this application could not have turned. A record is taken
+ * whole or not at all, so one such word refuses all of it.
  */
-[[nodiscard]] bool restorable_layers(cube::LayerMask layers,
-                                     int size) noexcept
+[[nodiscard]] std::optional<std::vector<cube::CubeMove>> unpacked_moves(
+    const std::vector<std::uint32_t>& words, int size)
 {
-    return cube::is_layer_run(layers, size) &&
-           layers != cube::layers_through(0, size - 1);
+    std::vector<cube::CubeMove> moves;
+    moves.reserve(words.size());
+    for (const std::uint32_t word : words) {
+        const auto move = cube::unpack(word);
+        if (!move || !turnable_layers(move->layers, size)) return std::nullopt;
+        moves.push_back(*move);
+    }
+    return moves;
 }
 
 }  // namespace
@@ -1610,13 +1634,8 @@ bool restore_painting(int size, std::uint32_t user_count) noexcept
         painting.push_back(*named);
     }
 
-    std::vector<cube::CubeMove> moves;
-    moves.reserve(words.size());
-    for (const std::uint32_t word : words) {
-        const auto move = cube::unpack(word);
-        if (!move || !restorable_layers(move->layers, size)) return false;
-        moves.push_back(*move);
-    }
+    const auto moves = unpacked_moves(words, size);
+    if (!moves) return false;
 
     // The last refusal, and the one this whole feature exists for: a colouring
     // that no turning reaches is not a cube, and a solver handed one would
@@ -1630,7 +1649,7 @@ bool restore_painting(int size, std::uint32_t user_count) noexcept
     // The colouring is the starting position, so what follows it is the user's
     // own -- recorded the ordinary way, which is what happened to the cube
     // this link came from.
-    for (const auto& move : moves) {
+    for (const auto& move : *moves) {
         state->cube_state.apply(move);
         state->timeline.record(move);
     }
@@ -1671,13 +1690,8 @@ bool restore_apply(int size, std::uint32_t scramble_count,
         static_cast<std::uint64_t>(scramble_count) + user_count;
     if (declared != words.size()) return false;
 
-    std::vector<cube::CubeMove> moves;
-    moves.reserve(words.size());
-    for (const std::uint32_t word : words) {
-        const auto move = cube::unpack(word);
-        if (!move || !restorable_layers(move->layers, size)) return false;
-        moves.push_back(*move);
-    }
+    const auto moves = unpacked_moves(words, size);
+    if (!moves) return false;
 
     // Past every refusal, so what follows cannot leave the cube half restored
     // -- the size included, which is why it arrives with the record rather
@@ -1690,14 +1704,16 @@ bool restore_apply(int size, std::uint32_t scramble_count,
     // this record came from.
     const auto scramble_end = static_cast<std::size_t>(scramble_count);
     state->timeline.begin_scramble(std::vector<cube::CubeMove>(
-        moves.begin(), moves.begin() + static_cast<std::ptrdiff_t>(scramble_end)));
+        moves->begin(),
+        moves->begin() + static_cast<std::ptrdiff_t>(scramble_end)));
 
-    for (std::size_t index = 0; index < moves.size(); ++index) {
-        state->cube_state.apply(moves[index]);
+    for (std::size_t index = 0; index < moves->size(); ++index) {
+        const cube::CubeMove& move = (*moves)[index];
+        state->cube_state.apply(move);
         if (index < scramble_end) {
             state->timeline.step(cube::TimelineEffect::Advance);
         } else {
-            state->timeline.record(moves[index]);
+            state->timeline.record(move);
         }
     }
 

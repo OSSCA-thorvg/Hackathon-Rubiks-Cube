@@ -1,29 +1,25 @@
 #include "app/Application.hpp"
 
-#include <array>
 #include <cstdint>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include "EngineLifecycle.hpp"
+#include "RenderContract.hpp"
 #include "graphics/CanvasTheme.hpp"
 #include "graphics/Palette.hpp"
 
 using rubiks::graphics::CanvasTheme;
 using rubiks::test::arrive;
+using rubiks::test::contract::kDarkGround;
+using rubiks::test::contract::kLightGround;
 using rubiks::test::drawn_frame;
 using rubiks::test::EngineLifecycle;
+using rubiks::test::Rgba;
 using rubiks::test::settle;
 
 namespace {
-
-// Contract colors as RGBA bytes on little-endian memory, the same order
-// RenderContractTest reads them in.
-using Rgba = std::array<std::uint8_t, 4>;
-
-constexpr Rgba kDarkGround{32, 32, 32, 255};
-constexpr Rgba kLightGround{231, 235, 240, 255};
 
 constexpr std::uint32_t kWidth = 320;
 constexpr std::uint32_t kHeight = 240;

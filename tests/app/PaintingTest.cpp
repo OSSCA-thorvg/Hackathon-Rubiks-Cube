@@ -22,6 +22,7 @@ namespace {
 
 using rubiks::test::EngineLifecycle;
 using rubiks::test::drawn_frame;
+using rubiks::test::pixel_at;
 using rubiks::test::settle;
 
 constexpr std::uint32_t kCanvas = 512;
@@ -44,16 +45,6 @@ struct Aim {
     const auto at = rubiks::graphics::net_cell_center(
         rubiks::cube::Face::Front, col, row, net, size);
     return Aim{at.x, at.y};
-}
-
-/** The four bytes drawn at a point of the canvas. */
-const std::uint8_t* pixel_at(float x, float y)
-{
-    const auto* bytes = reinterpret_cast<const std::uint8_t*>(
-        rubiks::app::surface_pixel_buffer(0));
-    const auto column = static_cast<std::size_t>(x);
-    const auto row = static_cast<std::size_t>(y);
-    return bytes + (row * kCanvas + column) * 4;
 }
 
 /**
@@ -405,13 +396,13 @@ TEST_CASE("the net draws the draft, and rings what a refusal points at")
     const auto near_white = [](const std::uint8_t* pixel) {
         return pixel[0] >= 200 && pixel[1] >= 200 && pixel[2] >= 200;
     };
-    CHECK_FALSE(near_white(pixel_at(aim.x - edge, aim.y)));
+    CHECK_FALSE(near_white(pixel_at(aim.x - edge, aim.y, kCanvas)));
 
     // What is on screen is the draft and not the cube: the cube's front face
     // is still every bit green, and this square is not.
     const auto red = rubiks::graphics::to_color(rubiks::cube::FaceColor::Red,
                                                 rubiks::graphics::Palette::Classic);
-    const auto* painted = pixel_at(aim.x, aim.y);
+    const auto* painted = pixel_at(aim.x, aim.y, kCanvas);
     CHECK(painted[0] == red.r);
     CHECK(painted[1] == red.g);
     CHECK(painted[2] == red.b);
@@ -422,9 +413,9 @@ TEST_CASE("the net draws the draft, and rings what a refusal points at")
     // than painting over.
     CHECK_FALSE(rubiks::app::apply_painting());
     REQUIRE(rubiks::app::render());
-    CHECK(near_white(pixel_at(aim.x - edge, aim.y)));
+    CHECK(near_white(pixel_at(aim.x - edge, aim.y, kCanvas)));
 
-    const auto* middle = pixel_at(aim.x, aim.y);
+    const auto* middle = pixel_at(aim.x, aim.y, kCanvas);
     CHECK(middle[0] == red.r);
     CHECK(middle[1] == red.g);
     CHECK(middle[2] == red.b);
@@ -434,7 +425,7 @@ TEST_CASE("the net draws the draft, and rings what a refusal points at")
     REQUIRE(rubiks::app::render());
     const auto green = rubiks::graphics::to_color(
         rubiks::cube::FaceColor::Green, rubiks::graphics::Palette::Classic);
-    const auto* restored = pixel_at(aim.x, aim.y);
+    const auto* restored = pixel_at(aim.x, aim.y, kCanvas);
     CHECK(restored[0] == green.r);
     CHECK(restored[1] == green.g);
     CHECK(restored[2] == green.b);

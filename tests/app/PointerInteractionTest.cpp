@@ -1,14 +1,13 @@
 #include "app/Application.hpp"
 
-#include <array>
 #include <cmath>
-#include <cstddef>
 #include <cstdint>
 #include <limits>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include "EngineLifecycle.hpp"
+#include "RenderContract.hpp"
 #include "cube/Cubie.hpp"
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
@@ -24,58 +23,8 @@
 
 namespace {
 
-using Rgba = std::array<std::uint8_t, 4>;
-
-constexpr Rgba kGreen{0, 155, 72, 255};
-constexpr Rgba kWhite{255, 255, 255, 255};
-constexpr Rgba kPaperWhite{216, 216, 216, 255};  // the 3D view's white
-constexpr Rgba kRed{183, 18, 52, 255};
-constexpr Rgba kBlue{0, 70, 173, 255};
-constexpr Rgba kOrange{255, 88, 0, 255};
-constexpr Rgba kYellow{255, 213, 0, 255};
-constexpr Rgba kBackground{32, 32, 32, 255};
-
-/** The cut surface, only ever on show while a layer is turning. */
-constexpr Rgba kBody{70, 74, 82, 255};
-
-// The 3D view is lit (render contract v4): one brightness per plane of the
-// cube, from docs/tasks/04-rubiks-cube-domain.md. The three planes turned
-// away from the light are at the ambient floor.
-constexpr unsigned kLitUp = 275;
-constexpr unsigned kLitFront = 230;
-constexpr unsigned kLitRight = 211;
-/** -X and -Z: the ambient floor; the kicker lights nothing, it only glints. */
-constexpr unsigned kLitAway = 191;
-/** The +Y cut a U turn opens, one layer down from the top. */
-[[maybe_unused]] constexpr unsigned kLitCutUp = 273;
-
-constexpr std::uint8_t lit_channel(unsigned value, unsigned brightness)
-{
-    const unsigned scaled = (value * brightness + 127) / 255;
-    return static_cast<std::uint8_t>(scaled > 255 ? 255 : scaled);
-}
-
-constexpr Rgba lit(const Rgba& color, unsigned brightness)
-{
-    return Rgba{lit_channel(color[0], brightness), lit_channel(color[1], brightness),
-                lit_channel(color[2], brightness), color[3]};
-}
-
-/** The sticker's chroma raised before it is lit, as the contract writes it. */
-constexpr std::uint8_t saturated_channel(int value, int gray)
-{
-    const int offset = (value - gray) * 125;
-    const int rounded = offset >= 0 ? (offset + 50) / 100 : -((-offset + 50) / 100);
-    const int result = gray + rounded;
-    return static_cast<std::uint8_t>(result < 0 ? 0 : result > 255 ? 255 : result);
-}
-
-constexpr Rgba saturated(const Rgba& color)
-{
-    const int gray = (2126 * color[0] + 7152 * color[1] + 722 * color[2] + 5000) / 10000;
-    return Rgba{saturated_channel(color[0], gray), saturated_channel(color[1], gray),
-                saturated_channel(color[2], gray), color[3]};
-}
+using namespace rubiks::test::contract;
+using rubiks::test::Rgba;
 
 // The six faces as the 3D view shows them: a sticker's colour, saturated, at
 // its plane's brightness. Named by the face so an orbit test reads as which
@@ -86,19 +35,13 @@ constexpr Rgba kRightLit = lit(saturated(kRed), kLitRight);
 constexpr Rgba kBackLit = lit(saturated(kBlue), kLitAway);
 constexpr Rgba kLeftLit = lit(saturated(kOrange), kLitAway);
 
-// The three face centers of the rendered scene contract, as fractions of the
-// square 3D region. Which colors they read depends on the viewpoint, which is
-// exactly what makes them useful for checking an orbit.
-constexpr float kUpSample[]{0.50f, 0.29f};
-constexpr float kLeftSample[]{0.31f, 0.61f};
-constexpr float kRightSample[]{0.69f, 0.61f};
-
 constexpr int kCubeSize = 3;
 
 using rubiks::test::cube_camera;
 using rubiks::test::cube_rect;
 using rubiks::test::kCanvas;
 using rubiks::test::kFrameMs;
+using rubiks::test::pixel_at;
 using rubiks::test::run_while_busy;
 using rubiks::test::settle;
 
@@ -131,15 +74,6 @@ float pixels_per_degree(std::uint32_t width, std::uint32_t height)
            rubiks::graphics::kDegreesPerQuarterTurn;
 }
 
-const std::uint8_t* pixel_at(float x, float y, std::uint32_t width)
-{
-    const auto* bytes = reinterpret_cast<const std::uint8_t*>(
-        rubiks::app::surface_pixel_buffer(0));
-    const auto column = static_cast<std::size_t>(x);
-    const auto row = static_cast<std::size_t>(y);
-    return bytes + (row * width + column) * 4;
-}
-
 /** Center of one net cell, in drawing-buffer pixels. */
 rubiks::math::Vec2 net_cell_point(rubiks::cube::Face face, int column, int row)
 {
@@ -160,15 +94,6 @@ const std::uint8_t* net_cell_pixel(rubiks::cube::Face face, int column,
 const std::uint8_t* up_face_cell(int column, int row)
 {
     return net_cell_pixel(rubiks::cube::Face::Up, column, row);
-}
-
-void require_pixel(const std::uint8_t* pixel, const Rgba& color)
-{
-    // Compared as integers so a failure prints numbers rather than bytes.
-    REQUIRE(int{pixel[0]} == int{color[0]});
-    REQUIRE(int{pixel[1]} == int{color[1]});
-    REQUIRE(int{pixel[2]} == int{color[2]});
-    REQUIRE(int{pixel[3]} == int{color[3]});
 }
 
 /** One column of the net's top face, all three cells. */
@@ -198,12 +123,12 @@ void require_up_right_column(const Rgba& color)
 }
 
 /** Reads a point given as a fraction of the square 3D region. */
-const std::uint8_t* cube_sample(const float (&sample)[2], std::uint32_t width,
+const std::uint8_t* cube_sample(const Sample& sample, std::uint32_t width,
                                 std::uint32_t height)
 {
     const auto rect = cube_rect(width, height);
-    return pixel_at(rect.x + sample[0] * rect.width,
-                    rect.y + sample[1] * rect.height, width);
+    return pixel_at(rect.x + sample.x * rect.width,
+                    rect.y + sample.y * rect.height, width);
 }
 
 /**
@@ -241,13 +166,19 @@ void require_pixel_reads(const std::uint8_t* pixel, const Rgba& color)
     }
 }
 
-/** The three visible face centers, in screen order. */
+/**
+ * The three visible face centers, in screen order.
+ *
+ * The contract names its samples for the faces they show from home, where the
+ * front face is the one on the left. Which colors they read depends on the
+ * viewpoint, which is exactly what makes them useful for checking an orbit.
+ */
 void require_visible_faces(const Rgba& top, const Rgba& left,
                            const Rgba& right)
 {
     REQUIRE(rubiks::app::render());
     require_pixel_reads(cube_sample(kUpSample, kCanvas, kCanvas), top);
-    require_pixel_reads(cube_sample(kLeftSample, kCanvas, kCanvas), left);
+    require_pixel_reads(cube_sample(kFrontSample, kCanvas, kCanvas), left);
     require_pixel_reads(cube_sample(kRightSample, kCanvas, kCanvas), right);
 }
 
@@ -262,25 +193,6 @@ void require_solved_net()
     }
 }
 
-/** Whether a pixel is the body at some brightness a lit cut face can have. */
-bool is_lit_body(const std::uint8_t* pixel)
-{
-    // The body by its hue rather than by a table of shades: kBody is
-    // (70, 74, 82), and every brightness of it, and every white glint laid
-    // over it, keeps the channels in that order with the blue-green step
-    // twice the green-red step. A glint on a cut face can be as strong as
-    // the lamp's whole specular, so its amount is not bounded here; what is
-    // is the spread, which shrinks towards white and is zero for a white
-    // sticker, and the darkness, which rules out the ground.
-    if (pixel[3] != kBody[3]) return false;
-    const int r = pixel[0], g = pixel[1], b = pixel[2];
-    if (r > g || g > b) return false;
-    const int spread = b - r;
-    if (spread < 2 || spread > 16) return false;
-    if (std::abs((b - g) - 2 * (g - r)) > 3) return false;
-    return r >= 40 && r <= 220;
-}
-
 /** The pixel a world point falls on from the home viewpoint. */
 const std::uint8_t* pixel_at_world(const rubiks::math::Vec3& world)
 {
@@ -289,13 +201,6 @@ const std::uint8_t* pixel_at_world(const rubiks::math::Vec3& world)
     REQUIRE(point);
     return pixel_at(point->x, point->y, kCanvas);
 }
-
-/**
- * A point on the cut a U turn opens -- the still middle layer's top at
- * y = +1/3, in the corner the turned layer does not cover -- which at rest is
- * behind the front face's green stickers, well inside one.
- */
-constexpr rubiks::math::Vec3 kCutOfUTurn{0.70f, 1.0f / 3.0f, 0.85f};
 
 /**
  * Whether a coarse sweep of the 3D region finds `color` at some brightness
@@ -468,13 +373,13 @@ TEST_CASE("the net shows a 3D drag while it is happening")
     const float corner_x = net.x + 3.0f * face_side + 0.5f * cell;
     const float corner_y = net.y + 2.0f * face_side + 1.5f * cell;
 
-    REQUIRE(pixel_at(corner_x, corner_y, kCanvas)[2] == kBackground[2]);
+    REQUIRE(pixel_at(corner_x, corner_y, kCanvas)[2] == kDarkGround[2]);
 
     bool crossed = false;
     for (int step = 1; step <= 89 && !crossed; ++step) {
         move_column_upward(2, static_cast<float>(step));
         REQUIRE(rubiks::app::render());
-        crossed = pixel_at(corner_x, corner_y, kCanvas)[2] != kBackground[2];
+        crossed = pixel_at(corner_x, corner_y, kCanvas)[2] != kDarkGround[2];
     }
     REQUIRE(crossed);
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -30,6 +32,9 @@ struct EngineLifecycle {
     EngineLifecycle(const EngineLifecycle&) = delete;
     EngineLifecycle& operator=(const EngineLifecycle&) = delete;
 };
+
+/** One pixel as the four bytes it is in memory: red, green, blue, alpha. */
+using Rgba = std::array<std::uint8_t, 4>;
 
 /**
  * Whether initialize() has succeeded and shutdown() has not followed it.
@@ -119,6 +124,26 @@ inline int run_while_busy()
     REQUIRE(length > 0);
 
     return std::vector<std::uint8_t>(pixels, pixels + length);
+}
+
+/**
+ * The four bytes a surface's last frame holds at a point, given in pixels.
+ *
+ * The fraction of each coordinate is dropped, so a point anywhere inside a
+ * pixel reads that pixel. `width` is the width the test gave the surface: the
+ * buffer is rows of that many pixels.
+ */
+[[nodiscard]] inline const std::uint8_t* pixel_at(float x, float y,
+                                                  std::uint32_t width,
+                                                  std::uint32_t surface = 0)
+{
+    const auto* bytes = reinterpret_cast<const std::uint8_t*>(
+        rubiks::app::surface_pixel_buffer(surface));
+    REQUIRE(bytes != nullptr);
+
+    return bytes +
+           (static_cast<std::size_t>(y) * width + static_cast<std::size_t>(x)) *
+               4;
 }
 
 /** Scrambles and waits for the whole sequence to arrive on the cube. */

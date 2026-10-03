@@ -9,6 +9,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "EngineLifecycle.hpp"
+#include "RenderContract.hpp"
 #include "cube/Cubie.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/NetGeometry.hpp"
@@ -22,19 +23,18 @@
 
 namespace {
 
-using Rgba = std::array<std::uint8_t, 4>;
 using rubiks::app::kSceneAxes;
 using rubiks::app::kSceneCube;
 using rubiks::app::kSceneNet;
 using rubiks::app::kSceneRings;
+using rubiks::test::contract::kDarkGround;
+using rubiks::test::contract::kGreen;
+using rubiks::test::contract::kLightGround;
+using rubiks::test::contract::kRed;
+using rubiks::test::contract::kWhite;
 using rubiks::test::kFrameMs;
+using rubiks::test::Rgba;
 using rubiks::test::settle;
-
-constexpr Rgba kDarkGround{32, 32, 32, 255};
-constexpr Rgba kLightGround{231, 235, 240, 255};
-constexpr Rgba kWhite{255, 255, 255, 255};
-constexpr Rgba kGreen{0, 155, 72, 255};
-constexpr Rgba kRed{183, 18, 52, 255};
 
 constexpr std::uint32_t kCubeSide = 512;
 constexpr std::uint32_t kNetWidth = 480;
@@ -49,12 +49,8 @@ constexpr std::uint32_t kAxesSurface = 2;
 /** One pixel of a surface's last frame. */
 Rgba pixel(std::uint32_t id, std::uint32_t width, float x, float y)
 {
-    const auto* bytes = reinterpret_cast<const std::uint8_t*>(
-        rubiks::app::surface_pixel_buffer(id));
-    REQUIRE(bytes != nullptr);
-    const std::size_t at =
-        (static_cast<std::size_t>(y) * width + static_cast<std::size_t>(x)) * 4;
-    return Rgba{bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]};
+    const auto* at = rubiks::test::pixel_at(x, y, width, id);
+    return Rgba{at[0], at[1], at[2], at[3]};
 }
 
 /** Where the net sits on a surface holding the net alone. */

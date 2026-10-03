@@ -11,6 +11,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "EngineLifecycle.hpp"
+#include "RenderContract.hpp"
 #include "cube/Surface.hpp"
 #include "graphics/Camera.hpp"
 #include "interaction/DragResolver.hpp"
@@ -35,88 +36,14 @@
 
 namespace {
 
-// Contract colors as RGBA bytes on little-endian memory.
-using Rgba = std::array<std::uint8_t, 4>;
-
-constexpr Rgba kBackground{32, 32, 32, 255};
-constexpr Rgba kWhite{255, 255, 255, 255};   // +Y up, as the net draws it
-// The same white as the 3D view lights it: graphics::kPaperWhite.
-constexpr Rgba kPaperWhite{216, 216, 216, 255};
-constexpr Rgba kYellow{255, 213, 0, 255};    // -Y down
-constexpr Rgba kGreen{0, 155, 72, 255};      // +Z front
-constexpr Rgba kBlue{0, 70, 173, 255};       // -Z back
-constexpr Rgba kRed{183, 18, 52, 255};       // +X right
-constexpr Rgba kOrange{255, 88, 0, 255};     // -X left
-
-// Contract v4: the 3D view is lit. Each plane of the cube has one brightness,
-// a byte out of 255, worked out by hand in docs/tasks/04-rubiks-cube-domain.md
-// from the light's resting place; the net is a diagram and stays unlit.
-constexpr unsigned kLitUp = 275;     // +Y, the plane nearest the key light
-constexpr unsigned kLitFront = 230;  // +Z
-constexpr unsigned kLitRight = 211;  // +X
-// The cut faces a turn opens lie one layer in, so their planes are their own:
-// the +Y cut at y = +1/3 of a U turn and the +X cut at x = +1/3 of an R turn.
-// (Recorded for the contract; the mid-turn checks look for the body at any
-// brightness a cut can have, at the place the cut is.)
-[[maybe_unused]] constexpr unsigned kLitCutUp = 273;
-[[maybe_unused]] constexpr unsigned kLitCutRight = 218;
-
-/**
- * A colour at a brightness, in the integer arithmetic the engine uses.
- *
- * The brightness may pass 255 -- the palette colour is a well-lit face, not
- * the brightest -- and each channel stops at 255.
- */
-constexpr std::uint8_t lit_channel(unsigned value, unsigned brightness)
-{
-    const unsigned scaled = (value * brightness + 127) / 255;
-    return static_cast<std::uint8_t>(scaled > 255 ? 255 : scaled);
-}
-
-constexpr Rgba lit(const Rgba& color, unsigned brightness)
-{
-    return Rgba{lit_channel(color[0], brightness), lit_channel(color[1], brightness),
-                lit_channel(color[2], brightness), color[3]};
-}
-
-/**
- * A sticker's colour with its chroma raised before it is lit (contract v4,
- * fifth revision): gray = (2126 r + 7152 g + 722 b + 5000) / 10000, and each
- * channel gray + ((c - gray) * 125 + 50) / 100, rounded away from grey.
- */
-constexpr std::uint8_t saturated_channel(int value, int gray)
-{
-    const int offset = (value - gray) * 125;
-    const int rounded = offset >= 0 ? (offset + 50) / 100 : -((-offset + 50) / 100);
-    const int result = gray + rounded;
-    return static_cast<std::uint8_t>(result < 0 ? 0 : result > 255 ? 255 : result);
-}
-
-constexpr Rgba saturated(const Rgba& color)
-{
-    const int gray = (2126 * color[0] + 7152 * color[1] + 722 * color[2] + 5000) / 10000;
-    return Rgba{saturated_channel(color[0], gray), saturated_channel(color[1], gray),
-                saturated_channel(color[2], gray), color[3]};
-}
+using namespace rubiks::test::contract;
+using rubiks::test::Rgba;
 
 struct Region {
     float x;
     float y;
     float side;  // the 3D region is square; for the net this is one face
 };
-
-/** Fraction of a region, measured from its top left. */
-struct Sample {
-    float x;
-    float y;
-};
-
-// Centers of the three visible face centers, unchanged from contract v2. They
-// are fractions of the 3D region rather than of the canvas, which is what
-// makes them valid at any aspect ratio now that the region is always square.
-constexpr Sample kUpSample{0.50f, 0.29f};
-constexpr Sample kFrontSample{0.31f, 0.61f};
-constexpr Sample kRightSample{0.69f, 0.61f};
 
 // Gaps between neighbouring stickers. The cubie body shows there -- painted
 // under the stickers as each slab's silhouette -- so they are exactly kBody.
@@ -142,12 +69,6 @@ constexpr NetBlock kNetBlocks[]{
 };
 
 constexpr int kCubeSize = 3;
-
-/**
- * The cubie body: the cut surfaces a turn opens, and what shows between the
- * stickers -- the slab silhouettes painted under them.
- */
-constexpr Rgba kBody{70, 74, 82, 255};
 
 /**
  * Half of the snap animation, which is half of the turn.
@@ -203,16 +124,6 @@ const std::uint8_t* pixel_in_cube(const Sample& sample, std::uint32_t width,
     const Region region = cube_region(width, height);
     return pixel_at(region.x + sample.x * region.side,
                     region.y + sample.y * region.side, width, height);
-}
-
-void require_pixel(const std::uint8_t* pixel, const Rgba& color)
-{
-    // Channel-by-channel exact match; a byte-order mistake cannot slip past.
-    // Compared as integers so a failure prints numbers rather than bytes.
-    REQUIRE(int{pixel[0]} == int{color[0]});
-    REQUIRE(int{pixel[1]} == int{color[1]});
-    REQUIRE(int{pixel[2]} == int{color[2]});
-    REQUIRE(int{pixel[3]} == int{color[3]});
 }
 
 /**
@@ -288,25 +199,6 @@ const std::uint8_t* pixel_in_net(float column, float row, std::uint32_t width,
                     height);
 }
 
-/** Whether a pixel is the body at some brightness a lit cut face can have. */
-bool is_lit_body(const std::uint8_t* pixel)
-{
-    // The body by its hue rather than by a table of shades: kBody is
-    // (70, 74, 82), and every brightness of it, and every white glint laid
-    // over it, keeps the channels in that order with the blue-green step
-    // twice the green-red step. A glint on a cut face can be as strong as
-    // the lamp's whole specular, so its amount is not bounded here; what is
-    // is the spread, which shrinks towards white and is zero for a white
-    // sticker, and the darkness, which rules out the ground.
-    if (pixel[3] != kBody[3]) return false;
-    const int r = pixel[0], g = pixel[1], b = pixel[2];
-    if (r > g || g > b) return false;
-    const int spread = b - r;
-    if (spread < 2 || spread > 16) return false;
-    if (std::abs((b - g) - 2 * (g - r)) > 3) return false;
-    return r >= 40 && r <= 220;
-}
-
 /**
  * The pixel a world-space point falls on, seen from the home viewpoint.
  *
@@ -324,26 +216,12 @@ const std::uint8_t* pixel_at_world(const rubiks::math::Vec3& world,
     return pixel_at(point->x, point->y, width, height);
 }
 
-/**
- * A point on the cut a turn opens, clear of the turned layer at half way.
- *
- * U turns the top layer; the still middle layer's top, y = +1/3, shows where
- * the turned layer (a square turned 45 degrees, a diamond) does not cover
- * it: the corners, |x| + |z| > sqrt 2. At rest the line of sight to this
- * point lands well inside a front-face sticker, green -- not a body at all.
- * Worked out by ray-casting from the home eye, with a tenth of a unit to
- * spare from every seam.
- */
-constexpr rubiks::math::Vec3 kCutOfUTurn{0.70f, 1.0f / 3.0f, 0.85f};
-/** The same for R: the still layers' +X cut at x = +1/3. */
-constexpr rubiks::math::Vec3 kCutOfRTurn{1.0f / 3.0f, 0.70f, 0.85f};
-
 void require_corners(std::uint32_t width, std::uint32_t height)
 {
-    require_pixel(pixel_at(0, 0, width), kBackground);
-    require_pixel(pixel_at(width - 1, 0, width), kBackground);
-    require_pixel(pixel_at(0, height - 1, width), kBackground);
-    require_pixel(pixel_at(width - 1, height - 1, width), kBackground);
+    require_pixel(pixel_at(0, 0, width), kDarkGround);
+    require_pixel(pixel_at(width - 1, 0, width), kDarkGround);
+    require_pixel(pixel_at(0, height - 1, width), kDarkGround);
+    require_pixel(pixel_at(width - 1, height - 1, width), kDarkGround);
 }
 
 void require_scene(std::uint32_t width, std::uint32_t height)
@@ -403,9 +281,9 @@ int guide_pixels(float left, float top, float right, float bottom,
                 const auto guide = rubiks::graphics::guide_color(axis);
                 const float cover = static_cast<float>(guide.a) / 255.0f;
                 const std::array<float, 3> over{
-                    guide.r * cover + kBackground[0] * (1.0f - cover),
-                    guide.g * cover + kBackground[1] * (1.0f - cover),
-                    guide.b * cover + kBackground[2] * (1.0f - cover)};
+                    guide.r * cover + kDarkGround[0] * (1.0f - cover),
+                    guide.g * cover + kDarkGround[1] * (1.0f - cover),
+                    guide.b * cover + kDarkGround[2] * (1.0f - cover)};
 
                 constexpr float kSlack = 12.0f;
                 if (std::abs(pixel[0] - over[0]) < kSlack &&
@@ -702,9 +580,9 @@ TEST_CASE("the ring diagram renders every sticker and the loops beneath them")
             (static_cast<int>(channel) * ring.a +
              static_cast<int>(under) * (255 - ring.a)) / 255);
     };
-    const std::array<int, 3> expected{over_background(ring.r, kBackground[0]),
-                                      over_background(ring.g, kBackground[1]),
-                                      over_background(ring.b, kBackground[2])};
+    const std::array<int, 3> expected{over_background(ring.r, kDarkGround[0]),
+                                      over_background(ring.g, kDarkGround[1]),
+                                      over_background(ring.b, kDarkGround[2])};
 
     std::size_t drawn = 0;
     for (std::uint32_t y = 0; y < kSize; ++y) {

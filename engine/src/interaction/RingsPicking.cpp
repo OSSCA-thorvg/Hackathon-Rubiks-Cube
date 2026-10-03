@@ -10,7 +10,8 @@ std::optional<RingsPick> pick_rings(float x, float y,
                                     const graphics::Rect& rect, int size)
 {
     if (!std::isfinite(x) || !std::isfinite(y)) return std::nullopt;
-    if (rect.width <= 0.0f || rect.height <= 0.0f || size < 2) {
+    if (rect.width <= 0.0f || rect.height <= 0.0f ||
+        size < cube::kMinCubeSize) {
         return std::nullopt;
     }
 

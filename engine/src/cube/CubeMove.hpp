@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 
 namespace rubiks::cube {
 
@@ -44,6 +45,20 @@ inline constexpr std::size_t kAxisCount = 3;
 /** Bitmask over layer indices 0 ... N-1 along a move's axis. */
 using LayerMask = std::uint32_t;
 
+/**
+ * How many layers a mask has a bit for.
+ *
+ * A cube has to be narrower than this to be turned at all. Whether a mask
+ * stays inside a cube is asked by shifting it down by the cube's size, and a
+ * shift by the whole width of the type is not defined, so the widest cube the
+ * domain turns is one layer short of the mask and every function that is
+ * handed a size refuses one this wide.
+ */
+inline constexpr int kLayerMaskBits = std::numeric_limits<LayerMask>::digits;
+
+/** The smallest cube there is: a single layer has nothing to turn against. */
+inline constexpr int kMinCubeSize = 2;
+
 /** The mask selecting a single layer. */
 [[nodiscard]] constexpr LayerMask layer(int index) noexcept
 {
@@ -81,7 +96,7 @@ using LayerMask = std::uint32_t;
  */
 [[nodiscard]] constexpr bool is_layer_run(LayerMask layers, int size) noexcept
 {
-    if (layers == 0 || size <= 0 || size >= 32) return false;
+    if (layers == 0 || size <= 0 || size >= kLayerMaskBits) return false;
     if ((layers >> size) != 0) return false;
 
     // Slid down until the run starts at the bottom, a run and only a run is

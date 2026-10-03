@@ -620,7 +620,9 @@ PaintReading read_painting(int size, const std::vector<FaceColor>& painting)
 {
     PaintReading refused;
     refused.fault = PaintFault::ColourCount;
-    if (size < 2 || size > 64) return refused;
+    // A cube nothing could turn is not read: one layer has nothing to turn
+    // against, and past the width of a mask a layer has no bit to be named by.
+    if (size < kMinCubeSize || size >= kLayerMaskBits) return refused;
 
     const Frame& frame = frame_for(size);
     if (painting.size() != frame.slots().size()) return refused;

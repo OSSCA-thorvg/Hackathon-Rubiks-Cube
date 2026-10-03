@@ -182,7 +182,7 @@ void pointer_cancel() noexcept;
  *
  * Both ends are read in one place, so moving either is one number.
  */
-inline constexpr int kMinCubeSize = 2;
+inline constexpr int kMinCubeSize = cube::kMinCubeSize;
 inline constexpr int kMaxCubeSize = cube::kPackedMaxLayers;
 
 /**

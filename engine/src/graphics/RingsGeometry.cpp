@@ -63,10 +63,10 @@ using math::kPi;
 {
     // A cube whose layers no longer fit in a mask cannot be drawn either, so
     // the table covers every size that could reach here.
-    constexpr int kSizes = 32;
+    constexpr int kSizes = cube::kLayerMaskBits;
     static std::array<float, kSizes> spacing{};
 
-    if (size < 2 || size >= kSizes) return 1.0f;
+    if (size < cube::kMinCubeSize || size >= kSizes) return 1.0f;
     if (spacing[static_cast<std::size_t>(size)] > 0.0f) {
         return spacing[static_cast<std::size_t>(size)];
     }

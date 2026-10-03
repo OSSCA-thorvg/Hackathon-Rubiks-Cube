@@ -32,8 +32,14 @@ inline constexpr std::uint32_t kPackedTurnsShift = 2;
 inline constexpr std::uint32_t kPackedTurnsMask = 0x3;
 inline constexpr std::uint32_t kPackedLayerShift = 4;
 
-/** How many layers the mask field holds; a wider cube cannot be packed. */
-inline constexpr int kPackedMaxLayers = 28;
+/**
+ * How many layers the mask field holds; a wider cube cannot be packed.
+ *
+ * The word is as wide as a layer mask, and the fields below the layers take
+ * their bits out of it.
+ */
+inline constexpr int kPackedMaxLayers =
+    kLayerMaskBits - static_cast<int>(kPackedLayerShift);
 
 /**
  * The three turns a quarter-turn count is written as.

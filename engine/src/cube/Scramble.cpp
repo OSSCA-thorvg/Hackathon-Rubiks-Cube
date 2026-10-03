@@ -57,7 +57,7 @@ std::vector<CubeMove> make_scramble(int size, std::uint32_t seed,
                                     std::size_t move_count)
 {
     std::vector<CubeMove> sequence;
-    if (size < 2 || move_count == 0) return sequence;
+    if (size < kMinCubeSize || move_count == 0) return sequence;
 
     // Half the cube, rounded down: a wide move deeper than that is the same
     // layers turned from the other side, and on an odd cube the middle slice

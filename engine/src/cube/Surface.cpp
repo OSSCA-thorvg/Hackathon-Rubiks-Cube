@@ -128,7 +128,7 @@ int outer_layer(Face face, int size) noexcept
 LayerMask depth_layers(Face face, int first_depth, int last_depth,
                        int size) noexcept
 {
-    if (size <= 0 || size >= 32) return 0;
+    if (size <= 0 || size >= kLayerMaskBits) return 0;
     if (first_depth < 1 || last_depth < first_depth || last_depth > size) {
         return 0;
     }
@@ -236,7 +236,7 @@ std::vector<SurfaceSticker> surface_stickers(int size)
 std::vector<SurfaceSticker> ring_slots(Axis axis, int layer, int size)
 {
     std::vector<SurfaceSticker> slots;
-    if (size < 2 || layer < 0 || layer >= size) return slots;
+    if (size < kMinCubeSize || layer < 0 || layer >= size) return slots;
 
     const auto cycle = sticker_cycle(axis);
     const Face first = cycle.front();

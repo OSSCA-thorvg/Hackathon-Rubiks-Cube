@@ -81,10 +81,8 @@ inline void apply_all(cube::CubeState& cube,
 }
 
 /**
- * A cube of `size` scrambled with the application's own generator.
- *
- * Forty moves unless a test says otherwise, which is enough to leave no part
- * of a cube of any size the tests reach where it began.
+ * A cube of `size` scrambled with the application's own generator, by forty
+ * moves unless a test says otherwise.
  */
 [[nodiscard]] inline cube::CubeState scrambled(std::uint32_t seed, int size,
                                                std::size_t moves = 40)

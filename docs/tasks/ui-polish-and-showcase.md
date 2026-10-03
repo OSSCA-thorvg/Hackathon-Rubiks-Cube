@@ -607,6 +607,8 @@ private:
 };
 ```
 
+> **개정 (2026-10-04)**: `background_`의 초기값은 이제 literal이 아니라 `graphics::canvas_background(graphics::CanvasTheme::Dark)`입니다. Engine 안에서 Dark ground의 값이 `canvas_background()` 한 곳에만 적히게 하려는 것이고, 값 자체는 `{32, 32, 32, 255}` 그대로라 pixel contract는 바뀌지 않습니다. 이 기본값 때문에 `ThorVGSoftwareRenderer.hpp`는 `graphics/CanvasTheme.hpp`를 include합니다. `Renderer` 경계는 그대로입니다. `set_background()`는 여전히 최종 color만 받고 theme은 renderer로 넘어오지 않습니다.
+
 `ApplicationState`가 `CanvasTheme`을 소유하고 `set_canvas_theme()`에서 renderer의 background를 바꿉니다. Cube state, camera, timeline, timer, busy state는 건드리지 않습니다. Theme 변경은 palette처럼 animation 중에도 허용합니다.
 
 ### ABI

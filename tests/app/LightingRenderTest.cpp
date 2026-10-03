@@ -1,17 +1,14 @@
 #include <algorithm>
-#include <array>
-#include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include "EngineLifecycle.hpp"
+#include "RendererFrame.hpp"
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Light.hpp"
 #include "graphics/RenderScene.hpp"
-#include "render/ThorVGSoftwareRenderer.hpp"
 
 // The renderer's side of Phase 19: how a shadow group and a highlight are
 // composed out of ThorVG's scenes, effects, masks and blends. Hand-built
@@ -27,56 +24,21 @@ using rubiks::graphics::RenderScene;
 using rubiks::graphics::RenderShadow;
 using rubiks::graphics::Rect;
 using rubiks::math::Vec2;
-using rubiks::render::ThorVGSoftwareRenderer;
+using rubiks::test::draw;
+using rubiks::test::Frame;
+using rubiks::test::is_ground;
+using rubiks::test::kDark;
+using rubiks::test::kLight;
+using rubiks::test::quad;
+using rubiks::test::Rgba;
+using rubiks::test::same_rgb;
 
 constexpr std::uint32_t kSide = 256;
-constexpr Color kDark{32, 32, 32, 255};
-constexpr Color kLight{231, 235, 240, 255};
-
-using Rgba = std::array<std::uint8_t, 4>;
-
-struct Frame {
-    std::unique_ptr<ThorVGSoftwareRenderer> renderer;
-
-    Rgba at(std::uint32_t x, std::uint32_t y) const
-    {
-        const auto* bytes =
-            reinterpret_cast<const std::uint8_t*>(renderer->pixel_buffer());
-        const std::size_t offset = (static_cast<std::size_t>(y) * kSide + x) * 4;
-        return Rgba{bytes[offset], bytes[offset + 1], bytes[offset + 2],
-                    bytes[offset + 3]};
-    }
-
-    int luminance(std::uint32_t x, std::uint32_t y) const
-    {
-        const Rgba pixel = at(x, y);
-        return int{pixel[0]} + int{pixel[1]} + int{pixel[2]};
-    }
-};
-
-/** Renders a scene over a ground colour. The engine has to be up for ThorVG. */
-Frame draw(const RenderScene& scene, Color ground = kDark)
-{
-    Frame frame{ThorVGSoftwareRenderer::create(kSide, kSide)};
-    REQUIRE(frame.renderer);
-    frame.renderer->set_background(ground);
-    REQUIRE(frame.renderer->render(scene));
-    return frame;
-}
 
 std::vector<Vec2> rectangle(float left, float top, float right, float bottom)
 {
     return {Vec2{left, top}, Vec2{right, top}, Vec2{right, bottom},
             Vec2{left, bottom}};
-}
-
-RenderFace quad(float left, float top, float right, float bottom, Color color)
-{
-    RenderFace face;
-    face.points = {Vec2{left, top}, Vec2{right, top}, Vec2{right, bottom},
-                   Vec2{left, bottom}};
-    face.color = color;
-    return face;
 }
 
 /** A shadow across the middle of the canvas, faded left to right. */
@@ -92,11 +54,6 @@ RenderShadow band()
     return shadow;
 }
 
-bool same_rgb(const Rgba& a, const Rgba& b)
-{
-    return a[0] == b[0] && a[1] == b[1] && a[2] == b[2];
-}
-
 }  // namespace
 
 TEST_CASE("the shadow darkens the ground on both themes and nowhere else")
@@ -107,7 +64,7 @@ TEST_CASE("the shadow darkens the ground on both themes and nowhere else")
     scene.shadow = band();
 
     for (const auto& ground : {kDark, kLight}) {
-        const Frame frame = draw(scene, ground);
+        const Frame frame = draw(scene, kSide, ground);
         const Rgba plain{ground.r, ground.g, ground.b, 255};
 
         // Inside, near the dark anchor: darker than the ground.
@@ -130,8 +87,8 @@ TEST_CASE("two casters overlapping are no darker than one")
     two.shadow->polygons.push_back(rectangle(20.0f, 100.0f, 236.0f, 156.0f));
     two.shadow->polygons.push_back(rectangle(60.0f, 110.0f, 200.0f, 150.0f));
 
-    const Frame single = draw(one);
-    const Frame doubled = draw(two);
+    const Frame single = draw(one, kSide);
+    const Frame doubled = draw(two, kSide);
     for (std::uint32_t x = 24; x < 232; x += 8) {
         for (std::uint32_t y = 104; y < 152; y += 8) {
             INFO("pixel " << x << ", " << y);
@@ -146,7 +103,7 @@ TEST_CASE("the shadow fades from its anchor towards its far end")
 
     RenderScene scene;
     scene.shadow = band();
-    const Frame frame = draw(scene);
+    const Frame frame = draw(scene, kSide);
 
     // Along the middle row, from the anchor outwards, it only gets lighter --
     // within the one unit per channel that gradient and blur rounding move.
@@ -173,7 +130,7 @@ TEST_CASE("a light overhead fades the shadow evenly outwards")
     scene.shadow->polygons = {rectangle(48.0f, 48.0f, 208.0f, 208.0f)};
     scene.shadow->fade_start = Vec2{128.0f, 128.0f};
     scene.shadow->fade_end = Vec2{129.0f, 128.0f};  // no direction to speak of
-    const Frame frame = draw(scene);
+    const Frame frame = draw(scene, kSide);
 
     // Darkest in the middle, lighter towards every side alike.
     const int middle = frame.luminance(128, 128);
@@ -195,7 +152,7 @@ TEST_CASE("the blur softens the shadow's edge")
     scene.shadow->polygons = {rectangle(48.0f, 48.0f, 208.0f, 208.0f)};
     scene.shadow->fade_start = Vec2{128.0f, 128.0f};
     scene.shadow->fade_end = Vec2{128.0f, 128.0f};
-    const Frame frame = draw(scene);
+    const Frame frame = draw(scene, kSide);
 
     // Two pixels inside the outline are lighter than the deep inside, and two
     // pixels outside it are darker than the ground: the edge has been spread.
@@ -212,13 +169,13 @@ TEST_CASE("the clip keeps the shadow inside its region")
     RenderScene scene;
     scene.shadow = band();
     scene.shadow->clip = Rect{0.0f, 0.0f, 128.0f, kSide};
-    const Frame frame = draw(scene);
+    const Frame frame = draw(scene, kSide);
 
     // The band runs to x = 236, but the clip ends at 128: everything to the
     // right of it, blur included, is the ground exactly.
     for (std::uint32_t x = 129; x < kSide; x += 3) {
         INFO("column " << x);
-        REQUIRE(same_rgb(frame.at(x, 128), Rgba{32, 32, 32, 255}));
+        REQUIRE(is_ground(frame.at(x, 128), kDark));
     }
     REQUIRE(frame.luminance(100, 128) < 32 * 3);
 }
@@ -233,7 +190,7 @@ TEST_CASE("the cube's body shows through its seams and keeps the shadow out")
     // Two stickers inside the silhouette with a seam between them.
     scene.faces.push_back(quad(104.0f, 96.0f, 126.0f, 160.0f, Color{200, 0, 0, 255}));
     scene.faces.push_back(quad(130.0f, 96.0f, 152.0f, 160.0f, Color{0, 200, 0, 255}));
-    const Frame frame = draw(scene);
+    const Frame frame = draw(scene, kSide);
 
     // The seam shows the cubie body and only the body, though the shadow
     // polygon runs straight under it: dark plastic, not the ground.
@@ -261,7 +218,7 @@ TEST_CASE("a highlight brightens its own face and never a face in front")
     scene.faces.push_back(behind);
     // A face drawn after it, covering its right half.
     scene.faces.push_back(quad(128.0f, 40.0f, 216.0f, 216.0f, Color{60, 60, 60, 255}));
-    const Frame frame = draw(scene);
+    const Frame frame = draw(scene, kSide);
 
     // The glint brightens the back face towards white, most at its centre...
     REQUIRE(frame.luminance(120, 128) > 40 + 90 + 160);
@@ -291,6 +248,6 @@ TEST_CASE("a shadow with no strength draws nothing")
     RenderScene scene;
     scene.shadow = band();
     scene.shadow->opacity = 0;
-    const Frame frame = draw(scene);
-    REQUIRE(same_rgb(frame.at(48, 128), Rgba{32, 32, 32, 255}));
+    const Frame frame = draw(scene, kSide);
+    REQUIRE(is_ground(frame.at(48, 128), kDark));
 }

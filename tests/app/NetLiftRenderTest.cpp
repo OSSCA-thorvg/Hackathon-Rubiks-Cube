@@ -1,17 +1,13 @@
-#include <algorithm>
-#include <array>
-#include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <utility>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include "EngineLifecycle.hpp"
+#include "RendererFrame.hpp"
 #include "graphics/Light.hpp"
 #include "graphics/RenderScene.hpp"
-#include "render/ThorVGSoftwareRenderer.hpp"
 
 // The renderer's side of Phase 19.5: a storey of lifted pieces as one scene
 // with ThorVG's drop shadow under it. Hand-built RenderScenes rendered into a
@@ -21,66 +17,20 @@ namespace {
 
 using rubiks::graphics::Color;
 using rubiks::graphics::LiftShadow;
-using rubiks::graphics::RenderFace;
 using rubiks::graphics::RenderGroup;
 using rubiks::graphics::RenderScene;
-using rubiks::math::Vec2;
-using rubiks::render::ThorVGSoftwareRenderer;
+using rubiks::test::draw;
+using rubiks::test::Frame;
+using rubiks::test::is_ground;
+using rubiks::test::kDark;
+using rubiks::test::kLight;
+using rubiks::test::quad;
+using rubiks::test::Rgba;
+using rubiks::test::same_rgb;
 
 constexpr std::uint32_t kSide = 128;
-constexpr Color kDark{32, 32, 32, 255};
-constexpr Color kLight{231, 235, 240, 255};
 constexpr Color kGreen{0, 155, 72, 255};
 constexpr Color kOrange{255, 88, 0, 255};
-
-using Rgba = std::array<std::uint8_t, 4>;
-
-struct Frame {
-    std::unique_ptr<ThorVGSoftwareRenderer> renderer;
-
-    Rgba at(std::uint32_t x, std::uint32_t y) const
-    {
-        const auto* bytes =
-            reinterpret_cast<const std::uint8_t*>(renderer->pixel_buffer());
-        const std::size_t offset = (static_cast<std::size_t>(y) * kSide + x) * 4;
-        return Rgba{bytes[offset], bytes[offset + 1], bytes[offset + 2],
-                    bytes[offset + 3]};
-    }
-
-    int luminance(std::uint32_t x, std::uint32_t y) const
-    {
-        const Rgba pixel = at(x, y);
-        return int{pixel[0]} + int{pixel[1]} + int{pixel[2]};
-    }
-
-    bool same_as(const Frame& other) const
-    {
-        const auto* a =
-            reinterpret_cast<const std::uint8_t*>(renderer->pixel_buffer());
-        const auto* b =
-            reinterpret_cast<const std::uint8_t*>(other.renderer->pixel_buffer());
-        return std::equal(a, a + kSide * kSide * 4, b);
-    }
-};
-
-/** Renders a scene over a ground colour. The engine has to be up for ThorVG. */
-Frame draw(const RenderScene& scene, Color ground = kDark)
-{
-    Frame frame{ThorVGSoftwareRenderer::create(kSide, kSide)};
-    REQUIRE(frame.renderer);
-    frame.renderer->set_background(ground);
-    REQUIRE(frame.renderer->render(scene));
-    return frame;
-}
-
-RenderFace quad(float left, float top, float right, float bottom, Color color)
-{
-    RenderFace face;
-    face.points = {Vec2{left, top}, Vec2{right, top}, Vec2{right, bottom},
-                   Vec2{left, bottom}};
-    face.color = color;
-    return face;
-}
 
 /** One square held off the page, its shadow `distance` down and to the right. */
 RenderGroup lifted(float left, float top, float side, Color color,
@@ -90,16 +40,6 @@ RenderGroup lifted(float left, float top, float side, Color color,
     group.faces.push_back(quad(left, top, left + side, top + side, color));
     group.shadow = LiftShadow{distance, 100, 0.5f * distance};
     return group;
-}
-
-bool same_rgb(const Rgba& a, const Rgba& b)
-{
-    return a[0] == b[0] && a[1] == b[1] && a[2] == b[2];
-}
-
-bool is_ground(const Rgba& pixel, Color ground)
-{
-    return pixel[0] == ground.r && pixel[1] == ground.g && pixel[2] == ground.b;
 }
 
 /**
@@ -130,7 +70,7 @@ TEST_CASE("a lifted piece shades the ground down and to the right of it")
     scene.groups.push_back(lifted(40.0f, 40.0f, 40.0f, kGreen, 7.0f));
 
     for (const auto& ground : {kDark, kLight}) {
-        const Frame frame = draw(scene, ground);
+        const Frame frame = draw(scene, kSide, ground);
 
         // The piece itself, in its own colour.
         REQUIRE(same_rgb(frame.at(60, 60), Rgba{kGreen.r, kGreen.g, kGreen.b, 255}));
@@ -163,8 +103,8 @@ TEST_CASE("a higher storey's shadow falls further")
     RenderScene high;
     high.groups.push_back(lifted(30.0f, 30.0f, 30.0f, kGreen, 8.0f));
 
-    const Frame near = draw(low, kLight);
-    const Frame far = draw(high, kLight);
+    const Frame near = draw(low, kSide, kLight);
+    const Frame far = draw(high, kSide, kLight);
     // Both shadows reach past the piece's edge at 60, to the right along a
     // row through the piece's middle and down along a column through it, and
     // the further lift reaches further on both -- by the extra push along
@@ -192,7 +132,7 @@ TEST_CASE("an upper storey shades the storey below it and not itself")
     upper.shadow = LiftShadow{8.0f, 100, 1.0f};
     scene.groups.push_back(upper);
 
-    const Frame frame = draw(scene, kLight);
+    const Frame frame = draw(scene, kSide, kLight);
 
     // The upper piece is whole: its own shadow does not darken it.
     REQUIRE(same_rgb(frame.at(64, 64), Rgba{kOrange.r, kOrange.g, kOrange.b, 255}));
@@ -223,8 +163,8 @@ TEST_CASE("a scene with no groups is the frame it always was")
     group.shadow = LiftShadow{0.0f, 0, 0.0f};
     grouped.groups.push_back(group);
 
-    const Frame a = draw(flat, kLight);
-    const Frame b = draw(grouped, kLight);
+    const Frame a = draw(flat, kSide, kLight);
+    const Frame b = draw(grouped, kSide, kLight);
     REQUIRE(a.same_as(b));
 }
 
@@ -242,7 +182,7 @@ TEST_CASE("the lift shadow is the ground shadow's colour")
     scene.groups.push_back(group);
 
     for (const auto& ground : {kDark, kLight}) {
-        const Frame frame = draw(scene, ground);
+        const Frame frame = draw(scene, kSide, ground);
         const Rgba expected{
             static_cast<std::uint8_t>(ground.r * rubiks::graphics::kShadowColor.r / 255),
             static_cast<std::uint8_t>(ground.g * rubiks::graphics::kShadowColor.g / 255),

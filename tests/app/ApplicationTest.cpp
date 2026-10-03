@@ -16,6 +16,8 @@ namespace {
 constexpr int kSize = 3;
 
 using rubiks::test::kFrameMs;
+using rubiks::test::run_frames;
+using rubiks::test::run_while_busy;
 using rubiks::test::settle;
 
 /**
@@ -166,12 +168,7 @@ TEST_CASE("played moves are nobody's, and the cube is busy until the last one")
     // Busy without a break from there to the end, and every frame it is busy
     // it asks for another -- between two of its moves nothing is animating,
     // so without the sequence in that answer the loop would stop halfway.
-    int frames = 0;
-    while (rubiks::app::is_busy()) {
-        REQUIRE(rubiks::app::advance(kFrameMs));
-        ++frames;
-        REQUIRE(frames < 1000);
-    }
+    const int frames = run_while_busy();
 
     REQUIRE(frames > 0);
     REQUIRE_FALSE(rubiks::app::advance(kFrameMs));
@@ -213,9 +210,7 @@ TEST_CASE("resizing and switching views leave a playing sequence alone")
 
     // A phone turned sideways part way through a scramble. Dropping the
     // sequence here would leave the cube half scrambled with nothing busy.
-    for (int frame = 0; frame < 20; ++frame) {
-        static_cast<void>(rubiks::app::advance(kFrameMs));
-    }
+    run_frames(20);
     REQUIRE(rubiks::app::resize_surface(0, 320, 200));
     REQUIRE(rubiks::app::set_view_mode(ViewMode::Flat));
     REQUIRE(rubiks::app::set_flat_style(FlatStyle::Rings));
@@ -235,9 +230,7 @@ TEST_CASE("discarding a sequence stops it where the last commit left it")
     // Part way in, with a turn of the sequence in flight. The player and that
     // turn go together: left behind, it would commit onto the fresh cube some
     // frames later and reset would have quietly kept one move of the old one.
-    for (int frame = 0; frame < 12; ++frame) {
-        static_cast<void>(rubiks::app::advance(kFrameMs));
-    }
+    run_frames(12);
 
     rubiks::app::reset_cube();
     REQUIRE_FALSE(rubiks::app::is_busy());

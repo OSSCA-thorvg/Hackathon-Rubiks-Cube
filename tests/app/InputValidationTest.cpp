@@ -50,7 +50,7 @@ TEST_CASE("repeated initialize validates dimensions before the no-op path")
 
 TEST_CASE("failed resizes preserve the previous buffer and target")
 {
-    REQUIRE(rubiks::app::initialize(64, 64));
+    const rubiks::test::EngineLifecycle engine(64, 64);
     const auto pointer = rubiks::app::surface_pixel_buffer(0);
     const auto length = rubiks::app::surface_pixel_byte_length(0);
     REQUIRE(pointer != 0);
@@ -67,6 +67,4 @@ TEST_CASE("failed resizes preserve the previous buffer and target")
     // Resizing to the current size succeeds without replacing the buffer.
     REQUIRE(rubiks::app::resize_surface(0, 64, 64));
     REQUIRE(rubiks::app::surface_pixel_buffer(0) == pointer);
-
-    rubiks::app::shutdown();
 }

@@ -18,6 +18,7 @@ namespace {
 
 using rubiks::test::arrive;
 using rubiks::test::drawn_frame;
+using rubiks::test::run_frames;
 using rubiks::test::settle;
 using rubiks::test::turn;
 
@@ -145,9 +146,7 @@ TEST_CASE("a scramble cut short by a move is shared exactly as it stands")
         REQUIRE(rubiks::app::solve_rewind());
 
         // Broken off inside the scramble, which is where the boundary moves.
-        for (int frame = 0; frame < 40; ++frame) {
-            static_cast<void>(rubiks::app::advance(rubiks::test::kFrameMs));
-        }
+        run_frames(40);
         rubiks::app::stop_playback();
 
         cut_at = rubiks::app::timeline_cursor();
@@ -365,9 +364,7 @@ TEST_CASE("a restored record brings the cube it was made on")
     // The record is playable on the cube it arrived with: rewinding it leaves
     // a solved 5x5 rather than reaching for a layer that is not there.
     REQUIRE(rubiks::app::solve_rewind());
-    for (int frame = 0; frame < 400; ++frame) {
-        static_cast<void>(rubiks::app::advance(16.0));
-    }
+    run_frames(400);
     REQUIRE(rubiks::app::is_solved());
     REQUIRE(rubiks::app::cube_size() == 5);
 }

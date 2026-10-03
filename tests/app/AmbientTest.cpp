@@ -18,15 +18,8 @@ namespace {
 using rubiks::test::apply_all;
 using rubiks::test::drawn_frame;
 using rubiks::test::kFrameMs;
+using rubiks::test::run_frames;
 using rubiks::test::settle;
-
-/** Runs a fixed number of frames, for watching, which never settles. */
-void run_frames(int count)
-{
-    for (int frame = 0; frame < count; ++frame) {
-        static_cast<void>(rubiks::app::advance(kFrameMs));
-    }
-}
 
 /**
  * Frames enough for several moves of a pattern to have been turned.

@@ -20,17 +20,7 @@ namespace {
 constexpr std::uint32_t kCanvas = 512;
 
 using rubiks::test::kFrameMs;
-
-/** Counts the frames a sequence or a snap takes to finish. */
-int frames_to_settle()
-{
-    int frames = 0;
-    while (rubiks::app::advance(kFrameMs)) {
-        ++frames;
-        REQUIRE(frames < 10000);
-    }
-    return frames;
-}
+using rubiks::test::settle;
 
 /** The center of the front face's right column: the grab that means R. */
 rubiks::math::Vec2 front_right_column()
@@ -68,7 +58,7 @@ int frames_for_released_drag()
     REQUIRE(rubiks::app::pointer_down_on(0, grab.x, grab.y));
     rubiks::app::pointer_move(grab.x, grab.y - 50.0f * pixels_per_degree());
     rubiks::app::pointer_up();
-    return frames_to_settle();
+    return settle();
 }
 
 }  // namespace
@@ -119,13 +109,13 @@ TEST_CASE("a played sequence runs shorter at a higher multiplier")
     {
         const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
         REQUIRE(rubiks::app::scramble(11U, 8U));
-        at_one = frames_to_settle();
+        at_one = settle();
     }
     {
         const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
         REQUIRE(rubiks::app::set_speed_scale(2.0f));
         REQUIRE(rubiks::app::scramble(11U, 8U));
-        at_two = frames_to_settle();
+        at_two = settle();
     }
 
     // Fewer frames, not exactly half of them: a fixed step lands where it
@@ -174,7 +164,7 @@ TEST_CASE("a turn already running keeps the duration it began with")
     REQUIRE(rubiks::app::set_speed_scale(4.0f));
     REQUIRE(rubiks::app::speed_scale() == 4.0f);
 
-    const int rest = frames_to_settle();
+    const int rest = settle();
     REQUIRE(rest > 0);
     REQUIRE_FALSE(rubiks::app::is_busy());
 }

@@ -21,6 +21,7 @@ namespace {
 using rubiks::test::arrive;
 using rubiks::test::drawn_frame;
 using rubiks::test::kFrameMs;
+using rubiks::test::run_frames;
 using rubiks::test::settle;
 using rubiks::test::turn;
 
@@ -232,9 +233,7 @@ TEST_CASE("a solve stopped part way leaves the record where the cube is")
     REQUIRE(rubiks::app::solve_rewind());
 
     // Far enough in for the rewind to have passed into the scramble.
-    for (int frame = 0; frame < 40; ++frame) {
-        static_cast<void>(rubiks::app::advance(kFrameMs));
-    }
+    run_frames(40);
 
     rubiks::app::stop_playback();
     REQUIRE_FALSE(rubiks::app::is_busy());
@@ -267,9 +266,7 @@ TEST_CASE("a stopped rewind can be picked up again from where it stopped")
     arrive(5U, 6U);
     REQUIRE(rubiks::app::solve_rewind());
 
-    for (int frame = 0; frame < 30; ++frame) {
-        static_cast<void>(rubiks::app::advance(kFrameMs));
-    }
+    run_frames(30);
     rubiks::app::stop_playback();
 
     const auto stopped_at = rubiks::app::timeline_cursor();
@@ -294,9 +291,7 @@ TEST_CASE("only a rewind can be stopped")
         const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
         REQUIRE(rubiks::app::scramble(9U, 6U));
-        for (int frame = 0; frame < 10; ++frame) {
-            static_cast<void>(rubiks::app::advance(kFrameMs));
-        }
+        run_frames(10);
 
         // A scramble stopped half way is a cube nobody asked for, so the
         // default keeps this sequence out of reach of the command.
@@ -312,9 +307,7 @@ TEST_CASE("only a rewind can be stopped")
         const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
         REQUIRE(rubiks::app::ambient_start(0));
-        for (int frame = 0; frame < 40; ++frame) {
-            static_cast<void>(rubiks::app::advance(kFrameMs));
-        }
+        run_frames(40);
 
         // Stopping it this way would leave the borrowed cube where the pattern
         // had got to, with nothing to put it back.
@@ -451,9 +444,7 @@ TEST_CASE("watching leaves no trace on the record")
     turn(rubiks::cube::Face::Right, 1);
 
     REQUIRE(rubiks::app::ambient_start(0));
-    for (int frame = 0; frame < 600; ++frame) {
-        static_cast<void>(rubiks::app::advance(kFrameMs));
-    }
+    run_frames(600);
     rubiks::app::ambient_stop();
 
     // Long past the end of a four-move pattern, so it has plainly gone round
@@ -498,9 +489,7 @@ TEST_CASE("a command that makes a new cube throws the rewind away with it")
     arrive(29U, 8U);
     REQUIRE(rubiks::app::solve_rewind());
 
-    for (int frame = 0; frame < 20; ++frame) {
-        static_cast<void>(rubiks::app::advance(kFrameMs));
-    }
+    run_frames(20);
 
     // The same discard a scramble uses, with nothing added to its list: what a
     // rewind leaves behind is a player, and that is already on it.

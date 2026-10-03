@@ -5,6 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "GraphicsSupport.hpp"
 #include "app/Application.hpp"
 #include "cube/Cubie.hpp"
 
@@ -41,9 +42,6 @@ struct EngineLifecycle {
     return rubiks::app::cube_size() != 0;
 }
 
-/** One frame of elapsed time, at the rate a display would deliver them. */
-inline constexpr double kFrameMs = 16.0;
-
 /**
  * Runs frames until the application stops asking for them.
  *
@@ -63,6 +61,40 @@ inline int settle()
 {
     int frames = 0;
     while (rubiks::app::advance(kFrameMs)) {
+        ++frames;
+        REQUIRE(frames < 4000);
+    }
+    return frames;
+}
+
+/**
+ * Runs exactly `count` frames, whatever the application says of each.
+ *
+ * For a test that wants to be part of the way through something, or to give
+ * something that should not happen the time it would need to happen in.
+ */
+inline void run_frames(int count)
+{
+    for (int frame = 0; frame < count; ++frame) {
+        static_cast<void>(rubiks::app::advance(kFrameMs));
+    }
+}
+
+/**
+ * Runs frames for as long as the application is busy, and requires each of
+ * them to ask for the next.
+ *
+ * settle() stops when a frame says no more are needed; this one asks the
+ * question a caller outside the frame loop asks, and so pins that the two
+ * answers agree while a sequence plays.
+ *
+ * @return how many frames it took, under the same guard as settle().
+ */
+inline int run_while_busy()
+{
+    int frames = 0;
+    while (rubiks::app::is_busy()) {
+        REQUIRE(rubiks::app::advance(kFrameMs));
         ++frames;
         REQUIRE(frames < 4000);
     }

@@ -525,14 +525,12 @@ TEST_CASE("a sliding turn half way through rasterizes in both views")
 
     // Both views come back to rest together, and undoing the turn puts the
     // whole resting contract back exactly as it was.
-    while (rubiks::app::advance(16.0)) {
-    }
+    rubiks::test::settle();
     REQUIRE(rubiks::app::render());
     REQUIRE_FALSE(is_lit_body(pixel_at_world(kCutOfUTurn, kSize, kSize)));
 
     REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Up, 1, 1, -1));
-    while (rubiks::app::advance(16.0)) {
-    }
+    rubiks::test::settle();
     require_scene(kSize, kSize);
 }
 
@@ -566,8 +564,7 @@ TEST_CASE("a turn across a cut band half way through rasterizes in both views")
 
     // And the turn arrives exactly where the commit puts the cube, so the
     // frame after it is the same picture.
-    while (rubiks::app::advance(16.0)) {
-    }
+    rubiks::test::settle();
     REQUIRE(rubiks::app::render());
     require_pixel(pixel_in_net(5.5f, 0.5f, kSize, kSize), kGreen);
     require_pixel(pixel_in_net(5.5f, 2.5f, kSize, kSize), kGreen);
@@ -623,8 +620,7 @@ TEST_CASE("pressing a net cell draws the rings it could turn on")
 
     // Releasing ends the gesture, so the guide goes with it.
     rubiks::app::pointer_up();
-    while (rubiks::app::advance(16.0)) {
-    }
+    rubiks::test::settle();
     REQUIRE(rubiks::app::render());
     REQUIRE(below() == 0);
     REQUIRE(beside() == 0);

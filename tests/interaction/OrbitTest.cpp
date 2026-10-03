@@ -6,6 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "CubeSupport.hpp"
+#include "GraphicsSupport.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/OrbitCamera.hpp"
 #include "interaction/InteractionController.hpp"
@@ -16,10 +17,10 @@ using Catch::Approx;
 using namespace rubiks::interaction;
 using rubiks::graphics::Camera;
 using rubiks::graphics::Rect;
+using rubiks::test::kFrameMs;
 
 constexpr int kSize = 3;
 constexpr std::uint32_t kCanvas = 1024;
-constexpr double kFrameMs = 16.0;
 
 Rect cube_rect()
 {

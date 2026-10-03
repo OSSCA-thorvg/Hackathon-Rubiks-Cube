@@ -12,6 +12,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "CubeSupport.hpp"
+#include "GraphicsSupport.hpp"
 #include "cube/CubeState.hpp"
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
@@ -32,10 +33,10 @@ using rubiks::graphics::Camera;
 using rubiks::graphics::Rect;
 using rubiks::math::Vec2;
 using rubiks::math::Vec3;
+using rubiks::test::kFrameMs;
 
 constexpr int kSize = 3;
 constexpr std::uint32_t kCanvas = 1024;
-constexpr double kFrameMs = 16.0;
 
 /**
  * An unmistakable one quarter turn of drag.
@@ -951,7 +952,7 @@ TEST_CASE("a piece lifts once for a turn and stays up until it settles")
 
     for (const float faces : {-0.5f, -1.0f, -1.4f, -0.05f, -2.5f}) {
         drag_net(controller, Face::Front, 1, 0, faces, 0.0f);
-        static_cast<void>(controller.advance(16.0));
+        static_cast<void>(controller.advance(kFrameMs));
 
         const auto turning = controller.active_rotation();
         REQUIRE(turning);
@@ -963,8 +964,7 @@ TEST_CASE("a piece lifts once for a turn and stays up until it settles")
 
     // And the release closes it, so the commit lands on a settled drawing.
     controller.pointer_up();
-    while (controller.advance(16.0)) {
-    }
+    settle(controller);
     REQUIRE_FALSE(controller.active_rotation());
 }
 

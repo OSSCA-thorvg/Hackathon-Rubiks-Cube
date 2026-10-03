@@ -98,6 +98,7 @@ constexpr std::uint32_t kCanvas = 1024;
 constexpr int kCubeSize = 3;
 
 using rubiks::test::kFrameMs;
+using rubiks::test::run_while_busy;
 using rubiks::test::settle;
 
 /**
@@ -1032,7 +1033,7 @@ TEST_CASE("shutdown returns the viewpoint home")
 
 TEST_CASE("a layer still turns correctly after the viewpoint moves")
 {
-    REQUIRE(rubiks::app::initialize(kCanvas, kCanvas));
+    const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
     // A whole turn of the viewpoint lands back where it started, so the
     // gesture that means R at home has to still mean R here.
@@ -1046,8 +1047,6 @@ TEST_CASE("a layer still turns correctly after the viewpoint moves")
     settle();
 
     require_up_right_column(kGreen);
-
-    rubiks::app::shutdown();
 }
 
 TEST_CASE("shutdown clears the gesture along with the cube")
@@ -1236,12 +1235,7 @@ TEST_CASE("a sequence plays on while the viewpoint is being swept")
 
     // A sweep is not busy, so every move still finds the controller free. If
     // one did not, this loop would never see the sequence end.
-    int frames = 0;
-    while (rubiks::app::is_busy()) {
-        REQUIRE(rubiks::app::advance(kFrameMs));
-        ++frames;
-        REQUIRE(frames < 1000);
-    }
+    run_while_busy();
 
     rubiks::app::pointer_up();
     settle();

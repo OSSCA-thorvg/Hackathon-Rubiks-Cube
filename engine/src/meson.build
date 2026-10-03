@@ -101,7 +101,7 @@ if host_machine.system() == 'emscripten'
 
   executable(
     'thorvg-rubiks',
-    files('platform/web/bindings.cpp'),
+    files('bindings/capi.cpp'),
     dependencies: application_dep,
     link_args: [
       '--no-entry',

@@ -152,7 +152,7 @@ engine/src/
 ├── app/Application.{hpp,cpp}     Surface, 장면별 배치, surface별 누름, frame_for와 건너뛰기
 ├── graphics/FrameInputs.{hpp,cpp} 그림마다 읽는 값과 그 비교, compose
 ├── graphics/AxisGizmo.{hpp,cpp}  draw_arms, build_axis_badge
-└── platform/web/bindings.cpp     surface ABI
+└── bindings/capi.cpp             surface ABI
 
 web/src/
 ├── wasm/CubeEngine.ts            CubeSurface, CubeScene, 모든 캔버스(surface 0 포함)를 한 경로로 표시와 복사

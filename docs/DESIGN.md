@@ -157,9 +157,8 @@ thorvg-rubiks/
 │       │   ├── Quaternion.cpp
 │       │   └── Transform.cpp
 │       │
-│       └── platform/
-│           └── web/
-│               └── bindings.cpp
+│       └── bindings/
+│           └── capi.cpp
 │
 ├── tests/                   # Native unit tests
 │   ├── cube/

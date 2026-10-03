@@ -360,19 +360,13 @@ struct ScreenRing {
 /** How far it is from one angle to another, travelling in `sense`. */
 [[nodiscard]] float forward_angle(float from, float to, float sense) noexcept
 {
-    float step = (to - from) * sense;
-    while (step < 0.0f) step += 2.0f * kPi;
-    while (step >= 2.0f * kPi) step -= 2.0f * kPi;
-    return step;
+    return math::wrapped((to - from) * sense, 2.0f * kPi);
 }
 
 /** The shorter way round from one angle to another, in radians. */
 [[nodiscard]] float toward_angle(float from, float to) noexcept
 {
-    float turn = to - from;
-    while (turn <= -kPi) turn += 2.0f * kPi;
-    while (turn > kPi) turn -= 2.0f * kPi;
-    return turn;
+    return math::wrapped_centred(to - from, 2.0f * kPi);
 }
 
 }  // namespace

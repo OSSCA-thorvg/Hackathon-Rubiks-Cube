@@ -8,6 +8,7 @@
 
 #include "graphics/NetGeometry.hpp"
 #include "graphics/RingsGeometry.hpp"
+#include "math/Angle.hpp"
 
 namespace rubiks::interaction {
 namespace {
@@ -325,9 +326,8 @@ void InteractionController::advance_rings_gesture(float x, float y) noexcept
     // way. A pointer cannot cross more than that between two events, so this
     // is what lets a drag go round and round without the angle folding over.
     const auto slots = static_cast<float>(4 * size_);
-    float step = *now - rings_gesture_->previous_slot;
-    while (step <= -0.5f * slots) step += slots;
-    while (step > 0.5f * slots) step -= slots;
+    const float step =
+        math::wrapped_centred(*now - rings_gesture_->previous_slot, slots);
 
     rings_gesture_->previous_slot = *now;
     rings_gesture_->swept_slots += step;

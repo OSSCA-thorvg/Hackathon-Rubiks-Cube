@@ -1,4 +1,5 @@
 #include <cmath>
+#include <limits>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -205,4 +206,29 @@ TEST_CASE("a quaternion turns a vector about its axis")
     {
         require_vec3(quaternion_rotate(turn, point), 0.0f, 1.0f, 0.0f);
     }
+}
+
+TEST_CASE("a value is wrapped into one period, from zero up")
+{
+    REQUIRE(wrapped(370.0f, 360.0f) == 10.0f);
+    REQUIRE(wrapped(-90.0f, 360.0f) == 270.0f);
+
+    // A hair below zero, plus the period, rounds to the period itself, which
+    // is not in the range. It is zero, whichever period it is measured in.
+    REQUIRE(wrapped(-1e-7f, 12.0f) == 0.0f);
+    REQUIRE(wrapped(-1e-6f, 360.0f) == 0.0f);
+
+    // Nothing that is not finite has a place in the period.
+    REQUIRE(wrapped(std::numeric_limits<float>::quiet_NaN(), 360.0f) == 0.0f);
+    REQUIRE(wrapped(std::numeric_limits<float>::infinity(), 360.0f) == 0.0f);
+    REQUIRE(wrapped(-std::numeric_limits<float>::infinity(), 360.0f) == 0.0f);
+}
+
+TEST_CASE("a value is wrapped into one period, half either side of zero")
+{
+    REQUIRE(wrapped_centred(7.0f, 12.0f) == -5.0f);
+
+    // The half itself belongs to the positive side, from either direction.
+    REQUIRE(wrapped_centred(6.0f, 12.0f) == 6.0f);
+    REQUIRE(wrapped_centred(-6.0f, 12.0f) == 6.0f);
 }

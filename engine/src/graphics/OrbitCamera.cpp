@@ -23,12 +23,7 @@ constexpr float kRadiansPerDegree = math::kPi / 180.0f;
 /** An equivalent angle in [0, 360). */
 [[nodiscard]] float wrapped_degrees(float degrees) noexcept
 {
-    const float remainder = std::fmod(degrees, 360.0f);
-    if (remainder >= 0.0f) return remainder;
-    // A hair below zero wraps to exactly 360 once rounded to a float, which
-    // is outside the range this promises. It is zero.
-    const float wrapped = remainder + 360.0f;
-    return wrapped < 360.0f ? wrapped : 0.0f;
+    return math::wrapped(degrees, 360.0f);
 }
 
 }  // namespace

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "cube/CubeMove.hpp"
 #include "cube/Cubie.hpp"
 #include "graphics/Color.hpp"
@@ -15,6 +17,28 @@ namespace rubiks::graphics {
  * cosmetic problem but an unreadable board.
  */
 enum class Palette { Classic, HighContrast };
+
+/**
+ * The palette an integer names, or nothing when it names none.
+ *
+ * For a value that arrives as a primitive across the C ABI, and for a caller
+ * handed an enum it cannot vouch for; the one place the question is answered
+ * for this enum. The switch has no default on purpose, so a palette added to
+ * the enum and not here is a warning from the compiler rather than a value
+ * refused in silence.
+ */
+[[nodiscard]] constexpr std::optional<Palette> palette_from(int value) noexcept
+{
+    const auto named = static_cast<Palette>(value);
+    if (static_cast<int>(named) != value) return std::nullopt;
+
+    switch (named) {
+        case Palette::Classic:
+        case Palette::HighContrast:
+            return named;
+    }
+    return std::nullopt;
+}
 
 /**
  * The only place the domain's color enum turns into pixels.

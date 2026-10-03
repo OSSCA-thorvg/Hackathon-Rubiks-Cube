@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 #include "graphics/Rect.hpp"
 
@@ -22,6 +23,34 @@ enum class ViewMode : std::uint8_t {
 };
 
 /**
+ * The view mode an integer names, or nothing when it names none.
+ *
+ * For a value that arrives as a primitive across the C ABI, and for a caller
+ * handed an enum it cannot vouch for; the one place the question is answered
+ * for this enum.
+ *
+ * It takes an int because the enum is a byte wide: cast first, 256 is Cube3D
+ * and nothing after the cast can tell. The comparison before the switch is
+ * what refuses it. The switch has no default on purpose, so a mode added to
+ * the enum and not here is a warning from the compiler rather than a value
+ * refused in silence.
+ */
+[[nodiscard]] constexpr std::optional<ViewMode> view_mode_from(
+    int value) noexcept
+{
+    const auto named = static_cast<ViewMode>(value);
+    if (static_cast<int>(named) != value) return std::nullopt;
+
+    switch (named) {
+        case ViewMode::Cube3D:
+        case ViewMode::Both:
+        case ViewMode::Flat:
+            return named;
+    }
+    return std::nullopt;
+}
+
+/**
  * Which drawing fills the flat region, wherever that region is.
  *
  * `Both` stacks them, the net over the rings. They are two views of the same
@@ -33,6 +62,22 @@ enum class FlatStyle : std::uint8_t {
     Rings = 1,
     Both = 2,
 };
+
+/** The flat style an integer names, or nothing; see view_mode_from(). */
+[[nodiscard]] constexpr std::optional<FlatStyle> flat_style_from(
+    int value) noexcept
+{
+    const auto named = static_cast<FlatStyle>(value);
+    if (static_cast<int>(named) != value) return std::nullopt;
+
+    switch (named) {
+        case FlatStyle::Net:
+        case FlatStyle::Rings:
+        case FlatStyle::Both:
+            return named;
+    }
+    return std::nullopt;
+}
 
 /**
  * Where the views of the cube sit in the drawing buffer.

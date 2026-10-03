@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstddef>
+#include <optional>
 
 /**
  * The Rubik's Cube domain: logical state only.
@@ -18,6 +19,35 @@ enum class Face { Right, Left, Up, Down, Front, Back };
 
 inline constexpr std::size_t kFaceCount = 6;
 
+/**
+ * The face an integer names, or nothing when it names none.
+ *
+ * For a value that arrives as a primitive, across the C ABI or out of a
+ * buffer, and for a caller that was handed an enum it cannot vouch for. This
+ * is the one place the question is answered for this enum.
+ *
+ * The switch has no default on purpose: a face added to the enum and not to
+ * the switch is a warning from the compiler rather than a value refused in
+ * silence. The comparison before it refuses an integer the cast could not
+ * hold.
+ */
+[[nodiscard]] constexpr std::optional<Face> face_from(int value) noexcept
+{
+    const auto named = static_cast<Face>(value);
+    if (static_cast<int>(named) != value) return std::nullopt;
+
+    switch (named) {
+        case Face::Right:
+        case Face::Left:
+        case Face::Up:
+        case Face::Down:
+        case Face::Front:
+        case Face::Back:
+            return named;
+    }
+    return std::nullopt;
+}
+
 /** The six faces, in the order the enum declares them. */
 [[nodiscard]] constexpr std::array<Face, kFaceCount> faces() noexcept
 {
@@ -26,6 +56,25 @@ inline constexpr std::size_t kFaceCount = 6;
 }
 
 enum class FaceColor { Red, Orange, White, Yellow, Green, Blue };
+
+/** The colour an integer names, or nothing; see face_from(). */
+[[nodiscard]] constexpr std::optional<FaceColor> face_color_from(
+    int value) noexcept
+{
+    const auto named = static_cast<FaceColor>(value);
+    if (static_cast<int>(named) != value) return std::nullopt;
+
+    switch (named) {
+        case FaceColor::Red:
+        case FaceColor::Orange:
+        case FaceColor::White:
+        case FaceColor::Yellow:
+        case FaceColor::Green:
+        case FaceColor::Blue:
+            return named;
+    }
+    return std::nullopt;
+}
 
 [[nodiscard]] constexpr std::size_t face_index(Face face) noexcept
 {

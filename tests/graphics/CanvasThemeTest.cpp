@@ -60,3 +60,15 @@ TEST_CASE("a value naming no theme falls back to dark")
     const auto unknown = static_cast<CanvasTheme>(7);
     REQUIRE(canvas_background(unknown) == canvas_background(CanvasTheme::Dark));
 }
+
+TEST_CASE("an integer is read as a theme only when it names one")
+{
+    using rubiks::graphics::canvas_theme_from;
+
+    // The first line of defence the case above speaks of: what the boundary
+    // asks before a value is allowed to be a theme at all.
+    REQUIRE(canvas_theme_from(0) == CanvasTheme::Light);
+    REQUIRE(canvas_theme_from(1) == CanvasTheme::Dark);
+    REQUIRE_FALSE(canvas_theme_from(2));
+    REQUIRE_FALSE(canvas_theme_from(-1));
+}

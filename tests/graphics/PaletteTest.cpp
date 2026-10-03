@@ -237,3 +237,13 @@ TEST_CASE("both palettes leave every sticker opaque")
         REQUIRE(to_color(face, Palette::HighContrast).a == 255);
     }
 }
+
+TEST_CASE("an integer is read as a palette only when it names one")
+{
+    using rubiks::graphics::palette_from;
+
+    REQUIRE(palette_from(0) == Palette::Classic);
+    REQUIRE(palette_from(1) == Palette::HighContrast);
+    REQUIRE_FALSE(palette_from(2));
+    REQUIRE_FALSE(palette_from(-1));
+}

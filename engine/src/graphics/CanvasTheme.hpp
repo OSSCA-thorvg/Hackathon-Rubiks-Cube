@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "graphics/Color.hpp"
 
 namespace rubiks::graphics {
@@ -17,6 +19,29 @@ namespace rubiks::graphics {
  * independent and every combination of them has to stay legible.
  */
 enum class CanvasTheme { Light, Dark };
+
+/**
+ * The theme an integer names, or nothing when it names none.
+ *
+ * For a value that arrives as a primitive across the C ABI, and for a caller
+ * handed an enum it cannot vouch for; the one place the question is answered
+ * for this enum. The switch has no default on purpose, so a theme added to
+ * the enum and not here is a warning from the compiler rather than a value
+ * refused in silence.
+ */
+[[nodiscard]] constexpr std::optional<CanvasTheme> canvas_theme_from(
+    int value) noexcept
+{
+    const auto named = static_cast<CanvasTheme>(value);
+    if (static_cast<int>(named) != value) return std::nullopt;
+
+    switch (named) {
+        case CanvasTheme::Light:
+        case CanvasTheme::Dark:
+            return named;
+    }
+    return std::nullopt;
+}
 
 /**
  * The opaque background a theme asks for.

@@ -441,3 +441,21 @@ TEST_CASE("a turn count wraps into 0 to 3 and a mask answers for each layer")
     REQUIRE(in_layers(inner, 2));
     REQUIRE_FALSE(in_layers(inner, 3));
 }
+
+TEST_CASE("an integer is read as a face or a colour only when it names one")
+{
+    using rubiks::cube::face_color_from;
+    using rubiks::cube::face_from;
+
+    // The two ends of each enum, which are where a boundary handing over a
+    // primitive is most easily off by one, and the first value past each.
+    REQUIRE(face_from(0) == Face::Right);
+    REQUIRE(face_from(5) == Face::Back);
+    REQUIRE_FALSE(face_from(6));
+    REQUIRE_FALSE(face_from(-1));
+
+    REQUIRE(face_color_from(0) == FaceColor::Red);
+    REQUIRE(face_color_from(5) == FaceColor::Blue);
+    REQUIRE_FALSE(face_color_from(6));
+    REQUIRE_FALSE(face_color_from(-1));
+}

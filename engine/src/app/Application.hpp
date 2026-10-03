@@ -508,7 +508,12 @@ void cancel_painting() noexcept;
 /** Whether a draft is open, which is the whole of "is being painted". */
 [[nodiscard]] bool is_painting() noexcept;
 
-/** The colour a press lays down. */
+/**
+ * The colour a press lays down.
+ *
+ * @return false with no draft open, and for a value that names none of the
+ *         six colours, which leaves the brush as it was.
+ */
 [[nodiscard]] bool set_brush(cube::FaceColor colour) noexcept;
 [[nodiscard]] cube::FaceColor brush() noexcept;
 

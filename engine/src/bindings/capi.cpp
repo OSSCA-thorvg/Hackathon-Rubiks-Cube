@@ -346,12 +346,10 @@ std::uint32_t thorvg_rubiks_timeline_move(std::uint32_t index) noexcept
 int thorvg_rubiks_turn_face(int face, int first_depth, int last_depth,
                             int face_turns) noexcept
 {
-    constexpr int kFirstFace = static_cast<int>(rubiks::cube::Face::Right);
-    constexpr int kLastFace = static_cast<int>(rubiks::cube::Face::Back);
-    if (face < kFirstFace || face > kLastFace) return 0;
+    const auto named = rubiks::cube::face_from(face);
+    if (!named) return 0;
 
-    return rubiks::app::turn_face(static_cast<rubiks::cube::Face>(face),
-                                  first_depth, last_depth, face_turns)
+    return rubiks::app::turn_face(*named, first_depth, last_depth, face_turns)
                ? 1
                : 0;
 }
@@ -379,16 +377,10 @@ int thorvg_rubiks_cube_size() noexcept
 /** Changes the visible render regions; invalid integer values are rejected. */
 int thorvg_rubiks_set_view_mode(int mode) noexcept
 {
-    constexpr int kFirstMode =
-        static_cast<int>(rubiks::graphics::ViewMode::Cube3D);
-    constexpr int kLastMode =
-        static_cast<int>(rubiks::graphics::ViewMode::Flat);
-    if (mode < kFirstMode || mode > kLastMode) return 0;
+    const auto named = rubiks::graphics::view_mode_from(mode);
+    if (!named) return 0;
 
-    return rubiks::app::set_view_mode(
-               static_cast<rubiks::graphics::ViewMode>(mode))
-               ? 1
-               : 0;
+    return rubiks::app::set_view_mode(*named) ? 1 : 0;
 }
 
 /** Returns the current graphics::ViewMode integer. */
@@ -400,16 +392,10 @@ int thorvg_rubiks_view_mode() noexcept
 /** Chooses which drawing fills the flat region; invalid values are rejected. */
 int thorvg_rubiks_set_flat_style(int style) noexcept
 {
-    constexpr int kFirstStyle =
-        static_cast<int>(rubiks::graphics::FlatStyle::Net);
-    constexpr int kLastStyle =
-        static_cast<int>(rubiks::graphics::FlatStyle::Both);
-    if (style < kFirstStyle || style > kLastStyle) return 0;
+    const auto named = rubiks::graphics::flat_style_from(style);
+    if (!named) return 0;
 
-    return rubiks::app::set_flat_style(
-               static_cast<rubiks::graphics::FlatStyle>(style))
-               ? 1
-               : 0;
+    return rubiks::app::set_flat_style(*named) ? 1 : 0;
 }
 
 /** Returns the current graphics::FlatStyle integer. */
@@ -421,15 +407,10 @@ int thorvg_rubiks_flat_style() noexcept
 /** Chooses which six shades the stickers take; invalid values are rejected. */
 int thorvg_rubiks_set_palette(int palette) noexcept
 {
-    constexpr int kFirst = static_cast<int>(rubiks::graphics::Palette::Classic);
-    constexpr int kLast =
-        static_cast<int>(rubiks::graphics::Palette::HighContrast);
-    if (palette < kFirst || palette > kLast) return 0;
+    const auto named = rubiks::graphics::palette_from(palette);
+    if (!named) return 0;
 
-    return rubiks::app::set_palette(
-               static_cast<rubiks::graphics::Palette>(palette))
-               ? 1
-               : 0;
+    return rubiks::app::set_palette(*named) ? 1 : 0;
 }
 
 /** Returns the current graphics::Palette integer. */
@@ -464,14 +445,10 @@ int thorvg_rubiks_is_painting() noexcept
 /** Chooses the colour a press lays down; invalid values are rejected. */
 int thorvg_rubiks_set_paint_brush(int colour) noexcept
 {
-    constexpr int kFirst = static_cast<int>(rubiks::cube::FaceColor::Red);
-    constexpr int kLast = static_cast<int>(rubiks::cube::FaceColor::Blue);
-    if (colour < kFirst || colour > kLast) return 0;
+    const auto named = rubiks::cube::face_color_from(colour);
+    if (!named) return 0;
 
-    return rubiks::app::set_brush(
-               static_cast<rubiks::cube::FaceColor>(colour))
-               ? 1
-               : 0;
+    return rubiks::app::set_brush(*named) ? 1 : 0;
 }
 
 int thorvg_rubiks_paint_brush() noexcept
@@ -524,12 +501,10 @@ int thorvg_rubiks_is_paint_filling() noexcept
 /** How many of a colour the draft carries; zero for an invalid colour. */
 int thorvg_rubiks_painted_count(int colour) noexcept
 {
-    constexpr int kFirst = static_cast<int>(rubiks::cube::FaceColor::Red);
-    constexpr int kLast = static_cast<int>(rubiks::cube::FaceColor::Blue);
-    if (colour < kFirst || colour > kLast) return 0;
+    const auto named = rubiks::cube::face_color_from(colour);
+    if (!named) return 0;
 
-    return rubiks::app::painted_count(
-        static_cast<rubiks::cube::FaceColor>(colour));
+    return rubiks::app::painted_count(*named);
 }
 
 int thorvg_rubiks_paint_apply() noexcept
@@ -571,15 +546,10 @@ int thorvg_rubiks_paint_fault() noexcept
 /** Chooses the ground the cube is drawn against; invalid values are rejected. */
 int thorvg_rubiks_set_canvas_theme(int theme) noexcept
 {
-    constexpr int kFirst =
-        static_cast<int>(rubiks::graphics::CanvasTheme::Light);
-    constexpr int kLast = static_cast<int>(rubiks::graphics::CanvasTheme::Dark);
-    if (theme < kFirst || theme > kLast) return 0;
+    const auto named = rubiks::graphics::canvas_theme_from(theme);
+    if (!named) return 0;
 
-    return rubiks::app::set_canvas_theme(
-               static_cast<rubiks::graphics::CanvasTheme>(theme))
-               ? 1
-               : 0;
+    return rubiks::app::set_canvas_theme(*named) ? 1 : 0;
 }
 
 /**

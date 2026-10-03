@@ -101,6 +101,13 @@ TEST_CASE("a press on the net colours instead of turning while a draft is open")
     REQUIRE(rubiks::app::begin_painting());
     REQUIRE(rubiks::app::set_brush(rubiks::cube::FaceColor::Red));
 
+    // A value that names none of the six colours is refused, and the brush is
+    // still the one that was chosen: a sticker can only ever be laid down in a
+    // colour a cube has.
+    REQUIRE_FALSE(
+        rubiks::app::set_brush(static_cast<rubiks::cube::FaceColor>(6)));
+    REQUIRE(rubiks::app::brush() == rubiks::cube::FaceColor::Red);
+
     const auto aim = front_cell(1, 1, 3);
     CHECK(press(aim.x, aim.y));
 

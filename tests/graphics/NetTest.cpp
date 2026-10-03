@@ -1056,6 +1056,28 @@ TEST_CASE("view modes place only the regions they render")
     REQUIRE(net.net.y == Approx((800.0f - net.net.height) * 0.5f));
 }
 
+TEST_CASE("an integer is read as a view mode or a flat style if it names one")
+{
+    REQUIRE(view_mode_from(0) == ViewMode::Cube3D);
+    REQUIRE(view_mode_from(1) == ViewMode::Both);
+    REQUIRE(view_mode_from(2) == ViewMode::Flat);
+    REQUIRE_FALSE(view_mode_from(3));
+    REQUIRE_FALSE(view_mode_from(-1));
+
+    REQUIRE(flat_style_from(0) == FlatStyle::Net);
+    REQUIRE(flat_style_from(1) == FlatStyle::Rings);
+    REQUIRE(flat_style_from(2) == FlatStyle::Both);
+    REQUIRE_FALSE(flat_style_from(3));
+    REQUIRE_FALSE(flat_style_from(-1));
+
+    // Both enums are a byte wide, so a cast alone reads 256 as the first of
+    // them and 258 as the last. An integer that does not fit names nothing.
+    REQUIRE_FALSE(view_mode_from(256));
+    REQUIRE_FALSE(view_mode_from(258));
+    REQUIRE_FALSE(flat_style_from(256));
+    REQUIRE_FALSE(flat_style_from(258));
+}
+
 TEST_CASE("a guide line takes the color of the axis it turns about")
 {
     using rubiks::cube::Axis;

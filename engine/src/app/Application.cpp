@@ -529,65 +529,6 @@ constexpr std::array<std::array<AmbientStep, 4>, kAmbientPatternCount>
     return {1, 1};
 }
 
-/** Reports whether a face value is one of the six external cube faces. */
-[[nodiscard]] bool valid_face(cube::Face face) noexcept
-{
-    switch (face) {
-        case cube::Face::Right:
-        case cube::Face::Left:
-        case cube::Face::Up:
-        case cube::Face::Down:
-        case cube::Face::Front:
-        case cube::Face::Back:
-            return true;
-    }
-    return false;
-}
-
-/** Reports whether an enum arriving through a primitive boundary is valid. */
-[[nodiscard]] bool valid_palette(graphics::Palette palette) noexcept
-{
-    switch (palette) {
-        case graphics::Palette::Classic:
-        case graphics::Palette::HighContrast:
-            return true;
-    }
-    return false;
-}
-
-/** Reports whether an enum arriving through a primitive boundary is valid. */
-[[nodiscard]] bool valid_canvas_theme(graphics::CanvasTheme theme) noexcept
-{
-    switch (theme) {
-        case graphics::CanvasTheme::Light:
-        case graphics::CanvasTheme::Dark:
-            return true;
-    }
-    return false;
-}
-
-[[nodiscard]] bool valid_view_mode(graphics::ViewMode mode) noexcept
-{
-    switch (mode) {
-        case graphics::ViewMode::Cube3D:
-        case graphics::ViewMode::Both:
-        case graphics::ViewMode::Flat:
-            return true;
-    }
-    return false;
-}
-
-[[nodiscard]] bool valid_flat_style(graphics::FlatStyle style) noexcept
-{
-    switch (style) {
-        case graphics::FlatStyle::Net:
-        case graphics::FlatStyle::Rings:
-        case graphics::FlatStyle::Both:
-            return true;
-    }
-    return false;
-}
-
 /**
  * What a mode puts on the screen, said once for everything that has to ask.
  *
@@ -1481,6 +1422,7 @@ bool is_painting() noexcept
 bool set_brush(cube::FaceColor colour) noexcept
 {
     if (!state || !state->paint) return false;
+    if (!cube::face_color_from(static_cast<int>(colour))) return false;
     state->paint->brush = colour;
     return true;
 }
@@ -1656,8 +1598,9 @@ bool restore_painting(int size, std::uint32_t user_count) noexcept
     std::vector<cube::FaceColor> painting;
     painting.reserve(colours.size());
     for (const std::uint8_t colour : colours) {
-        if (colour >= cube::kFaceCount) return false;
-        painting.push_back(static_cast<cube::FaceColor>(colour));
+        const auto named = cube::face_color_from(colour);
+        if (!named) return false;
+        painting.push_back(*named);
     }
 
     std::vector<cube::CubeMove> moves;
@@ -1975,7 +1918,7 @@ bool turn_face(cube::Face face, int first_depth, int last_depth,
                int face_turns) noexcept
 {
     if (!state) return false;
-    if (!valid_face(face)) return false;
+    if (!cube::face_from(static_cast<int>(face))) return false;
     if (face_turns != -1 && face_turns != 1 && face_turns != 2) return false;
 
     // The controller does not know about playback, and between a sequence
@@ -1995,7 +1938,9 @@ bool turn_face(cube::Face face, int first_depth, int last_depth,
 
 bool set_view_mode(graphics::ViewMode mode) noexcept
 {
-    if (!state || !valid_view_mode(mode)) return false;
+    if (!state || !graphics::view_mode_from(static_cast<int>(mode))) {
+        return false;
+    }
     if (mode == state->view_mode) return true;
 
     // Preserve every orbit step produced before the command, then end only
@@ -2014,7 +1959,9 @@ graphics::ViewMode view_mode() noexcept
 
 bool set_flat_style(graphics::FlatStyle style) noexcept
 {
-    if (!state || !valid_flat_style(style)) return false;
+    if (!state || !graphics::flat_style_from(static_cast<int>(style))) {
+        return false;
+    }
     if (style == state->flat_style) return true;
 
     // A drag holds a rectangle that is about to move or vanish, so it goes the
@@ -2032,7 +1979,9 @@ graphics::FlatStyle flat_style() noexcept
 
 bool set_palette(graphics::Palette palette) noexcept
 {
-    if (!state || !valid_palette(palette)) return false;
+    if (!state || !graphics::palette_from(static_cast<int>(palette))) {
+        return false;
+    }
 
     // No cancel and no relayout: the palette is read where a sticker becomes
     // pixels and nowhere else, so a drag keeps its grip and a snap keeps its
@@ -2086,7 +2035,9 @@ std::uintptr_t lighting_values(std::uint32_t count) noexcept
 
 bool set_canvas_theme(graphics::CanvasTheme theme) noexcept
 {
-    if (!state || !valid_canvas_theme(theme)) return false;
+    if (!state || !graphics::canvas_theme_from(static_cast<int>(theme))) {
+        return false;
+    }
 
     // Both, in one place: the field is what a surface sized later is cleared
     // to and the renderer is what a frame reads, and a refused value has

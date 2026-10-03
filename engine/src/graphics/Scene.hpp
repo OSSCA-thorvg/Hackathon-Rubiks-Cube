@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "graphics/Color.hpp"
+#include "graphics/RenderScene.hpp"
 #include "math/Types.hpp"
 
 /**
@@ -48,9 +49,6 @@ struct ShadowGroup {
     /** Strength before the renderer's own fade and blur, 0 meaning none. */
     std::uint8_t opacity = 0;
 };
-
-/** Stops of a glint's falloff, centre to rim. */
-inline constexpr std::size_t kGlintStops = 5;
 
 /** The glint on one face, as geometry rather than as a colour. */
 template <typename Point>

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <iterator>
 #include <optional>
@@ -9,10 +10,12 @@
 
 #include "graphics/Color.hpp"
 #include "graphics/Rect.hpp"
-#include "graphics/Scene.hpp"
 #include "math/Types.hpp"
 
 namespace rubiks::graphics {
+
+/** Stops of a glint's falloff, centre to rim. */
+inline constexpr std::size_t kGlintStops = 5;
 
 /**
  * The glint on one face, in pixels.

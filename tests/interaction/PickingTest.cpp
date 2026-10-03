@@ -14,7 +14,6 @@
 namespace {
 
 using namespace rubiks::interaction;
-using rubiks::cube::Axis;
 using rubiks::cube::Face;
 using rubiks::graphics::Camera;
 using rubiks::graphics::Rect;
@@ -181,19 +180,4 @@ TEST_CASE("a ray leaving the cube behind it does not hit")
     // origin, which the positive-distance requirement rejects.
     REQUIRE_FALSE(
         pick_cube(Ray{Vec3{5.0f, 0.0f, 0.0f}, Vec3{1.0f, 0.0f, 0.0f}}, kSize));
-}
-
-TEST_CASE("a face reports the axis it points along")
-{
-    REQUIRE(axis_of(Face::Right) == Axis::X);
-    REQUIRE(axis_of(Face::Left) == Axis::X);
-    REQUIRE(axis_of(Face::Up) == Axis::Y);
-    REQUIRE(axis_of(Face::Down) == Axis::Y);
-    REQUIRE(axis_of(Face::Front) == Axis::Z);
-    REQUIRE(axis_of(Face::Back) == Axis::Z);
-
-    const Pick pick{Face::Front, 2, 1, 0, Vec3{}};
-    REQUIRE(layer_of(pick, Axis::X) == 2);
-    REQUIRE(layer_of(pick, Axis::Y) == 1);
-    REQUIRE(layer_of(pick, Axis::Z) == 0);
 }

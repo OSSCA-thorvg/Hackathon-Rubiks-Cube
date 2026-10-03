@@ -340,3 +340,19 @@ TEST_CASE("a face, a run of depths and a turn count name one move")
     REQUIRE(face_move(Face::Right, 0, 1, 1, kSize).layers == 0);
     REQUIRE(face_move(Face::Right, 1, 4, 1, kSize).layers == 0);
 }
+
+TEST_CASE("a face reports the axis it points along")
+{
+    REQUIRE(axis_of(Face::Right) == Axis::X);
+    REQUIRE(axis_of(Face::Left) == Axis::X);
+    REQUIRE(axis_of(Face::Up) == Axis::Y);
+    REQUIRE(axis_of(Face::Down) == Axis::Y);
+    REQUIRE(axis_of(Face::Front) == Axis::Z);
+    REQUIRE(axis_of(Face::Back) == Axis::Z);
+
+    // A slot's coordinate along an axis, which is also its layer index.
+    const CubiePosition slot{2, 1, 0};
+    REQUIRE(coordinate_on(Axis::X, slot) == 2);
+    REQUIRE(coordinate_on(Axis::Y, slot) == 1);
+    REQUIRE(coordinate_on(Axis::Z, slot) == 0);
+}

@@ -9,7 +9,6 @@
 namespace rubiks::interaction {
 namespace {
 
-using cube::Axis;
 using cube::Face;
 using math::Vec3;
 
@@ -123,35 +122,6 @@ std::optional<Pick> pick_cube(const Ray& ray, int size) noexcept
     }
 
     return nearest;
-}
-
-int layer_of(const Pick& pick, Axis axis) noexcept
-{
-    switch (axis) {
-        case Axis::X:
-            return pick.x;
-        case Axis::Y:
-            return pick.y;
-        case Axis::Z:
-            break;
-    }
-    return pick.z;
-}
-
-Axis axis_of(Face face) noexcept
-{
-    switch (face) {
-        case Face::Right:
-        case Face::Left:
-            return Axis::X;
-        case Face::Up:
-        case Face::Down:
-            return Axis::Y;
-        case Face::Front:
-        case Face::Back:
-            break;
-    }
-    return Axis::Z;
 }
 
 }  // namespace rubiks::interaction

@@ -2,7 +2,6 @@
 
 #include <optional>
 
-#include "cube/CubeMove.hpp"
 #include "cube/Cubie.hpp"
 #include "graphics/Camera.hpp"
 #include "graphics/Rect.hpp"
@@ -61,11 +60,5 @@ inline constexpr float kRayEpsilon = 1e-4f;
  * cell rather than to a cell that does not exist.
  */
 [[nodiscard]] std::optional<Pick> pick_cube(const Ray& ray, int size) noexcept;
-
-/** The cubie's coordinate along `axis`, which is also its layer index. */
-[[nodiscard]] int layer_of(const Pick& pick, cube::Axis axis) noexcept;
-
-/** The axis a face points along. */
-[[nodiscard]] cube::Axis axis_of(cube::Face face) noexcept;
 
 }  // namespace rubiks::interaction

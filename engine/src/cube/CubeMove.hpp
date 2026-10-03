@@ -40,6 +40,12 @@ using LayerMask = std::uint32_t;
     return mask;
 }
 
+/** Whether a mask selects the layer at `index`. */
+[[nodiscard]] constexpr bool in_layers(LayerMask layers, int index) noexcept
+{
+    return (layers & layer(index)) != 0;
+}
+
 /**
  * Whether a mask is one unbroken run of layers, all of them inside the cube.
  *
@@ -93,6 +99,12 @@ struct CubeMove {
 [[nodiscard]] constexpr CubeMove inverse(const CubeMove& move) noexcept
 {
     return CubeMove{move.axis, move.layers, -move.quarter_turns};
+}
+
+/** Turn count in 0 ... 3; a move of any integer size is well defined. */
+[[nodiscard]] constexpr int normalized_turns(int quarter_turns) noexcept
+{
+    return ((quarter_turns % 4) + 4) % 4;
 }
 
 }  // namespace rubiks::cube

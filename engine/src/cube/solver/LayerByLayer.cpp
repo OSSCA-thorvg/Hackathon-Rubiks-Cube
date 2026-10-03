@@ -736,9 +736,7 @@ struct Small {
             for (int y = 0; y < 3; ++y) {
                 for (int z = 0; z < 3; ++z) {
                     const CubiePosition from{x, y, z};
-                    if ((layers & layer(coordinate_on(axis, from))) == 0) {
-                        continue;
-                    }
+                    if (!in_layers(layers, coordinate_on(axis, from))) continue;
 
                     const auto& was = cubies[spot(x, y, z)];
                     Cubie carried = was;

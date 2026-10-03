@@ -11,6 +11,7 @@ namespace {
 
 using cube::Axis;
 using cube::Face;
+using cube::in_layers;
 using math::Vec3;
 
 constexpr float kPi = 3.14159265358979323846f;
@@ -108,11 +109,6 @@ constexpr float kH = 1.0f;
             break;
     }
     return {Face::Front, Face::Back};
-}
-
-[[nodiscard]] bool in_layers(cube::LayerMask layers, int index) noexcept
-{
-    return (layers & cube::layer(index)) != 0;
 }
 
 /**

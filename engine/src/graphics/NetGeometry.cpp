@@ -20,6 +20,7 @@ using cube::Axis;
 using cube::Face;
 using cube::axis_of;
 using cube::coordinate_on;
+using cube::in_layers;
 using cube::outer_layer;
 using math::Vec2;
 
@@ -94,11 +95,6 @@ struct NetMetrics {
     quad.color =
         to_color(state.at(cell.x, cell.y, cell.z).sticker(cell.face), palette);
     return quad;
-}
-
-[[nodiscard]] bool in_layers(cube::LayerMask layers, int index) noexcept
-{
-    return (layers & cube::layer(index)) != 0;
 }
 
 /** Turns a quad about a point, clockwise on screen for a positive angle. */

@@ -27,12 +27,6 @@ namespace {
     return turned;
 }
 
-/** Turn count in 0 ... 3; a move of any integer size is well defined. */
-[[nodiscard]] int normalized_turns(int quarter_turns) noexcept
-{
-    return ((quarter_turns % 4) + 4) % 4;
-}
-
 }  // namespace
 
 CubeState::CubeState(int size, std::vector<Cubie> cubies) noexcept
@@ -111,8 +105,7 @@ void CubeState::rotate_quarter(Axis axis, LayerMask layers) noexcept
         for (int y = 0; y < size_; ++y) {
             for (int z = 0; z < size_; ++z) {
                 const CubiePosition from{x, y, z};
-                const auto bit = layer(coordinate_on(axis, from));
-                if ((layers & bit) == 0) continue;
+                if (!in_layers(layers, coordinate_on(axis, from))) continue;
 
                 const auto to = turned_position(axis, from, size_);
                 next[index(to.x, to.y, to.z)] =

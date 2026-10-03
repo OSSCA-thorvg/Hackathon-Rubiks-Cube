@@ -17,6 +17,7 @@ using cube::axes;
 using cube::axis_index;
 using cube::axis_of;
 using cube::coordinate_on;
+using cube::in_layers;
 using cube::outer_layer;
 using math::Vec2;
 
@@ -31,11 +32,6 @@ constexpr float kDegreesPerQuarterTurn = 90.0f;
 [[nodiscard]] float length_of(const Vec2& v) noexcept
 {
     return std::sqrt(v.x * v.x + v.y * v.y);
-}
-
-[[nodiscard]] bool in_layers(cube::LayerMask layers, int index) noexcept
-{
-    return (layers & cube::layer(index)) != 0;
 }
 
 /**
@@ -320,7 +316,7 @@ struct RingsMetrics {
 [[nodiscard]] SurfaceSticker turned_times(SurfaceSticker sticker, Axis axis,
                                           int size, int times) noexcept
 {
-    const int steps = ((times % 4) + 4) % 4;
+    const int steps = cube::normalized_turns(times);
     for (int step = 0; step < steps; ++step) {
         sticker = cube::turned_sticker(sticker, axis, size);
     }

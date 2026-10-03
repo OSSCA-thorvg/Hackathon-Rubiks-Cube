@@ -62,7 +62,7 @@ inline constexpr std::uint32_t kPackedTurnsHalf = 2;
 {
     // Modulo with the sign folded away, so every integer a move may hold ends
     // up as one of the three codes.
-    const int turns = ((move.quarter_turns % 4) + 4) % 4;
+    const int turns = normalized_turns(move.quarter_turns);
     if (turns == 0 || move.layers == 0) return 0;
     if ((move.layers >> kPackedMaxLayers) != 0) return 0;
 

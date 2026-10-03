@@ -349,9 +349,7 @@ struct Commutator {
 [[nodiscard]] Facelet carried_one(Facelet cell, const Turn& step, int size)
 {
     const auto move = to_move(step, size);
-    if ((move.layers & layer(coordinate_on(move.axis, cell.at))) == 0) {
-        return cell;
-    }
+    if (!in_layers(move.layers, coordinate_on(move.axis, cell.at))) return cell;
     for (int i = 0, n = normalized_turns(move.quarter_turns); i < n; ++i) {
         cell.at = turned_position(move.axis, cell.at, size);
         cell.face = turned_face(move.axis, cell.face);
@@ -563,7 +561,7 @@ public:
             const auto move = to_move(steps[k], size_);
             const auto axis = axis_index(move.axis);
             for (int at = 0; at < size_; ++at) {
-                if ((move.layers & layer(at)) == 0) continue;
+                if (!in_layers(move.layers, at)) continue;
                 named += along_[axis][static_cast<std::size_t>(at)].size();
             }
         }
@@ -593,7 +591,7 @@ public:
             const auto axis = axis_index(move.axis);
 
             for (int at = 0; at < size_; ++at) {
-                if ((move.layers & layer(at)) == 0) continue;
+                if (!in_layers(move.layers, at)) continue;
                 for (const int cell : along_[axis][static_cast<std::size_t>(at)]) {
                     Facelet origin = cells_[static_cast<std::size_t>(cell)];
                     for (std::size_t j = k; j-- > 0;) {

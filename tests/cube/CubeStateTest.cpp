@@ -286,6 +286,7 @@ TEST_CASE("seeded scrambles are reproducible and structurally valid")
 
 TEST_CASE("a scramble reaches the layers inside a larger cube")
 {
+    using rubiks::cube::in_layers;
     using rubiks::cube::is_layer_run;
 
     for (int size = 2; size <= 9; ++size) {
@@ -298,8 +299,8 @@ TEST_CASE("a scramble reaches the layers inside a larger cube")
         for (std::size_t index = 0; index < scramble.size(); ++index) {
             const CubeMove& move = scramble[index];
             REQUIRE(is_layer_run(move.layers, size));
-            REQUIRE(((move.layers & layer(0)) != 0 ||
-                     (move.layers & layer(size - 1)) != 0));
+            REQUIRE((in_layers(move.layers, 0) ||
+                     in_layers(move.layers, size - 1)));
             REQUIRE(width_of(move.layers) <= size / 2);
             REQUIRE((move.quarter_turns == -1 || move.quarter_turns == 1 ||
                      move.quarter_turns == 2));
@@ -410,4 +411,23 @@ TEST_CASE("the axes are listed in the order the enum declares them")
     REQUIRE(axis_index(Axis::X) == 0);
     REQUIRE(axis_index(Axis::Y) == 1);
     REQUIRE(axis_index(Axis::Z) == 2);
+}
+
+TEST_CASE("a turn count wraps into 0 to 3 and a mask answers for each layer")
+{
+    using rubiks::cube::in_layers;
+    using rubiks::cube::normalized_turns;
+
+    // A quarter back is three forward, a quarter past a whole turn is one,
+    // and a whole turn back is none.
+    REQUIRE(normalized_turns(-1) == 3);
+    REQUIRE(normalized_turns(5) == 1);
+    REQUIRE(normalized_turns(-4) == 0);
+
+    // The two inner slices of a cube of four, and neither of its faces.
+    const auto inner = layers_through(1, 2);
+    REQUIRE_FALSE(in_layers(inner, 0));
+    REQUIRE(in_layers(inner, 1));
+    REQUIRE(in_layers(inner, 2));
+    REQUIRE_FALSE(in_layers(inner, 3));
 }

@@ -167,7 +167,7 @@ TEST_CASE("one round of a watched pattern moves most of a big cube")
             std::set<std::pair<int, int>> bands;
             for (const auto& move : ambient_pattern(choice, size)) {
                 for (int layer = 0; layer < size; ++layer) {
-                    if ((move.layers & rubiks::cube::layer(layer)) != 0) {
+                    if (rubiks::cube::in_layers(move.layers, layer)) {
                         bands.insert({static_cast<int>(move.axis), layer});
                     }
                 }

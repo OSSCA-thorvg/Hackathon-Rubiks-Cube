@@ -43,8 +43,10 @@ using rubiks::cube::CubeMove;
 using rubiks::cube::CubiePosition;
 using rubiks::cube::Face;
 using rubiks::cube::faces;
+using rubiks::cube::in_layers;
 using rubiks::cube::layer;
 using rubiks::cube::make_scramble;
+using rubiks::cube::normalized_turns;
 using rubiks::cube::outer_layer;
 using rubiks::cube::SurfaceSticker;
 using rubiks::cube::surface_stickers;
@@ -139,11 +141,11 @@ private:
                                           const CubeMove& move)
 {
     std::vector<int> lands(slots.all().size(), 0);
-    const int turns = ((move.quarter_turns % 4) + 4) % 4;
+    const int turns = normalized_turns(move.quarter_turns);
 
     for (std::size_t i = 0; i < slots.all().size(); ++i) {
         SurfaceSticker s = slots.all()[i];
-        if ((move.layers & layer(coordinate_on(move.axis, s))) != 0) {
+        if (in_layers(move.layers, coordinate_on(move.axis, s))) {
             for (int t = 0; t < turns; ++t) {
                 s = turned_sticker(s, move.axis, slots.size());
             }

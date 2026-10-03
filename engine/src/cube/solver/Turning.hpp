@@ -36,11 +36,6 @@ struct Turn {
     int turns;
 };
 
-[[nodiscard]] inline int normalized_turns(int quarter_turns) noexcept
-{
-    return ((quarter_turns % 4) + 4) % 4;
-}
-
 /** Whether a face is the one at the far end of its axis. */
 [[nodiscard]] inline bool positive_face(Face face, int size) noexcept
 {

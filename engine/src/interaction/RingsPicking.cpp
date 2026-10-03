@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-#include "graphics/RingsGeometry.hpp"
+#include "graphics/2d/rings/RingsGeometry.hpp"
 
 namespace rubiks::interaction {
 

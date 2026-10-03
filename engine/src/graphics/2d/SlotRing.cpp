@@ -1,4 +1,4 @@
-#include "graphics/SlotRing.hpp"
+#include "graphics/2d/SlotRing.hpp"
 
 #include <algorithm>
 #include <cmath>

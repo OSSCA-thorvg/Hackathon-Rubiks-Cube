@@ -3,11 +3,11 @@
 #include <optional>
 #include <vector>
 
-#include "graphics/Camera.hpp"
-#include "graphics/Light.hpp"
+#include "graphics/3d/Camera.hpp"
+#include "graphics/3d/Light.hpp"
 #include "graphics/Rect.hpp"
 #include "graphics/RenderScene.hpp"
-#include "graphics/Scene.hpp"
+#include "graphics/3d/Scene.hpp"
 #include "math/Types.hpp"
 
 /**

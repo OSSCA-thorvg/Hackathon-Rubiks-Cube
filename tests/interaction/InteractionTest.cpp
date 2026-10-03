@@ -14,9 +14,9 @@
 #include "CubeSupport.hpp"
 #include "GraphicsSupport.hpp"
 #include "cube/CubeState.hpp"
-#include "graphics/CubeGeometry.hpp"
+#include "graphics/3d/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
-#include "graphics/NetGeometry.hpp"
+#include "graphics/2d/net/NetGeometry.hpp"
 #include "interaction/DragResolver.hpp"
 #include "interaction/NetPicking.hpp"
 

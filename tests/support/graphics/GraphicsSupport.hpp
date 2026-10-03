@@ -3,9 +3,9 @@
 #include <cstdint>
 
 #include "CubeSupport.hpp"
-#include "graphics/Camera.hpp"
+#include "graphics/3d/Camera.hpp"
 #include "graphics/Layout.hpp"
-#include "graphics/OrbitCamera.hpp"
+#include "graphics/3d/OrbitCamera.hpp"
 #include "graphics/Rect.hpp"
 
 /**

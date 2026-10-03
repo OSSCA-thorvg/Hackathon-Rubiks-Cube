@@ -29,7 +29,10 @@ thorvg-rubiks/
 ├── engine/
 │   ├── src/cube/           # Cube state, cubie, move (rendering과 무관)
 │   ├── src/math/           # vector, matrix, quaternion, projection, angle
-│   ├── src/graphics/       # camera, pipeline passes, cube와 전개도 geometry
+│   ├── src/graphics/       # 모든 view가 함께 쓰는 타입 (Color, Rect, RenderScene, Palette, Layout)
+│   │   ├── 3d/             # camera, pipeline passes, 조명, cube geometry
+│   │   ├── 2d/             # SlotRing, net/ (전개도), rings/ (링 diagram)
+│   │   └── frame/          # 캔버스 한 장의 입력과 compose
 │   ├── src/interaction/    # picking, drag 해석, snap animation, 시점 orbit
 │   ├── src/render/         # ThorVG rendering backend
 │   ├── src/app/            # engine lifecycle

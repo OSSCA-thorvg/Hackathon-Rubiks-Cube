@@ -8,7 +8,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "GraphicsSupport.hpp"
-#include "graphics/CubeGeometry.hpp"
+#include "graphics/3d/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
 
 namespace {

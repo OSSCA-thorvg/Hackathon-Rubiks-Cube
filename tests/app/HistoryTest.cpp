@@ -8,7 +8,7 @@
 #include "EngineLifecycle.hpp"
 #include "cube/CubeMove.hpp"
 #include "graphics/Layout.hpp"
-#include "graphics/NetGeometry.hpp"
+#include "graphics/2d/net/NetGeometry.hpp"
 #include "math/Types.hpp"
 
 // The record of what has happened to the cube, and the two commands that walk

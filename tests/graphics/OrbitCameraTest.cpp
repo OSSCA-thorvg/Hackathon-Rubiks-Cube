@@ -1,11 +1,11 @@
-#include "graphics/OrbitCamera.hpp"
+#include "graphics/3d/OrbitCamera.hpp"
 
 #include <cmath>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include "graphics/CubeGeometry.hpp"
+#include "graphics/3d/CubeGeometry.hpp"
 
 namespace {
 

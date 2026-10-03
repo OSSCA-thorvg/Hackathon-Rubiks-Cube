@@ -3,8 +3,8 @@
 #include <type_traits>
 #include <utility>
 
-#include "graphics/Passes.hpp"
-#include "graphics/Scene.hpp"
+#include "graphics/3d/Passes.hpp"
+#include "graphics/3d/Scene.hpp"
 
 /**
  * Pipeline composition.

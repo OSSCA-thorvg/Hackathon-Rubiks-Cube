@@ -10,7 +10,7 @@
 #include "graphics/Palette.hpp"
 #include "graphics/Rect.hpp"
 #include "graphics/RenderScene.hpp"
-#include "graphics/SlotRing.hpp"
+#include "graphics/2d/SlotRing.hpp"
 #include "math/Types.hpp"
 
 namespace rubiks::graphics {

@@ -1,4 +1,4 @@
-#include "graphics/Light.hpp"
+#include "graphics/3d/Light.hpp"
 
 #include <algorithm>
 #include <cmath>

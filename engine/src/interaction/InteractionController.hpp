@@ -5,9 +5,9 @@
 
 #include "cube/CubeMove.hpp"
 #include "graphics/ActiveRotation.hpp"
-#include "graphics/NetGeometry.hpp"
-#include "graphics/RingsGeometry.hpp"
-#include "graphics/Camera.hpp"
+#include "graphics/2d/net/NetGeometry.hpp"
+#include "graphics/2d/rings/RingsGeometry.hpp"
+#include "graphics/3d/Camera.hpp"
 #include "graphics/Rect.hpp"
 #include "interaction/DragResolver.hpp"
 #include "interaction/NetPicking.hpp"

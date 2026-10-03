@@ -12,7 +12,7 @@
 #include "RenderContract.hpp"
 #include "cube/Cubie.hpp"
 #include "graphics/Layout.hpp"
-#include "graphics/NetGeometry.hpp"
+#include "graphics/2d/net/NetGeometry.hpp"
 #include "graphics/Palette.hpp"
 
 // Surfaces: more than one canvas drawn by one engine. Each holds the scenes it

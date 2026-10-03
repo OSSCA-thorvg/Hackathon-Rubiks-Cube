@@ -149,8 +149,8 @@ surface마다 마지막 프레임을 그린 입력(`graphics::FrameInputs`)을 �
 ```text
 engine/src/
 ├── app/Application.{hpp,cpp}     Surface, 장면별 배치, surface별 누름, frame_for와 건너뛰기
-├── graphics/FrameInputs.{hpp,cpp} 그림마다 읽는 값과 그 비교, compose
-├── graphics/AxisGizmo.{hpp,cpp}  draw_arms, build_axis_badge
+├── graphics/frame/FrameInputs.{hpp,cpp} 그림마다 읽는 값과 그 비교, compose
+├── graphics/3d/AxisGizmo.{hpp,cpp}  draw_arms, build_axis_badge
 └── bindings/capi.cpp             surface ABI
 
 web/src/

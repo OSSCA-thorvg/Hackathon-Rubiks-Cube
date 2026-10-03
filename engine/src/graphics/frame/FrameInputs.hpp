@@ -8,12 +8,12 @@
 #include "cube/Cubie.hpp"
 #include "graphics/ActiveRotation.hpp"
 #include "graphics/Layout.hpp"
-#include "graphics/Light.hpp"
-#include "graphics/NetGeometry.hpp"
-#include "graphics/OrbitCamera.hpp"
+#include "graphics/3d/Light.hpp"
+#include "graphics/2d/net/NetGeometry.hpp"
+#include "graphics/3d/OrbitCamera.hpp"
 #include "graphics/Palette.hpp"
 #include "graphics/RenderScene.hpp"
-#include "graphics/RingsGeometry.hpp"
+#include "graphics/2d/rings/RingsGeometry.hpp"
 
 /**
  * What one canvas's frame is drawn from, and the drawing made of it.

@@ -4,7 +4,7 @@
 #include <array>
 #include <cmath>
 
-#include "graphics/CubeGeometry.hpp"
+#include "graphics/3d/CubeGeometry.hpp"
 
 namespace rubiks::interaction {
 namespace {

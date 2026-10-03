@@ -1,10 +1,10 @@
-#include "graphics/AxisGizmo.hpp"
+#include "graphics/3d/AxisGizmo.hpp"
 
 #include <algorithm>
 #include <array>
 
 #include "cube/CubeMove.hpp"
-#include "graphics/CubeGeometry.hpp"
+#include "graphics/3d/CubeGeometry.hpp"
 #include "graphics/Palette.hpp"
 #include "math/Types.hpp"
 

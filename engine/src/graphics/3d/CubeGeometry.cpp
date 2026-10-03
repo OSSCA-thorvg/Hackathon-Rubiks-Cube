@@ -1,4 +1,4 @@
-#include "graphics/CubeGeometry.hpp"
+#include "graphics/3d/CubeGeometry.hpp"
 
 #include <array>
 #include <cmath>

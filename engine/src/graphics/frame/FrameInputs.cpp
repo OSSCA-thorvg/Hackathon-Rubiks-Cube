@@ -1,9 +1,9 @@
-#include "graphics/FrameInputs.hpp"
+#include "graphics/frame/FrameInputs.hpp"
 
-#include "graphics/AxisGizmo.hpp"
-#include "graphics/Camera.hpp"
-#include "graphics/CubeGeometry.hpp"
-#include "graphics/Pipeline.hpp"
+#include "graphics/3d/AxisGizmo.hpp"
+#include "graphics/3d/Camera.hpp"
+#include "graphics/3d/CubeGeometry.hpp"
+#include "graphics/3d/Pipeline.hpp"
 #include "graphics/Rect.hpp"
 
 namespace rubiks::graphics {

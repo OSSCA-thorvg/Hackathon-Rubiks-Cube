@@ -3,7 +3,7 @@
 #include <optional>
 
 #include "cube/CubeMove.hpp"
-#include "graphics/Camera.hpp"
+#include "graphics/3d/Camera.hpp"
 #include "graphics/Rect.hpp"
 #include "interaction/Picking.hpp"
 #include "math/Types.hpp"

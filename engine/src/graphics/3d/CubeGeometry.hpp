@@ -7,7 +7,7 @@
 #include "graphics/ActiveRotation.hpp"
 #include "graphics/Color.hpp"
 #include "graphics/Palette.hpp"
-#include "graphics/Scene.hpp"
+#include "graphics/3d/Scene.hpp"
 #include "math/Quaternion.hpp"
 #include "math/Types.hpp"
 

@@ -2,7 +2,7 @@
 
 #include "cube/CubeMove.hpp"
 #include "graphics/Rect.hpp"
-#include "graphics/SlotRing.hpp"
+#include "graphics/2d/SlotRing.hpp"
 
 namespace rubiks::graphics {
 

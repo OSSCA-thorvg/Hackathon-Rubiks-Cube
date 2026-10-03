@@ -8,7 +8,7 @@
 #include "cube/CubeMove.hpp"
 #include "cube/Cubie.hpp"
 #include "graphics/Layout.hpp"
-#include "graphics/NetGeometry.hpp"
+#include "graphics/2d/net/NetGeometry.hpp"
 #include "graphics/Rect.hpp"
 
 // Picking a net cell and working out which turn a drag from it means. The

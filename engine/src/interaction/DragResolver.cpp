@@ -3,7 +3,7 @@
 #include <cmath>
 
 #include "cube/Surface.hpp"
-#include "graphics/CubeGeometry.hpp"
+#include "graphics/3d/CubeGeometry.hpp"
 #include "math/Quaternion.hpp"
 
 namespace rubiks::interaction {

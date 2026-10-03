@@ -16,7 +16,7 @@
 #include "cube/Surface.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/Palette.hpp"
-#include "graphics/RingsGeometry.hpp"
+#include "graphics/2d/rings/RingsGeometry.hpp"
 #include "math/Angle.hpp"
 
 namespace {

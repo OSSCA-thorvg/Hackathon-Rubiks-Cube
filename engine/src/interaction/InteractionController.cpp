@@ -6,8 +6,8 @@
 #include <cstdlib>
 #include <utility>
 
-#include "graphics/NetGeometry.hpp"
-#include "graphics/RingsGeometry.hpp"
+#include "graphics/2d/net/NetGeometry.hpp"
+#include "graphics/2d/rings/RingsGeometry.hpp"
 #include "math/Angle.hpp"
 
 namespace rubiks::interaction {

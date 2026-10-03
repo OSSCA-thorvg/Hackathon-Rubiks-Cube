@@ -18,9 +18,9 @@
 #include "cube/CubeState.hpp"
 #include "cube/Surface.hpp"
 #include "graphics/Layout.hpp"
-#include "graphics/NetGeometry.hpp"
-#include "graphics/NetRing.hpp"
-#include "graphics/SlotRing.hpp"
+#include "graphics/2d/net/NetGeometry.hpp"
+#include "graphics/2d/net/NetRing.hpp"
+#include "graphics/2d/SlotRing.hpp"
 #include "graphics/Palette.hpp"
 #include "math/Angle.hpp"
 

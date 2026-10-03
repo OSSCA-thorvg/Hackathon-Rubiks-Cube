@@ -1,4 +1,4 @@
-#include "graphics/OrbitCamera.hpp"
+#include "graphics/3d/OrbitCamera.hpp"
 
 #include <algorithm>
 #include <cmath>

@@ -10,7 +10,7 @@
 #include "cube/Assembly.hpp"
 #include "cube/Cubie.hpp"
 #include "graphics/Layout.hpp"
-#include "graphics/NetGeometry.hpp"
+#include "graphics/2d/net/NetGeometry.hpp"
 #include "graphics/Palette.hpp"
 
 // Colouring a real cube onto the net: what a draft is while it is open, what

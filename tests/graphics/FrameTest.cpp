@@ -8,11 +8,11 @@
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
 #include "cube/Cubie.hpp"
-#include "graphics/FrameInputs.hpp"
+#include "graphics/frame/FrameInputs.hpp"
 #include "graphics/Layout.hpp"
-#include "graphics/Light.hpp"
-#include "graphics/NetGeometry.hpp"
-#include "graphics/OrbitCamera.hpp"
+#include "graphics/3d/Light.hpp"
+#include "graphics/2d/net/NetGeometry.hpp"
+#include "graphics/3d/OrbitCamera.hpp"
 
 // What a frame is drawn from, compared. A canvas keeps its last frame for as
 // long as this says nothing changed, so every input a drawing reads has to

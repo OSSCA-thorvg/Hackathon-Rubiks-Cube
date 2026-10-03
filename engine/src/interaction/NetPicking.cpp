@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include "graphics/NetGeometry.hpp"
+#include "graphics/2d/net/NetGeometry.hpp"
 
 namespace rubiks::interaction {
 

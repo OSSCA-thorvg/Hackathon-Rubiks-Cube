@@ -18,7 +18,7 @@ Phase 17(Solve hint and step-through)과 Phase 18(Paint your cube) 어느 쪽도
 
 ### 파이프라인은 패스를 끼울 자리를 이미 갖고 있습니다
 
-[`Pipeline.hpp`](../../engine/src/graphics/Pipeline.hpp)의 `operator|`는 왼쪽 scene에 오른쪽 callable을 적용하는 문법일 뿐이고, 왼쪽에 올 수 있는 타입은 `is_pipeline_value`로 WorldScene, ViewScene, ClipScene 셋이 열려 있습니다. 새 패스는 이 셋 중 하나를 받아 같은 타입을 돌려주면 등록 없이 체인에 들어갑니다. 체인은 [`Application.cpp`](../../engine/src/app/Application.cpp) 한 곳입니다.
+[`Pipeline.hpp`](../../engine/src/graphics/3d/Pipeline.hpp)의 `operator|`는 왼쪽 scene에 오른쪽 callable을 적용하는 문법일 뿐이고, 왼쪽에 올 수 있는 타입은 `is_pipeline_value`로 WorldScene, ViewScene, ClipScene 셋이 열려 있습니다. 새 패스는 이 셋 중 하나를 받아 같은 타입을 돌려주면 등록 없이 체인에 들어갑니다. 체인은 [`Application.cpp`](../../engine/src/app/Application.cpp) 한 곳입니다.
 
 ### 기존 패스는 `faces`만 만집니다
 
@@ -134,7 +134,7 @@ Rw : [L] 정지   + [M R] 회전          → 2개
 M  : [L] 정지   + [M] 회전 + [R] 정지 → 3개
 ```
 
-박스 수는 `(mask의 연속 구간 수) × 2 + 1` 이하이고, 현재 생성 경로에서는 3 이하입니다(test). 박스는 꼭짓점 8개로 충분합니다 — 볼록한 박스의 그림자는 볼록 다각형 하나라서, `shadow()`는 꼭짓점 8개를 투영한 뒤 2D convex hull([`ConvexHull.hpp`](../../engine/src/graphics/ConvexHull.hpp))을 잡습니다. casters는 `build_cube_scene`이 스티커와 같은 회전을 적용해 냅니다. 그려지지 않고, `shadow()`와 결정 6의 몸체만 읽습니다.
+박스 수는 `(mask의 연속 구간 수) × 2 + 1` 이하이고, 현재 생성 경로에서는 3 이하입니다(test). 박스는 꼭짓점 8개로 충분합니다 — 볼록한 박스의 그림자는 볼록 다각형 하나라서, `shadow()`는 꼭짓점 8개를 투영한 뒤 2D convex hull([`ConvexHull.hpp`](../../engine/src/graphics/3d/ConvexHull.hpp))을 잡습니다. casters는 `build_cube_scene`이 스티커와 같은 회전을 적용해 냅니다. 그려지지 않고, `shadow()`와 결정 6의 몸체만 읽습니다.
 
 ### 5. 광원은 키 라이트 하나이고, 조명과 그림자가 공유한다
 
@@ -208,7 +208,7 @@ Classic 흰색은 (255, 255, 255)입니다. 밝기 275인 윗면에서 255로 cl
 
 ## 상수 (확정)
 
-[`Light.hpp`](../../engine/src/graphics/Light.hpp), [`RenderScene.hpp`](../../engine/src/graphics/RenderScene.hpp), [`Palette.hpp`](../../engine/src/graphics/Palette.hpp)의 값입니다.
+[`Light.hpp`](../../engine/src/graphics/3d/Light.hpp), [`RenderScene.hpp`](../../engine/src/graphics/RenderScene.hpp), [`Palette.hpp`](../../engine/src/graphics/Palette.hpp)의 값입니다.
 
 | 상수 | 값 | 뜻 |
 |---|---|---|

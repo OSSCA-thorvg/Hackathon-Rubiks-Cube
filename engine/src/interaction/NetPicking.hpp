@@ -2,7 +2,7 @@
 
 #include <optional>
 
-#include "graphics/NetGeometry.hpp"
+#include "graphics/2d/net/NetGeometry.hpp"
 #include "graphics/Rect.hpp"
 
 /**

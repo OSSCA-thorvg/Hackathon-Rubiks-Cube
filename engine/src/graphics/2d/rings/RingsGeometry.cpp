@@ -1,4 +1,4 @@
-#include "graphics/RingsGeometry.hpp"
+#include "graphics/2d/rings/RingsGeometry.hpp"
 
 #include <algorithm>
 #include <array>

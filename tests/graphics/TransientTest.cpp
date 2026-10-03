@@ -11,7 +11,7 @@
 #include "CubeSupport.hpp"
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
-#include "graphics/CubeGeometry.hpp"
+#include "graphics/3d/CubeGeometry.hpp"
 
 namespace {
 

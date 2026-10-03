@@ -1,4 +1,4 @@
-#include "graphics/ConvexHull.hpp"
+#include "graphics/3d/ConvexHull.hpp"
 
 #include <algorithm>
 #include <cstddef>

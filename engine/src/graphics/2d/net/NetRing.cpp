@@ -1,4 +1,4 @@
-#include "graphics/NetRing.hpp"
+#include "graphics/2d/net/NetRing.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "cube/Surface.hpp"
-#include "graphics/NetGeometry.hpp"
+#include "graphics/2d/net/NetGeometry.hpp"
 
 namespace rubiks::graphics {
 namespace {

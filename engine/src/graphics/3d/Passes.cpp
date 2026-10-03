@@ -1,4 +1,4 @@
-#include "graphics/Passes.hpp"
+#include "graphics/3d/Passes.hpp"
 
 #include <algorithm>
 #include <array>
@@ -6,7 +6,7 @@
 #include <optional>
 #include <vector>
 
-#include "graphics/ConvexHull.hpp"
+#include "graphics/3d/ConvexHull.hpp"
 
 namespace rubiks::graphics {
 namespace {

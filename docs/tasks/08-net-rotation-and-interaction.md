@@ -17,7 +17,7 @@
 ## Scope
 
 - 표면 스티커 identity와 슬롯 순환을 유도하는 순수 domain 함수 (`cube/Surface`)
-- (axis, layer) → 닫힌 링 생성과 밴드의 강체 조각 이동 (`graphics/NetRing`, `graphics/NetGeometry`)
+- (axis, layer) → 닫힌 링 생성과 밴드의 강체 조각 이동 (`graphics/2d/net/NetRing`, `graphics/2d/net/NetGeometry`)
 - Z 회전의 제자리 강체 회전
 - 움직이는 조각을 정지 그림 위로 들어 올리는 3층 호버
 - Renderer 경계 확장: `RenderScene`의 stroke 목록과 ThorVG cubic path / stroke 렌더링
@@ -249,7 +249,7 @@ npm --prefix web run build
 
 ## 조정 가능한 값들
 
-전부 `graphics/NetGeometry.hpp`와 `graphics/NetRing.hpp`에 있고, 이름과 값만 바꾸면 됩니다.
+전부 `graphics/2d/net/NetGeometry.hpp`와 `graphics/2d/net/NetRing.hpp`에 있고, 이름과 값만 바꾸면 됩니다.
 
 | 상수 | 값 | 무엇 |
 |---|---|---|

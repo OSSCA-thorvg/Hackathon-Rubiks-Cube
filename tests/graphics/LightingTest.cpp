@@ -50,7 +50,7 @@ Camera identity_camera()
 
 Camera home_camera()
 {
-    return default_camera(1.0f);
+    return home_orbit().to_camera(1.0f);
 }
 
 /**
@@ -232,7 +232,7 @@ TEST_CASE("saturation scales a colour's chroma about its grey and leaves grey al
     scene.faces[1].color = kBodyColor;
     const ViewScene lit = light(lamp, camera)(scene);
     REQUIRE(lit.faces[0].color == saturate(Color{200, 100, 50, 255}, 125));
-    REQUIRE(lit.faces[0].color != Color{200, 100, 50, 255});
+    REQUIRE_FALSE(lit.faces[0].color == Color{200, 100, 50, 255});
     REQUIRE(lit.faces[1].color == kBodyColor);
 }
 
@@ -369,7 +369,7 @@ TEST_CASE("the shadow's points travel through the passes like face corners")
     const Rect region{40.0f, 10.0f, 200.0f, 200.0f};
     const Camera camera = identity_camera();
     const RenderScene result = scene | view(camera) | project(camera) | cull() |
-                               depth_sort() | viewport(region);
+                               depth_sort() | viewport(region, region);
 
     REQUIRE(result.faces.size() == 1);
     REQUIRE(result.shadow.has_value());
@@ -406,7 +406,8 @@ TEST_CASE("the shadow's points travel through the passes like face corners")
         WorldScene unshadowed = scene;
         unshadowed.shadow.reset();
         const RenderScene bare = unshadowed | view(camera) | project(camera) |
-                                 cull() | depth_sort() | viewport(region);
+                                 cull() | depth_sort() |
+                                 viewport(region, region);
         REQUIRE_FALSE(bare.shadow.has_value());
         REQUIRE(bare.bodies.size() == 1);
     }
@@ -417,7 +418,8 @@ TEST_CASE("the shadow's points travel through the passes like face corners")
         std::reverse(reversed.faces[0].points.begin(),
                      reversed.faces[0].points.end());
         const RenderScene culled = reversed | view(camera) | project(camera) |
-                                   cull() | depth_sort() | viewport(region);
+                                   cull() | depth_sort() |
+                                   viewport(region, region);
         REQUIRE(culled.faces.empty());
         REQUIRE(culled.shadow.has_value());
     }
@@ -637,7 +639,8 @@ TEST_CASE("the shading of one plane runs on across its stickers")
             // The middle sticker: the axis runs through the middle of the
             // face, so the middle stop is the plane's reference byte, which
             // is what the contract reads.
-            REQUIRE(face.shading->colors.front() != face.shading->colors.back());
+            REQUIRE_FALSE(face.shading->colors.front() ==
+                          face.shading->colors.back());
             REQUIRE(face.shading->colors[2] == face.color);
         }
     }
@@ -676,7 +679,8 @@ TEST_CASE("the shading of one plane runs on across its stickers")
                                | light(default_lighting(), home_camera());
         for (const auto& face : fine.faces) {
             if (face.shading) {
-                REQUIRE(face.shading->colors.front() != face.shading->colors.back());
+                REQUIRE_FALSE(face.shading->colors.front() ==
+                              face.shading->colors.back());
             }
         }
     }
@@ -926,7 +930,7 @@ TEST_CASE("a turning layer's shadow turns with it")
 TEST_CASE("the whole chain puts the shadow below the cube inside its region")
 {
     const auto placement = layout(kCanvas, kCanvas);
-    const Camera camera = default_camera(placement.cube.width / placement.cube.height);
+    const Camera camera = camera_into(home_orbit(), placement.cube);
     const RenderScene scene = build_cube_scene(CubeState(3))  //
                               | shadow(default_lighting(), camera) //
                               | view(camera)                  //
@@ -934,7 +938,7 @@ TEST_CASE("the whole chain puts the shadow below the cube inside its region")
                               | project(camera)               //
                               | cull()                        //
                               | depth_sort()                  //
-                              | viewport(placement.cube);
+                              | viewport(placement.cube, placement.cube);
 
     REQUIRE(scene.faces.size() == 27);
     REQUIRE(scene.shadow.has_value());

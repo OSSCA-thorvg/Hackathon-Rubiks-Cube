@@ -18,10 +18,4 @@ struct Color {
     return lhs.r == rhs.r && lhs.g == rhs.g && lhs.b == rhs.b && lhs.a == rhs.a;
 }
 
-[[nodiscard]] constexpr bool operator!=(const Color& lhs,
-                                        const Color& rhs) noexcept
-{
-    return !(lhs == rhs);
-}
-
 }  // namespace rubiks::graphics

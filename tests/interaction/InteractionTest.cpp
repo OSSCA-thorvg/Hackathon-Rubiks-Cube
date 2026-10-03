@@ -16,6 +16,7 @@
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/NetGeometry.hpp"
+#include "graphics/OrbitCamera.hpp"
 #include "interaction/DragResolver.hpp"
 #include "interaction/NetPicking.hpp"
 
@@ -54,7 +55,7 @@ Rect cube_rect()
 Camera cube_camera()
 {
     const Rect rect = cube_rect();
-    return rubiks::graphics::default_camera(rect.width / rect.height);
+    return rubiks::graphics::camera_into(rubiks::graphics::home_orbit(), rect);
 }
 
 /** Where a world point lands in viewport pixels. */

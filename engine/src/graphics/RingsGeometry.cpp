@@ -530,12 +530,6 @@ std::optional<float> rings_slot_at(Axis axis, int layer, const Rect& rect,
 }
 
 RenderScene build_rings_scene(const cube::CubeState& state, const Rect& rect,
-                              Palette palette)
-{
-    return build_rings_scene(state, rect, std::nullopt, {}, palette);
-}
-
-RenderScene build_rings_scene(const cube::CubeState& state, const Rect& rect,
                               const std::optional<ActiveRotation>& active,
                               const std::vector<RingsGuide>& guides,
                               Palette palette)

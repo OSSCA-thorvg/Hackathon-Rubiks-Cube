@@ -12,6 +12,7 @@
 #include "graphics/Camera.hpp"
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
+#include "graphics/OrbitCamera.hpp"
 #include "graphics/Palette.hpp"
 #include "graphics/Passes.hpp"
 #include "graphics/Pipeline.hpp"
@@ -87,15 +88,14 @@ std::size_t count_color(const RenderScene& scene, const Color& color)
 RenderScene render_cube(const CubeState& state)
 {
     const auto placement = layout(kCanvas, kCanvas);
-    const Camera camera =
-        default_camera(placement.cube.width / placement.cube.height);
+    const Camera camera = camera_into(home_orbit(), placement.cube);
 
     return build_cube_scene(state)   //
            | view(camera)            //
            | project(camera)         //
            | cull()                  //
            | depth_sort()            //
-           | viewport(placement.cube);
+           | viewport(placement.cube, placement.cube);
 }
 
 /** A point given as a fraction of the square 3D region. */
@@ -294,8 +294,8 @@ TEST_CASE("viewport maps NDC into a sub-rectangle of the buffer")
     ClipScene scene;
     scene.faces.push_back(clip_face(quad, -1.0f, Color{9, 9, 9, 255}));
 
-    const RenderScene mapped =
-        viewport(Rect{40.0f, 10.0f, 200.0f, 100.0f})(scene);
+    const Rect target{40.0f, 10.0f, 200.0f, 100.0f};
+    const RenderScene mapped = viewport(target, target)(scene);
     REQUIRE(mapped.faces.size() == 1);
 
     const auto& points = mapped.faces[0].points;
@@ -441,7 +441,8 @@ TEST_CASE("the axis gizmo reports which way each axis points from here")
     using rubiks::cube::Axis;
 
     const Rect region = layout(1000, 800).cube;
-    const RenderScene scene = build_axis_gizmo(default_camera(1.0f), region);
+    const RenderScene scene =
+        build_axis_gizmo(home_orbit().to_camera(1.0f), region);
 
     // Three segments and nothing filled: it is a reading of the viewpoint, not
     // part of the scene.
@@ -491,7 +492,8 @@ TEST_CASE("the axis gizmo reports which way each axis points from here")
     REQUIRE(x_tip.y == Approx(z_tip.y));
 
     // A region with no extent is a view mode that is not being shown.
-    REQUIRE(build_axis_gizmo(default_camera(1.0f), Rect{}).strokes.empty());
+    REQUIRE(build_axis_gizmo(home_orbit().to_camera(1.0f), Rect{})
+                .strokes.empty());
 }
 
 TEST_CASE("composing scenes carries every list across, in order")

@@ -25,8 +25,9 @@ enum class Palette { Classic, HighContrast };
  * face a sticker belongs to, and the shade is this function's answer.
  *
  * The palette defaults to `Classic` so that the scenes every existing test was
- * derived from keep asking for the colors they assert. A caller that means the
- * other one says so, and there are three such callers, all in Application.
+ * derived from keep asking for the colors they assert. The engine's own
+ * callers are the scene builders of the cube, the net and the rings, and each
+ * of them passes the palette it was handed.
  */
 [[nodiscard]] Color to_color(cube::FaceColor color,
                              Palette palette = Palette::Classic) noexcept;

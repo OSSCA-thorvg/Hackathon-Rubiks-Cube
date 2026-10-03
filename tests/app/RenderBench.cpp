@@ -17,6 +17,7 @@
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/Light.hpp"
+#include "graphics/OrbitCamera.hpp"
 #include "graphics/Passes.hpp"
 #include "graphics/Pipeline.hpp"
 #include "render/ThorVGSoftwareRenderer.hpp"
@@ -148,7 +149,7 @@ int main(int argc, char** argv)
     if (cube_only) {
     using namespace rubiks::graphics;
     const auto placement = layout(kCanvas, kCanvas, ViewMode::Cube3D);
-    const Camera camera = default_camera(1.0f);
+    const Camera camera = home_orbit().to_camera(1.0f);
     const ActiveRotation turn{rubiks::cube::Axis::X,
                               rubiks::cube::layer(size - 1), 45.0f};
     const RenderScene scene = build_cube_scene(rubiks::cube::CubeState(size), turn)  //
@@ -158,7 +159,7 @@ int main(int argc, char** argv)
                               | project(camera)                                      //
                               | cull()                                               //
                               | depth_sort()                                         //
-                              | viewport(placement.cube);
+                              | viewport(placement.cube, placement.cube);
     std::size_t glints = 0;
     for (const auto& face : scene.faces) {
         glints += face.highlights.size();

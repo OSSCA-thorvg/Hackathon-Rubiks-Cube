@@ -17,7 +17,7 @@
  *         | project(camera)
  *         | cull()
  *         | depth_sort()
- *         | viewport(width, height);
+ *         | viewport(rect, stage);
  *
  * It is only syntax: no pass gains behaviour from being composed, and the
  * types still have to line up, so applying a pass to the wrong space is a

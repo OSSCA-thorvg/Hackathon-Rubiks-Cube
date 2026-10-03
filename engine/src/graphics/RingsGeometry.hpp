@@ -161,16 +161,12 @@ struct RingsGuide {
                                                  const Rect& rect, int size,
                                                  const math::Vec2& point);
 
-/** Builds the ring diagram as screen-space quads and strokes filling `rect`. */
-[[nodiscard]] RenderScene build_rings_scene(const cube::CubeState& state,
-                                            const Rect& rect,
-                                            Palette palette = Palette::Classic);
-
 /**
- * The same with a turn in progress drawn into it.
+ * Builds the ring diagram as screen-space quads and strokes filling `rect`,
+ * with a turn in progress drawn into it when there is one.
  *
- * `nullopt` is the resting diagram above. Stickers stay axis-aligned however
- * far round they are carried: the net can tilt a cell against the direction its
+ * `nullopt` is the diagram at rest. Stickers stay axis-aligned however far
+ * round they are carried: the net can tilt a cell against the direction its
  * ring set off in because every one of those directions is square to the
  * screen, and here none of them is.
  */

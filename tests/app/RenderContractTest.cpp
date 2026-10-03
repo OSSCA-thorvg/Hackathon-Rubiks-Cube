@@ -17,6 +17,7 @@
 #include "math/Types.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/NetGeometry.hpp"
+#include "graphics/OrbitCamera.hpp"
 #include "graphics/RingsGeometry.hpp"
 #include "graphics/Palette.hpp"
 #include "interaction/InteractionController.hpp"
@@ -318,7 +319,7 @@ const std::uint8_t* pixel_at_world(const rubiks::math::Vec3& world,
     const Region region = cube_region(width, height);
     const rubiks::graphics::Rect rect{region.x, region.y, region.side, region.side};
     const auto point = rubiks::interaction::project_to_screen(
-        world, rubiks::graphics::default_camera(1.0f), rect);
+        world, rubiks::graphics::home_orbit().to_camera(1.0f), rect);
     REQUIRE(point);
     return pixel_at(point->x, point->y, width, height);
 }

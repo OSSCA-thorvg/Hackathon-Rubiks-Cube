@@ -13,6 +13,7 @@
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/NetGeometry.hpp"
+#include "graphics/OrbitCamera.hpp"
 #include "graphics/RingsGeometry.hpp"
 #include "graphics/SlotRing.hpp"
 #include "interaction/DragResolver.hpp"
@@ -115,7 +116,7 @@ rubiks::graphics::Rect cube_rect(std::uint32_t width, std::uint32_t height)
 rubiks::graphics::Camera cube_camera(std::uint32_t width, std::uint32_t height)
 {
     const auto rect = cube_rect(width, height);
-    return rubiks::graphics::default_camera(rect.width / rect.height);
+    return rubiks::graphics::camera_into(rubiks::graphics::home_orbit(), rect);
 }
 
 /** Where the middle sticker of one front face column is drawn. */

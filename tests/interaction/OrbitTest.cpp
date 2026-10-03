@@ -29,7 +29,7 @@ Rect cube_rect()
 Camera cube_camera()
 {
     const Rect rect = cube_rect();
-    return rubiks::graphics::default_camera(rect.width / rect.height);
+    return rubiks::graphics::camera_into(rubiks::graphics::home_orbit(), rect);
 }
 
 /** A point in the corner of the viewport, well clear of the cube. */

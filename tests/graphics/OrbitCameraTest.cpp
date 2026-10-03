@@ -43,24 +43,6 @@ float silhouette_extent(const OrbitCamera& view)
 
 }  // namespace
 
-TEST_CASE("the home viewpoint is the camera the contract was derived from")
-{
-    // default_camera delegates here, so this pins the delegation rather than
-    // a coincidence between two ways of building the same camera.
-    const Camera from_orbit = home_orbit().to_camera(1.5f);
-    const Camera pinned = default_camera(1.5f);
-
-    REQUIRE(from_orbit.eye().x == pinned.eye().x);
-    REQUIRE(from_orbit.eye().y == pinned.eye().y);
-    REQUIRE(from_orbit.eye().z == pinned.eye().z);
-    REQUIRE(from_orbit.near_plane() == pinned.near_plane());
-
-    const auto view = from_orbit.view();
-    const auto expected_view = pinned.view();
-    REQUIRE(view.x.x == expected_view.x.x);
-    REQUIRE(view.w.z == expected_view.w.z);
-}
-
 TEST_CASE("the home eye lands on the diagonal it is defined by")
 {
     const Vec3 eye = home_orbit().to_camera(1.0f).eye();

@@ -9,6 +9,7 @@
 
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
+#include "graphics/OrbitCamera.hpp"
 
 namespace {
 
@@ -30,7 +31,7 @@ Rect cube_rect()
 Camera cube_camera()
 {
     const Rect rect = cube_rect();
-    return rubiks::graphics::default_camera(rect.width / rect.height);
+    return rubiks::graphics::camera_into(rubiks::graphics::home_orbit(), rect);
 }
 
 /** A point at a fraction of the 3D viewport, as the contract measures them. */

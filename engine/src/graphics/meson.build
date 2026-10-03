@@ -5,7 +5,6 @@ graphics_lib = static_library(
   'rubiks-graphics',
   files(
     'AxisGizmo.cpp',
-    'Camera.cpp',
     'CanvasTheme.cpp',
     'ConvexHull.cpp',
     'CubeGeometry.cpp',

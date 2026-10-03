@@ -142,10 +142,10 @@ TEST_CASE("the cut is filled rather than left open")
     // The body color has to be distinguishable from the background and from
     // every sticker, or a turn would look like a hole.
     for (const auto& face : turning.faces) {
-        if (face.color != kBodyColor) continue;
+        if (!(face.color == kBodyColor)) continue;
         REQUIRE(face.color.a == 255);
     }
-    REQUIRE(kBodyColor != Color{32, 32, 32, 255});
+    REQUIRE_FALSE(kBodyColor == Color{32, 32, 32, 255});
 }
 
 TEST_CASE("turning a layer a quarter of the way draws the turned cube")

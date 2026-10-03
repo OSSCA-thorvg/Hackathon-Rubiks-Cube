@@ -133,28 +133,27 @@ struct DepthSortPass {
  * cube shares the canvas with the net view. Keeping that rectangle square is
  * also what frees the camera aspect from the canvas aspect.
  *
- * The shadow gets the rectangle as its clip and a blur width sized to it,
- * and its casters become the convex silhouettes the renderer hides it behind.
- * This is the one pass that knows the rectangle, so it is the one that writes
- * them.
+ * The shadow gets the stage as its clip and a blur width sized to the
+ * rectangle, and its casters become the convex silhouettes the renderer hides
+ * it behind. This is the one pass that knows the rectangle, so it is the one
+ * that writes them.
  */
 struct ViewportPass {
     Rect rect;
-    /** Where the shadow may be drawn; the viewport itself unless told otherwise. */
+    /** Where the shadow may be drawn: the stage the viewport stands on. */
     Rect clip;
 
     [[nodiscard]] RenderScene operator()(const ClipScene& scene) const;
 };
 
-[[nodiscard]] ViewportPass viewport(const Rect& rect) noexcept;
-
 /**
- * The same, with the shadow allowed onto a stage wider than the viewport.
+ * The pass into `rect`, with the shadow allowed onto `stage`.
  *
  * The cube's viewport is a square, but the canvas round it is not, and the
  * ground shadow leans out of the square into the margins. The stage is the
  * canvas less whatever flat views share it, so the shadow can use the room
- * that is there without reaching the drawing beside it.
+ * that is there without reaching the drawing beside it. A caller with no
+ * wider ground to offer passes the viewport as its own stage.
  */
 [[nodiscard]] ViewportPass viewport(const Rect& rect, const Rect& stage) noexcept;
 

@@ -76,13 +76,6 @@ public:
     [[nodiscard]] std::optional<std::size_t> slot_of(
         const cube::SurfaceSticker& sticker) const noexcept;
 
-    /** The sticker resting in a slot. */
-    [[nodiscard]] cube::SurfaceSticker sticker_at(
-        std::size_t slot) const noexcept
-    {
-        return slots_[slot];
-    }
-
     /**
      * The loop at a slot index, which may be fractional and may run off
      * either end: the ring is closed, so the index wraps.

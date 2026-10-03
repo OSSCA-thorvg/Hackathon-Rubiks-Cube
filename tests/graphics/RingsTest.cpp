@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstddef>
 #include <map>
+#include <optional>
 #include <set>
 #include <tuple>
 #include <utility>
@@ -254,7 +255,7 @@ TEST_CASE("three slots along the ring is where the domain sends the sticker")
 TEST_CASE("a resting diagram draws every sticker and every ring")
 {
     const rubiks::cube::CubeState state(kSize);
-    const auto scene = build_rings_scene(state, kRect);
+    const auto scene = build_rings_scene(state, kRect, std::nullopt);
 
     REQUIRE(scene.faces.size() == 54);
     REQUIRE(scene.underlays.size() == 9);
@@ -279,7 +280,8 @@ TEST_CASE("a turn drawn at nothing and at a quarter matches the cube itself")
         for (int layer = 0; layer < kSize; ++layer) {
             const auto mask = rubiks::cube::layer(layer);
 
-            const auto settled = build_rings_scene(state, kRect);
+            const auto settled =
+                build_rings_scene(state, kRect, std::nullopt);
             const auto opening =
                 build_rings_scene(state, kRect,
                                   ActiveRotation{axis, mask, 0.0f, 1.0f});
@@ -299,7 +301,8 @@ TEST_CASE("a turn drawn at nothing and at a quarter matches the cube itself")
             const auto landed =
                 build_rings_scene(state, kRect,
                                   ActiveRotation{axis, mask, 90.0f, 1.0f});
-            const auto after = build_rings_scene(turned, kRect);
+            const auto after =
+                build_rings_scene(turned, kRect, std::nullopt);
 
             std::map<std::pair<int, int>, Color> shown;
             for (const auto& quad : landed.faces) {
@@ -467,7 +470,7 @@ TEST_CASE("the slot spacing is worked out from the layout, at every size")
         // And the stickers drawn at that spacing keep off one another: the
         // closest pair of the 6N^2 is further apart than a sticker is wide.
         const rubiks::cube::CubeState cube(size);
-        const auto scene = build_rings_scene(cube, kRect);
+        const auto scene = build_rings_scene(cube, kRect, std::nullopt);
 
         std::vector<Vec2> middles;
         for (const auto& face : scene.faces) {

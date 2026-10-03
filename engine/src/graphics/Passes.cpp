@@ -311,11 +311,6 @@ RenderScene ViewportPass::operator()(const ClipScene& scene) const
     return result;
 }
 
-ViewportPass viewport(const Rect& rect) noexcept
-{
-    return ViewportPass{rect, rect};
-}
-
 ViewportPass viewport(const Rect& rect, const Rect& stage) noexcept
 {
     return ViewportPass{rect, stage};

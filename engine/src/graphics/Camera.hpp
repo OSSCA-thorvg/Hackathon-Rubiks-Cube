@@ -80,13 +80,4 @@ inline constexpr math::Vec3 kWorldUp{0.0f, 1.0f, 0.0f};
  */
 inline constexpr math::Vec3 kHomeEye{3.0f, 3.0f, 3.0f};
 
-/**
- * The camera of the home viewpoint.
- *
- * Delegates to the orbit at home rather than building its own camera, so the
- * viewpoint the contract was derived from has one definition instead of two
- * that agree only as far as floating point lets them.
- */
-[[nodiscard]] Camera default_camera(float aspect) noexcept;
-
 }  // namespace rubiks::graphics

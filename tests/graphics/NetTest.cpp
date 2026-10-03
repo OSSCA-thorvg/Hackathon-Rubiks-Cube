@@ -15,6 +15,7 @@
 #include "cube/Assembly.hpp"
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
+#include "cube/Surface.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/NetGeometry.hpp"
 #include "graphics/NetRing.hpp"
@@ -473,11 +474,12 @@ TEST_CASE("every band is one closed ring through its twelve resting slots")
     for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
         for (int index = 0; index < kSize; ++index) {
             const auto ring = net_ring(axis, index, rect, kSize);
+            const auto slots = rubiks::cube::ring_slots(axis, index, kSize);
             INFO("axis " << static_cast<int>(axis) << " layer " << index);
             REQUIRE(ring.slot_count() == 4 * kSize);
 
             for (std::size_t slot = 0; slot < ring.slot_count(); ++slot) {
-                const auto sticker = ring.sticker_at(slot);
+                const auto sticker = slots[slot];
                 const auto placed = net_position(sticker, kSize);
                 REQUIRE(placed);
 
@@ -612,6 +614,7 @@ TEST_CASE("a turning band rides its ring one face's worth at a time")
     for (const auto axis : {Axis::X, Axis::Y}) {
         for (int index = 0; index < kSize; ++index) {
             const auto ring = net_ring(axis, index, rect, kSize);
+            const auto slots = rubiks::cube::ring_slots(axis, index, kSize);
 
             for (const float angle : {15.0f, 30.0f, 45.0f, 70.0f}) {
                 const RenderScene scene = build_net_scene(
@@ -628,7 +631,7 @@ TEST_CASE("a turning band rides its ring one face's worth at a time")
                     std::vector<rubiks::math::Vec2> drawn_at;
                     for (std::size_t step = 0; step < kSize; ++step) {
                         const std::size_t slot = first + step;
-                        const auto sticker = ring.sticker_at(slot);
+                        const auto sticker = slots[slot];
 
                         // Where the piece holds this cell: along the loop's
                         // direction from its middle, by as many cells as the
@@ -1126,12 +1129,12 @@ TEST_CASE("a ring runs dead straight between slots that share a face")
     // parts and only the corners between faces are curved. It is also what
     // stops a cell rocking -- along a run there is nothing for its tilt to
     // follow but the run itself.
-    const auto require_straight = [&](const SlotRing& ring) {
+    const auto require_straight = [&](
+        const SlotRing& ring,
+        const std::vector<rubiks::cube::SurfaceSticker>& slots) {
         for (std::size_t slot = 0; slot < ring.slot_count(); ++slot) {
             const auto next = (slot + 1) % ring.slot_count();
-            if (ring.sticker_at(slot).face != ring.sticker_at(next).face) {
-                continue;
-            }
+            if (slots[slot].face != slots[next].face) continue;
 
             const auto from = ring.at(static_cast<float>(slot)).position;
             const auto to = ring.at(static_cast<float>(slot) + 1.0f).position;
@@ -1152,7 +1155,8 @@ TEST_CASE("a ring runs dead straight between slots that share a face")
 
     for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
         for (int index = 0; index < kSize; ++index) {
-            require_straight(net_ring(axis, index, rect, kSize));
+            require_straight(net_ring(axis, index, rect, kSize),
+                             rubiks::cube::ring_slots(axis, index, kSize));
         }
     }
 }

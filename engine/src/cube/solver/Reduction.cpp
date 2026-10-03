@@ -478,12 +478,6 @@ public:
         return cells_;
     }
 
-    /** The colour each cell is being asked for. */
-    [[nodiscard]] const std::vector<FaceColor>& wants() const noexcept
-    {
-        return wants_;
-    }
-
     /** How many stickers there are to get right. */
     [[nodiscard]] int target() const noexcept
     {
@@ -692,20 +686,6 @@ public:
         return delta;
     }
 
-    /** The same, for a tool with nothing in front of it. */
-    [[nodiscard]] int gain(const CubeState& cube,
-                           const std::vector<std::pair<int, int>>& moved) const
-    {
-        int delta = 0;
-        for (const auto& [from, to] : moved) {
-            const auto& was = cells_[static_cast<std::size_t>(from)];
-            const auto colour = sticker_at(cube, was.at, was.face);
-            if (colour == wants_[static_cast<std::size_t>(to)]) ++delta;
-            if (colour == wants_[static_cast<std::size_t>(from)]) --delta;
-        }
-        return delta;
-    }
-
     /**
      * How many more stickers would be home after a setup, a tool, and the
      * setup taken back.
@@ -846,7 +826,7 @@ struct Choice {
  */
 class CentreWorkshop {
 public:
-    explicit CentreWorkshop(int size) : size_(size), centres_(size, centre_cells(size))
+    explicit CentreWorkshop(int size) : centres_(size, centre_cells(size))
     {
         for (const auto& tool : centre_shapes(size)) {
             Prepared prepared;
@@ -867,7 +847,6 @@ public:
 
     }
 
-    [[nodiscard]] int size() const noexcept { return size_; }
     [[nodiscard]] const Board& centres() const noexcept { return centres_; }
     [[nodiscard]] const std::vector<Prepared>& tools() const noexcept
     {
@@ -911,7 +890,6 @@ private:
         return source;
     }
 
-    int size_;
     Board centres_;
     std::vector<Prepared> centre_tools_;
     std::vector<Turn> centre_setups_;
@@ -937,7 +915,7 @@ private:
  * turns are generators enough: a slice keeps an edge piece at the depth it
  * found it, so adding the slices would merge nothing.
  */
-[[nodiscard]] std::vector<int> facelet_worlds(const Board& board, int size)
+[[nodiscard]] std::vector<int> facelet_worlds(const Board& board)
 {
     std::vector<Turn> generators;
     for (const Face face : faces()) {
@@ -945,7 +923,6 @@ private:
             generators.push_back(face_turn(face, turns));
         }
     }
-    (void)size;
     return orbits_under(board, generators);
 }
 
@@ -975,7 +952,7 @@ public:
         // world. Between them these say, of any cube, how many swaps each
         // world is from finished -- which is the one thing about a big cube
         // that no tool here can change and every tool here has to respect.
-        worlds_ = facelet_worlds(edges_, size);
+        worlds_ = facelet_worlds(edges_);
         for (const int world : worlds_) {
             if (world + 1 > static_cast<int>(homes_.size())) {
                 homes_.resize(static_cast<std::size_t>(world) + 1,

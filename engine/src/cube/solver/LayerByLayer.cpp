@@ -58,7 +58,6 @@ struct FaceTurn {
 struct Placement {
     std::vector<Face> faces;
     std::vector<FaceColor> colours;
-    CubiePosition at{};
 };
 
 [[nodiscard]] bool shows(const Placement& piece, Face face) noexcept
@@ -111,7 +110,6 @@ struct Placement {
                              const CubiePosition& position)
 {
     Placement piece;
-    piece.at = position;
     piece.faces = exposed_faces(position, cube.size());
     for (const Face face : piece.faces) {
         piece.colours.push_back(sticker_at(cube, position, face));

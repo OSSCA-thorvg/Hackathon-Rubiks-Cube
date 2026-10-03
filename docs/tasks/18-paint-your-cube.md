@@ -89,6 +89,8 @@ struct PaintReading {
 
 두 가지를 계약으로 못 박습니다. `blamed`의 번호는 **`surface_stickers(size)`가 세는 순서**이고 — 웹의 강조와 ABI가 같은 순서를 읽어야 하므로 이것이 규약입니다 — `fault`는 하나뿐이므로 **검사 순서가 곧 보고 우선순위**입니다: 개수 → 궤도 → 조각의 정체 → 방향(비틀림·뒤집힘) → 홀짝. 여러 개가 겹칠 때 가장 바깥의 것을 먼저 말하는 편이 고치기 쉽습니다.
 
+> **개정 (2026-10-03)**: `blamed`는 ABI를 건너지 않습니다. 목록을 건네던 export 둘(`paint_blamed_count`, `paint_blamed_at`)은 페이지가 읽은 적이 없어 지웠습니다. 페이지는 `paint_fault`의 문장만 쓰고, 틀린 칸의 테두리는 엔진이 전개도에 직접 그립니다. 그래서 번호의 순서는 웹과 ABI 사이의 규약이 아니라, 진단(`read_painting`)과 그 칸에 테두리를 두르는 그림(`build_net_painting`) 사이의 규약입니다. surface를 말하지 않던 `paint_at`과 `paint_fill`도 같은 날 지웠습니다. 포인터로 칠하는 것은 초안이 열린 동안의 `pointer_down_on`이고, `set_paint_filling`을 켜 두면 그 누름이 면 전체를 채웁니다. 아래 Step 5의 "export 14개"는 그때의 수입니다.
+
 초안에는 "어디에도 안 걸리는데 안 되는" `Unreachable`이 있었습니다. 뺐습니다 — 6번이 그 자리를 측정으로 대신합니다.
 
 ### 3. 검사는 짧다 — 규칙은 재서 확정했습니다

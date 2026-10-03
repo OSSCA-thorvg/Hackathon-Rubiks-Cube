@@ -106,9 +106,9 @@ struct PaintReading {
     /**
      * The stickers to point at, numbered as `surface_stickers()` counts them.
      *
-     * The order is the contract between this, the ABI and the drawing that
-     * highlights them; it is not an implementation detail any of the three may
-     * choose for itself. Empty when nothing can usefully be pointed at.
+     * The order is the contract between this and the drawing that highlights
+     * them; it is not an implementation detail either may choose for itself.
+     * Empty when nothing can usefully be pointed at.
      */
     std::vector<int> blamed;
 

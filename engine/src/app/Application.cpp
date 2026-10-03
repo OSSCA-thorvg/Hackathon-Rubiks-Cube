@@ -718,16 +718,6 @@ void drain_orbit() noexcept
 }
 
 /**
- * Throws away everything a playback is made of, in one call.
- *
- * Two things, not one: the sequence, and any turn of it already in flight. A
- * turn that has left the player still commits on its own a few frames later,
- * so dropping only the player would apply the last move of an abandoned
- * scramble onto the cube that replaced it. The sweep the pointer has made is
- * kept -- a viewpoint is where the user left it -- and moves already committed
- * are never taken back.
- */
-/**
  * Drops a draft that has stopped describing the cube it was taken from.
  *
  * A draft is a colouring of one cube of one size, so every command that puts a
@@ -741,22 +731,54 @@ void discard_painting() noexcept
 }
 
 /**
- * Forgets where the session began, which every fresh cube does.
+ * Throws away everything a playback is made of, in one call.
  *
- * Beside `discard_painting()` rather than inside it: closing a draft is not
- * the same as replacing the cube, and only the second of those makes the
- * colouring this session started from stop being true.
+ * Two things, not one: the sequence, and any turn of it already in flight. A
+ * turn that has left the player still commits on its own a few frames later,
+ * so dropping only the player would apply the last move of an abandoned
+ * scramble onto the cube that replaced it. The sweep the pointer has made is
+ * kept -- a viewpoint is where the user left it -- and moves already committed
+ * are never taken back.
  */
-void forget_origin() noexcept
-{
-    state->origin.clear();
-}
-
 void discard_playback() noexcept
 {
     drain_orbit();
     state->interaction.reset();
     state->playback.reset();
+}
+
+/**
+ * Puts a different cube in the place of the one that is there.
+ *
+ * Every command that replaces the cube comes through here, so the order is
+ * written once. The draft goes, because it is a colouring of the cube being
+ * replaced. Whatever was playing goes, with any turn of it still in flight,
+ * before the cube that turn would have landed on arrives. Then the cube, a
+ * controller for it, and an empty record: a command that has a record to put
+ * on the new cube writes it afterwards.
+ *
+ * The controller is replaced rather than told, because the size is the rule
+ * it turns moves down by and a gesture half made on the cube before is not
+ * something to carry across.
+ *
+ * `origin` is the colouring the session begins from when the cube was read
+ * from one, and nothing otherwise, so every fresh cube forgets where the last
+ * session began. Closing a draft does not do that on its own: only replacing
+ * the cube makes the colouring this session started from stop being true. It
+ * is taken by value so that the draft's own stickers can be handed over; they
+ * have left the draft by the time this closes it.
+ */
+void install_cube(cube::CubeState next,
+                  std::vector<cube::FaceColor> origin = {}) noexcept
+{
+    discard_painting();
+    discard_playback();
+
+    const int size = next.size();
+    state->cube_state = std::move(next);
+    state->interaction = interaction::InteractionController(size);
+    state->timeline.clear();
+    state->origin = std::move(origin);
 }
 
 /**
@@ -1218,10 +1240,7 @@ bool scramble(std::uint32_t seed, std::uint32_t move_count) noexcept
     // has not published yet still counts. Everything else goes, including a
     // snap that would otherwise commit onto the new cube, and a colouring of
     // the cube that is about to stop existing.
-    discard_painting();
-    forget_origin();
-    discard_playback();
-    state->cube_state = cube::CubeState(size_of_cube());
+    install_cube(cube::CubeState(size_of_cube()));
 
     // The whole sequence is recorded before any of it has happened, and the
     // cursor walks up it as the moves land -- so a scramble interrupted half
@@ -1249,11 +1268,7 @@ void reset_cube() noexcept
     if (!state) return;
 
     // Same split as scramble(): the cube is the only thing this command owns.
-    discard_painting();
-    forget_origin();
-    discard_playback();
-    state->cube_state = cube::CubeState(size_of_cube());
-    state->timeline.clear();
+    install_cube(cube::CubeState(size_of_cube()));
 }
 
 bool set_cube_size(int size) noexcept
@@ -1265,12 +1280,9 @@ bool set_cube_size(int size) noexcept
     // is there is not a command.
     if (size == size_of_cube()) return true;
 
-    // A reset with one thing added. The controller is replaced rather than
-    // told, because the size is the rule it turns moves down by and a gesture
-    // half-made on the cube before is not something to carry across.
-    reset_cube();
-    state->cube_state = cube::CubeState(size);
-    state->interaction = interaction::InteractionController(size);
+    // A reset onto a cube of the new size: the record, the draft and whatever
+    // was playing go the way they do for a reset, and nothing else does.
+    install_cube(cube::CubeState(size));
     return true;
 }
 
@@ -1529,15 +1541,10 @@ bool apply_painting() noexcept
     // so the record goes the way it goes for a change of size -- and a rewind
     // afterwards comes back to this cube rather than to a solved one, which is
     // what a person who painted their own cube would expect it to mean.
-    discard_playback();
-    state->cube_state = std::move(*built);
-    state->interaction = interaction::InteractionController(size);
-    state->timeline.clear();
-
-    // Kept before the draft goes, because this is the one thing about the
-    // draft that outlives it: where the session began.
-    state->origin = std::move(state->paint->stickers);
-    discard_painting();
+    //
+    // The draft's stickers are handed over as where the session began, which
+    // is the one thing about the draft that outlives it.
+    install_cube(std::move(*built), std::move(state->paint->stickers));
     return true;
 }
 
@@ -1618,12 +1625,7 @@ bool restore_painting(int size, std::uint32_t user_count) noexcept
     if (!built) return false;
 
     // Past every refusal, so what follows cannot leave the cube half restored.
-    discard_painting();
-    discard_playback();
-    state->cube_state = std::move(*built);
-    state->interaction = interaction::InteractionController(size);
-    state->timeline.clear();
-    state->origin = std::move(painting);
+    install_cube(std::move(*built), std::move(painting));
 
     // The colouring is the starting position, so what follows it is the user's
     // own -- recorded the ordinary way, which is what happened to the cube
@@ -1680,11 +1682,7 @@ bool restore_apply(int size, std::uint32_t scramble_count,
     // Past every refusal, so what follows cannot leave the cube half restored
     // -- the size included, which is why it arrives with the record rather
     // than through a call of its own before it.
-    discard_painting();
-    forget_origin();
-    discard_playback();
-    state->cube_state = cube::CubeState(size);
-    state->interaction = interaction::InteractionController(size);
+    install_cube(cube::CubeState(size));
 
     // Built through the ordinary operations rather than through a way in of
     // its own: the scramble is begun and then walked up, and the user's moves

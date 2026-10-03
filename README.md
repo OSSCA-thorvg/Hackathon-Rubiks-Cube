@@ -28,7 +28,7 @@ thorvg-rubiks/
 ├── web/                    # Vite + TypeScript + HTML/CSS (Browser application)
 ├── engine/
 │   ├── src/cube/           # Cube state, cubie, move (rendering과 무관)
-│   ├── src/math/           # vector, matrix, quaternion, projection
+│   ├── src/math/           # vector, matrix, quaternion, projection, angle
 │   ├── src/graphics/       # camera, pipeline passes, cube와 전개도 geometry
 │   ├── src/interaction/    # picking, drag 해석, snap animation, 시점 orbit
 │   ├── src/render/         # ThorVG rendering backend

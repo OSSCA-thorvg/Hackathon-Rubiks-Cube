@@ -8,7 +8,9 @@
  *
  * The cube's turns and the viewpoint are kept in degrees, which is what a
  * quarter turn and a drag are naturally measured in; the trigonometry wants
- * radians. This is the one place the two meet.
+ * radians. This is where the two meet. The orbit camera alone converts with
+ * two factors of its own, built from the pi here, for the reason written
+ * beside them.
  */
 namespace rubiks::math {
 

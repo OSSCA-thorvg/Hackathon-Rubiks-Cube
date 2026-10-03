@@ -269,8 +269,6 @@ CubeState
     ↓
 BuildScene           (stickers + shadow casters)
     ↓
-Model Transform
-    ↓
 Shadow               (casters → ground shadow, world space)
     ↓
 View Transform
@@ -292,7 +290,6 @@ ThorVG Render
 auto scene =
     cube
     | BuildScene{}
-    | Transform(model)
     | Shadow(light, camera)
     | View(camera)
     | Light(light, camera)

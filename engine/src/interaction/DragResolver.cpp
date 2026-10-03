@@ -61,11 +61,10 @@ std::optional<AxisCandidate> resolve_axis(
     std::optional<AxisCandidate> best;
     float best_score = 0.0f;
 
-    for (const Axis axis : cube::axes()) {
-        // Turning about the axis the grabbed face points along would spin the
-        // sticker in place, which no drag can ask for.
-        if (axis == face_axis) continue;
-
+    // Turning about the axis the grabbed face points along would spin the
+    // sticker in place, which no drag can ask for, so only the other two are
+    // tried.
+    for (const Axis axis : cube::other_axes(face_axis)) {
         const auto direction = turn_direction(axis, pick.point, camera,
                                               viewport);
         if (!direction) continue;

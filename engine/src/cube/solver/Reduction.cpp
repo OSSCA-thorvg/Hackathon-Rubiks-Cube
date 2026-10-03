@@ -150,8 +150,7 @@ struct Commutator {
 
     for (const Face face : faces()) {
         for (const int face_turns : {1, -1, 2}) {
-            for (const Axis axis : axes()) {
-                if (axis == axis_of(face)) continue;
+            for (const Axis axis : other_axes(axis_of(face))) {
                 for (int layer = 1; layer <= size - 2; ++layer) {
                     for (const int slice_turns : {1, -1, 2}) {
                         tools.push_back(Commutator{

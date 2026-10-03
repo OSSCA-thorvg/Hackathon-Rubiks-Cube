@@ -41,13 +41,7 @@ private:
                              std::optional<Axis> previous) noexcept
 {
     if (!previous) return axes()[random.below(3)];
-
-    std::array<Axis, 2> choices{};
-    std::size_t count = 0;
-    for (const Axis axis : axes()) {
-        if (axis != *previous) choices[count++] = axis;
-    }
-    return choices[random.below(2)];
+    return other_axes(*previous)[random.below(2)];
 }
 
 /** Maps a stable random index to one quarter-turn amount. */

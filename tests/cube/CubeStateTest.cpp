@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <utility>
 #include <vector>
 
@@ -394,10 +395,11 @@ TEST_CASE("cubes of different sizes are never equal")
     REQUIRE_FALSE(CubeState(2) == CubeState(3));
 }
 
-TEST_CASE("the axes are listed in the order the enum declares them")
+TEST_CASE("the axes, and the two beside any one, come in the enum's order")
 {
     using rubiks::cube::axes;
     using rubiks::cube::axis_index;
+    using rubiks::cube::other_axes;
 
     // Written out by hand rather than looped over: a seeded scramble draws
     // its axis by this order and the solver builds its tools in it, so the
@@ -411,6 +413,13 @@ TEST_CASE("the axes are listed in the order the enum declares them")
     REQUIRE(axis_index(Axis::X) == 0);
     REQUIRE(axis_index(Axis::Y) == 1);
     REQUIRE(axis_index(Axis::Z) == 2);
+
+    // The same order again for the two that are left: a face's stickers are
+    // walked across the first and down the second, which is the order a
+    // painting is indexed in.
+    REQUIRE(other_axes(Axis::X) == std::array<Axis, 2>{Axis::Y, Axis::Z});
+    REQUIRE(other_axes(Axis::Y) == std::array<Axis, 2>{Axis::X, Axis::Z});
+    REQUIRE(other_axes(Axis::Z) == std::array<Axis, 2>{Axis::X, Axis::Y});
 }
 
 TEST_CASE("a turn count wraps into 0 to 3 and a mask answers for each layer")

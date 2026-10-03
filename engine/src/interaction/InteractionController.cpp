@@ -594,8 +594,7 @@ std::vector<graphics::RingsGuide> InteractionController::rings_through_pick()
     // Every axis but the one the sticker's own face points along: a turn about
     // that one spins it where it is rather than carrying it anywhere.
     const auto& sticker = rings_gesture_->pick.sticker;
-    for (const auto axis : cube::axes()) {
-        if (axis == cube::axis_of(sticker.face)) continue;
+    for (const auto axis : cube::other_axes(cube::axis_of(sticker.face))) {
         rings.push_back(
             graphics::RingsGuide{axis, cube::coordinate_on(axis, sticker)});
     }

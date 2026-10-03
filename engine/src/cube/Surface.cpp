@@ -218,17 +218,13 @@ std::vector<SurfaceSticker> surface_stickers(int size)
         const Axis normal = axis_of(face);
 
         // The face pins its own axis; the other two run over the whole face.
+        const auto [across_axis, down_axis] = other_axes(normal);
         for (int down = 0; down < size; ++down) {
             for (int across = 0; across < size; ++across) {
                 CubiePosition position{0, 0, 0};
                 set_coordinate(position, normal, outer_layer(face, size));
-
-                bool first = true;
-                for (const Axis axis : axes()) {
-                    if (axis == normal) continue;
-                    set_coordinate(position, axis, first ? across : down);
-                    first = false;
-                }
+                set_coordinate(position, across_axis, across);
+                set_coordinate(position, down_axis, down);
                 stickers.push_back(SurfaceSticker{position.x, position.y,
                                                   position.z, face});
             }

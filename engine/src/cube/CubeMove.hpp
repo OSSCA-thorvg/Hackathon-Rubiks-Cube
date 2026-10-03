@@ -16,6 +16,26 @@ inline constexpr std::size_t kAxisCount = 3;
     return {Axis::X, Axis::Y, Axis::Z};
 }
 
+/**
+ * The two axes that are not this one, in the order the enum declares them.
+ *
+ * The order is relied on. A face's stickers are walked across the first of
+ * the two and down the second, which is the order a painting is indexed in,
+ * and the solver builds its tools in the order this gives.
+ */
+[[nodiscard]] constexpr std::array<Axis, 2> other_axes(Axis axis) noexcept
+{
+    switch (axis) {
+        case Axis::X:
+            return {Axis::Y, Axis::Z};
+        case Axis::Y:
+            return {Axis::X, Axis::Z};
+        case Axis::Z:
+            break;
+    }
+    return {Axis::X, Axis::Y};
+}
+
 [[nodiscard]] constexpr std::size_t axis_index(Axis axis) noexcept
 {
     return static_cast<std::size_t>(axis);

@@ -243,19 +243,7 @@ struct RingsMetrics {
                                                   int size) noexcept
 {
     const Axis free = axis_of(sticker.face);
-
-    Axis first = Axis::X;
-    Axis second = Axis::X;
-    bool found_first = false;
-    for (const Axis axis : axes()) {
-        if (axis == free) continue;
-        if (!found_first) {
-            first = axis;
-            found_first = true;
-            continue;
-        }
-        second = axis;
-    }
+    const auto [first, second] = cube::other_axes(free);
 
     const Vec2 first_center = axis_center(first);
     const Vec2 second_center = axis_center(second);

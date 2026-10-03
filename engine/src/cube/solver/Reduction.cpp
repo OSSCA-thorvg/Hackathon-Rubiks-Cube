@@ -331,7 +331,7 @@ struct Commutator {
  */
 [[nodiscard]] std::vector<Turn> face_setups()
 {
-    std::vector<Turn> before{Turn{Face::Up, 1, 1, 0}};
+    std::vector<Turn> before{Turn{Face::Up, 1, 0}};
     for (const Face face : faces()) {
         for (const int turns : {1, -1, 2}) {
             before.push_back(face_turn(face, turns));
@@ -343,7 +343,7 @@ struct Commutator {
 /** Whether a turn is one of the six outer faces rather than an inner slice. */
 [[nodiscard]] bool is_face_turn(const Turn& turn) noexcept
 {
-    return turn.first_depth == 1 && turn.last_depth == 1;
+    return turn.depth == 1;
 }
 
 /** Where a sticker ends up after one turn. */

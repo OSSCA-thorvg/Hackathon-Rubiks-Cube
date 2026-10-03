@@ -22,18 +22,17 @@
 namespace rubiks::cube::solver {
 
 /**
- * A run of layers measured inwards from one face, turned as seen from it.
+ * One layer measured inwards from one face, turned as seen from it.
  *
  * Depth 1 is the face itself and depths grow inwards, exactly as the
- * application's own turn command counts them. A face turn is depth 1 to 1; an
- * inner slice is one depth further in; nothing here ever asks for a run,
+ * application's own turn command counts them. A face turn is depth 1 and an
+ * inner slice is further in. A turn names one depth and never a run of them,
  * because a solver that turns two layers at once has to put the second one
  * back.
  */
 struct Turn {
     Face face;
-    int first_depth;
-    int last_depth;
+    int depth;
     int turns;
 };
 
@@ -51,7 +50,7 @@ struct Turn {
 /** One outer face, turned as seen from outside it. */
 [[nodiscard]] inline Turn face_turn(Face face, int turns) noexcept
 {
-    return Turn{face, 1, 1, turns};
+    return Turn{face, 1, turns};
 }
 
 /**
@@ -68,7 +67,7 @@ struct Turn {
                       : axis == Axis::Y ? Face::Up
                                         : Face::Front;
     const int depth = size - layer;
-    return Turn{from, depth, depth, turns};
+    return Turn{from, depth, turns};
 }
 
 /**
@@ -82,14 +81,14 @@ struct Turn {
 {
     return CubeMove{
         axis_of(turn.face),
-        depth_layers(turn.face, turn.first_depth, turn.last_depth, size),
+        depth_layers(turn.face, turn.depth, turn.depth, size),
         positive_face(turn.face, size) ? turn.turns : -turn.turns};
 }
 
 /** The same turn, taken back. */
 [[nodiscard]] inline Turn undone(const Turn& turn) noexcept
 {
-    return Turn{turn.face, turn.first_depth, turn.last_depth, -turn.turns};
+    return Turn{turn.face, turn.depth, -turn.turns};
 }
 
 /** A face carried round by `quarters` turns of the up face. */

@@ -101,7 +101,7 @@ struct OrbitDelta {
  */
 class InteractionController {
 public:
-    explicit InteractionController(int size = 3) noexcept : size_(size) {}
+    explicit InteractionController(int size) noexcept : size_(size) {}
 
     /**
      * Starts a gesture: a layer drag over the cube, an orbit anywhere else.

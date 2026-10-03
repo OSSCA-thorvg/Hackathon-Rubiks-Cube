@@ -1,5 +1,6 @@
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <map>
 #include <optional>
 #include <tuple>
@@ -199,4 +200,19 @@ TEST_CASE("only the selected layer moves")
     // the exception being the center of the right face, which is centered on
     // the axis and so turns in place.
     REQUIRE(moved == 20);
+}
+
+TEST_CASE("a rotation's progress is its angle in quarter turns")
+{
+    REQUIRE(quarter_progress(45.0f) == 0.5f);
+
+    // Neither capped at one quarter nor folded to a positive turn: a drag
+    // carried two quarters the other way is two quarters the other way.
+    REQUIRE(quarter_progress(-180.0f) == -2.0f);
+
+    // An angle that is not finite is drawn as no turn at all, rather than
+    // handed on to be floored and indexed with.
+    REQUIRE(quarter_progress(std::numeric_limits<float>::quiet_NaN()) == 0.0f);
+    REQUIRE(quarter_progress(std::numeric_limits<float>::infinity()) == 0.0f);
+    REQUIRE(quarter_progress(-std::numeric_limits<float>::infinity()) == 0.0f);
 }

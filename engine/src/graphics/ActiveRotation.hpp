@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+
 #include "cube/CubeMove.hpp"
 
 namespace rubiks::graphics {
@@ -44,6 +46,25 @@ struct ActiveRotation {
 {
     return a.axis == b.axis && a.layers == b.layers &&
            a.angle_degrees == b.angle_degrees && a.opening == b.opening;
+}
+
+/** The angle of one quarter turn, in the degrees a rotation is measured in. */
+inline constexpr float kDegreesPerQuarterTurn = 90.0f;
+
+/**
+ * How far through its quarter turn a flat drawing draws a rotation: 1 at a
+ * finished quarter.
+ *
+ * Not capped: the rings wrap, so a drag carried past a quarter simply keeps
+ * going round the loop it is on. An angle that is not finite is no progress
+ * at all: a drawing floors the result and reads tables by it, and neither
+ * means anything for a NaN.
+ */
+[[nodiscard]] inline float quarter_progress(float angle_degrees) noexcept
+{
+    if (!std::isfinite(angle_degrees)) return 0.0f;
+
+    return angle_degrees / kDegreesPerQuarterTurn;
 }
 
 }  // namespace rubiks::graphics

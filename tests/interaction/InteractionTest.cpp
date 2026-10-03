@@ -69,7 +69,8 @@ Vec2 screen_of(const Vec3& world)
 /** Pixels of drag along a locked direction that add up to one degree. */
 float pixels_per_degree()
 {
-    return kQuarterTurnFraction * cube_rect().width / 90.0f;
+    return kQuarterTurnFraction * cube_rect().width /
+           rubiks::graphics::kDegreesPerQuarterTurn;
 }
 
 /** The screen direction a positive turn about `axis` carries `grab` along. */

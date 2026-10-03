@@ -23,8 +23,6 @@ using cube::outer_layer;
 using math::Vec2;
 using math::kPi;
 
-constexpr float kDegreesPerQuarterTurn = 90.0f;
-
 [[nodiscard]] Vec2 subtracted(const Vec2& a, const Vec2& b) noexcept
 {
     return Vec2{a.x - b.x, a.y - b.y};
@@ -580,7 +578,7 @@ RenderScene build_rings_scene(const cube::CubeState& state, const Rect& rect,
         return scene;
     }
 
-    const float progress = active->angle_degrees / kDegreesPerQuarterTurn;
+    const float progress = quarter_progress(active->angle_degrees);
 
     // A turn past a whole quarter is that many finished turns and a part of
     // one. Taking the finished ones off first is what keeps a sticker landing

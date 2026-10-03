@@ -151,7 +151,8 @@ void require_ends_match(const rubiks::cube::CubeMove& move)
     CubeState after = before;
     after.apply(move);
 
-    const float angle = 90.0f * static_cast<float>(move.quarter_turns);
+    const float angle =
+        kDegreesPerQuarterTurn * static_cast<float>(move.quarter_turns);
     const Rect rect = test_rect();
 
     INFO("axis " << static_cast<int>(move.axis) << " layers " << move.layers
@@ -613,8 +614,8 @@ TEST_CASE("a turning band rides its ring one face's worth at a time")
             for (const float angle : {15.0f, 30.0f, 45.0f, 70.0f}) {
                 const RenderScene scene = build_net_scene(
                     state, rect, ActiveRotation{axis, layer(index), angle});
-                const float advance =
-                    static_cast<float>(kSize) * angle / 90.0f;
+                const float advance = static_cast<float>(kSize) * angle /
+                                      kDegreesPerQuarterTurn;
 
                 for (std::size_t first = 0; first < ring.slot_count();
                      first += kSize) {

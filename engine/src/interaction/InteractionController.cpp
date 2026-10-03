@@ -13,7 +13,7 @@
 namespace rubiks::interaction {
 namespace {
 
-constexpr float kDegreesPerQuarterTurn = 90.0f;
+using graphics::kDegreesPerQuarterTurn;
 
 /** Degrees of turn per pixel of drag along the locked direction. */
 [[nodiscard]] float degrees_per_pixel(const graphics::Rect& viewport) noexcept

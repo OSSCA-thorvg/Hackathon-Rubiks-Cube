@@ -26,8 +26,6 @@ using cube::outer_layer;
 using math::Vec2;
 using math::kPi;
 
-constexpr float kDegreesPerQuarterTurn = 90.0f;
-
 /** Where one cell of the net lands, given the rectangle the net fills. */
 struct NetMetrics {
     float cell;
@@ -277,19 +275,6 @@ struct Step {
 {
     return Step{a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z,
                 a.x * b.y - a.y * b.x};
-}
-
-/**
- * How far through its quarter turn the net draws a rotation.
- *
- * Not capped: the rings wrap, so a drag carried past a quarter simply keeps
- * going round the loop it is on.
- */
-[[nodiscard]] float net_progress(float angle_degrees) noexcept
-{
-    if (!std::isfinite(angle_degrees)) return 0.0f;
-
-    return angle_degrees / kDegreesPerQuarterTurn;
 }
 
 }  // namespace
@@ -583,7 +568,7 @@ RenderScene build_net_scene(const cube::CubeState& state, const Rect& rect,
 
     const int size = state.size();
     const NetMetrics metrics = net_metrics(rect, size);
-    const float progress = net_progress(active->angle_degrees);
+    const float progress = quarter_progress(active->angle_degrees);
 
     // The cross draws a Z turn where it happens. The front block's border is
     // that layer's band, and the four blocks around it are laid out four-fold

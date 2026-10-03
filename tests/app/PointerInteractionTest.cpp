@@ -136,7 +136,8 @@ rubiks::math::Vec2 front_column(int column, std::uint32_t width,
 float pixels_per_degree(std::uint32_t width, std::uint32_t height)
 {
     return rubiks::interaction::kQuarterTurnFraction *
-           cube_rect(width, height).width / 90.0f;
+           cube_rect(width, height).width /
+           rubiks::graphics::kDegreesPerQuarterTurn;
 }
 
 const std::uint8_t* pixel_at(float x, float y, std::uint32_t width)

@@ -50,7 +50,8 @@ float pixels_per_degree()
                                                rubiks::graphics::ViewMode::Both,
                                                rubiks::graphics::FlatStyle::Net)
                           .cube;
-    return rubiks::interaction::kQuarterTurnFraction * rect.width / 90.0f;
+    return rubiks::interaction::kQuarterTurnFraction * rect.width /
+           rubiks::graphics::kDegreesPerQuarterTurn;
 }
 
 /**

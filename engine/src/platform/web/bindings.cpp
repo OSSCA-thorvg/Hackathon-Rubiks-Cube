@@ -1,7 +1,5 @@
 #include <cstdint>
 
-#include <emscripten/emscripten.h>
-
 #include "app/Application.hpp"
 
 // C ABI for browser clients. Every function uses primitive types only.
@@ -15,8 +13,7 @@ extern "C" {
  *
  * @return one when initialization succeeds; otherwise zero.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_initialize(
-    std::uint32_t width, std::uint32_t height) noexcept
+int thorvg_rubiks_initialize(std::uint32_t width, std::uint32_t height) noexcept
 {
     return rubiks::app::initialize(width, height) ? 1 : 0;
 }
@@ -28,7 +25,7 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_initialize(
  *
  * @return one when the frame completed, including sync; otherwise zero.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_render() noexcept
+int thorvg_rubiks_render() noexcept
 {
     return rubiks::app::render() ? 1 : 0;
 }
@@ -41,7 +38,7 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_render() noexcept
  *
  * @return one when the surface has the new size afterwards; otherwise zero.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_resize_surface(
+int thorvg_rubiks_resize_surface(
     std::uint32_t id, std::uint32_t width, std::uint32_t height) noexcept
 {
     return rubiks::app::resize_surface(id, width, height) ? 1 : 0;
@@ -53,7 +50,7 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_resize_surface(
  *
  * @return one when accepted; zero for an unknown surface or unknown bits.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_surface_scenes(
+int thorvg_rubiks_set_surface_scenes(
     std::uint32_t id, std::uint32_t scenes) noexcept
 {
     return rubiks::app::set_surface_scenes(id, scenes) ? 1 : 0;
@@ -66,15 +63,13 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_surface_scenes(
  *
  * @return zero for a surface with no buffer.
  */
-EMSCRIPTEN_KEEPALIVE std::uintptr_t thorvg_rubiks_surface_pixel_buffer(
-    std::uint32_t id) noexcept
+std::uintptr_t thorvg_rubiks_surface_pixel_buffer(std::uint32_t id) noexcept
 {
     return rubiks::app::surface_pixel_buffer(id);
 }
 
 /** Returns surface `id`'s pixel buffer length in bytes; zero without one. */
-EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_surface_pixel_byte_length(
-    std::uint32_t id) noexcept
+std::uint32_t thorvg_rubiks_surface_pixel_byte_length(std::uint32_t id) noexcept
 {
     return rubiks::app::surface_pixel_byte_length(id);
 }
@@ -85,8 +80,7 @@ EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_surface_pixel_byte_length(
  * render() skips a surface whose picture would not change, so a client
  * copies a surface out only when this has moved since it last did.
  */
-EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_surface_frame(
-    std::uint32_t id) noexcept
+std::uint32_t thorvg_rubiks_surface_frame(std::uint32_t id) noexcept
 {
     return rubiks::app::surface_frame(id);
 }
@@ -98,9 +92,7 @@ EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_surface_frame(
  *         non-finite coordinates, while another gesture is running, and for
  *         a surface with no buffer.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_pointer_down_on(std::uint32_t id,
-                                                       float x,
-                                                       float y) noexcept
+int thorvg_rubiks_pointer_down_on(std::uint32_t id, float x, float y) noexcept
 {
     return rubiks::app::pointer_down_on(id, x, y) ? 1 : 0;
 }
@@ -108,7 +100,7 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_pointer_down_on(std::uint32_t id,
 /**
  * Continues the active gesture. A no-op without one.
  */
-EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_pointer_move(float x, float y) noexcept
+void thorvg_rubiks_pointer_move(float x, float y) noexcept
 {
     rubiks::app::pointer_move(x, y);
 }
@@ -116,7 +108,7 @@ EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_pointer_move(float x, float y) noexcept
 /**
  * Releases the active gesture, the only path that can turn the cube.
  */
-EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_pointer_up() noexcept
+void thorvg_rubiks_pointer_up() noexcept
 {
     rubiks::app::pointer_up();
 }
@@ -124,7 +116,7 @@ EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_pointer_up() noexcept
 /**
  * Abandons the active gesture without turning the cube.
  */
-EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_pointer_cancel() noexcept
+void thorvg_rubiks_pointer_cancel() noexcept
 {
     rubiks::app::pointer_cancel();
 }
@@ -136,7 +128,7 @@ EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_pointer_cancel() noexcept
  *
  * @return one while further frames still have to be drawn; otherwise zero.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_advance(double elapsed_ms) noexcept
+int thorvg_rubiks_advance(double elapsed_ms) noexcept
 {
     return rubiks::app::advance(elapsed_ms) ? 1 : 0;
 }
@@ -147,14 +139,14 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_advance(double elapsed_ms) noexcept
  * The cube is still solved when this returns; it arrives at the scrambled
  * state once the sequence has been played, and is busy until then.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_scramble(
+int thorvg_rubiks_scramble(
     std::uint32_t seed, std::uint32_t move_count) noexcept
 {
     return rubiks::app::scramble(seed, move_count) ? 1 : 0;
 }
 
 /** Restores the solved cube while preserving camera and view mode. */
-EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_reset_cube() noexcept
+void thorvg_rubiks_reset_cube() noexcept
 {
     rubiks::app::reset_cube();
 }
@@ -172,8 +164,7 @@ EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_reset_cube() noexcept
  *
  * @return zero when the count is nothing or past the engine's bound.
  */
-EMSCRIPTEN_KEEPALIVE std::uintptr_t thorvg_rubiks_restore_buffer(
-    std::uint32_t total_count) noexcept
+std::uintptr_t thorvg_rubiks_restore_buffer(std::uint32_t total_count) noexcept
 {
     return rubiks::app::restore_buffer(total_count);
 }
@@ -187,7 +178,7 @@ EMSCRIPTEN_KEEPALIVE std::uintptr_t thorvg_rubiks_restore_buffer(
  *
  * @return one when the whole record was accepted and applied; otherwise zero.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_restore_apply(
+int thorvg_rubiks_restore_apply(
     int size, std::uint32_t scramble_count, std::uint32_t user_count) noexcept
 {
     return rubiks::app::restore_apply(size, scramble_count, user_count) ? 1 : 0;
@@ -202,8 +193,7 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_restore_apply(
  * @return one when watching began; zero when it had already begun, or while
  *         a colouring draft is open.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_ambient_start(
-    std::uint32_t choice) noexcept
+int thorvg_rubiks_ambient_start(std::uint32_t choice) noexcept
 {
     return rubiks::app::ambient_start(choice) ? 1 : 0;
 }
@@ -213,19 +203,19 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_ambient_start(
  *
  * Immediate rather than animated, and a no-op when nothing is being watched.
  */
-EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_ambient_stop() noexcept
+void thorvg_rubiks_ambient_stop() noexcept
 {
     rubiks::app::ambient_stop();
 }
 
 /** Returns one while a pattern is being watched. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_is_ambient() noexcept
+int thorvg_rubiks_is_ambient() noexcept
 {
     return rubiks::app::is_ambient() ? 1 : 0;
 }
 
 /** Returns one when the committed logical cube is solved. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_is_solved() noexcept
+int thorvg_rubiks_is_solved() noexcept
 {
     return rubiks::app::is_solved() ? 1 : 0;
 }
@@ -236,8 +226,7 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_is_solved() noexcept
  * Read off the record rather than counted, so a rewind takes moves out of it
  * as surely as making them put them in.
  */
-EMSCRIPTEN_KEEPALIVE std::uint32_t
-thorvg_rubiks_committed_move_count() noexcept
+std::uint32_t thorvg_rubiks_committed_move_count() noexcept
 {
     return rubiks::app::committed_move_count();
 }
@@ -248,7 +237,7 @@ thorvg_rubiks_committed_move_count() noexcept
  * @return one when a rewind began; zero with nothing of the user's own on the
  *         cube, while anything else owns it, or while a draft is open.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_undo() noexcept
+int thorvg_rubiks_undo() noexcept
 {
     return rubiks::app::undo() ? 1 : 0;
 }
@@ -259,7 +248,7 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_undo() noexcept
  * @return one when a replay began; zero when nothing has been rewound, while
  *         anything else owns the cube, or while a draft is open.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_redo() noexcept
+int thorvg_rubiks_redo() noexcept
 {
     return rubiks::app::redo() ? 1 : 0;
 }
@@ -270,7 +259,7 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_redo() noexcept
  * @return one when a rewind began; zero with nothing applied, while anything
  *         else owns the cube, or while a draft is open.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_solve_rewind() noexcept
+int thorvg_rubiks_solve_rewind() noexcept
 {
     return rubiks::app::solve_rewind() ? 1 : 0;
 }
@@ -283,7 +272,7 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_solve_rewind() noexcept
  *
  * @return one when this cube can be solved.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_can_solve() noexcept
+int thorvg_rubiks_can_solve() noexcept
 {
     return rubiks::app::can_solve() ? 1 : 0;
 }
@@ -294,7 +283,7 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_can_solve() noexcept
  * @return one when a solve began; zero for a cube already solved, a size with
  *         no solver, and while something else owns the cube.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_solve() noexcept
+int thorvg_rubiks_solve() noexcept
 {
     return rubiks::app::solve() ? 1 : 0;
 }
@@ -304,13 +293,13 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_solve() noexcept
  *
  * A no-op for a scramble or a watched pattern, which have to reach their end.
  */
-EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_stop_playback() noexcept
+void thorvg_rubiks_stop_playback() noexcept
 {
     rubiks::app::stop_playback();
 }
 
 /** How many moves the record holds, scramble and user moves together. */
-EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_timeline_length() noexcept
+std::uint32_t thorvg_rubiks_timeline_length() noexcept
 {
     return rubiks::app::timeline_length();
 }
@@ -321,14 +310,13 @@ EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_timeline_length() noexcept
  * Every commit moves this by exactly one, so a caller watching it change is
  * watching moves commit, and there is no counter beside it saying the same.
  */
-EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_timeline_cursor() noexcept
+std::uint32_t thorvg_rubiks_timeline_cursor() noexcept
 {
     return rubiks::app::timeline_cursor();
 }
 
 /** Where the scramble stops and the user's own moves begin. */
-EMSCRIPTEN_KEEPALIVE std::uint32_t
-thorvg_rubiks_timeline_scramble_end() noexcept
+std::uint32_t thorvg_rubiks_timeline_scramble_end() noexcept
 {
     return rubiks::app::timeline_scramble_end();
 }
@@ -343,8 +331,7 @@ thorvg_rubiks_timeline_scramble_end() noexcept
  * @return zero for an index the record does not hold; a packed move is never
  *         zero, because a move always turns at least one layer.
  */
-EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_timeline_move(
-    std::uint32_t index) noexcept
+std::uint32_t thorvg_rubiks_timeline_move(std::uint32_t index) noexcept
 {
     return rubiks::app::timeline_move(index);
 }
@@ -356,9 +343,8 @@ EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_timeline_move(
  * face itself and depths count inwards, so `(face, 1, 1)` is the face turn,
  * `(face, 1, 2)` is the wide move, and `(face, 2, 2)` is the slice behind it.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_turn_face(int face, int first_depth,
-                                                 int last_depth,
-                                                 int face_turns) noexcept
+int thorvg_rubiks_turn_face(int face, int first_depth, int last_depth,
+                            int face_turns) noexcept
 {
     constexpr int kFirstFace = static_cast<int>(rubiks::cube::Face::Right);
     constexpr int kLastFace = static_cast<int>(rubiks::cube::Face::Back);
@@ -379,19 +365,19 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_turn_face(int face, int first_depth,
  * @return one when the size is one the engine builds; otherwise zero, and
  *         nothing has changed.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_cube_size(int size) noexcept
+int thorvg_rubiks_set_cube_size(int size) noexcept
 {
     return rubiks::app::set_cube_size(size) ? 1 : 0;
 }
 
 /** How many layers the cube has along an axis; zero before initialization. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_cube_size() noexcept
+int thorvg_rubiks_cube_size() noexcept
 {
     return rubiks::app::cube_size();
 }
 
 /** Changes the visible render regions; invalid integer values are rejected. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_view_mode(int mode) noexcept
+int thorvg_rubiks_set_view_mode(int mode) noexcept
 {
     constexpr int kFirstMode =
         static_cast<int>(rubiks::graphics::ViewMode::Cube3D);
@@ -406,13 +392,13 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_view_mode(int mode) noexcept
 }
 
 /** Returns the current graphics::ViewMode integer. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_view_mode() noexcept
+int thorvg_rubiks_view_mode() noexcept
 {
     return static_cast<int>(rubiks::app::view_mode());
 }
 
 /** Chooses which drawing fills the flat region; invalid values are rejected. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_flat_style(int style) noexcept
+int thorvg_rubiks_set_flat_style(int style) noexcept
 {
     constexpr int kFirstStyle =
         static_cast<int>(rubiks::graphics::FlatStyle::Net);
@@ -427,13 +413,13 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_flat_style(int style) noexcept
 }
 
 /** Returns the current graphics::FlatStyle integer. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_flat_style() noexcept
+int thorvg_rubiks_flat_style() noexcept
 {
     return static_cast<int>(rubiks::app::flat_style());
 }
 
 /** Chooses which six shades the stickers take; invalid values are rejected. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_palette(int palette) noexcept
+int thorvg_rubiks_set_palette(int palette) noexcept
 {
     constexpr int kFirst = static_cast<int>(rubiks::graphics::Palette::Classic);
     constexpr int kLast =
@@ -447,7 +433,7 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_palette(int palette) noexcept
 }
 
 /** Returns the current graphics::Palette integer. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_palette() noexcept
+int thorvg_rubiks_palette() noexcept
 {
     return static_cast<int>(rubiks::app::palette());
 }
@@ -460,23 +446,23 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_palette() noexcept
  * bulk -- the draft lives in the engine and is drawn from there, so what
  * crosses this boundary is a press and a colour.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_begin() noexcept
+int thorvg_rubiks_paint_begin() noexcept
 {
     return rubiks::app::begin_painting() ? 1 : 0;
 }
 
-EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_paint_cancel() noexcept
+void thorvg_rubiks_paint_cancel() noexcept
 {
     rubiks::app::cancel_painting();
 }
 
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_is_painting() noexcept
+int thorvg_rubiks_is_painting() noexcept
 {
     return rubiks::app::is_painting() ? 1 : 0;
 }
 
 /** Chooses the colour a press lays down; invalid values are rejected. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_paint_brush(int colour) noexcept
+int thorvg_rubiks_set_paint_brush(int colour) noexcept
 {
     constexpr int kFirst = static_cast<int>(rubiks::cube::FaceColor::Red);
     constexpr int kLast = static_cast<int>(rubiks::cube::FaceColor::Blue);
@@ -488,26 +474,25 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_paint_brush(int colour) noexcept
                : 0;
 }
 
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_brush() noexcept
+int thorvg_rubiks_paint_brush() noexcept
 {
     return static_cast<int>(rubiks::app::brush());
 }
 
 /** Moves the keyboard's place on the net, or puts it down the first time. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_cursor_step(int columns,
-                                                         int rows) noexcept
+int thorvg_rubiks_paint_cursor_step(int columns, int rows) noexcept
 {
     return rubiks::app::paint_cursor_step(columns, rows) ? 1 : 0;
 }
 
 /** Lays the brush at the keyboard's place: the cell, or its face while filling. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_at_cursor() noexcept
+int thorvg_rubiks_paint_at_cursor() noexcept
 {
     return rubiks::app::paint_at_cursor() ? 1 : 0;
 }
 
 /** Whether the place is drawn, which it is while the net has the focus. */
-EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_set_paint_cursor_shown(int shown) noexcept
+void thorvg_rubiks_set_paint_cursor_shown(int shown) noexcept
 {
     rubiks::app::set_paint_cursor_shown(shown != 0);
 }
@@ -517,7 +502,7 @@ EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_set_paint_cursor_shown(int shown) noexce
  * is put down: face * 0x1000000 + colour * 0x10000 + row * 0x100 + column. A
  * row and column fit a byte each at every size built here.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_cursor() noexcept
+int thorvg_rubiks_paint_cursor() noexcept
 {
     const auto at = rubiks::app::paint_cursor();
     if (!at) return -1;
@@ -526,18 +511,18 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_cursor() noexcept
 }
 
 /** Whether a press covers the whole face it lands on. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_paint_filling(int whole_face) noexcept
+int thorvg_rubiks_set_paint_filling(int whole_face) noexcept
 {
     return rubiks::app::set_filling(whole_face != 0) ? 1 : 0;
 }
 
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_is_paint_filling() noexcept
+int thorvg_rubiks_is_paint_filling() noexcept
 {
     return rubiks::app::is_filling() ? 1 : 0;
 }
 
 /** How many of a colour the draft carries; zero for an invalid colour. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_painted_count(int colour) noexcept
+int thorvg_rubiks_painted_count(int colour) noexcept
 {
     constexpr int kFirst = static_cast<int>(rubiks::cube::FaceColor::Red);
     constexpr int kLast = static_cast<int>(rubiks::cube::FaceColor::Blue);
@@ -547,46 +532,44 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_painted_count(int colour) noexcept
         static_cast<rubiks::cube::FaceColor>(colour));
 }
 
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_apply() noexcept
+int thorvg_rubiks_paint_apply() noexcept
 {
     return rubiks::app::apply_painting() ? 1 : 0;
 }
 
 /** How many colours the session's starting colouring has; zero when none. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_origin_painting_count() noexcept
+int thorvg_rubiks_origin_painting_count() noexcept
 {
     return static_cast<int>(rubiks::app::origin_painting_count());
 }
 
 /** One of those colours, or -1 past the end. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_origin_painting_at(int index) noexcept
+int thorvg_rubiks_origin_painting_at(int index) noexcept
 {
     if (index < 0) return -1;
     return rubiks::app::origin_painting_at(static_cast<std::uint32_t>(index));
 }
 
 /** Hands out the buffer a colouring from a link is written into. */
-EMSCRIPTEN_KEEPALIVE std::uintptr_t thorvg_rubiks_painting_buffer(
-    std::uint32_t count) noexcept
+std::uintptr_t thorvg_rubiks_painting_buffer(std::uint32_t count) noexcept
 {
     return rubiks::app::painting_buffer(count);
 }
 
 /** Reads both buffers back as a painted session. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_restore_painting(
-    int size, std::uint32_t user_count) noexcept
+int thorvg_rubiks_restore_painting(int size, std::uint32_t user_count) noexcept
 {
     return rubiks::app::restore_painting(size, user_count) ? 1 : 0;
 }
 
 /** The last refusal as a cube::PaintFault integer; zero is None. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_fault() noexcept
+int thorvg_rubiks_paint_fault() noexcept
 {
     return static_cast<int>(rubiks::app::painting_fault());
 }
 
 /** Chooses the ground the cube is drawn against; invalid values are rejected. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_canvas_theme(int theme) noexcept
+int thorvg_rubiks_set_canvas_theme(int theme) noexcept
 {
     constexpr int kFirst =
         static_cast<int>(rubiks::graphics::CanvasTheme::Light);
@@ -600,13 +583,6 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_canvas_theme(int theme) noexcept
 }
 
 /**
- * Sets how much faster than the written tempos every animation runs.
- *
- * Out-of-range values are clamped rather than refused -- a slider that ran
- * past its end still meant the end -- so a zero comes back only from a value
- * that is not a number or from there being no engine.
- */
-/**
  * Takes the buffer a lighting setup is written into, and its address.
  *
  * The same arrangement the shared record uses: the engine owns the memory and
@@ -617,8 +593,7 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_canvas_theme(int theme) noexcept
  *
  * @return zero for a count the engine does not accept.
  */
-EMSCRIPTEN_KEEPALIVE std::uintptr_t thorvg_rubiks_lighting_buffer(
-    std::uint32_t count) noexcept
+std::uintptr_t thorvg_rubiks_lighting_buffer(std::uint32_t count) noexcept
 {
     return rubiks::app::lighting_buffer(count);
 }
@@ -629,13 +604,13 @@ EMSCRIPTEN_KEEPALIVE std::uintptr_t thorvg_rubiks_lighting_buffer(
  * @return one when accepted; zero for a wrong count or a value that is not a
  *         number, in which case the lighting is unchanged.
  */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_lighting(std::uint32_t count) noexcept
+int thorvg_rubiks_set_lighting(std::uint32_t count) noexcept
 {
     return rubiks::app::set_lighting(count) ? 1 : 0;
 }
 
 /** How many values describe the current lighting; zero outside a lifecycle. */
-EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_lighting_count() noexcept
+std::uint32_t thorvg_rubiks_lighting_count() noexcept
 {
     return rubiks::app::lighting_count();
 }
@@ -646,31 +621,37 @@ EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_lighting_count() noexcept
  *
  * @return zero for a count other than thorvg_rubiks_lighting_count().
  */
-EMSCRIPTEN_KEEPALIVE std::uintptr_t thorvg_rubiks_lighting_values(
-    std::uint32_t count) noexcept
+std::uintptr_t thorvg_rubiks_lighting_values(std::uint32_t count) noexcept
 {
     return rubiks::app::lighting_values(count);
 }
 
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_speed_scale(float scale) noexcept
+/**
+ * Sets how much faster than the written tempos every animation runs.
+ *
+ * Out-of-range values are clamped rather than refused -- a slider that ran
+ * past its end still meant the end -- so a zero comes back only from a value
+ * that is not a number or from there being no engine.
+ */
+int thorvg_rubiks_set_speed_scale(float scale) noexcept
 {
     return rubiks::app::set_speed_scale(scale) ? 1 : 0;
 }
 
 /** Returns the current multiplier, or 1 outside a lifecycle. */
-EMSCRIPTEN_KEEPALIVE float thorvg_rubiks_speed_scale() noexcept
+float thorvg_rubiks_speed_scale() noexcept
 {
     return rubiks::app::speed_scale();
 }
 
 /** Restores only the turntable camera. */
-EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_reset_view() noexcept
+void thorvg_rubiks_reset_view() noexcept
 {
     rubiks::app::reset_view();
 }
 
 /** Returns one while a gesture, snap, or commit is active; orbit is not busy. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_is_busy() noexcept
+int thorvg_rubiks_is_busy() noexcept
 {
     return rubiks::app::is_busy() ? 1 : 0;
 }
@@ -678,7 +659,7 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_is_busy() noexcept
 /**
  * Releases the engine. Safe to call regardless of the initialization state.
  */
-EMSCRIPTEN_KEEPALIVE void thorvg_rubiks_shutdown() noexcept
+void thorvg_rubiks_shutdown() noexcept
 {
     rubiks::app::shutdown();
 }

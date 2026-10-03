@@ -25,7 +25,9 @@ application_dep = declare_dependency(
 )
 
 if host_machine.system() == 'emscripten'
-  # The C ABI exported to TypeScript; nothing else leaves the module.
+  # The C ABI exported to TypeScript; nothing else leaves the module, and
+  # this list alone decides it: the bindings mark nothing for export
+  # themselves.
   wasm_c_abi = [
     '_thorvg_rubiks_initialize',
     '_thorvg_rubiks_render',

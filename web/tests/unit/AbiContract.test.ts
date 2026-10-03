@@ -6,11 +6,13 @@ import { describe, expect, it } from 'vitest';
 /**
  * The C ABI is written out by hand in four places: the functions the bindings
  * define, the export list the link is given, the declarations TypeScript
- * compiles against, and the calls CubeEngine makes. No build holds them to
- * each other. A function left off the export list is simply not exported, a
- * declaration is believed whatever the module holds, and either way the page
- * finds out when it makes the call. So they are held to each other here, by
- * name, before there is a module to load.
+ * compiles against, and the calls CubeEngine makes. The builds hold them to
+ * each other only in part: the link refuses a listed name that nothing
+ * defines, and tsc refuses a call to a function that is not declared. The
+ * rest goes unnoticed. A function left off the export list is simply not
+ * exported, a declaration is believed whatever the module holds, and either
+ * way the page finds out when it makes the call. So all four are held to each
+ * other here, by name, before there is a module to load.
  *
  * By name and not by number: how many there are is whatever the four agree on.
  */

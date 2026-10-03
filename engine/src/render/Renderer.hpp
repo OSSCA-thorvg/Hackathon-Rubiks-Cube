@@ -42,39 +42,20 @@ public:
      *
      * On the boundary rather than on the software renderer alone, because
      * the application owns its renderer through this interface and could
-     * not reach a method the concrete class kept to itself. A backend with
-     * no background of its own is not obliged to have one, so the default
-     * accepts the color and does nothing with it -- the same shape the
-     * pixel-buffer accessors below already take.
+     * not reach a method the concrete class kept to itself.
      *
      * The renderer is told a color rather than a theme: a theme is the
      * language of presentation, and a renderer is the tool that paints a
      * target.
      */
-    virtual void set_background(graphics::Color color) noexcept
-    {
-        static_cast<void>(color);
-    }
+    virtual void set_background(graphics::Color color) noexcept = 0;
 
-    /**
-     * Returns the address of the CPU-visible pixel buffer.
-     *
-     * @return zero for backends without a CPU-visible pixel buffer.
-     */
-    [[nodiscard]] virtual std::uintptr_t pixel_buffer() const noexcept
-    {
-        return 0;
-    }
+    /** Returns the address of the CPU-visible pixel buffer. */
+    [[nodiscard]] virtual std::uintptr_t pixel_buffer() const noexcept = 0;
 
-    /**
-     * Returns the byte length of the CPU-visible pixel buffer.
-     *
-     * @return zero for backends without a CPU-visible pixel buffer.
-     */
-    [[nodiscard]] virtual std::uint32_t pixel_byte_length() const noexcept
-    {
-        return 0;
-    }
+    /** Returns the byte length of the CPU-visible pixel buffer. */
+    [[nodiscard]] virtual std::uint32_t pixel_byte_length()
+        const noexcept = 0;
 };
 
 }  // namespace rubiks::render

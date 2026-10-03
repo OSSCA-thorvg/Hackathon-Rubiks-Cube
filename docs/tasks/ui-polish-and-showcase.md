@@ -595,6 +595,8 @@ public:
 };
 ```
 
+> **개정 (2026-10-03)**: `set_background()`, `pixel_buffer()`, `pixel_byte_length()`는 이제 기본 구현이 없는 순수 가상 함수입니다. `Renderer`를 구현하는 class는 `ThorVGSoftwareRenderer` 하나이고 application의 출력 경로 전체가 pixel buffer라서, background나 pixel buffer를 갖지 않는 backend를 위한 기본 구현은 쓰인 적이 없습니다. Setter를 `Renderer` 경계에 두는 이유는 그대로입니다.
+
 ```cpp
 class ThorVGSoftwareRenderer : public Renderer {
 public:

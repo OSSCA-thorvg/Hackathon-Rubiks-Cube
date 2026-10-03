@@ -11,6 +11,7 @@
 #include "graphics/NetRing.hpp"
 #include "graphics/SlotRing.hpp"
 #include "graphics/Palette.hpp"
+#include "math/Angle.hpp"
 #include "math/Types.hpp"
 
 namespace rubiks::graphics {
@@ -23,9 +24,9 @@ using cube::coordinate_on;
 using cube::in_layers;
 using cube::outer_layer;
 using math::Vec2;
+using math::kPi;
 
 constexpr float kDegreesPerQuarterTurn = 90.0f;
-constexpr float kPi = 3.14159265358979323846f;
 
 /** Where one cell of the net lands, given the rectangle the net fills. */
 struct NetMetrics {
@@ -100,7 +101,7 @@ struct NetMetrics {
 /** Turns a quad about a point, clockwise on screen for a positive angle. */
 void rotate_quad(RenderFace& quad, const Vec2& center, float degrees) noexcept
 {
-    const float radians = degrees * kPi / 180.0f;
+    const float radians = math::to_radians(degrees);
     const float sine = std::sin(radians);
     const float cosine = std::cos(radians);
 
@@ -157,7 +158,7 @@ void rotate_quad(RenderFace& quad, const Vec2& center, float degrees) noexcept
 [[nodiscard]] float degrees_between(const Vec2& from, const Vec2& to) noexcept
 {
     const float turn = std::atan2(to.y, to.x) - std::atan2(from.y, from.x);
-    return turn * 180.0f / kPi;
+    return math::to_degrees(turn);
 }
 
 /** Grows a quad about its own middle. */

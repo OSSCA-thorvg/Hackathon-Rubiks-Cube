@@ -3,6 +3,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "math/Angle.hpp"
 #include "math/Projection.hpp"
 #include "math/Quaternion.hpp"
 #include "math/Types.hpp"
@@ -15,7 +16,6 @@ namespace {
 using Catch::Approx;
 using namespace rubiks::math;
 
-constexpr float kPi = 3.14159265358979323846f;
 constexpr double kDefaultMargin = 1e-5;
 constexpr double kInverseProjectionMargin = 1e-4;
 

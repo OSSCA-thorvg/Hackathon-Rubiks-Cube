@@ -16,6 +16,7 @@
 #include "graphics/Palette.hpp"
 #include "graphics/Passes.hpp"
 #include "graphics/Pipeline.hpp"
+#include "math/Angle.hpp"
 
 // Linked against the graphics library alone: if the pipeline ever picks up a
 // ThorVG include, this target stops building.
@@ -29,8 +30,8 @@ using rubiks::cube::Face;
 using rubiks::cube::FaceColor;
 using rubiks::math::Vec2;
 using rubiks::math::Vec3;
+using rubiks::math::kPi;
 
-constexpr float kPi = 3.14159265358979323846f;
 constexpr std::uint32_t kCanvas = 1024;
 
 /** Square camera with a 90 degree vertical field of view at the origin. */

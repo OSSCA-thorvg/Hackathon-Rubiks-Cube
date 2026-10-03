@@ -1,5 +1,6 @@
 #pragma once
 
+#include "math/Angle.hpp"
 #include "math/Projection.hpp"
 #include "math/Types.hpp"
 
@@ -62,7 +63,7 @@ private:
  * Named here rather than kept in the implementation because a viewpoint that
  * moves has to build cameras differing from the home one in the eye alone.
  */
-inline constexpr float kVerticalFov = 3.14159265358979323846f / 4.0f;
+inline constexpr float kVerticalFov = math::kPi / 4.0f;
 inline constexpr float kNearPlane = 1.0f;
 inline constexpr float kFarPlane = 10.0f;
 

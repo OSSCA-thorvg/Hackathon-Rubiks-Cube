@@ -3,12 +3,16 @@
 #include <algorithm>
 #include <cmath>
 
+#include "math/Angle.hpp"
+
 namespace rubiks::graphics {
 namespace {
 
-constexpr float kPi = 3.14159265358979323846f;
-constexpr float kDegreesPerRadian = 180.0f / kPi;
-constexpr float kRadiansPerDegree = kPi / 180.0f;
+// One factor each way, rather than math::to_radians() and to_degrees(): a
+// single multiplication can differ from theirs in the last bit, and the home
+// viewpoint every rendered scene is pinned to comes out of these.
+constexpr float kDegreesPerRadian = 180.0f / math::kPi;
+constexpr float kRadiansPerDegree = math::kPi / 180.0f;
 
 /** The radius of the sphere every viewpoint sits on. */
 [[nodiscard]] float orbit_radius() noexcept

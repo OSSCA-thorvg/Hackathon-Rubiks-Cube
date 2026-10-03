@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "graphics/Palette.hpp"
+#include "math/Angle.hpp"
 
 namespace rubiks::graphics {
 namespace {
@@ -20,8 +21,8 @@ using cube::coordinate_on;
 using cube::in_layers;
 using cube::outer_layer;
 using math::Vec2;
+using math::kPi;
 
-constexpr float kPi = 3.14159265358979323846f;
 constexpr float kDegreesPerQuarterTurn = 90.0f;
 
 [[nodiscard]] Vec2 subtracted(const Vec2& a, const Vec2& b) noexcept

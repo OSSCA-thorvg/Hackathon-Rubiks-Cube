@@ -5,6 +5,7 @@
 #include <cstddef>
 
 #include "graphics/Palette.hpp"
+#include "math/Angle.hpp"
 
 namespace rubiks::graphics {
 namespace {
@@ -13,8 +14,6 @@ using cube::Axis;
 using cube::Face;
 using cube::in_layers;
 using math::Vec3;
-
-constexpr float kPi = 3.14159265358979323846f;
 
 /** Corner offsets in units of half_extent, wound outward-facing. */
 using Corners = std::array<Vec3, 4>;
@@ -194,7 +193,7 @@ math::Quaternion layer_rotation(Axis axis, float degrees) noexcept
     // The single place the domain's clockwise-from-the-positive-end convention
     // becomes a right-handed rotation.
     return math::quaternion_from_axis_angle(axis_direction(axis),
-                                            -degrees * kPi / 180.0f);
+                                            math::to_radians(-degrees));
 }
 
 WorldScene build_cube_scene(const cube::CubeState& state, Palette palette)

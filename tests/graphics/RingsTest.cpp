@@ -17,6 +17,7 @@
 #include "graphics/Layout.hpp"
 #include "graphics/Palette.hpp"
 #include "graphics/RingsGeometry.hpp"
+#include "math/Angle.hpp"
 
 namespace {
 
@@ -26,9 +27,9 @@ using rubiks::cube::Axis;
 using rubiks::cube::Face;
 using rubiks::cube::SurfaceSticker;
 using rubiks::math::Vec2;
+using rubiks::math::kPi;
 
 constexpr int kSize = 3;
-constexpr float kPi = 3.14159265358979323846f;
 
 const Rect kRect{0.0f, 0.0f, 600.0f, 600.0f};
 

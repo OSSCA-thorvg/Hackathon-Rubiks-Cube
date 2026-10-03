@@ -24,6 +24,7 @@
 #include "graphics/Palette.hpp"
 #include "graphics/Passes.hpp"
 #include "graphics/Pipeline.hpp"
+#include "math/Angle.hpp"
 
 // Phase 19: the light over the cube and the shadow under it, as passes. Linked
 // against the graphics library alone, like the rest of this directory.
@@ -37,8 +38,8 @@ using rubiks::cube::CubeState;
 using rubiks::cube::FaceColor;
 using rubiks::math::Vec2;
 using rubiks::math::Vec3;
+using rubiks::math::kPi;
 
-constexpr float kPi = 3.14159265358979323846f;
 constexpr std::uint32_t kCanvas = 1024;
 
 /** A camera at the origin looking down -Z: view space is world space. */

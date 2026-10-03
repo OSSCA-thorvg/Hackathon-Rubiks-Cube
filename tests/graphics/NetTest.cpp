@@ -21,6 +21,7 @@
 #include "graphics/NetRing.hpp"
 #include "graphics/SlotRing.hpp"
 #include "graphics/Palette.hpp"
+#include "math/Angle.hpp"
 
 namespace {
 
@@ -517,7 +518,7 @@ TEST_CASE("a ring runs along a drawn direction wherever a cell rests")
                     ring.at(static_cast<float>(slot + kSize)).tangent;
                 const float turn = std::atan2(landed.y, landed.x) -
                                    std::atan2(here.y, here.x);
-                const float quarters = turn / (0.5f * 3.14159265f);
+                const float quarters = turn / (0.5f * rubiks::math::kPi);
                 REQUIRE(quarters == Approx(std::lround(quarters)).margin(1e-3));
             }
         }
@@ -971,7 +972,7 @@ TEST_CASE("a Z turn takes the front block and its band round together")
                     ActiveRotation{Axis::Z, layer(index), angle, open};
                 const RenderScene scene =
                     build_net_scene(state, rect, turning);
-                const float radians = angle * 3.14159265f / 180.0f;
+                const float radians = rubiks::math::to_radians(angle);
 
                 for (const auto& sticker : band_of(Axis::Z, index)) {
                     const auto placed = net_position(sticker, kSize);

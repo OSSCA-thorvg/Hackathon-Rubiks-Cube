@@ -23,6 +23,34 @@ math::Vec3 to_vec3(const math::Vec4& v) noexcept
 }
 
 /**
+ * How far apart two planes' offsets, and their unit normals, may be while
+ * the planes still count as one.
+ */
+constexpr float kPlaneTolerance = 1e-4f;
+
+/**
+ * Whether two planes, each a unit normal and its offset from the origin, are
+ * the same plane. The shading and the glints both group faces by this, so
+ * the two always agree about which plane a sticker lies on.
+ */
+bool same_plane(const math::Vec3& normal, float offset,
+                const math::Vec3& other_normal, float other_offset) noexcept
+{
+    return std::abs(offset - other_offset) < kPlaneTolerance &&
+           math::length(normal - other_normal) < kPlaneTolerance;
+}
+
+/**
+ * The point of a plane nearest `point`: the plane goes through `origin` and
+ * has the unit normal `normal`.
+ */
+math::Vec3 foot_on_plane(const math::Vec3& point, const math::Vec3& origin,
+                         const math::Vec3& normal) noexcept
+{
+    return point - normal * math::dot(point - origin, normal);
+}
+
+/**
  * Outward unit normal of a face, or nullopt for a degenerate one.
  *
  * Faces are wound counter-clockwise seen from outside, which is what the cull
@@ -173,8 +201,7 @@ ViewScene LightPass::operator()(ViewScene scene) const
 
         PlaneShading* plane = nullptr;
         for (auto& seen : shadings) {
-            if (std::abs(seen.offset - offset) < 1e-4f &&
-                math::length(seen.normal - *normal) < 1e-4f) {
+            if (same_plane(seen.normal, seen.offset, *normal, offset)) {
                 plane = &seen;
                 break;
             }
@@ -184,9 +211,9 @@ ViewScene LightPass::operator()(ViewScene scene) const
             fresh.normal = *normal;
             fresh.offset = offset;
             const math::Vec3& key = lamps_in_view[0];
-            fresh.foot = key - *normal * math::dot(key - face.points[0], *normal);
+            fresh.foot = foot_on_plane(key, face.points[0], *normal);
             const math::Vec3 anchor_foot =
-                anchor_in_view - *normal * math::dot(anchor_in_view - face.points[0], *normal);
+                foot_on_plane(anchor_in_view, face.points[0], *normal);
             const math::Vec3 away = anchor_foot - fresh.foot;
             const float away_length = math::length(away);
             fresh.usable = away_length > 1e-4f;
@@ -232,14 +259,14 @@ ViewScene LightPass::operator()(ViewScene scene) const
         // The reference shade: where the plane comes nearest the cube's
         // centre, the middle of the cube face for a sticker on the outside.
         const math::Vec3 anchor_foot =
-            anchor_in_view - *normal * math::dot(anchor_in_view - origin, *normal);
+            foot_on_plane(anchor_in_view, origin, *normal);
         face.color = shade(base, brightness(anchor_foot, *normal));
 
         // Shading: the plane's axis and stops, this sticker's colour.
         if (shaded) {
             for (const auto& plane : shadings) {
-                if (!plane.usable || std::abs(plane.offset - offset) >= 1e-4f ||
-                    math::length(plane.normal - *normal) >= 1e-4f) {
+                if (!plane.usable ||
+                    !same_plane(plane.normal, plane.offset, *normal, offset)) {
                     continue;
                 }
                 // The plane's brightness at a point along its axis, read off
@@ -297,8 +324,8 @@ ViewScene LightPass::operator()(ViewScene scene) const
 
             PlaneGlint* plane = nullptr;
             for (auto& seen : planes) {
-                if (seen.lamp == i && std::abs(seen.offset - offset) < 1e-4f &&
-                    math::length(seen.normal - *normal) < 1e-4f) {
+                if (seen.lamp == i &&
+                    same_plane(seen.normal, seen.offset, *normal, offset)) {
                     plane = &seen;
                     break;
                 }

@@ -90,6 +90,8 @@ y_screen = (1 - ndc_y) / 2 * height
 - `Transform`: translation(`Vec3`) + rotation(`Quaternion`) + uniform scale(`float`)을 `Mat4`로 합성 (직접 구현)
 - `look_at`, `perspective`: 위 규약대로 직접 구현합니다. linalg에도 고수준 transformation helper가 일부 있지만, 규약의 기준을 이 문서와 test에 두기 위해 사용하지 않습니다.
 
+> **개정 (2026-10-03)**: `Transform`과, `Quaternion`의 `Mat4` 변환·합성·정규화·identity는 제거되었습니다. `Transform`을 쓰던 곳은 identity model을 통과시키던 `transform(model)` pass 하나였고(아래 Pipeline passes의 개정), quaternion을 합성하거나 행렬로 바꾸는 곳은 그 뒤로 생기지 않았습니다. Camera orbit은 회전을 합성하지 않고 두 각도를 더합니다([Phase 5.5](./05.5-camera-orbit.md)). `Quaternion`에 남은 것은 engine이 layer 회전에 쓰는 둘, axis-angle 생성(`quaternion_from_axis_angle`)과 점 회전(`quaternion_rotate`)입니다.
+
 ### Camera and fixed view
 
 `Camera`는 view matrix(`look_at`)와 projection matrix(`perspective`)를 소유합니다.

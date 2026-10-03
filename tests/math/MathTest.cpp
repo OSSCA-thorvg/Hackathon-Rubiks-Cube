@@ -5,7 +5,6 @@
 
 #include "math/Projection.hpp"
 #include "math/Quaternion.hpp"
-#include "math/Transform.hpp"
 #include "math/Types.hpp"
 
 // This target links neither ThorVG nor the renderer, so the conventions below
@@ -197,7 +196,7 @@ TEST_CASE("inverse undoes a projection times a view")
     }
 }
 
-TEST_CASE("quaternion rotation agrees with its matrix")
+TEST_CASE("a quaternion turns a vector about its axis")
 {
     const Quaternion turn =
         quaternion_from_axis_angle(Vec3{0.0f, 0.0f, 1.0f}, kPi / 2.0f);
@@ -206,49 +205,5 @@ TEST_CASE("quaternion rotation agrees with its matrix")
     SECTION("a quarter turn about +Z sends +X to +Y")
     {
         require_vec3(quaternion_rotate(turn, point), 0.0f, 1.0f, 0.0f);
-    }
-
-    SECTION("the matrix form produces the same point")
-    {
-        const Vec4 rotated = apply_point(quaternion_to_matrix(turn), point);
-        require_vec4(rotated, 0.0f, 1.0f, 0.0f, 1.0f);
-    }
-
-    SECTION("composition applies the right-hand rotation first")
-    {
-        const Quaternion about_x =
-            quaternion_from_axis_angle(Vec3{1.0f, 0.0f, 0.0f}, kPi / 2.0f);
-
-        // About X first sends +Y to +Z; about Z then leaves +Z alone.
-        const Quaternion combined = quaternion_multiply(turn, about_x);
-        require_vec3(quaternion_rotate(combined, Vec3{0.0f, 1.0f, 0.0f}), 0.0f,
-                     0.0f, 1.0f);
-    }
-
-    SECTION("the identity rotation leaves points alone")
-    {
-        require_vec3(quaternion_rotate(quaternion_identity(), point), 1.0f,
-                     0.0f, 0.0f);
-    }
-}
-
-TEST_CASE("Transform composes as translation, then rotation, then scale")
-{
-    Transform transform;
-    transform.translation = Vec3{10.0f, 0.0f, 0.0f};
-    transform.rotation =
-        quaternion_from_axis_angle(Vec3{0.0f, 0.0f, 1.0f}, kPi / 2.0f);
-    transform.scale = 2.0f;
-
-    // (1, 0, 0) scales to (2, 0, 0), rotates to (0, 2, 0), moves to (10, 2, 0).
-    require_vec4(apply_point(transform.to_matrix(), Vec3{1.0f, 0.0f, 0.0f}),
-                 10.0f, 2.0f, 0.0f, 1.0f);
-
-    SECTION("a default Transform is the identity")
-    {
-        const Transform identity_transform;
-        require_vec4(
-            apply_point(identity_transform.to_matrix(), Vec3{1.0f, 2.0f, 3.0f}),
-            1.0f, 2.0f, 3.0f, 1.0f);
     }
 }

@@ -23,7 +23,6 @@
 #include "graphics/Palette.hpp"
 #include "graphics/Passes.hpp"
 #include "graphics/Pipeline.hpp"
-#include "math/Transform.hpp"
 
 // Phase 19: the light over the cube and the shadow under it, as passes. Linked
 // against the graphics library alone, like the rest of this directory.
@@ -343,27 +342,6 @@ TEST_CASE("a turn cuts the casters into runs along its axis alone")
         const ActiveRotation turn{Axis::X, rubiks::cube::layers_through(2, 4), 20.0f};
         REQUIRE(build_cube_scene(big, turn).casters.size() == 3);
     }
-}
-
-TEST_CASE("the model transform moves the casters with the stickers")
-{
-    rubiks::math::Transform moved;
-    moved.translation = Vec3{0.5f, -0.25f, 2.0f};
-
-    const WorldScene before = build_cube_scene(CubeState(3));
-    const WorldScene after = before | transform(moved);
-
-    REQUIRE(after.casters.size() == before.casters.size());
-    for (std::size_t i = 0; i < 8; ++i) {
-        const Vec3 delta =
-            after.casters[0].corners[i] - before.casters[0].corners[i];
-        REQUIRE(delta.x == Approx(0.5f));
-        REQUIRE(delta.y == Approx(-0.25f));
-        REQUIRE(delta.z == Approx(2.0f));
-    }
-    const Vec3 face_delta = after.faces[0].points[0] - before.faces[0].points[0];
-    REQUIRE(face_delta.x == Approx(0.5f));
-    REQUIRE(face_delta.z == Approx(2.0f));
 }
 
 TEST_CASE("the shadow's points travel through the passes like face corners")
@@ -949,7 +927,6 @@ TEST_CASE("the whole chain puts the shadow below the cube inside its region")
     const auto placement = layout(kCanvas, kCanvas);
     const Camera camera = default_camera(placement.cube.width / placement.cube.height);
     const RenderScene scene = build_cube_scene(CubeState(3))  //
-                              | transform({})                 //
                               | shadow(default_lighting(), camera) //
                               | view(camera)                  //
                               | light(default_lighting(), camera)  //

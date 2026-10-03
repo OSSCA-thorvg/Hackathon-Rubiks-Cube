@@ -67,28 +67,6 @@ bool shadow_in_front(const ShadowGroup<math::Vec3>& shadow, float near_plane)
 
 }  // namespace
 
-WorldScene TransformPass::operator()(WorldScene scene) const
-{
-    for (auto& face : scene.faces) {
-        for (auto& point : face.points) {
-            point = to_vec3(math::apply_point(model_matrix, point));
-        }
-    }
-    // The casters are the cube too, and a shadow of a cube that has moved is
-    // the shadow of where it moved to.
-    for (auto& caster : scene.casters) {
-        for (auto& corner : caster.corners) {
-            corner = to_vec3(math::apply_point(model_matrix, corner));
-        }
-    }
-    return scene;
-}
-
-TransformPass transform(const math::Transform& model) noexcept
-{
-    return TransformPass{model.to_matrix()};
-}
-
 ViewScene ViewPass::operator()(const WorldScene& scene) const
 {
     ViewScene result;

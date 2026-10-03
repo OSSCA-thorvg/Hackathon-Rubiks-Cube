@@ -20,8 +20,8 @@ namespace rubiks::graphics {
  *
  * The net goes straight from the domain to screen-space quads without the
  * pipeline. It is already two-dimensional, nothing occludes anything, and
- * there is no perspective, so model, view, projection, culling and depth
- * sorting would all be identity. That the result still slots into the same
+ * there is no perspective, so view, projection, culling and depth sorting
+ * would all be identity. That the result still slots into the same
  * RenderScene is a consequence of keeping the renderer boundary purely 2D.
  */
 

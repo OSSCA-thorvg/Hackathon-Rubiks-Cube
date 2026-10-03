@@ -13,7 +13,6 @@
  * pipeline reads in data-flow order:
  *
  *     auto scene = build_scene()
- *         | transform(model)
  *         | view(camera)
  *         | project(camera)
  *         | cull()

@@ -158,6 +158,8 @@ depth_sort()             → back-to-front 정렬
 viewport(width, height)  → screen-space RenderScene
 ```
 
+> **개정 (2026-10-03)**: `transform(model)` pass는 제거되었습니다. Engine이 넣은 model은 Phase 3부터 줄곧 identity뿐이어서, frame마다 모든 꼭짓점에 단위행렬을 곱하고 있었습니다. Cube는 `build_cube_scene()`이 만든 world 좌표 그대로 `view(camera)`로 들어가고, layer 회전은 scene을 만들 때 점을 직접 돌립니다. 위 두 예시의 `transform(model)` 줄과 아래 "Model transform은 identity `Transform`을 pipeline에 실제로 통과시킵니다" 항목은 이 개정 전의 기록입니다.
+
 Projection과 viewport 변환은 한 pass로 합치지 않고 분리합니다.
 Culling은 아래와 같이 Y flip 이전의 NDC에서 판정하므로, viewport 변환이 project 안에 들어가면 cull이 이미 뒤집힌 좌표를 받게 됩니다.
 각 중간 표현(`WorldScene`, `ViewScene`, `ClipScene`, `RenderScene`)은 서로 다른 타입이므로 pass를 잘못된 space에 적용하면 그림이 조용히 틀어지는 대신 compile error가 납니다.

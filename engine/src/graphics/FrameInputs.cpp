@@ -5,7 +5,6 @@
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Pipeline.hpp"
 #include "graphics/Rect.hpp"
-#include "math/Transform.hpp"
 
 namespace rubiks::graphics {
 
@@ -25,10 +24,6 @@ RenderScene compose(const FrameInputs& frame)
     RenderScene scene;
     if (frame.cube) {
         const CubeDrawing& drawing = *frame.cube;
-
-        // The model transform is identity for now, but it goes through the
-        // real path so the quaternion-to-matrix step is exercised every frame.
-        const math::Transform model;
         const Camera camera = camera_into(drawing.orbit, placement.cube);
 
         // The high-contrast palette exists to keep six shades apart for eyes
@@ -41,7 +36,6 @@ RenderScene compose(const FrameInputs& frame)
 
         scene = build_cube_scene(*drawing.cube.state, drawing.rotation,
                                  drawing.palette)  //
-                | transform(model)                 //
                 | shadow(lamp, camera)             //
                 | view(camera)                     //
                 | light(lamp, camera)              //

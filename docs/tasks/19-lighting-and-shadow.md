@@ -79,6 +79,8 @@ scene = build_cube_scene(state, active, palette)   // faces(to_lit_color) + cast
       | viewport(rect, stage);                     // bodies, 그림자 clip = stage (캔버스 전체)
 ```
 
+> **개정 (2026-10-03)**: `transform(model)`은 체인에서 빠졌습니다. Model은 identity 말고 다른 값이 된 적이 없어 `TransformPass`를 제거했고, 체인은 `build_cube_scene()`에서 곧바로 `shadow()`로 이어집니다. Casters는 만들어진 world 좌표 그대로 그림자와 몸체가 됩니다. 이 문서가 `TransformPass`의 통과 규칙과 "identity가 아닌 model에서 스티커와 casters가 함께 움직임" test를 말하는 곳은 이 개정 전의 기록입니다.
+
 `shadow()`는 바닥 평면이 정의된 월드 공간에서, `light()`는 시선 벡터가 공짜인 뷰 공간에서 돕니다. 두 패스는 **같은 `Lighting` 값**을 받고 각자 자기 좌표계로 옮깁니다 — `light()`는 생성 시 `camera.view()`로 램프를 뷰 공간에 옮겨 들고 있습니다. 궤도 카메라에서 광택의 반사점과 그림자 방향이 같은 광원에서 나온다는 것이 test로 고정되어 있습니다.
 
 RenderScene은 여전히 ThorVG를 모릅니다. 조명 결과는 `Color`와 기하(음영 축과 stop 색, 광택 타원과 stop, 그림자 그룹, 몸체 실루엣)로만 전달되고, 그것을 gradient와 Scene으로 옮기는 결정은 렌더러가 합니다. [DESIGN.md](../DESIGN.md)의 "ThorVG는 파이프라인의 마지막 backend" 원칙 그대로입니다.

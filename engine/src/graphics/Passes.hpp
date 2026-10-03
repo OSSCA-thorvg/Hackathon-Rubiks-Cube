@@ -8,7 +8,6 @@
 #include "graphics/Rect.hpp"
 #include "graphics/RenderScene.hpp"
 #include "graphics/Scene.hpp"
-#include "math/Transform.hpp"
 #include "math/Types.hpp"
 
 /**
@@ -19,15 +18,6 @@
  * `cull()(scene)` — which is how the unit tests exercise them.
  */
 namespace rubiks::graphics {
-
-/** Applies the model transform to faces and casters, staying in world space. */
-struct TransformPass {
-    math::Mat4 model_matrix;
-
-    [[nodiscard]] WorldScene operator()(WorldScene scene) const;
-};
-
-[[nodiscard]] TransformPass transform(const math::Transform& model) noexcept;
 
 /**
  * Casts the casters onto the ground from the light, in world space.

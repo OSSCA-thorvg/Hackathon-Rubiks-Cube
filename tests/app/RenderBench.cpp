@@ -19,7 +19,6 @@
 #include "graphics/Light.hpp"
 #include "graphics/Passes.hpp"
 #include "graphics/Pipeline.hpp"
-#include "math/Transform.hpp"
 #include "render/ThorVGSoftwareRenderer.hpp"
 #endif
 
@@ -141,7 +140,6 @@ int main(int argc, char** argv)
     const ActiveRotation turn{rubiks::cube::Axis::X,
                               rubiks::cube::layer(size - 1), 45.0f};
     const RenderScene scene = build_cube_scene(rubiks::cube::CubeState(size), turn)  //
-                              | transform({})                                        //
                               | shadow(default_lighting(), camera)                        //
                               | view(camera)                                         //
                               | light(default_lighting(), camera)                         //

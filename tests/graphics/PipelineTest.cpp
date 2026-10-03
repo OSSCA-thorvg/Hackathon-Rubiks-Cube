@@ -14,7 +14,6 @@
 #include "graphics/Palette.hpp"
 #include "graphics/Passes.hpp"
 #include "graphics/Pipeline.hpp"
-#include "math/Transform.hpp"
 
 // Linked against the graphics library alone: if the pipeline ever picks up a
 // ThorVG include, this target stops building.
@@ -84,15 +83,13 @@ std::size_t count_color(const RenderScene& scene, const Color& color)
 }
 
 /** Renders a cube state through the whole pipeline into the cube region. */
-RenderScene render_cube(const CubeState& state,
-                        const rubiks::math::Transform& model = {})
+RenderScene render_cube(const CubeState& state)
 {
     const auto placement = layout(kCanvas, kCanvas);
     const Camera camera =
         default_camera(placement.cube.width / placement.cube.height);
 
     return build_cube_scene(state)   //
-           | transform(model)        //
            | view(camera)            //
            | project(camera)         //
            | cull()                  //
@@ -436,22 +433,6 @@ TEST_CASE("a move changes the colors the pipeline puts on screen")
             to_color(FaceColor::Green));
     REQUIRE(face_at(scene, cube_sample(0.69f, 0.61f))->color ==
             to_color(FaceColor::Red));
-}
-
-TEST_CASE("the model transform reaches the pipeline output")
-{
-    rubiks::math::Transform shrunk;
-    shrunk.scale = 0.5f;
-
-    const RenderScene reference = render_cube(CubeState(3));
-    const RenderScene scaled = render_cube(CubeState(3), shrunk);
-
-    REQUIRE(reference.faces.size() == scaled.faces.size());
-
-    // A half-size cube covers strictly less of the region, so the contract
-    // sample of the full-size cube now shows background.
-    REQUIRE(face_at(reference, cube_sample(0.50f, 0.29f)) != nullptr);
-    REQUIRE(face_at(scaled, cube_sample(0.50f, 0.29f)) == nullptr);
 }
 
 TEST_CASE("the axis gizmo reports which way each axis points from here")

@@ -49,7 +49,6 @@ function createFakeModule() {
     setFlatStyleResult: 1,
     palette: CubePalette.Classic,
     setPaletteResult: 1,
-    canvasTheme: CubeCanvasTheme.Dark,
     setCanvasThemeResult: 1,
     speedScale: 1,
     setSpeedScaleResult: 1,
@@ -190,11 +189,9 @@ function createFakeModule() {
       return behavior.setPaletteResult;
     }),
     _thorvg_rubiks_palette: vi.fn((): number => behavior.palette),
-    _thorvg_rubiks_set_canvas_theme: vi.fn((theme: number): number => {
-      if (behavior.setCanvasThemeResult !== 0) behavior.canvasTheme = theme;
-      return behavior.setCanvasThemeResult;
-    }),
-    _thorvg_rubiks_canvas_theme: vi.fn((): number => behavior.canvasTheme),
+    _thorvg_rubiks_set_canvas_theme: vi.fn(
+      (): number => behavior.setCanvasThemeResult,
+    ),
     _thorvg_rubiks_set_speed_scale: vi.fn((scale: number): number => {
       // Clamped rather than refused, the way the engine does it.
       if (behavior.setSpeedScaleResult !== 0) {
@@ -241,7 +238,6 @@ function createFakeModule() {
     _thorvg_rubiks_set_surface_scenes: vi.fn(
       (): number => behavior.setSurfaceScenesResult,
     ),
-    _thorvg_rubiks_surface_scenes: vi.fn((): number => 0),
     _thorvg_rubiks_surface_pixel_buffer: vi.fn((id: number): number => {
       if (id === 0 && behavior.pixelBufferOverride !== null) {
         return behavior.pixelBufferOverride;
@@ -622,7 +618,7 @@ describe('CubeEngine gameplay and view controls', () => {
   });
 
   it('sets and validates the current view mode', async () => {
-    const { engine, behavior } = await createEngine();
+    const { engine, module, behavior } = await createEngine();
 
     expect(engine.viewMode()).toBe(CubeViewMode.Both);
     engine.setViewMode(CubeViewMode.Flat);
@@ -653,13 +649,11 @@ describe('CubeEngine gameplay and view controls', () => {
 
     // The ground is a fourth axis and crosses none of the others: the cube
     // is drawn in the palette it was set to whichever ground it stands on.
-    expect(engine.canvasTheme()).toBe(CubeCanvasTheme.Dark);
     engine.setCanvasTheme(CubeCanvasTheme.Light);
-    expect(engine.canvasTheme()).toBe(CubeCanvasTheme.Light);
+    expect(module._thorvg_rubiks_set_canvas_theme).toHaveBeenLastCalledWith(
+      CubeCanvasTheme.Light,
+    );
     expect(engine.palette()).toBe(CubePalette.Classic);
-    behavior.canvasTheme = 5;
-    expect(() => engine.canvasTheme()).toThrow('invalid canvas theme');
-    behavior.canvasTheme = CubeCanvasTheme.Dark;
     behavior.setCanvasThemeResult = 0;
     expect(() => engine.setCanvasTheme(CubeCanvasTheme.Light)).toThrow(
       'rejected canvas theme',

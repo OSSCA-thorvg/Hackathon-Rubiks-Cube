@@ -5,10 +5,8 @@
  * directory by build_wasm.sh and are not tracked by Git. This declaration
  * is source: update it whenever the exported C ABI changes.
  *
- * Only what the page calls is declared. The engine also still exports the
- * calls it had before surfaces -- resize, pixel_buffer, pointer_down and the
- * paint_at pair, all of which mean surface 0 alone -- and nothing here uses
- * them: every canvas goes through the surface calls, the cube's included.
+ * Every export is declared, and nothing else. Every canvas goes through the
+ * surface calls, the cube's included.
  */
 
 /** Surface of the generated Emscripten module used by this project. */
@@ -29,7 +27,6 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_resize_surface(id: number, width: number, height: number): number;
   /** Which scenes surface `id` shows: cube 1, net 2, rings 4, axes 8. */
   _thorvg_rubiks_set_surface_scenes(id: number, scenes: number): number;
-  _thorvg_rubiks_surface_scenes(id: number): number;
   /** Zero for a surface with no buffer; valid until that surface is resized. */
   _thorvg_rubiks_surface_pixel_buffer(id: number): number;
   _thorvg_rubiks_surface_pixel_byte_length(id: number): number;
@@ -146,9 +143,6 @@ export type ThorvgRubiksModule = {
 
   /** Returns 1 when the canvas theme was accepted; others are rejected. */
   _thorvg_rubiks_set_canvas_theme(theme: number): number;
-
-  /** Returns the current canvas theme as its ABI integer. */
-  _thorvg_rubiks_canvas_theme(): number;
   /** The current graphics::Palette as an integer. */
   _thorvg_rubiks_palette(): number;
   /** Returns 1 when taken; out-of-range values are clamped, not refused. */
@@ -192,8 +186,6 @@ export type ThorvgRubiksModule = {
   _thorvg_rubiks_painted_count(colour: number): number;
   _thorvg_rubiks_paint_apply(): number;
   _thorvg_rubiks_paint_fault(): number;
-  _thorvg_rubiks_paint_blamed_count(): number;
-  _thorvg_rubiks_paint_blamed_at(index: number): number;
   _thorvg_rubiks_origin_painting_count(): number;
   _thorvg_rubiks_origin_painting_at(index: number): number;
   _thorvg_rubiks_painting_buffer(count: number): number;

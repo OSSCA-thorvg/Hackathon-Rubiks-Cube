@@ -22,17 +22,6 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_initialize(
 }
 
 /**
- * Resizes the drawing buffer following the resize failure semantics.
- *
- * @return one when the buffer uses the new size afterwards; otherwise zero.
- */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_resize(std::uint32_t width,
-                                              std::uint32_t height) noexcept
-{
-    return rubiks::app::resize(width, height) ? 1 : 0;
-}
-
-/**
  * Renders one frame into the engine-owned pixel buffer.
  *
  * The buffer is safe to read only after this function returns one.
@@ -42,29 +31,6 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_resize(std::uint32_t width,
 EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_render() noexcept
 {
     return rubiks::app::render() ? 1 : 0;
-}
-
-/**
- * Returns the current pixel buffer address in WASM linear memory.
- *
- * The address stays valid from a successful initialize or resize until the
- * next resize or shutdown.
- *
- * @return zero without a valid software buffer.
- */
-EMSCRIPTEN_KEEPALIVE std::uintptr_t thorvg_rubiks_pixel_buffer() noexcept
-{
-    return rubiks::app::pixel_buffer();
-}
-
-/**
- * Returns the pixel buffer length in bytes (width * height * 4).
- *
- * @return zero without a valid software buffer.
- */
-EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_pixel_byte_length() noexcept
-{
-    return rubiks::app::pixel_byte_length();
 }
 
 /**
@@ -91,13 +57,6 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_surface_scenes(
     std::uint32_t id, std::uint32_t scenes) noexcept
 {
     return rubiks::app::set_surface_scenes(id, scenes) ? 1 : 0;
-}
-
-/** Returns the scenes surface `id` holds; zero for an unknown surface. */
-EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_surface_scenes(
-    std::uint32_t id) noexcept
-{
-    return rubiks::app::surface_scenes(id);
 }
 
 /**
@@ -135,29 +94,15 @@ EMSCRIPTEN_KEEPALIVE std::uint32_t thorvg_rubiks_surface_frame(
 /**
  * Begins a pointer gesture on surface `id`, in that surface's pixels.
  *
- * @return one when a gesture began; zero as thorvg_rubiks_pointer_down
- *         returns it, and for a surface with no buffer.
+ * @return one when a gesture began; zero before initialization, for
+ *         non-finite coordinates, while another gesture is running, and for
+ *         a surface with no buffer.
  */
 EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_pointer_down_on(std::uint32_t id,
                                                        float x,
                                                        float y) noexcept
 {
     return rubiks::app::pointer_down_on(id, x, y) ? 1 : 0;
-}
-
-/**
- * Begins a pointer gesture. Coordinates are drawing-buffer pixels.
- *
- * Pressing a cell of either the cube or the net drags a layer, pressing
- * elsewhere sweeps the viewpoint. A snap still animating is confirmed rather
- * than allowed to block the press.
- *
- * @return one when a gesture began; zero before initialization, for
- *         non-finite coordinates, and while another gesture is running.
- */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_pointer_down(float x, float y) noexcept
-{
-    return rubiks::app::pointer_down(x, y) ? 1 : 0;
 }
 
 /**
@@ -510,7 +455,7 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_palette() noexcept
 /**
  * Colouring a real cube onto the net.
  *
- * Ten small calls rather than one that carries a buffer, because a person
+ * Small calls rather than one that carries a buffer, because a person
  * colours one square at a time and the browser has nothing to hand over in
  * bulk -- the draft lives in the engine and is drawn from there, so what
  * crosses this boundary is a press and a colour.
@@ -546,16 +491,6 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_paint_brush(int colour) noexcept
 EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_brush() noexcept
 {
     return static_cast<int>(rubiks::app::brush());
-}
-
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_at(float x, float y) noexcept
-{
-    return rubiks::app::paint_at(x, y) ? 1 : 0;
-}
-
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_fill(float x, float y) noexcept
-{
-    return rubiks::app::fill_face_at(x, y) ? 1 : 0;
 }
 
 /** Moves the keyboard's place on the net, or puts it down the first time. */
@@ -650,17 +585,6 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_fault() noexcept
     return static_cast<int>(rubiks::app::painting_fault());
 }
 
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_blamed_count() noexcept
-{
-    return rubiks::app::painting_blamed_count();
-}
-
-/** One blamed sticker's number, or -1 past the end. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_paint_blamed_at(int index) noexcept
-{
-    return rubiks::app::painting_blamed_at(index);
-}
-
 /** Chooses the ground the cube is drawn against; invalid values are rejected. */
 EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_canvas_theme(int theme) noexcept
 {
@@ -673,12 +597,6 @@ EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_set_canvas_theme(int theme) noexcept
                static_cast<rubiks::graphics::CanvasTheme>(theme))
                ? 1
                : 0;
-}
-
-/** Returns the current graphics::CanvasTheme integer. */
-EMSCRIPTEN_KEEPALIVE int thorvg_rubiks_canvas_theme() noexcept
-{
-    return static_cast<int>(rubiks::app::canvas_theme());
 }
 
 /**

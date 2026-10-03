@@ -18,12 +18,11 @@ namespace rubiks::app {
  * How many surfaces the engine draws into.
  *
  * A surface is one canvas's worth of drawing: a target of its own size and
- * the scenes it shows. Surface 0 is made by initialize(), and every call
- * below that names no surface -- resize(), pixel_buffer(), pointer_down() --
- * is about it. A host with one canvas never needs another. A host that lays
- * its views out itself gives each of the others a size and a scene, and puts
- * the canvases wherever it likes: where the views sit and how big they are is
- * the host's, and what is in each of them is the engine's.
+ * the scenes it shows. Surface 0 is made by initialize() and holds every
+ * scene, so a host with one canvas never needs another. A host that lays its
+ * views out itself gives each of the others a size and a scene, and puts the
+ * canvases wherever it likes: where the views sit and how big they are is the
+ * host's, and what is in each of them is the engine's.
  */
 inline constexpr std::uint32_t kSurfaceCount = 4;
 
@@ -48,7 +47,8 @@ inline constexpr std::uint32_t kAllScenes =
  *
  * Dimensions are validated first and invalid ones fail even when already
  * initialized. Repeated calls with valid dimensions succeed without
- * reconfiguring the renderer; the size is then changed through resize().
+ * reconfiguring the renderer; the size is then changed through
+ * resize_surface().
  *
  * @return true when the runtime and renderer are ready for rendering.
  */
@@ -56,19 +56,13 @@ inline constexpr std::uint32_t kAllScenes =
                               std::uint32_t height) noexcept;
 
 /**
- * Resizes surface 0 following the resize failure semantics of the Phase 1
- * contract. A size, never nothing: see resize_surface() for putting one away.
- *
- * @return true when the target uses the new size afterwards.
- */
-[[nodiscard]] bool resize(std::uint32_t width, std::uint32_t height) noexcept;
-
-/**
- * Resizes surface `id`, or puts it away with zero by zero.
+ * Resizes surface `id`, or puts it away with zero by zero. A resize that
+ * fails follows the resize failure semantics of the Phase 1 contract.
  *
  * A surface put away holds no target and draws nothing until it is given a
- * size again. A drag begun on it is dropped, as a resize has always dropped
- * one; a drag on any other surface carries on.
+ * size again, and surface 0 can be put away like the rest: a page whose cube
+ * canvas has no box does exactly that. A drag begun on the surface is dropped,
+ * as a resize has always dropped one; a drag on any other surface carries on.
  *
  * @return false for an unknown surface or a size no target can have.
  */
@@ -82,9 +76,6 @@ inline constexpr std::uint32_t kAllScenes =
  */
 [[nodiscard]] bool set_surface_scenes(std::uint32_t id,
                                       std::uint32_t scenes) noexcept;
-
-/** The scenes surface `id` holds; zero for an unknown surface. */
-[[nodiscard]] std::uint32_t surface_scenes(std::uint32_t id) noexcept;
 
 /**
  * Draws every surface whose picture has changed since its last frame.
@@ -105,20 +96,9 @@ inline constexpr std::uint32_t kAllScenes =
 void invalidate() noexcept;
 
 /**
- * Returns the address of the software pixel buffer.
- *
- * @return zero without a valid software buffer.
+ * The address and the byte length of surface `id`'s software pixel buffer;
+ * zero for a surface with no target.
  */
-[[nodiscard]] std::uintptr_t pixel_buffer() noexcept;
-
-/**
- * Returns the byte length of the software pixel buffer.
- *
- * @return zero without a valid software buffer.
- */
-[[nodiscard]] std::uint32_t pixel_byte_length() noexcept;
-
-/** The same two, for surface `id`; zero for one with no target. */
 [[nodiscard]] std::uintptr_t surface_pixel_buffer(std::uint32_t id) noexcept;
 [[nodiscard]] std::uint32_t surface_pixel_byte_length(
     std::uint32_t id) noexcept;
@@ -132,12 +112,17 @@ void invalidate() noexcept;
 [[nodiscard]] std::uint32_t surface_frame(std::uint32_t id) noexcept;
 
 /**
- * Begins a pointer gesture at a point in drawing-buffer pixels.
+ * Begins a pointer gesture on surface `id`, at a point in that surface's
+ * drawing-buffer pixels.
  *
- * Pressing a cell of either view drags a layer; pressing anywhere else sweeps
- * the viewpoint around the cube. Which view a press belongs to comes from the
- * layout, so the two never contend for a pixel. Converting CSS pixels and the
- * device pixel ratio is the caller's job, the same split the resize path uses.
+ * What the press can start is what that surface shows: a cell of its net, a
+ * sticker of its rings, or a layer or the viewpoint on its cube. Pressing a
+ * cell of either view drags a layer. A press outside a surface's cube but on
+ * a surface that shows one sweeps the viewpoint, as a press on the background
+ * of one canvas always has. Which view a press belongs to comes from the
+ * layout, so the two never contend for a pixel. The moves that follow arrive
+ * in the same surface's pixels. Converting CSS pixels and the device pixel
+ * ratio is the caller's job, the same split the resize path uses.
  *
  * A snap left running by the previous release is confirmed here rather than
  * blocking the press, so drags in quick succession all reach the cube.
@@ -150,22 +135,16 @@ void invalidate() noexcept;
  * around rather than interrupted; watching ends at a command, and a drag is
  * not one.
  *
- * @return true when a gesture began. False only when none could: before
- *         initialization, for non-finite coordinates, while another gesture is
- *         already running, and for a press with nothing on screen it could
- *         start -- off the net in the flat-only view, or anywhere in that view
- *         while a sequence plays.
- */
-[[nodiscard]] bool pointer_down(float x, float y) noexcept;
-
-/**
- * The same press, on surface `id`, at a point in that surface's pixels.
+ * While a draft is open a press lays the brush on the net instead, and the
+ * moves that follow carry it across every cell they cross.
  *
- * What the press can start is what that surface shows: a cell of its net, a
- * sticker of its rings, or a layer or the viewpoint on its cube. The moves
- * that follow arrive in the same surface's pixels. A press outside a surface's
- * cube but on a surface that shows one sweeps the viewpoint, as a press on the
- * background of one canvas always has.
+ * @return true when a gesture began. False only when none could: before
+ *         initialization, for a surface with no target, for non-finite
+ *         coordinates, while another gesture is already running, and for a
+ *         press with nothing on screen it could start -- off the net in the
+ *         flat-only view, or anywhere in that view while a sequence plays.
+ *         With a draft open, false for a point outside the net -- the four
+ *         empty corners of the cross included.
  */
 [[nodiscard]] bool pointer_down_on(std::uint32_t id, float x, float y) noexcept;
 
@@ -557,32 +536,19 @@ void cancel_painting() noexcept;
 [[nodiscard]] cube::FaceColor brush() noexcept;
 
 /**
- * Lays the brush on the cell under a point, in drawing-buffer pixels.
- *
- * @return false without a draft, and for a point outside the net -- the four
- *         empty corners of the cross included.
- */
-[[nodiscard]] bool paint_at(float x, float y) noexcept;
-
-/**
  * Whether a press lays the brush on one cell or on the whole face.
  *
  * A mode rather than a second gesture, because a button on the page has no
  * point on the net to act at -- and "press Fill, then press the face" is one
  * thing to learn where a modifier key or a double press would be two.
- */
-[[nodiscard]] bool set_filling(bool whole_face) noexcept;
-[[nodiscard]] bool is_filling() noexcept;
-
-/**
- * Lays the brush on every cell of the face under a point.
  *
  * A four by four is ninety-six cells and a twenty-eight is four thousand seven
  * hundred; most faces of a real cube are mostly one colour, so filling and
  * then mending is the difference between this being usable at those sizes and
  * not.
  */
-[[nodiscard]] bool fill_face_at(float x, float y) noexcept;
+[[nodiscard]] bool set_filling(bool whole_face) noexcept;
+[[nodiscard]] bool is_filling() noexcept;
 
 /**
  * The keyboard's way onto the net: a place on the draft, moved a cell at a
@@ -637,7 +603,7 @@ void set_paint_cursor_shown(bool shown) noexcept;
  * carry on afterwards without knowing where the cube came from.
  *
  * A refusal leaves the draft open and unchanged, with `painting_fault()` and
- * the blamed stickers saying what to mend. Nothing is half applied.
+ * the ringed stickers saying what to mend. Nothing is half applied.
  *
  * @return false without a draft, and for a colouring no turning could reach.
  */
@@ -645,17 +611,6 @@ void set_paint_cursor_shown(bool shown) noexcept;
 
 /** What the last refusal was, or `None` when nothing has been refused yet. */
 [[nodiscard]] cube::PaintFault painting_fault() noexcept;
-
-/**
- * The stickers the last refusal blames, numbered as `surface_stickers()`
- * counts them.
- *
- * Read one at a time rather than handed over as a block: the count is small,
- * the boundary this crosses carries primitives only, and a fault that blames
- * nothing at all is an ordinary answer rather than a missing one.
- */
-[[nodiscard]] int painting_blamed_count() noexcept;
-[[nodiscard]] int painting_blamed_at(int index) noexcept;
 
 /** The draft's colours, in `surface_stickers()` order. Empty without a draft. */
 [[nodiscard]] const std::vector<cube::FaceColor>& painting_draft() noexcept;
@@ -771,15 +726,6 @@ void set_paint_cursor_shown(bool shown) noexcept;
  * @return false outside a lifecycle and for a value that names no theme.
  */
 [[nodiscard]] bool set_canvas_theme(graphics::CanvasTheme theme) noexcept;
-
-/**
- * Returns the current canvas theme, defaulting to Dark outside a lifecycle.
- *
- * Dark rather than Light because that is the ground the renderer has always
- * cleared to and the one the native build, which has no page around it to ask,
- * still wants.
- */
-[[nodiscard]] graphics::CanvasTheme canvas_theme() noexcept;
 
 /**
  * Sets how much faster than the written tempos every animation runs.

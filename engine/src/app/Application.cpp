@@ -233,10 +233,14 @@ struct ApplicationState {
     // same arrangement as `restore`.
     std::vector<float> lighting_values;
 
-    // The ground behind the cube. Kept here rather than only on the renderer
-    // so that a query has an answer without reaching through the rendering
-    // boundary, and so the two cannot drift: every write goes through
-    // set_canvas_theme(), which sets both.
+    // The ground behind the cube. Kept here as well as on each renderer,
+    // because a surface given a size after the theme was chosen gets a new
+    // renderer that has to be told it. The two cannot drift: every write goes
+    // through set_canvas_theme(), which sets both.
+    //
+    // Dark rather than Light to begin with, because that is the ground the
+    // renderer has always cleared to and the one the native build, which has
+    // no page around it to ask, still wants.
     graphics::CanvasTheme canvas_theme = graphics::CanvasTheme::Dark;
 
     // Everything that has happened to the cube, as one sequence. How many
@@ -939,18 +943,6 @@ bool initialize(std::uint32_t width, std::uint32_t height) noexcept
     return true;
 }
 
-bool resize(std::uint32_t width, std::uint32_t height) noexcept
-{
-    if (!state) return false;
-
-    // Surface 0 keeps the contract it has always had: a size, never nothing.
-    // Putting it away is resize_surface()'s, which says so in its name.
-    if (!render::ThorVGSoftwareRenderer::valid_dimensions(width, height)) {
-        return false;
-    }
-    return resize_surface(0, width, height);
-}
-
 bool resize_surface(std::uint32_t id, std::uint32_t width,
                     std::uint32_t height) noexcept
 {
@@ -1010,17 +1002,6 @@ bool set_surface_scenes(std::uint32_t id, std::uint32_t scenes) noexcept
     surface.scenes = scenes;
     relayout(surface);
     return true;
-}
-
-std::uint32_t surface_scenes(std::uint32_t id) noexcept
-{
-    if (!state || id >= kSurfaceCount) return 0;
-    return state->surfaces[id].scenes;
-}
-
-bool pointer_down(float x, float y) noexcept
-{
-    return pointer_down_on(0, x, y);
 }
 
 bool pointer_down_on(std::uint32_t id, float x, float y) noexcept
@@ -1532,11 +1513,6 @@ cube::FaceColor brush() noexcept
     return state->paint->brush;
 }
 
-bool paint_at(float x, float y) noexcept
-{
-    return paint_on(0, x, y);
-}
-
 bool set_filling(bool whole_face) noexcept
 {
     if (!state || !state->paint) return false;
@@ -1547,11 +1523,6 @@ bool set_filling(bool whole_face) noexcept
 bool is_filling() noexcept
 {
     return state && state->paint && state->paint->filling;
-}
-
-bool fill_face_at(float x, float y) noexcept
-{
-    return fill_on(0, x, y);
 }
 
 bool paint_cursor_step(int columns, int rows) noexcept
@@ -1654,22 +1625,6 @@ cube::PaintFault painting_fault() noexcept
 {
     if (!state || !state->paint) return cube::PaintFault::None;
     return state->paint->reading.fault;
-}
-
-int painting_blamed_count() noexcept
-{
-    if (!state || !state->paint) return 0;
-    return static_cast<int>(state->paint->reading.blamed.size());
-}
-
-int painting_blamed_at(int index) noexcept
-{
-    if (!state || !state->paint) return -1;
-    const auto& blamed = state->paint->reading.blamed;
-    if (index < 0 || static_cast<std::size_t>(index) >= blamed.size()) {
-        return -1;
-    }
-    return blamed[static_cast<std::size_t>(index)];
 }
 
 const std::vector<cube::FaceColor>& painting_draft() noexcept
@@ -2168,9 +2123,9 @@ bool set_canvas_theme(graphics::CanvasTheme theme) noexcept
 {
     if (!state || !valid_canvas_theme(theme)) return false;
 
-    // Both, in one place: the field is what a query reads and the renderer
-    // is what a frame reads, and a refused value has already left above, so
-    // neither can be written without the other.
+    // Both, in one place: the field is what a surface sized later is cleared
+    // to and the renderer is what a frame reads, and a refused value has
+    // already left above, so neither can be written without the other.
     //
     // The ground is the renderer's rather than the scene's, so no frame's
     // inputs describe it: every target holds the old one until it is drawn
@@ -2183,11 +2138,6 @@ bool set_canvas_theme(graphics::CanvasTheme theme) noexcept
         surface.drawn.reset();
     }
     return true;
-}
-
-graphics::CanvasTheme canvas_theme() noexcept
-{
-    return state ? state->canvas_theme : graphics::CanvasTheme::Dark;
 }
 
 bool set_speed_scale(float scale) noexcept
@@ -2226,16 +2176,6 @@ void reset_view() noexcept
 bool is_busy() noexcept
 {
     return state && busy();
-}
-
-std::uintptr_t pixel_buffer() noexcept
-{
-    return surface_pixel_buffer(0);
-}
-
-std::uint32_t pixel_byte_length() noexcept
-{
-    return surface_pixel_byte_length(0);
 }
 
 std::uintptr_t surface_pixel_buffer(std::uint32_t id) noexcept

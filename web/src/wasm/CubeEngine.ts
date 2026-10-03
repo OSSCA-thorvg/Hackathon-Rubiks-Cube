@@ -989,16 +989,6 @@ export class CubeEngine {
     }
   }
 
-  /** Returns the ground the cube is being drawn against. */
-  canvasTheme(): CubeCanvasTheme {
-    this.assertUsable();
-    const theme = this.module._thorvg_rubiks_canvas_theme();
-    if (theme !== CubeCanvasTheme.Light && theme !== CubeCanvasTheme.Dark) {
-      throw new Error(`Engine returned an invalid canvas theme ${theme}.`);
-    }
-    return theme;
-  }
-
   /**
    * Sets how much faster than the written tempos every animation runs.
    *
@@ -1287,24 +1277,6 @@ export class CubeEngine {
       throw new Error(`Engine returned an unknown paint fault ${fault}.`);
     }
     return fault as CubePaintFault;
-  }
-
-  /**
-   * The squares the last refusal blames, as `surface_stickers()` numbers them.
-   *
-   * Read one at a time across the boundary and gathered here, because the
-   * boundary carries primitives only and the list is short enough that a
-   * shared buffer would be more machinery than it saves.
-   */
-  paintBlamed(): number[] {
-    this.assertUsable();
-    const count = this.module._thorvg_rubiks_paint_blamed_count();
-    const blamed: number[] = [];
-    for (let index = 0; index < count; index += 1) {
-      const slot = this.module._thorvg_rubiks_paint_blamed_at(index);
-      if (slot >= 0) blamed.push(slot);
-    }
-    return blamed;
   }
 
   /**

@@ -2,7 +2,7 @@ solver_test = executable(
   'solver-test',
   files('AssemblySolveTest.cpp', 'LayerByLayerTest.cpp', 'ProjectionTest.cpp',
         'ReductionBench.cpp', 'ReductionTest.cpp'),
-  dependencies: [cube_solver_dep, catch2_dep],
+  dependencies: [cube_solver_dep, cube_test_support_dep, catch2_dep],
 )
 
 # Far longer than the default thirty seconds: this executable reduces big cubes

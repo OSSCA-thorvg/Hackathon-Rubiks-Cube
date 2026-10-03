@@ -81,7 +81,6 @@ enum class PaintFault {
 struct PaintReading {
     PaintFault fault = PaintFault::None;
     std::vector<int> blamed;   ///< 강조할 스티커 번호(비어 있을 수 있음).
-    int expected = 0, found = 0;
 };
 ```
 

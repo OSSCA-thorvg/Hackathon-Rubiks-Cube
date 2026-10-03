@@ -44,9 +44,10 @@ constexpr int kDefaultCubeSize = 3;
  *
  * Every one of them is read in two places: where the state is first given its
  * value, and where the getter answers when there is nothing to ask -- no
- * engine yet, or for the brush no draft. A control on the page reads the
- * second while the engine is still starting, so the two have to be one value
- * or the control shows something the engine does not start with.
+ * engine, or for the brush no draft. The second is what a caller outside a
+ * lifecycle is told, and one who asks for the brush with no draft open. The
+ * two have to be one value, so that what such a caller is told is what a
+ * lifecycle, or a draft, then opens with.
  */
 constexpr float kDefaultSpeedScale = 1.0f;
 constexpr graphics::ViewMode kDefaultViewMode = graphics::ViewMode::Both;

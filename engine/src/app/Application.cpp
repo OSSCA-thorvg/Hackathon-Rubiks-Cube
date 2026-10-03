@@ -344,9 +344,9 @@ std::unique_ptr<ApplicationState> state;
  * `turns` quarters clockwise as seen from outside it.
  *
  * `cube::face_move()` with this application's refusals in front of it: which
- * end of an axis a face sits at and which way it turns from outside are
- * written there, once. Depth 1 is the face; `(Right, 1, 1, 1)` is R and
- * `(Right, 1, 2, 1)` is Rw.
+ * layers the depths select and which way the face turns about its axis are
+ * worked out there, not here. Depth 1 is the face; `(Right, 1, 1, 1)` is R
+ * and `(Right, 1, 2, 1)` is Rw.
  *
  * Nothing for a range no move corresponds to: empty, reversed, off the far
  * side of the cube, or the whole of it -- the last being a rotation, which

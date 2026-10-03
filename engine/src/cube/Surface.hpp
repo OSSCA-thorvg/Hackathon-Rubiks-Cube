@@ -81,7 +81,7 @@ struct SurfaceSticker {
  * is how a written move reads: `(Right, 1, 1, 1)` is R and `(Right, 1, 2, 1)`
  * is Rw. Clockwise from outside is a positive turn about the axis only for
  * the face at its far end; the face opposite reads the axis backwards, and
- * this is the one place that says so.
+ * this is where a move is given that sign.
  *
  * A run `depth_layers()` turns down comes back as a move with no layers.
  * Whether the whole cube turned at once counts as a move is the caller's

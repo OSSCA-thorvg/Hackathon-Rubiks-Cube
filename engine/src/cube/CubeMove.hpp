@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <vector>
 
 namespace rubiks::cube {
 
@@ -80,27 +79,5 @@ struct CubeMove {
 {
     return CubeMove{move.axis, move.layers, -move.quarter_turns};
 }
-
-/** The sequence that undoes `sequence`: reversed, each move inverted. */
-[[nodiscard]] std::vector<CubeMove> inverse(
-    const std::vector<CubeMove>& sequence);
-
-/**
- * The six standard face turns of an N x N x N cube.
- *
- * These are constructors, not parsers, so they cannot fail. The negative
- * faces take -1 quarter turns because clockwise as seen from outside that
- * face is counter-clockwise about the positive axis direction.
- */
-namespace moves {
-
-[[nodiscard]] CubeMove R(int size) noexcept;
-[[nodiscard]] CubeMove L(int size) noexcept;
-[[nodiscard]] CubeMove U(int size) noexcept;
-[[nodiscard]] CubeMove D(int size) noexcept;
-[[nodiscard]] CubeMove F(int size) noexcept;
-[[nodiscard]] CubeMove B(int size) noexcept;
-
-}  // namespace moves
 
 }  // namespace rubiks::cube

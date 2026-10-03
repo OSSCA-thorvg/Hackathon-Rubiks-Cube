@@ -46,7 +46,6 @@ public:
     [[nodiscard]] bool is_solved() const noexcept;
 
     void apply(const CubeMove& move) noexcept;
-    void apply(const std::vector<CubeMove>& sequence) noexcept;
 
 private:
     /**

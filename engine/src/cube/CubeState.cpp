@@ -131,13 +131,6 @@ void CubeState::apply(const CubeMove& move) noexcept
     }
 }
 
-void CubeState::apply(const std::vector<CubeMove>& sequence) noexcept
-{
-    for (const auto& move : sequence) {
-        apply(move);
-    }
-}
-
 bool operator==(const CubeState& a, const CubeState& b) noexcept
 {
     return a.size_ == b.size_ && a.cubies_ == b.cubies_;

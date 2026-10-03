@@ -12,7 +12,7 @@ const DESKTOP = { width: 1200, height: 1000 };
 test.use({ viewport: DESKTOP });
 
 test('the machine decides when nothing has been chosen', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await expect(page.locator('.game-shell')).toBeVisible();
 
   // The suite runs dark, so System means dark here -- on the page and on the
@@ -33,7 +33,7 @@ test('a light machine gets a light page and a light canvas', async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: 'light' });
-  await page.goto('/');
+  await page.goto('./');
   await expect(page.locator('.game-shell')).toBeVisible();
 
   await expect(page.locator('html')).not.toHaveAttribute('data-theme');
@@ -44,7 +44,7 @@ test('a light machine gets a light page and a light canvas', async ({
 test('an explicit choice paints both surfaces and survives a reload', async ({
   page,
 }) => {
-  await page.goto('/');
+  await page.goto('./');
   await expect(page.locator('.game-shell')).toBeVisible();
   await openSettings(page);
 
@@ -67,7 +67,7 @@ test('an explicit choice paints both surfaces and survives a reload', async ({
 });
 
 test('an explicit choice is not overruled by the machine', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await expect(page.locator('.game-shell')).toBeVisible();
   await openSettings(page);
 
@@ -88,7 +88,7 @@ test('an explicit choice is not overruled by the machine', async ({ page }) => {
 test('the settings surface opens and closes from the keyboard', async ({
   page,
 }) => {
-  await page.goto('/');
+  await page.goto('./');
   await expect(page.locator('.game-shell')).toBeVisible();
 
   const trigger = page.locator('#settings-trigger');

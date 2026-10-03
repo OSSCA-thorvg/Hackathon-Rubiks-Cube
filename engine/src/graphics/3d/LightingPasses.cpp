@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "graphics/3d/ConvexHull.hpp"
-#include "graphics/3d/CubeGeometry.hpp"
 
 namespace rubiks::graphics {
 namespace {

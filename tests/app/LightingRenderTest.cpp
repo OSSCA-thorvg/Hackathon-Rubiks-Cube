@@ -6,7 +6,6 @@
 
 #include "EngineLifecycle.hpp"
 #include "RendererFrame.hpp"
-#include "graphics/3d/CubeGeometry.hpp"
 #include "graphics/3d/Light.hpp"
 #include "graphics/RenderScene.hpp"
 

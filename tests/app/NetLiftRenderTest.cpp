@@ -6,7 +6,6 @@
 
 #include "EngineLifecycle.hpp"
 #include "RendererFrame.hpp"
-#include "graphics/3d/Light.hpp"
 #include "graphics/RenderScene.hpp"
 
 // The renderer's side of Phase 19.5: a storey of lifted pieces as one scene

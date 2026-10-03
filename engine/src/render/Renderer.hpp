@@ -54,8 +54,7 @@ public:
     [[nodiscard]] virtual std::uintptr_t pixel_buffer() const noexcept = 0;
 
     /** Returns the byte length of the CPU-visible pixel buffer. */
-    [[nodiscard]] virtual std::uint32_t pixel_byte_length()
-        const noexcept = 0;
+    [[nodiscard]] virtual std::uint32_t pixel_byte_length() const noexcept = 0;
 };
 
 }  // namespace rubiks::render

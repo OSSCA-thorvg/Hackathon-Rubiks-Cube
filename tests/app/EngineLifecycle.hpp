@@ -30,6 +30,17 @@ struct EngineLifecycle {
     EngineLifecycle& operator=(const EngineLifecycle&) = delete;
 };
 
+/**
+ * Whether initialize() has succeeded and shutdown() has not followed it.
+ *
+ * Asked through the cube: there is a cube exactly while there is an engine,
+ * and no cube has a size of zero.
+ */
+[[nodiscard]] inline bool is_initialized()
+{
+    return rubiks::app::cube_size() != 0;
+}
+
 /** One frame of elapsed time, at the rate a display would deliver them. */
 inline constexpr double kFrameMs = 16.0;
 
@@ -69,9 +80,9 @@ inline int settle()
 {
     REQUIRE(rubiks::app::render());
 
-    const auto* pixels =
-        reinterpret_cast<const std::uint8_t*>(rubiks::app::pixel_buffer());
-    const std::uint32_t length = rubiks::app::pixel_byte_length();
+    const auto* pixels = reinterpret_cast<const std::uint8_t*>(
+        rubiks::app::surface_pixel_buffer(0));
+    const std::uint32_t length = rubiks::app::surface_pixel_byte_length(0);
     REQUIRE(pixels != nullptr);
     REQUIRE(length > 0);
 

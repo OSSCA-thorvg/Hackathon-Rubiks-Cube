@@ -394,7 +394,7 @@ TEST_CASE("the restore buffer is asked for before it is read")
 {
     SECTION("before there is an engine at all")
     {
-        REQUIRE_FALSE(rubiks::app::is_initialized());
+        REQUIRE_FALSE(rubiks::test::is_initialized());
         REQUIRE(rubiks::app::restore_buffer(4) == 0);
         REQUIRE_FALSE(rubiks::app::restore_apply(3, 2, 2));
     }

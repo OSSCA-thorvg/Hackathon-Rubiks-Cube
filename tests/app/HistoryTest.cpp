@@ -88,7 +88,7 @@ constexpr int kCubeSize = 3;
 
 TEST_CASE("the record is empty and safe before initialization")
 {
-    REQUIRE_FALSE(rubiks::app::is_initialized());
+    REQUIRE_FALSE(rubiks::test::is_initialized());
 
     REQUIRE(rubiks::app::timeline_length() == 0);
     REQUIRE(rubiks::app::timeline_cursor() == 0);
@@ -372,7 +372,7 @@ TEST_CASE("a rewind is refused while anything else owns the cube")
         turn(rubiks::cube::Face::Right, 1);
 
         const auto grip = net_cell_point(rubiks::cube::Face::Front, 1, 0);
-        REQUIRE(rubiks::app::pointer_down(grip.x, grip.y));
+        REQUIRE(rubiks::app::pointer_down_on(0, grip.x, grip.y));
         REQUIRE_FALSE(rubiks::app::undo());
         REQUIRE_FALSE(rubiks::app::solve_rewind());
 
@@ -441,7 +441,7 @@ TEST_CASE("a turn confirmed by the next press still reaches the record")
     // The other way a move commits, and it goes through the same function:
     // a record that only watched the frame path would lose this one.
     const auto corner = net_cell_point(rubiks::cube::Face::Front, 1, 0);
-    REQUIRE(rubiks::app::pointer_down(corner.x, corner.y));
+    REQUIRE(rubiks::app::pointer_down_on(0, corner.x, corner.y));
     REQUIRE(rubiks::app::timeline_cursor() == 1);
     REQUIRE(rubiks::app::timeline_length() == 1);
     REQUIRE(rubiks::app::committed_move_count() == 1);

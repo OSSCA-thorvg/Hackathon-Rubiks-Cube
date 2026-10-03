@@ -114,19 +114,17 @@ void sweep_viewpoint()
 
 }  // namespace
 
-TEST_CASE("surface 0 holds every scene, and the others start with nothing")
+TEST_CASE("surface 0 starts with a target, and the others with nothing")
 {
     const rubiks::test::EngineLifecycle engine(kCubeSide, kCubeSide);
 
-    REQUIRE(rubiks::app::surface_scenes(0) == rubiks::app::kAllScenes);
+    REQUIRE(rubiks::app::surface_pixel_buffer(0) != 0);
+    REQUIRE(rubiks::app::surface_pixel_byte_length(0) ==
+            kCubeSide * kCubeSide * 4);
     for (std::uint32_t id = 1; id < rubiks::app::kSurfaceCount; ++id) {
-        REQUIRE(rubiks::app::surface_scenes(id) == 0);
         REQUIRE(rubiks::app::surface_pixel_buffer(id) == 0);
+        REQUIRE(rubiks::app::surface_pixel_byte_length(id) == 0);
     }
-
-    // The single-canvas calls are surface 0's.
-    REQUIRE(rubiks::app::pixel_buffer() == rubiks::app::surface_pixel_buffer(0));
-    REQUIRE(rubiks::app::pixel_byte_length() == kCubeSide * kCubeSide * 4);
 }
 
 TEST_CASE("a surface holding one scene draws it alone, filling the surface")
@@ -434,18 +432,39 @@ TEST_CASE("surfaces and scenes the engine does not have are refused")
     REQUIRE_FALSE(rubiks::app::resize_surface(none, 10, 10));
     REQUIRE_FALSE(rubiks::app::resize_surface(1, 0, 10));
     REQUIRE_FALSE(rubiks::app::pointer_down_on(none, 1.0f, 1.0f));
-    REQUIRE(rubiks::app::surface_scenes(none) == 0);
     REQUIRE(rubiks::app::surface_frame(none) == 0);
     REQUIRE(rubiks::app::surface_pixel_buffer(none) == 0);
+}
 
-    // Surface 0 keeps its old contract: it is always some size.
-    REQUIRE_FALSE(rubiks::app::resize(0, 0));
+TEST_CASE("surface 0 is put away and given a size again like any other")
+{
+    const rubiks::test::EngineLifecycle engine(kCubeSide, kCubeSide);
+    REQUIRE(rubiks::app::render());
+    const std::uint32_t before = rubiks::app::surface_frame(0);
+
+    // A page whose cube canvas has no box measures nothing for it, and says
+    // so the way it does for every other canvas.
+    REQUIRE(rubiks::app::resize_surface(0, 0, 0));
+    REQUIRE(rubiks::app::surface_pixel_buffer(0) == 0);
+    REQUIRE(rubiks::app::surface_pixel_byte_length(0) == 0);
+    REQUIRE_FALSE(rubiks::app::pointer_down_on(0, 10.0f, 10.0f));
+    REQUIRE(rubiks::app::render());
+    REQUIRE(rubiks::app::surface_frame(0) == before);
+
+    // The cube is still there to be turned while nothing shows it.
+    REQUIRE(rubiks::app::turn_face(rubiks::cube::Face::Right, 1, 1, 1));
+    settle();
+    REQUIRE(rubiks::app::committed_move_count() == 1);
+
+    REQUIRE(rubiks::app::resize_surface(0, kCubeSide, kCubeSide));
     REQUIRE(rubiks::app::surface_pixel_buffer(0) != 0);
+    REQUIRE(rubiks::app::render());
+    REQUIRE(rubiks::app::surface_frame(0) == before + 1);
 }
 
 TEST_CASE("surface calls are refused before initialization")
 {
-    REQUIRE_FALSE(rubiks::app::is_initialized());
+    REQUIRE_FALSE(rubiks::test::is_initialized());
     REQUIRE_FALSE(rubiks::app::resize_surface(1, 10, 10));
     REQUIRE_FALSE(rubiks::app::set_surface_scenes(1, kSceneNet));
     REQUIRE_FALSE(rubiks::app::pointer_down_on(1, 1.0f, 1.0f));

@@ -64,7 +64,7 @@ float pixels_per_degree()
 int frames_for_released_drag()
 {
     const auto grab = front_right_column();
-    REQUIRE(rubiks::app::pointer_down(grab.x, grab.y));
+    REQUIRE(rubiks::app::pointer_down_on(0, grab.x, grab.y));
     rubiks::app::pointer_move(grab.x, grab.y - 50.0f * pixels_per_degree());
     rubiks::app::pointer_up();
     return frames_to_settle();

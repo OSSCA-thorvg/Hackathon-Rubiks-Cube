@@ -81,28 +81,28 @@ void undo_through_faces(const std::vector<rubiks::cube::CubeMove>& plan)
 
 TEST_CASE("calls before initialization fail")
 {
-    REQUIRE(!rubiks::app::is_initialized());
+    REQUIRE(!rubiks::test::is_initialized());
     REQUIRE(!rubiks::app::render());
-    REQUIRE(!rubiks::app::resize(64, 64));
-    REQUIRE(rubiks::app::pixel_buffer() == 0);
-    REQUIRE(rubiks::app::pixel_byte_length() == 0);
+    REQUIRE(!rubiks::app::resize_surface(0, 64, 64));
+    REQUIRE(rubiks::app::surface_pixel_buffer(0) == 0);
+    REQUIRE(rubiks::app::surface_pixel_byte_length(0) == 0);
 }
 
 TEST_CASE("initialize and shutdown are idempotent")
 {
     REQUIRE(rubiks::app::initialize(64, 64));
     REQUIRE(rubiks::app::initialize(64, 64));
-    REQUIRE(rubiks::app::is_initialized());
-    REQUIRE(rubiks::app::pixel_buffer() != 0);
-    REQUIRE(rubiks::app::pixel_byte_length() == 64u * 64u * 4u);
+    REQUIRE(rubiks::test::is_initialized());
+    REQUIRE(rubiks::app::surface_pixel_buffer(0) != 0);
+    REQUIRE(rubiks::app::surface_pixel_byte_length(0) == 64u * 64u * 4u);
     REQUIRE(rubiks::app::render());
 
     rubiks::app::shutdown();
     rubiks::app::shutdown();
-    REQUIRE(!rubiks::app::is_initialized());
+    REQUIRE(!rubiks::test::is_initialized());
     REQUIRE(!rubiks::app::render());
-    REQUIRE(rubiks::app::pixel_buffer() == 0);
-    REQUIRE(rubiks::app::pixel_byte_length() == 0);
+    REQUIRE(rubiks::app::surface_pixel_buffer(0) == 0);
+    REQUIRE(rubiks::app::surface_pixel_byte_length(0) == 0);
 }
 
 TEST_CASE("the application can be reinitialized after shutdown")
@@ -110,7 +110,7 @@ TEST_CASE("the application can be reinitialized after shutdown")
     REQUIRE(rubiks::app::initialize(32, 32));
     REQUIRE(rubiks::app::render());
     rubiks::app::shutdown();
-    REQUIRE(!rubiks::app::is_initialized());
+    REQUIRE(!rubiks::test::is_initialized());
 }
 
 TEST_CASE("scramble and reset own only the cube solve session")
@@ -221,7 +221,7 @@ TEST_CASE("resizing and switching views leave a playing sequence alone")
     for (int frame = 0; frame < 20; ++frame) {
         static_cast<void>(rubiks::app::advance(kFrameMs));
     }
-    REQUIRE(rubiks::app::resize(320, 200));
+    REQUIRE(rubiks::app::resize_surface(0, 320, 200));
     REQUIRE(rubiks::app::set_view_mode(ViewMode::Flat));
     REQUIRE(rubiks::app::set_flat_style(FlatStyle::Rings));
     REQUIRE(rubiks::app::is_busy());
@@ -393,7 +393,7 @@ TEST_CASE("view modes preserve state and net mode takes pointer gestures")
 
         // The center of the canvas is the center of the net block, so the net
         // is the one view on screen and it answers the press itself.
-        REQUIRE(rubiks::app::pointer_down(128.0f, 128.0f));
+        REQUIRE(rubiks::app::pointer_down_on(0, 128.0f, 128.0f));
         rubiks::app::pointer_cancel();
         REQUIRE_FALSE(rubiks::app::is_solved());
 

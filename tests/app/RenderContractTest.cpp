@@ -180,8 +180,8 @@ Region net_region(std::uint32_t width, std::uint32_t height)
 const std::uint8_t* pixel_at(std::uint32_t x, std::uint32_t y,
                              std::uint32_t width)
 {
-    const auto* bytes =
-        reinterpret_cast<const std::uint8_t*>(rubiks::app::pixel_buffer());
+    const auto* bytes = reinterpret_cast<const std::uint8_t*>(
+        rubiks::app::surface_pixel_buffer(0));
     return bytes + (static_cast<std::size_t>(y) * width + x) * 4;
 }
 
@@ -347,8 +347,8 @@ void require_corners(std::uint32_t width, std::uint32_t height)
 
 void require_scene(std::uint32_t width, std::uint32_t height)
 {
-    REQUIRE(rubiks::app::pixel_buffer() != 0);
-    REQUIRE(rubiks::app::pixel_byte_length() == width * height * 4);
+    REQUIRE(rubiks::app::surface_pixel_buffer(0) != 0);
+    REQUIRE(rubiks::app::surface_pixel_byte_length(0) == width * height * 4);
     REQUIRE(rubiks::app::render());
 
     require_cube_faces(width, height);
@@ -439,13 +439,13 @@ TEST_CASE("face, net and corner pixels match the rendered scene contract")
 
     SECTION("after resizing to a larger square buffer")
     {
-        REQUIRE(rubiks::app::resize(512, 512));
+        REQUIRE(rubiks::app::resize_surface(0, 512, 512));
         require_scene(512, 512);
     }
 
     SECTION("after resizing to a smaller square buffer")
     {
-        REQUIRE(rubiks::app::resize(129, 129));
+        REQUIRE(rubiks::app::resize_surface(0, 129, 129));
         require_scene(129, 129);
     }
 
@@ -460,7 +460,7 @@ TEST_CASE("the contract holds on non-square buffers")
 
     SECTION("and on a portrait buffer")
     {
-        REQUIRE(rubiks::app::resize(200, 320));
+        REQUIRE(rubiks::app::resize_surface(0, 200, 320));
         require_scene(200, 320);
     }
 
@@ -605,7 +605,7 @@ TEST_CASE("pressing a net cell draws the rings it could turn on")
     // The middle of the front block turns on two rings, neither of them the
     // one the front block itself spins on.
     const Sample press = net_cell_point(4.5f, 4.5f, kSize, kSize);
-    REQUIRE(rubiks::app::pointer_down(press.x, press.y));
+    REQUIRE(rubiks::app::pointer_down_on(0, press.x, press.y));
     REQUIRE(rubiks::app::render());
 
     REQUIRE(below() > 0);
@@ -631,7 +631,7 @@ TEST_CASE("pressing a net cell draws the rings it could turn on")
     REQUIRE(beside() == 0);
 
     // A drag the other way settles on the horizontal ring instead.
-    REQUIRE(rubiks::app::pointer_down(press.x, press.y));
+    REQUIRE(rubiks::app::pointer_down_on(0, press.x, press.y));
     rubiks::app::pointer_move(press.x + 3.0f * cell, press.y);
     REQUIRE(rubiks::app::render());
     REQUIRE(beside() > 0);

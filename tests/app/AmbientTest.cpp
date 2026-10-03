@@ -286,7 +286,7 @@ TEST_CASE("a drag looks around a watched pattern without interrupting it")
     // Over the middle of the cube, which at any other moment is a grip on a
     // layer. It sweeps the viewpoint instead, exactly as it does while a
     // scramble plays, and the pattern goes on turning underneath it.
-    REQUIRE(rubiks::app::pointer_down(128.0f, 60.0f));
+    REQUIRE(rubiks::app::pointer_down_on(0, 128.0f, 60.0f));
     rubiks::app::pointer_move(80.0f, 60.0f);
     rubiks::app::pointer_up();
     REQUIRE(rubiks::app::is_ambient());
@@ -311,14 +311,14 @@ TEST_CASE("a press with no cube on screen is refused, watched or not")
 
     // A coordinate that is not a place, refused before anything is changed
     // the way every other malformed press is.
-    REQUIRE_FALSE(rubiks::app::pointer_down(
-        std::numeric_limits<float>::quiet_NaN(), 60.0f));
+    REQUIRE_FALSE(rubiks::app::pointer_down_on(
+        0, std::numeric_limits<float>::quiet_NaN(), 60.0f));
     REQUIRE(rubiks::app::is_ambient());
 
     // And with the cube itself off screen there is no viewpoint to sweep, so
     // the press has nothing to start -- the same answer a scramble gives.
     REQUIRE(rubiks::app::set_view_mode(rubiks::graphics::ViewMode::Flat));
-    REQUIRE_FALSE(rubiks::app::pointer_down(128.0f, 128.0f));
+    REQUIRE_FALSE(rubiks::app::pointer_down_on(0, 128.0f, 128.0f));
     REQUIRE(rubiks::app::is_ambient());
 }
 
@@ -391,7 +391,7 @@ TEST_CASE("watching outlives a resize and a change of view")
 
     // Looking at it another way is not input into the cube, so the pattern
     // carries on where it was -- the same as a scramble part way through.
-    REQUIRE(rubiks::app::resize(320, 200));
+    REQUIRE(rubiks::app::resize_surface(0, 320, 200));
     REQUIRE(rubiks::app::set_view_mode(ViewMode::Flat));
     REQUIRE(rubiks::app::set_flat_style(FlatStyle::Rings));
     REQUIRE(rubiks::app::is_ambient());
@@ -404,7 +404,7 @@ TEST_CASE("watching outlives a resize and a change of view")
 
 TEST_CASE("watching before initialization is refused and asked about safely")
 {
-    REQUIRE_FALSE(rubiks::app::is_initialized());
+    REQUIRE_FALSE(rubiks::test::is_initialized());
     REQUIRE_FALSE(rubiks::app::ambient_start(0));
     REQUIRE_FALSE(rubiks::app::is_ambient());
     rubiks::app::ambient_stop();

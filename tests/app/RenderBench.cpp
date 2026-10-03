@@ -121,8 +121,8 @@ int main(int argc, char** argv)
     // since that is where the lighting has something to show.
     if (dump) {
         if (!rubiks::app::render()) return 1;
-        const auto* pixels =
-            reinterpret_cast<const std::uint8_t*>(rubiks::app::pixel_buffer());
+        const auto* pixels = reinterpret_cast<const std::uint8_t*>(
+            rubiks::app::surface_pixel_buffer(0));
         if (FILE* out = std::fopen(dump, "wb")) {
             std::fprintf(out, "P6\n%u %u\n255\n", kCanvas, kCanvas);
             for (std::uint32_t i = 0; i < kCanvas * kCanvas; ++i) {

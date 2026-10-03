@@ -54,8 +54,8 @@ struct Aim {
 /** The four bytes drawn at a point of the canvas. */
 const std::uint8_t* pixel_at(float x, float y)
 {
-    const auto* bytes =
-        reinterpret_cast<const std::uint8_t*>(rubiks::app::pixel_buffer());
+    const auto* bytes = reinterpret_cast<const std::uint8_t*>(
+        rubiks::app::surface_pixel_buffer(0));
     const auto column = static_cast<std::size_t>(x);
     const auto row = static_cast<std::size_t>(y);
     return bytes + (row * kCanvas + column) * 4;
@@ -118,7 +118,7 @@ TEST_CASE("a press on the net colours instead of turning while a draft is open")
 
     // And the same press arriving as a gesture goes the same way: a drag
     // across the net carries the brush rather than a layer.
-    CHECK(rubiks::app::pointer_down(aim.x, aim.y));
+    CHECK(rubiks::app::pointer_down_on(0, aim.x, aim.y));
     const auto along = front_cell(2, 1, 3);
     rubiks::app::pointer_move(along.x, along.y);
     rubiks::app::pointer_up();

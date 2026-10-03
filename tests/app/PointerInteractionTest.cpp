@@ -140,8 +140,8 @@ float pixels_per_degree(std::uint32_t width, std::uint32_t height)
 
 const std::uint8_t* pixel_at(float x, float y, std::uint32_t width)
 {
-    const auto* bytes =
-        reinterpret_cast<const std::uint8_t*>(rubiks::app::pixel_buffer());
+    const auto* bytes = reinterpret_cast<const std::uint8_t*>(
+        rubiks::app::surface_pixel_buffer(0));
     const auto column = static_cast<std::size_t>(x);
     const auto row = static_cast<std::size_t>(y);
     return bytes + (row * width + column) * 4;
@@ -358,7 +358,7 @@ void orbit_left(float quarter_turns)
     const auto rect = cube_rect(kCanvas, kCanvas);
     const auto from = background_point();
 
-    REQUIRE(rubiks::app::pointer_down(from.x, from.y));
+    REQUIRE(rubiks::app::pointer_down_on(0, from.x, from.y));
     rubiks::app::pointer_move(
         from.x - rubiks::interaction::kOrbitQuarterTurnFraction * rect.width *
                      quarter_turns,
@@ -377,7 +377,7 @@ void move_column_upward(int column, float degrees)
 void drag_column_upward(int column, float degrees)
 {
     const auto grab = front_column(column, kCanvas, kCanvas);
-    REQUIRE(rubiks::app::pointer_down(grab.x, grab.y));
+    REQUIRE(rubiks::app::pointer_down_on(0, grab.x, grab.y));
     move_column_upward(column, degrees);
 }
 
@@ -401,7 +401,7 @@ void drag_net_cell(rubiks::cube::Face face, int column, int row, float faces_x,
         net.width / static_cast<float>(rubiks::graphics::kNetColumns);
     const auto from = net_cell_point(face, column, row);
 
-    REQUIRE(rubiks::app::pointer_down(from.x, from.y));
+    REQUIRE(rubiks::app::pointer_down_on(0, from.x, from.y));
     rubiks::app::pointer_move(from.x + faces_x * face_side,
                               from.y + faces_y * face_side);
 }
@@ -424,9 +424,9 @@ void drag_net_top_row_left()
 
 TEST_CASE("pointer entry points are safe before initialization")
 {
-    REQUIRE_FALSE(rubiks::app::is_initialized());
+    REQUIRE_FALSE(rubiks::test::is_initialized());
 
-    REQUIRE_FALSE(rubiks::app::pointer_down(10.0f, 10.0f));
+    REQUIRE_FALSE(rubiks::app::pointer_down_on(0, 10.0f, 10.0f));
     REQUIRE_FALSE(rubiks::app::advance(kFrameMs));
 
     // These return nothing, so the contract is only that they are harmless.
@@ -434,7 +434,7 @@ TEST_CASE("pointer entry points are safe before initialization")
     rubiks::app::pointer_up();
     rubiks::app::pointer_cancel();
 
-    REQUIRE_FALSE(rubiks::app::is_initialized());
+    REQUIRE_FALSE(rubiks::test::is_initialized());
 }
 
 TEST_CASE("a drag gesture turns the cube")
@@ -610,7 +610,7 @@ TEST_CASE("a press on the background confirms the snap as well")
     // Where the press landed is no part of the rule: a snap is over once the
     // next press arrives, whether that press turns a layer or sweeps the view.
     const auto corner = background_point();
-    REQUIRE(rubiks::app::pointer_down(corner.x, corner.y));
+    REQUIRE(rubiks::app::pointer_down_on(0, corner.x, corner.y));
 
     REQUIRE(rubiks::app::committed_move_count() == 1);
     require_up_right_column(kGreen);
@@ -630,7 +630,7 @@ TEST_CASE("a press that cannot start anything confirms nothing")
     REQUIRE(rubiks::app::advance(kFrameMs));
 
     const float nan = std::numeric_limits<float>::quiet_NaN();
-    REQUIRE_FALSE(rubiks::app::pointer_down(nan, nan));
+    REQUIRE_FALSE(rubiks::app::pointer_down_on(0, nan, nan));
 
     // Every reason to reject a press comes before the confirmation, so a press
     // that begins nothing has changed nothing either: the snap still owns the
@@ -658,7 +658,7 @@ TEST_CASE("a press off the net in net-only view confirms nothing")
     // The corner of the canvas, clear of the net block. There is no viewpoint
     // on screen to sweep, so this press starts nothing -- and a press that
     // starts nothing confirms nothing.
-    REQUIRE_FALSE(rubiks::app::pointer_down(2.0f, 2.0f));
+    REQUIRE_FALSE(rubiks::app::pointer_down_on(0, 2.0f, 2.0f));
     REQUIRE(rubiks::app::committed_move_count() == 0);
 
     settle();
@@ -768,7 +768,7 @@ TEST_CASE("the net is draggable in net-only view")
     const float x = net.x + face_side + 1.5f * cell;
     const float y = net.y + face_side + 0.5f * cell;
 
-    REQUIRE(rubiks::app::pointer_down(x, y));
+    REQUIRE(rubiks::app::pointer_down_on(0, x, y));
     rubiks::app::pointer_move(x - 0.6f * face_side, y);
     rubiks::app::pointer_up();
     settle();
@@ -796,7 +796,7 @@ TEST_CASE("an empty corner of the cross is not a net cell")
 
     // With the cube on screen this is background like any other, so it sweeps
     // the viewpoint; what it must never do is turn a layer.
-    REQUIRE(rubiks::app::pointer_down(x, y));
+    REQUIRE(rubiks::app::pointer_down_on(0, x, y));
     rubiks::app::pointer_move(x - face_side, y);
     rubiks::app::pointer_up();
     settle();
@@ -812,8 +812,8 @@ TEST_CASE("an empty corner of the cross is not a net cell")
                           .net;
     const float only_face =
         only.width / static_cast<float>(rubiks::graphics::kNetColumns);
-    REQUIRE_FALSE(rubiks::app::pointer_down(only.x + 0.5f * only_face,
-                                            only.y + 0.5f * only_face));
+    REQUIRE_FALSE(rubiks::app::pointer_down_on(0, only.x + 0.5f * only_face,
+                                               only.y + 0.5f * only_face));
 
 }
 
@@ -826,7 +826,7 @@ TEST_CASE("a net drag and a cube drag cannot run at once")
     // One gesture at a time, whichever view it started in: the second press
     // is refused rather than layered on top of the first.
     const auto grab = front_column(2, kCanvas, kCanvas);
-    REQUIRE_FALSE(rubiks::app::pointer_down(grab.x, grab.y));
+    REQUIRE_FALSE(rubiks::app::pointer_down_on(0, grab.x, grab.y));
 
     rubiks::app::pointer_up();
     settle();
@@ -864,7 +864,7 @@ TEST_CASE("pressing away from the cube never turns a layer")
     const float corner_x = rect.x + rect.width * 0.02f;
     const float corner_y = rect.y + rect.height * 0.02f;
 
-    REQUIRE(rubiks::app::pointer_down(corner_x, corner_y));
+    REQUIRE(rubiks::app::pointer_down_on(0, corner_x, corner_y));
     rubiks::app::pointer_move(corner_x - 300.0f, corner_y);
     rubiks::app::pointer_up();
     settle();
@@ -900,13 +900,13 @@ TEST_CASE("resizing during a drag abandons it")
 
     // The gesture holds screen directions from the old viewport, so it cannot
     // survive; dropping it is what keeps the angle from jumping.
-    REQUIRE(rubiks::app::resize(800, 600));
+    REQUIRE(rubiks::app::resize_surface(0, 800, 600));
     REQUIRE_FALSE(rubiks::app::advance(kFrameMs));
 
     rubiks::app::pointer_up();
     REQUIRE_FALSE(rubiks::app::advance(kFrameMs));
 
-    REQUIRE(rubiks::app::resize(kCanvas, kCanvas));
+    REQUIRE(rubiks::app::resize_surface(0, kCanvas, kCanvas));
     require_up_right_column(kWhite);
 
 }
@@ -920,10 +920,10 @@ TEST_CASE("resizing during the snap lets it finish")
 
     // The release already decided the turn, and the snap animates an angle
     // rather than reading the screen, so a resize cannot invalidate it.
-    REQUIRE(rubiks::app::resize(800, 600));
+    REQUIRE(rubiks::app::resize_surface(0, 800, 600));
     REQUIRE(settle() >= 1);
 
-    REQUIRE(rubiks::app::resize(kCanvas, kCanvas));
+    REQUIRE(rubiks::app::resize_surface(0, kCanvas, kCanvas));
     require_up_right_column(kGreen);
 
 }
@@ -974,8 +974,8 @@ TEST_CASE("a press between two frames sees the viewpoint it was aimed at")
     // apply it exactly once: not zero times, which would pick against a
     // viewpoint the user never saw, and not twice.
     const auto rect = cube_rect(kCanvas, kCanvas);
-    REQUIRE(rubiks::app::pointer_down(rect.x + rect.width * 0.02f,
-                                      rect.y + rect.height * 0.02f));
+    REQUIRE(rubiks::app::pointer_down_on(0, rect.x + rect.width * 0.02f,
+                                         rect.y + rect.height * 0.02f));
     rubiks::app::pointer_up();
     settle();
 
@@ -991,8 +991,8 @@ TEST_CASE("a resize keeps the viewpoint and applies the last sweep")
 
     // The gesture cannot continue across a resize, but what it already swept
     // still counts.
-    REQUIRE(rubiks::app::resize(800, 600));
-    REQUIRE(rubiks::app::resize(kCanvas, kCanvas));
+    REQUIRE(rubiks::app::resize_surface(0, 800, 600));
+    REQUIRE(rubiks::app::resize_surface(0, kCanvas, kCanvas));
     settle();
 
     require_visible_faces(kUpLit, kRightLit, kBackLit);
@@ -1107,7 +1107,7 @@ void drag_round_ring(const rubiks::graphics::SlotRing& ring, float from,
                      float slots)
 {
     const auto start = ring.at(from).position;
-    REQUIRE(rubiks::app::pointer_down(start.x, start.y));
+    REQUIRE(rubiks::app::pointer_down_on(0, start.x, start.y));
 
     constexpr int kSteps = 32;
     for (int step = 1; step <= kSteps; ++step) {
@@ -1204,7 +1204,7 @@ TEST_CASE("a press away from the ring diagram's stickers starts nothing")
 
     // The press misses, and being refused it cannot have confirmed the snap
     // on its way out. Phase 7 put every reason to refuse ahead of that.
-    REQUIRE_FALSE(rubiks::app::pointer_down(middle.x, middle.y));
+    REQUIRE_FALSE(rubiks::app::pointer_down_on(0, middle.x, middle.y));
     REQUIRE(rubiks::app::committed_move_count() == 0);
 
     settle();
@@ -1223,7 +1223,7 @@ TEST_CASE("a press over the cube while a sequence plays only looks around it")
     // follows sweeps the viewpoint instead.
     const auto grab = front_column(2, kCanvas, kCanvas);
     const auto rect = cube_rect(kCanvas, kCanvas);
-    REQUIRE(rubiks::app::pointer_down(grab.x, grab.y));
+    REQUIRE(rubiks::app::pointer_down_on(0, grab.x, grab.y));
     rubiks::app::pointer_move(
         grab.x -
             rubiks::interaction::kOrbitQuarterTurnFraction * rect.width,
@@ -1287,7 +1287,7 @@ TEST_CASE("a press while a sequence plays in the flat view starts nothing")
         // it may start. Sent to the empty cube region instead it would be
         // measured against a rectangle of no width, and the infinity that
         // yields would leave the viewpoint NaN for the rest of the session.
-        REQUIRE_FALSE(rubiks::app::pointer_down(at.x, at.y));
+        REQUIRE_FALSE(rubiks::app::pointer_down_on(0, at.x, at.y));
         rubiks::app::pointer_move(at.x + 0.2f * kCanvas, at.y);
         rubiks::app::pointer_up();
 

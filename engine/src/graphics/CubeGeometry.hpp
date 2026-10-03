@@ -49,6 +49,9 @@ void append_sticker(WorldScene& scene, const math::Vec3& center,
  */
 inline constexpr Color kBodyColor{70, 74, 82, 255};
 
+/** Unit vector along the positive direction of an axis. */
+[[nodiscard]] math::Vec3 axis_direction(cube::Axis axis) noexcept;
+
 /**
  * Rotation of a turning layer, in the domain's sign convention.
  *

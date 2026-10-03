@@ -82,20 +82,6 @@ constexpr float kH = 1.0f;
     return z;
 }
 
-/** Unit vector along the positive direction of an axis. */
-[[nodiscard]] Vec3 axis_direction(Axis axis) noexcept
-{
-    switch (axis) {
-        case Axis::X:
-            return Vec3{1.0f, 0.0f, 0.0f};
-        case Axis::Y:
-            return Vec3{0.0f, 1.0f, 0.0f};
-        case Axis::Z:
-            break;
-    }
-    return Vec3{0.0f, 0.0f, 1.0f};
-}
-
 /** The coordinate of a cubie along a move's axis. */
 [[nodiscard]] int coordinate_on(Axis axis, int x, int y, int z) noexcept
 {
@@ -192,6 +178,19 @@ void append_sticker(WorldScene& scene, const Vec3& center, float half_extent,
                               center.z + offsets[i].z * half_extent};
     }
     scene.faces.push_back(quad);
+}
+
+Vec3 axis_direction(Axis axis) noexcept
+{
+    switch (axis) {
+        case Axis::X:
+            return Vec3{1.0f, 0.0f, 0.0f};
+        case Axis::Y:
+            return Vec3{0.0f, 1.0f, 0.0f};
+        case Axis::Z:
+            break;
+    }
+    return Vec3{0.0f, 0.0f, 1.0f};
 }
 
 math::Quaternion layer_rotation(Axis axis, float degrees) noexcept

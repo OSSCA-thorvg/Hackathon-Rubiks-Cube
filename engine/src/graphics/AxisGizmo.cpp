@@ -2,9 +2,9 @@
 
 #include <algorithm>
 #include <array>
-#include <cstddef>
 
 #include "cube/CubeMove.hpp"
+#include "graphics/CubeGeometry.hpp"
 #include "graphics/Palette.hpp"
 #include "math/Types.hpp"
 
@@ -13,7 +13,6 @@ namespace {
 
 using cube::Axis;
 using math::Vec2;
-using math::Vec3;
 
 /** One arm, kept with its view-space depth so the near ones can go last. */
 struct Arm {
@@ -33,23 +32,19 @@ RenderScene draw_arms(const Camera& camera, Vec2 origin, float arm_length,
     RenderScene scene;
     const math::Mat4 view = camera.view();
 
-    constexpr std::array<std::pair<Axis, Vec3>, 3> kAxes{
-        {{Axis::X, Vec3{1.0f, 0.0f, 0.0f}},
-         {Axis::Y, Vec3{0.0f, 1.0f, 0.0f}},
-         {Axis::Z, Vec3{0.0f, 0.0f, 1.0f}}}};
-
-    std::array<Arm, 3> arms{};
-    for (std::size_t i = 0; i < kAxes.size(); ++i) {
+    std::array<Arm, cube::kAxisCount> arms{};
+    for (const Axis axis : cube::axes()) {
         // A direction, so w is zero and the eye's position drops out: what is
         // left is the viewpoint's rotation, which is all a gizmo reports.
         const auto turned =
-            math::apply(view, math::Vec4{kAxes[i].second, 0.0f});
+            math::apply(view, math::Vec4{axis_direction(axis), 0.0f});
 
         // Screen Y runs down, so the view's up becomes a step up the canvas.
-        arms[i] = Arm{kAxes[i].first,
-                      Vec2{origin.x + turned.x * arm_length,
-                           origin.y - turned.y * arm_length},
-                      turned.z};
+        arms[cube::axis_index(axis)] =
+            Arm{axis,
+                Vec2{origin.x + turned.x * arm_length,
+                     origin.y - turned.y * arm_length},
+                turned.z};
     }
 
     // Furthest first: the camera looks down its own -Z, so a larger z is nearer

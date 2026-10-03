@@ -777,23 +777,6 @@ private:
     return which;
 }
 
-/** Every quarter turn a cube of this size has: the six faces and the slices. */
-[[nodiscard]] std::vector<Turn> quarter_turns(int size)
-{
-    std::vector<Turn> steps;
-    for (const Face face : faces()) {
-        for (const int turns : {1, -1}) steps.push_back(face_turn(face, turns));
-    }
-    for (const Axis axis : kAxes) {
-        for (int layer = 1; layer <= size - 2; ++layer) {
-            for (const int turns : {1, -1}) {
-                steps.push_back(layer_turn(axis, layer, turns, size));
-            }
-        }
-    }
-    return steps;
-}
-
 /** One tool, worked out once and read every round. */
 struct Prepared {
     std::vector<Turn> steps;
@@ -1419,69 +1402,6 @@ void build_reduction(Work& work, const CentreWorkshop& centres,
 }
 
 }  // namespace
-
-CentreLocality centre_locality(int size)
-{
-    const Board centres{size, centre_cells(size)};
-    const auto cluster = orbits_under(centres, quarter_turns(size));
-
-    CentreLocality out;
-    out.cells = static_cast<int>(cluster.size());
-    if (cluster.empty()) return out;
-
-    out.clusters = *std::max_element(cluster.begin(), cluster.end()) + 1;
-
-    std::vector<int> serving(static_cast<std::size_t>(
-        *std::max_element(cluster.begin(), cluster.end()) + 1), 0);
-    std::vector<int> held(static_cast<std::size_t>(out.clusters), 0);
-    for (const int which : cluster) ++held[static_cast<std::size_t>(which)];
-    out.smallest_cluster = *std::min_element(held.begin(), held.end());
-    out.largest_cluster = *std::max_element(held.begin(), held.end());
-
-    for (const auto& tool : centre_shapes(size)) {
-        const auto moved = centres.hops(written_out(tool));
-        if (moved.empty()) continue;
-
-        // Which sets the tool reaches into, counted rather than assumed. Both
-        // ends of every hop, because a tool that took a sticker out of one set
-        // and left it in another would be the thing this is looking for.
-        std::set<int> reached;
-        for (const auto& [from, to] : moved) {
-            reached.insert(cluster[static_cast<std::size_t>(from)]);
-            reached.insert(cluster[static_cast<std::size_t>(to)]);
-        }
-        const bool local = reached.size() == 1;
-
-        // The three families told apart by what their second half is: a face
-        // turn for the coarse one, a slice for the other two, and the narrow
-        // one carries its face turn in the first half instead.
-        if (is_face_turn(tool.second.front())) {
-            ++out.coarse;
-            if (local) ++out.coarse_local;
-            continue;
-        }
-
-        const bool narrow = tool.first.size() > 1;
-        if (narrow) {
-            ++out.narrow;
-            if (local) ++out.narrow_local;
-        } else {
-            ++out.fine;
-            if (local) ++out.fine_local;
-        }
-        out.widest_fine_reach =
-            std::max(out.widest_fine_reach, static_cast<int>(reached.size()));
-
-        // A local tool belongs to the one cluster it stays in, and how many
-        // each cluster is left holding is what a stage working one cluster at
-        // a time would actually search.
-        if (local) ++serving[static_cast<std::size_t>(*reached.begin())];
-    }
-
-    out.fewest_local_tools = *std::min_element(serving.begin(), serving.end());
-    out.most_local_tools = *std::max_element(serving.begin(), serving.end());
-    return out;
-}
 
 std::vector<CubeMove> solve_centres(const CubeState& state)
 {

@@ -1,5 +1,5 @@
 diff --git a/engine/src/cube/solver/Reduction.cpp b/engine/src/cube/solver/Reduction.cpp
-index 6bd77f0..0509d3b 100644
+index 443db1a..18a2577 100644
 --- a/engine/src/cube/solver/Reduction.cpp
 +++ b/engine/src/cube/solver/Reduction.cpp
 @@ -484,6 +484,14 @@ public:
@@ -17,7 +17,29 @@ index 6bd77f0..0509d3b 100644
      /** How many of them are showing the colour asked of them. */
      [[nodiscard]] int at_home(const CubeState& cube) const
      {
-@@ -799,6 +807,9 @@ struct Prepared {
+@@ -777,11 +785,31 @@ private:
+     return which;
+ }
+ 
++/** Every quarter turn a cube of this size has: the six faces and the slices. */
++[[nodiscard]] std::vector<Turn> quarter_turns(int size)
++{
++    std::vector<Turn> steps;
++    for (const Face face : faces()) {
++        for (const int turns : {1, -1}) steps.push_back(face_turn(face, turns));
++    }
++    for (const Axis axis : kAxes) {
++        for (int layer = 1; layer <= size - 2; ++layer) {
++            for (const int turns : {1, -1}) {
++                steps.push_back(layer_turn(axis, layer, turns, size));
++            }
++        }
++    }
++    return steps;
++}
++
+ /** One tool, worked out once and read every round. */
+ struct Prepared {
      std::vector<Turn> steps;
      std::vector<std::pair<int, int>> moved;
      Carries carries{};
@@ -27,7 +49,7 @@ index 6bd77f0..0509d3b 100644
  };
  
  /** One choice of setup and tool, or nothing when none was any good. */
-@@ -833,6 +844,7 @@ public:
+@@ -816,6 +844,7 @@ public:
              prepared.steps = written_out(tool);
              prepared.moved = centres_.hops(prepared.steps);
              prepared.carries = centres_.carries(prepared.moved);
@@ -35,7 +57,7 @@ index 6bd77f0..0509d3b 100644
              if (prepared.moved.empty()) continue;
              centre_tools_.push_back(std::move(prepared));
          }
-@@ -845,6 +857,51 @@ public:
+@@ -828,6 +857,51 @@ public:
                      : sources_after(centres_, {setup}));
          }
  
@@ -87,7 +109,7 @@ index 6bd77f0..0509d3b 100644
      }
  
      [[nodiscard]] const Board& centres() const noexcept { return centres_; }
-@@ -860,6 +917,20 @@ public:
+@@ -843,6 +917,20 @@ public:
      {
          return centre_sources_;
      }
@@ -108,7 +130,7 @@ index 6bd77f0..0509d3b 100644
  
  private:
      /** Each cell answering for itself, which is what no setup at all does. */
-@@ -894,6 +965,10 @@ private:
+@@ -877,6 +965,10 @@ private:
      std::vector<Prepared> centre_tools_;
      std::vector<Turn> centre_setups_;
      std::vector<std::vector<int>> centre_sources_;
@@ -119,7 +141,7 @@ index 6bd77f0..0509d3b 100644
  };
  
  /**
-@@ -1183,6 +1258,70 @@ private:
+@@ -1166,6 +1258,70 @@ private:
  
  };
  
@@ -190,7 +212,7 @@ index 6bd77f0..0509d3b 100644
  void build_centres(Work& work, const CentreWorkshop& shop)
  {
      const Board& board = shop.centres();
-@@ -1194,28 +1333,52 @@ void build_centres(Work& work, const CentreWorkshop& shop)
+@@ -1177,28 +1333,52 @@ void build_centres(Work& work, const CentreWorkshop& shop)
  
      const int target = board.target();
  

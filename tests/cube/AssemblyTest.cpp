@@ -7,7 +7,6 @@
 #include "cube/Assembly.hpp"
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
-#include "cube/Scramble.hpp"
 #include "cube/Surface.hpp"
 
 // Reading a painting of stickers back as a cube, and refusing the ones that
@@ -21,19 +20,11 @@ using rubiks::cube::CubeMove;
 using rubiks::cube::CubeState;
 using rubiks::cube::FaceColor;
 using rubiks::cube::layers_through;
-using rubiks::cube::make_scramble;
 using rubiks::cube::PaintFault;
 using rubiks::cube::painting_of;
 using rubiks::cube::read_painting;
 using rubiks::cube::surface_stickers;
-using rubiks::test::apply_all;
-
-CubeState scrambled(std::uint32_t seed, int size, std::size_t moves = 40)
-{
-    CubeState cube(size);
-    apply_all(cube, make_scramble(size, seed, moves));
-    return cube;
-}
+using rubiks::test::scrambled;
 
 /** The same cube held a different way up, which is not a move the puzzle has. */
 CubeState turned_over(const CubeState& cube, Axis axis, int quarters)

@@ -1,10 +1,13 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
 #include "cube/Cubie.hpp"
+#include "cube/Scramble.hpp"
 #include "cube/Surface.hpp"
 
 /**
@@ -75,6 +78,28 @@ inline void apply_all(cube::CubeState& cube,
     for (const auto& move : sequence) {
         cube.apply(move);
     }
+}
+
+/**
+ * A cube of `size` scrambled with the application's own generator.
+ *
+ * Forty moves unless a test says otherwise, which is enough to leave no part
+ * of a cube of any size the tests reach where it began.
+ */
+[[nodiscard]] inline cube::CubeState scrambled(std::uint32_t seed, int size,
+                                               std::size_t moves = 40)
+{
+    cube::CubeState state(size);
+    apply_all(state, cube::make_scramble(size, seed, moves));
+    return state;
+}
+
+/** Whether a move is an outer face of `size` turned on its own. */
+[[nodiscard]] constexpr bool is_outer_face_turn(const cube::CubeMove& move,
+                                                int size) noexcept
+{
+    return move.layers == cube::layer(0) ||
+           move.layers == cube::layer(size - 1);
 }
 
 /**

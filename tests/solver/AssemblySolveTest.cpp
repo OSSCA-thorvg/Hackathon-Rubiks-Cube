@@ -7,7 +7,6 @@
 #include "CubeSupport.hpp"
 #include "cube/Assembly.hpp"
 #include "cube/CubeState.hpp"
-#include "cube/Scramble.hpp"
 #include "cube/Surface.hpp"
 #include "cube/solver/LayerByLayer.hpp"
 #include "cube/solver/Reduction.hpp"
@@ -30,7 +29,6 @@ namespace {
 using rubiks::cube::assembled;
 using rubiks::cube::CubeState;
 using rubiks::cube::FaceColor;
-using rubiks::cube::make_scramble;
 using rubiks::cube::PaintFault;
 using rubiks::cube::painting_of;
 using rubiks::cube::read_painting;
@@ -38,13 +36,7 @@ using rubiks::cube::solver::LayerByLayer;
 using rubiks::cube::solver::Reduction;
 using rubiks::cube::solver::Solver;
 using rubiks::test::apply_all;
-
-CubeState scrambled(std::uint32_t seed, int size, std::size_t moves = 40)
-{
-    CubeState cube(size);
-    apply_all(cube, make_scramble(size, seed, moves));
-    return cube;
-}
+using rubiks::test::scrambled;
 
 /**
  * A painting made by disturbing a real one, rather than by colouring at random.

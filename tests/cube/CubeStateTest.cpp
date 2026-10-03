@@ -28,6 +28,7 @@ using rubiks::cube::layers_through;
 using rubiks::cube::solved_color;
 using rubiks::test::apply_all;
 using rubiks::test::inverse_of;
+using rubiks::test::is_outer_face_turn;
 
 constexpr int kSize = 3;
 constexpr int kLast = kSize - 1;
@@ -278,7 +279,7 @@ TEST_CASE("seeded scrambles are reproducible and structurally valid")
 
     for (std::size_t index = 0; index < first.size(); ++index) {
         const CubeMove& move = first[index];
-        REQUIRE((move.layers == layer(0) || move.layers == layer(kLast)));
+        REQUIRE(is_outer_face_turn(move, kSize));
         REQUIRE((move.quarter_turns == -1 || move.quarter_turns == 1 ||
                  move.quarter_turns == 2));
         if (index > 0) REQUIRE(move.axis != first[index - 1].axis);

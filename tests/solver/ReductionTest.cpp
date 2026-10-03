@@ -36,13 +36,7 @@ using rubiks::cube::solver::reduced;
 using rubiks::cube::solver::solve_as_three_layers;
 using rubiks::cube::solver::solve_centres;
 using rubiks::test::apply_all;
-
-CubeState scrambled(std::uint32_t seed, int size, std::size_t moves = 40)
-{
-    CubeState cube(size);
-    apply_all(cube, make_scramble(size, seed, moves));
-    return cube;
-}
+using rubiks::test::scrambled;
 
 /** Whether every face's centre block is one colour, its own. */
 bool centres_done(const CubeState& cube)
@@ -229,8 +223,7 @@ TEST_CASE("an odd number of slices from solved is reduced all the same")
             cube.apply(CubeMove{rubiks::cube::Axis::X, rubiks::cube::layer(1),
                                 1});
             for (const auto& move : make_scramble(size, seed, 30)) {
-                if (move.layers == rubiks::cube::layer(0) ||
-                    move.layers == rubiks::cube::layer(size - 1)) {
+                if (rubiks::test::is_outer_face_turn(move, size)) {
                     cube.apply(move);
                 }
             }

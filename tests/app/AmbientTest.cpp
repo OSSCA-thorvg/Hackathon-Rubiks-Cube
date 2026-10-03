@@ -124,9 +124,7 @@ TEST_CASE("a watched pattern reaches under the surface of a bigger cube")
             // pattern here has at least one move that goes deeper than that.
             bool reaches_inside = false;
             for (const auto& move : pattern) {
-                const auto layers = move.layers;
-                if (layers != rubiks::cube::layer(0) &&
-                    layers != rubiks::cube::layer(size - 1)) {
+                if (!rubiks::test::is_outer_face_turn(move, size)) {
                     reaches_inside = true;
                 }
             }
@@ -140,8 +138,7 @@ TEST_CASE("a watched pattern reaches under the surface of a bigger cube")
         for (std::uint32_t choice = 0; choice < kAmbientPatternCount;
              ++choice) {
             for (const auto& move : ambient_pattern(choice, small)) {
-                REQUIRE((move.layers == rubiks::cube::layer(0) ||
-                         move.layers == rubiks::cube::layer(small - 1)));
+                REQUIRE(rubiks::test::is_outer_face_turn(move, small));
             }
         }
     }

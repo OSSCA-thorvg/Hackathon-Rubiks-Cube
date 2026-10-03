@@ -7,7 +7,6 @@
 #include "CubeSupport.hpp"
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
-#include "cube/Scramble.hpp"
 #include "cube/solver/Projection.hpp"
 
 // Reading a big cube as the three by three it has been reduced to, and the two
@@ -19,13 +18,12 @@ using rubiks::cube::Axis;
 using rubiks::cube::CubeMove;
 using rubiks::cube::CubeState;
 using rubiks::cube::layer;
-using rubiks::cube::make_scramble;
 using rubiks::cube::solver::parities;
 using rubiks::cube::solver::Projection;
 using rubiks::cube::solver::projected;
 using rubiks::cube::solver::reachable;
 using rubiks::cube::solver::reduced;
-using rubiks::test::apply_all;
+using rubiks::test::scrambled;
 
 /** One outer face of a cube of any size, turned the same way at every size. */
 [[nodiscard]] CubeMove outer(Axis axis, bool far_end, int turns, int size)
@@ -144,8 +142,7 @@ TEST_CASE("a turn that reaches inside leaves the cube unreduced")
 TEST_CASE("a scramble that reaches inside is not a three by three either")
 {
     for (const int size : {4, 5, 6, 7, 8, 9}) {
-        CubeState cube(size);
-        apply_all(cube, make_scramble(size, 11, 40));
+        const auto cube = scrambled(11, size);
         INFO("size " << size);
         CHECK_FALSE(reduced(cube));
     }

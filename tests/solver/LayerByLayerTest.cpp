@@ -26,17 +26,10 @@ using rubiks::cube::solver::compress;
 using rubiks::cube::solver::LayerByLayer;
 using rubiks::cube::solver::solve_as_three_layers;
 using rubiks::test::apply_all;
+using rubiks::test::is_outer_face_turn;
+using rubiks::test::scrambled;
 
 constexpr int kSize = 3;
-
-/** A cube scrambled with the application's own generator. */
-CubeState scrambled(std::uint32_t seed, std::size_t moves = 20,
-                    int size = kSize)
-{
-    CubeState cube(size);
-    apply_all(cube, make_scramble(size, seed, moves));
-    return cube;
-}
 
 /**
  * A big cube turned by its outer faces alone, which leaves it reduced.
@@ -53,17 +46,11 @@ CubeState outer_scrambled(std::uint32_t seed, int size,
     // The generator reaches inside a big cube on purpose, so its moves are
     // filtered down here to the ones a three by three would have made.
     for (const auto& move : make_scramble(size, seed, moves)) {
-        if (move.layers == layer(0) || move.layers == layer(size - 1)) {
+        if (is_outer_face_turn(move, size)) {
             cube.apply(move);
         }
     }
     return cube;
-}
-
-/** Whether a move is an outer face of `size` turned on its own. */
-bool is_outer_face_turn(const CubeMove& move, int size)
-{
-    return move.layers == layer(0) || move.layers == layer(size - 1);
 }
 
 }  // namespace
@@ -84,7 +71,7 @@ TEST_CASE("a two by two is solved by the corner stages alone")
     const LayerByLayer solver;
 
     for (std::uint32_t seed = 0; seed < 500; ++seed) {
-        auto cube = scrambled(seed, 20, 2);
+        auto cube = scrambled(seed, 2, 20);
         const auto solution = solver.solve(cube);
 
         apply_all(cube, solution);
@@ -98,7 +85,7 @@ TEST_CASE("a two by two solution is outer face turns as well")
     const LayerByLayer solver;
 
     for (std::uint32_t seed = 0; seed < 100; ++seed) {
-        for (const auto& move : solver.solve(scrambled(seed, 20, 2))) {
+        for (const auto& move : solver.solve(scrambled(seed, 2, 20))) {
             INFO("seed " << seed);
             REQUIRE(is_outer_face_turn(move, 2));
             REQUIRE(is_layer_run(move.layers, 2));
@@ -133,7 +120,7 @@ TEST_CASE("every scramble the application can make is solved")
     const LayerByLayer solver;
 
     for (std::uint32_t seed = 0; seed < 500; ++seed) {
-        auto cube = scrambled(seed);
+        auto cube = scrambled(seed, kSize, 20);
         const auto solution = solver.solve(cube);
 
         apply_all(cube, solution);
@@ -148,7 +135,7 @@ TEST_CASE("longer and shorter scrambles are solved as well")
 
     for (const std::size_t length : {1, 2, 3, 7, 40, 100}) {
         for (std::uint32_t seed = 0; seed < 60; ++seed) {
-            auto cube = scrambled(seed, length);
+            auto cube = scrambled(seed, kSize, length);
             apply_all(cube, solver.solve(cube));
             INFO("seed " << seed << " length " << length);
             REQUIRE(cube.is_solved());
@@ -161,7 +148,7 @@ TEST_CASE("a solution is made of outer face turns and nothing else")
     const LayerByLayer solver;
 
     for (std::uint32_t seed = 0; seed < 200; ++seed) {
-        const auto cube = scrambled(seed);
+        const auto cube = scrambled(seed, kSize, 20);
         for (const auto& move : solver.solve(cube)) {
             INFO("seed " << seed);
 
@@ -180,7 +167,7 @@ TEST_CASE("the same cube is always solved the same way")
     const LayerByLayer solver;
 
     for (std::uint32_t seed = 0; seed < 50; ++seed) {
-        const auto cube = scrambled(seed);
+        const auto cube = scrambled(seed, kSize, 20);
         const auto first = solver.solve(cube);
         const auto second = solver.solve(cube);
         REQUIRE(first == second);
@@ -196,7 +183,7 @@ TEST_CASE("solutions stay within a length worth watching")
     constexpr std::uint32_t kSeeds = 500;
 
     for (std::uint32_t seed = 0; seed < kSeeds; ++seed) {
-        const auto length = solver.solve(scrambled(seed)).size();
+        const auto length = solver.solve(scrambled(seed, kSize, 20)).size();
         longest = length > longest ? length : longest;
         total += length;
     }
@@ -257,7 +244,7 @@ TEST_CASE("neighbouring turns of one layer are run together")
     {
         const LayerByLayer solver;
         for (std::uint32_t seed = 0; seed < 50; ++seed) {
-            auto cube = scrambled(seed);
+            auto cube = scrambled(seed, kSize, 20);
             const auto solution = solver.solve(cube);
             auto again = cube;
 

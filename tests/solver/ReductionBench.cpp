@@ -10,7 +10,6 @@
 #include "CubeSupport.hpp"
 #include "cube/CubeState.hpp"
 #include "cube/PackedMove.hpp"
-#include "cube/Scramble.hpp"
 #include "cube/solver/LayerByLayer.hpp"
 #include "cube/solver/Reduction.hpp"
 #include "cube/solver/ReductionStages.hpp"
@@ -50,12 +49,12 @@ namespace {
 
 using rubiks::cube::CubeState;
 using rubiks::cube::kPackedMaxLayers;
-using rubiks::cube::make_scramble;
 using rubiks::cube::solver::reduce;
 using rubiks::cube::solver::Reduction;
 using rubiks::cube::solver::solve_as_three_layers;
 using rubiks::cube::solver::solve_centres;
 using rubiks::test::apply_all;
+using rubiks::test::scrambled;
 
 using Clock = std::chrono::steady_clock;
 
@@ -64,13 +63,6 @@ constexpr std::uint32_t kSeeds[] = {0, 1, 7, 13, 42};
 
 /** How long a scramble is. Forty is what the rest of the tests use. */
 constexpr std::size_t kScrambleMoves = 40;
-
-CubeState scrambled(std::uint32_t seed, int size)
-{
-    CubeState cube(size);
-    apply_all(cube, make_scramble(size, seed, kScrambleMoves));
-    return cube;
-}
 
 /** Seconds taken by `work`, which is called for its time rather than its value. */
 template <typename Work>
@@ -127,7 +119,7 @@ Measured measure(int size, std::size_t seed_count)
     // workshops are built and the timings below are the search alone -- which
     // is what a second and later solve in the application costs.
     Reduction solver;
-    (void)solver.solve(scrambled(kSeeds[0], size));
+    (void)solver.solve(scrambled(kSeeds[0], size, kScrambleMoves));
 
     std::vector<double> centres;
     std::vector<double> reductions;
@@ -135,7 +127,7 @@ Measured measure(int size, std::size_t seed_count)
     std::vector<double> solves;
 
     for (std::size_t i = 0; i < seed_count; ++i) {
-        const auto cube = scrambled(kSeeds[i], size);
+        const auto cube = scrambled(kSeeds[i], size, kScrambleMoves);
 
         std::vector<rubiks::cube::CubeMove> centre_moves;
         centres.push_back(seconds([&] { centre_moves = solve_centres(cube); }));
@@ -283,7 +275,7 @@ TEST_CASE("every solution, move by move", "[.dump]")
     for (const int size : {4, 5, 6, 7, 8, 9}) {
         Reduction solver;
         for (const std::uint32_t seed : kSeeds) {
-            const auto cube = scrambled(seed, size);
+            const auto cube = scrambled(seed, size, kScrambleMoves);
             const auto moves = solver.solve(cube);
 
             std::cout << "size " << size << " seed " << seed << " moves "

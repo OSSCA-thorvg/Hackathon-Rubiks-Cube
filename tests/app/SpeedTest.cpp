@@ -6,7 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "EngineLifecycle.hpp"
-#include "graphics/Layout.hpp"
+#include "GraphicsSupport.hpp"
 #include "interaction/InteractionController.hpp"
 #include "math/Types.hpp"
 
@@ -25,10 +25,7 @@ using rubiks::test::settle;
 /** The center of the front face's right column: the grab that means R. */
 rubiks::math::Vec2 front_right_column()
 {
-    const auto rect = rubiks::graphics::layout(kCanvas, kCanvas,
-                                               rubiks::graphics::ViewMode::Both,
-                                               rubiks::graphics::FlatStyle::Net)
-                          .cube;
+    const auto rect = rubiks::test::cube_rect(kCanvas, kCanvas);
     return rubiks::math::Vec2{rect.x + rect.width * 0.433f,
                               rect.y + rect.height * 0.694f};
 }
@@ -36,10 +33,7 @@ rubiks::math::Vec2 front_right_column()
 /** How far the pointer moves to turn a layer by one degree. */
 float pixels_per_degree()
 {
-    const auto rect = rubiks::graphics::layout(kCanvas, kCanvas,
-                                               rubiks::graphics::ViewMode::Both,
-                                               rubiks::graphics::FlatStyle::Net)
-                          .cube;
+    const auto rect = rubiks::test::cube_rect(kCanvas, kCanvas);
     return rubiks::interaction::kQuarterTurnFraction * rect.width /
            rubiks::graphics::kDegreesPerQuarterTurn;
 }

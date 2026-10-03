@@ -17,7 +17,6 @@
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/NetGeometry.hpp"
-#include "graphics/OrbitCamera.hpp"
 #include "interaction/DragResolver.hpp"
 #include "interaction/NetPicking.hpp"
 
@@ -33,10 +32,12 @@ using rubiks::graphics::Camera;
 using rubiks::graphics::Rect;
 using rubiks::math::Vec2;
 using rubiks::math::Vec3;
+using rubiks::test::cube_camera;
+using rubiks::test::cube_rect;
+using rubiks::test::kCanvas;
 using rubiks::test::kFrameMs;
 
 constexpr int kSize = 3;
-constexpr std::uint32_t kCanvas = 1024;
 
 /**
  * An unmistakable one quarter turn of drag.
@@ -47,17 +48,6 @@ constexpr std::uint32_t kCanvas = 1024;
  * quietly change what they are asking about.
  */
 constexpr float kOneTurnDrag = 75.0f;
-
-Rect cube_rect()
-{
-    return rubiks::graphics::layout(kCanvas, kCanvas).cube;
-}
-
-Camera cube_camera()
-{
-    const Rect rect = cube_rect();
-    return rubiks::graphics::camera_into(rubiks::graphics::home_orbit(), rect);
-}
 
 /** Where a world point lands in viewport pixels. */
 Vec2 screen_of(const Vec3& world)

@@ -7,31 +7,18 @@
 
 #include "CubeSupport.hpp"
 #include "GraphicsSupport.hpp"
-#include "graphics/Layout.hpp"
-#include "graphics/OrbitCamera.hpp"
 #include "interaction/InteractionController.hpp"
 
 namespace {
 
 using Catch::Approx;
 using namespace rubiks::interaction;
-using rubiks::graphics::Camera;
 using rubiks::graphics::Rect;
+using rubiks::test::cube_camera;
+using rubiks::test::cube_rect;
 using rubiks::test::kFrameMs;
 
 constexpr int kSize = 3;
-constexpr std::uint32_t kCanvas = 1024;
-
-Rect cube_rect()
-{
-    return rubiks::graphics::layout(kCanvas, kCanvas).cube;
-}
-
-Camera cube_camera()
-{
-    const Rect rect = cube_rect();
-    return rubiks::graphics::camera_into(rubiks::graphics::home_orbit(), rect);
-}
 
 /** A point in the corner of the viewport, well clear of the cube. */
 float corner_x()

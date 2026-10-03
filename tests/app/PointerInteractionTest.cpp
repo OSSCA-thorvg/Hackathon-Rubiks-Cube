@@ -13,7 +13,6 @@
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/NetGeometry.hpp"
-#include "graphics/OrbitCamera.hpp"
 #include "graphics/RingsGeometry.hpp"
 #include "graphics/SlotRing.hpp"
 #include "interaction/DragResolver.hpp"
@@ -94,9 +93,11 @@ constexpr float kUpSample[]{0.50f, 0.29f};
 constexpr float kLeftSample[]{0.31f, 0.61f};
 constexpr float kRightSample[]{0.69f, 0.61f};
 
-constexpr std::uint32_t kCanvas = 1024;
 constexpr int kCubeSize = 3;
 
+using rubiks::test::cube_camera;
+using rubiks::test::cube_rect;
+using rubiks::test::kCanvas;
 using rubiks::test::kFrameMs;
 using rubiks::test::run_while_busy;
 using rubiks::test::settle;
@@ -108,17 +109,6 @@ using rubiks::test::settle;
  * on either side of it so that these tests never hinge on where those sit.
  */
 constexpr float kQuarterTurnDrag = 75.0f;
-
-rubiks::graphics::Rect cube_rect(std::uint32_t width, std::uint32_t height)
-{
-    return rubiks::graphics::layout(width, height).cube;
-}
-
-rubiks::graphics::Camera cube_camera(std::uint32_t width, std::uint32_t height)
-{
-    const auto rect = cube_rect(width, height);
-    return rubiks::graphics::camera_into(rubiks::graphics::home_orbit(), rect);
-}
 
 /** Where the middle sticker of one front face column is drawn. */
 rubiks::math::Vec2 front_column(int column, std::uint32_t width,

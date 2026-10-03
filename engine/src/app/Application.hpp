@@ -89,13 +89,6 @@ inline constexpr std::uint32_t kAllScenes =
 [[nodiscard]] bool render() noexcept;
 
 /**
- * Makes the next render() draw every surface, changed or not.
- *
- * For measuring a frame, which a skipped one would not be.
- */
-void invalidate() noexcept;
-
-/**
  * The address and the byte length of surface `id`'s software pixel buffer;
  * zero for a surface with no target.
  */
@@ -240,35 +233,14 @@ void reset_cube() noexcept;
 inline constexpr std::uint32_t kAmbientPatternCount = 4;
 
 /**
- * How many times a written pattern may repeat before the cube is back where
- * it began.
- *
- * A bound rather than the exact orders, which are worked out in the phase
- * document and live nowhere else. Nothing in the engine reads an order -- the
- * repeat just keeps taking the next move -- so writing them down here would be
- * a set of numbers that only the tests guarding them ever looked at. What the
- * watching of those cubes promises is that it comes back round within a
- * while, and that is a bound; it goes on holding when the table is edited,
- * which is when the promise is easiest to break.
- *
- * It is about the written patterns, which is to say about cubes with no
- * layers inside. A bigger cube is walked over instead, and a walk that mixes
- * the whole of it does not come back round in any number of rounds anyone
- * would sit through -- staying near the solved cube and leaving most of the
- * cube alone are the same thing, and the second of those is what made a big
- * cube not worth watching. Nothing rests on the return: what puts the cube
- * back is the snapshot the watching took.
- */
-inline constexpr int kAmbientMaxPeriod = 200;
-
-/**
  * The pattern one choice selects, taken modulo the size of the table.
  *
  * Every value is a valid choice, so there is no rejection path and no size to
- * ask for before choosing. The table is fixed and public because the property
- * that matters about it -- that each of its patterns brings the cube back
- * round within kAmbientMaxPeriod -- is arithmetic, and checking arithmetic
- * needs the numbers rather than an application to play them into.
+ * ask for before choosing. Declared here though only the engine and its tests
+ * call it, because what matters about the table -- that each of its written
+ * patterns brings the cube back round within a while -- is arithmetic, and
+ * checking arithmetic needs the moves rather than an application to play them
+ * into.
  *
  * The patterns are written as a face and a share of the cube, and built for
  * the cube in hand, so the same four are watchable at every size. A share
@@ -281,7 +253,12 @@ inline constexpr int kAmbientMaxPeriod = 200;
  * because four moves of a 9x9 leave most of it standing still: the walk steps
  * round the six faces, counts its depth up through the halves, and alternates
  * a slice with a half, so every band of the cube is turned on the way past.
- * What that costs is the return above.
+ * What that costs is the return: a walk that mixes the whole of a cube does
+ * not come back round in any number of rounds anyone would sit through --
+ * staying near the solved cube and leaving most of the cube alone are the
+ * same thing, and the second of those is what made a big cube not worth
+ * watching. Nothing rests on the return: what puts the cube back is the
+ * snapshot the watching took.
  *
  * Empty for a size this application does not build.
  */
@@ -612,12 +589,6 @@ void set_paint_cursor_shown(bool shown) noexcept;
 /** What the last refusal was, or `None` when nothing has been refused yet. */
 [[nodiscard]] cube::PaintFault painting_fault() noexcept;
 
-/** The draft's colours, in `surface_stickers()` order. Empty without a draft. */
-[[nodiscard]] const std::vector<cube::FaceColor>& painting_draft() noexcept;
-
-/** Every sticker on the cube as it stands, in `surface_stickers()` order. */
-[[nodiscard]] std::vector<cube::FaceColor> cube_painting() noexcept;
-
 /**
  * The colouring this session began from, when it began from one.
  *
@@ -807,12 +778,5 @@ void reset_view() noexcept;
  * Safe to call regardless of the initialization state.
  */
 void shutdown() noexcept;
-
-/**
- * Reports whether this application owns an active ThorVG initialization.
- *
- * @return true when initialize() has completed successfully.
- */
-[[nodiscard]] bool is_initialized() noexcept;
 
 }  // namespace rubiks::app

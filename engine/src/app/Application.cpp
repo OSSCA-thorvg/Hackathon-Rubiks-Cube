@@ -1265,12 +1265,6 @@ bool render() noexcept
     return drawn_all;
 }
 
-void invalidate() noexcept
-{
-    if (!state) return;
-    for (auto& surface : state->surfaces) surface.drawn.reset();
-}
-
 bool scramble(std::uint32_t seed, std::uint32_t move_count) noexcept
 {
     if (!state) return false;
@@ -1625,19 +1619,6 @@ cube::PaintFault painting_fault() noexcept
 {
     if (!state || !state->paint) return cube::PaintFault::None;
     return state->paint->reading.fault;
-}
-
-const std::vector<cube::FaceColor>& painting_draft() noexcept
-{
-    static const std::vector<cube::FaceColor> none;
-    if (!state || !state->paint) return none;
-    return state->paint->stickers;
-}
-
-std::vector<cube::FaceColor> cube_painting() noexcept
-{
-    if (!state) return {};
-    return cube::painting_of(state->cube_state);
 }
 
 std::uint32_t origin_painting_count() noexcept
@@ -2204,11 +2185,6 @@ void shutdown() noexcept
     // included, so ThorVG is only terminated afterwards.
     state.reset();
     static_cast<void>(tvg::Initializer::term());
-}
-
-bool is_initialized() noexcept
-{
-    return static_cast<bool>(state);
 }
 
 }  // namespace rubiks::app

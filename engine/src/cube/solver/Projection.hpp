@@ -3,7 +3,7 @@
 #include <array>
 #include <cstddef>
 
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 
 /**
  * Reading a big cube as the three by three it has been turned into.
@@ -37,7 +37,7 @@ inline constexpr std::size_t kEdgeSlots = 12;
  * True for every two by two and for a three by three whose centres are home:
  * neither has a row longer than one piece, so neither has anything to pair.
  */
-[[nodiscard]] bool reduced(const CubeState& cube);
+[[nodiscard]] bool reduced(const Cube& cube);
 
 /**
  * A reduced cube as the twenty pieces of a three by three.
@@ -47,7 +47,7 @@ inline constexpr std::size_t kEdgeSlots = 12;
  * cube -- and two cubes of different sizes turned by the same outer faces
  * project to the same thing.
  *
- * Not a `CubeState`: every one of those is a position turning could have
+ * Not a `Cube`: every one of those is a position turning could have
  * reached, which is what keeps unreachable cubes out of the domain, and most
  * of what can be written into the fields below is not such a position. This is
  * a reading of a cube rather than a cube.
@@ -75,7 +75,7 @@ struct Projection {
  * nothing that could go wrong with it; asking here is a precondition
  * violation, as is asking about a cube that is not reduced.
  */
-[[nodiscard]] Projection projected(const CubeState& cube);
+[[nodiscard]] Projection projected(const Cube& cube);
 
 /**
  * The two positions a reduced even cube can hold that a three by three cannot.

@@ -6,7 +6,7 @@
 
 #include "CubeSupport.hpp"
 #include "cube/Assembly.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 #include "cube/Surface.hpp"
 #include "cube/solver/LayerByLayer.hpp"
 #include "cube/solver/Reduction.hpp"
@@ -27,7 +27,7 @@
 namespace {
 
 using rubiks::cube::assembled;
-using rubiks::cube::CubeState;
+using rubiks::cube::Cube;
 using rubiks::cube::FaceColor;
 using rubiks::cube::PaintFault;
 using rubiks::cube::painting_of;
@@ -48,7 +48,7 @@ using rubiks::test::scrambled;
  * far outside it -- some of these are cubes and some are not, which is exactly
  * the mixture worth testing.
  */
-std::vector<FaceColor> disturbed(const CubeState& cube, std::uint32_t seed,
+std::vector<FaceColor> disturbed(const Cube& cube, std::uint32_t seed,
                                  int swaps)
 {
     auto painting = painting_of(cube);
@@ -126,7 +126,7 @@ TEST_CASE("every size the application builds is read and solved", "[.big]")
 
         // Paintings and not cubes: a cubie's hidden stickers are nothing a
         // painting could have mentioned, so the two are the same cube to look
-        // at without being the same `CubeState`.
+        // at without being the same `Cube`.
         REQUIRE(painting_of(*built) == painting_of(cube));
 
         auto working = *built;

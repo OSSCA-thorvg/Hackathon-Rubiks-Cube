@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-#include "cube/Cubie.hpp"
+#include "cube/Face.hpp"
 #include "cube/Surface.hpp"
 #include "cube/solver/Projection.hpp"
 #include "cube/solver/Turning.hpp"
@@ -106,7 +106,7 @@ struct Placement {
     return true;
 }
 
-[[nodiscard]] Placement read(const CubeState& cube,
+[[nodiscard]] Placement read(const Cube& cube,
                              const CubiePosition& position)
 {
     Placement piece;
@@ -146,22 +146,22 @@ struct Placement {
  * one of that row answers for it -- which is true once the cube is reduced,
  * and this is only ever asked after it has been.
  *
- * Only the showing faces are read. A cubie carries a colour on the faces it
- * hides as well, and those turn with it, so looking at all six would find the
- * same colours on several pieces at once.
+ * Each surface piece is considered once, using its first exposed face as
+ * its identity. Interior coordinates and hidden colours are never visited.
  */
-[[nodiscard]] Placement find_piece(const CubeState& cube,
+[[nodiscard]] Placement find_piece(const Cube& cube,
                                    const std::vector<FaceColor>& colours)
 {
     const int size = cube.size();
-    for (int x = 0; x < size; ++x) {
-        for (int y = 0; y < size; ++y) {
-            for (int z = 0; z < size; ++z) {
-                const auto piece = read(cube, CubiePosition{x, y, z});
-                if (piece.faces.size() != colours.size()) continue;
-                if (wears(piece, colours)) return piece;
-            }
-        }
+    for (const SurfaceSticker sticker : surface_cells(size)) {
+        const FaceCell cell = face_cell(sticker, size);
+        const std::size_t showing = 1 +
+            static_cast<std::size_t>(cell.row == 0 || cell.row == size - 1) +
+            static_cast<std::size_t>(cell.col == 0 || cell.col == size - 1);
+        if (showing != colours.size()) continue;
+        const Placement piece = read(cube, sticker.position());
+        if (piece.faces.front() != sticker.face) continue;
+        if (wears(piece, colours)) return piece;
     }
     assert(false);
     return Placement{};
@@ -297,7 +297,7 @@ const std::vector<FaceTurn> kEdgeCycle{
     {Face::Right, 1},  {Face::Up, 1},  {Face::Right, 1},  {Face::Up, -1},
     {Face::Right, -1}, {Face::Up, -1}, {Face::Right, 2}};
 
-[[nodiscard]] int top_edges_turned_up(const CubeState& cube)
+[[nodiscard]] int top_edges_turned_up(const Cube& cube)
 {
     int count = 0;
     for (const Face side : kSides) {
@@ -308,7 +308,7 @@ const std::vector<FaceTurn> kEdgeCycle{
 }
 
 /** How many of the top corners are already showing the top colour. */
-[[nodiscard]] int top_corners_turned_up_count(const CubeState& cube)
+[[nodiscard]] int top_corners_turned_up_count(const Cube& cube)
 {
     int count = 0;
     for (int frame = 0; frame < 4; ++frame) {
@@ -322,7 +322,7 @@ const std::vector<FaceTurn> kEdgeCycle{
     return count;
 }
 
-[[nodiscard]] int top_corners_in_place(const CubeState& cube)
+[[nodiscard]] int top_corners_in_place(const Cube& cube)
 {
     int count = 0;
     for (int frame = 0; frame < 4; ++frame) {
@@ -338,7 +338,7 @@ const std::vector<FaceTurn> kEdgeCycle{
     return count;
 }
 
-[[nodiscard]] int top_edges_in_place(const CubeState& cube)
+[[nodiscard]] int top_edges_in_place(const Cube& cube)
 {
     int count = 0;
     for (const Face side : kSides) {
@@ -355,7 +355,7 @@ const std::vector<FaceTurn> kEdgeCycle{
  * edges can be brought home by a sequence that leaves the corners a quarter
  * out, and a score blind to the corners would call that an improvement.
  */
-[[nodiscard]] int top_layer_in_place(const CubeState& cube)
+[[nodiscard]] int top_layer_in_place(const Cube& cube)
 {
     return top_corners_in_place(cube) + top_edges_in_place(cube);
 }
@@ -388,7 +388,7 @@ const std::vector<FaceTurn> kEdgeCycle{
  *         improves on standing still.
  */
 bool apply_best(Work& work, const std::vector<FaceTurn>& sequence,
-                int (*score)(const CubeState&))
+                int (*score)(const Cube&))
 {
     // Backwards as well as forwards. A sequence that moves three pieces round
     // moves them the other way when it is taken back, and the four ways round
@@ -451,7 +451,7 @@ bool apply_best(Work& work, const std::vector<FaceTurn>& sequence,
  * as a list of pictures.
  */
 void repeat_until_deep(Work& work, const std::vector<FaceTurn>& sequence,
-                       int (*score)(const CubeState&), int target)
+                       int (*score)(const Cube&), int target)
 {
     const std::array<std::vector<FaceTurn>, 2> both{sequence,
                                                     reversed(sequence)};
@@ -494,7 +494,7 @@ void repeat_until_deep(Work& work, const std::vector<FaceTurn>& sequence,
 }
 
 void repeat_until(Work& work, const std::vector<FaceTurn>& sequence,
-                  int (*score)(const CubeState&), int target)
+                  int (*score)(const Cube&), int target)
 {
     for (int guard = 0; score(work.cube()) < target; ++guard) {
         assert(guard < 8);
@@ -685,92 +685,50 @@ void place_middle_edges(Work& work)
 // together is the one idea in F2L, and it is worth about a fifth of the whole
 // solution.
 
-/**
- * A three by three the search can turn without touching the heap.
- *
- * `CubeState` is the cube; this is a scratch copy of one, and the difference
- * that matters is that its cubies are an array rather than a vector. The
- * search below turns a throwaway cube tens of thousands of times for every
- * slot it fills, so a turn has to cost nothing.
- *
- * It is a three by three whatever size the cube is. A reduced cube turns
- * exactly like one under outer faces -- that is what reduced means, and what
- * `solve_as_three_layers` is already relying on -- so the search reads one
- * wing of each edge row and one cell of each centre and works on that. A nine
- * by nine has seven hundred and twenty-nine cubies and twenty-six of them
- * decide this stage; turning the other seven hundred was the whole cost.
- *
- * The turning itself is `CubeState::rotate_quarter` written out again, which
- * is a repetition and is why it is only nine lines: the permutation comes
- * from `turned_position` and `turned_face`, the same two functions the cube
- * itself turns by, so the copy cannot drift from the original.
- */
+/** A reduced three-by-three search state with 54 visible colours and no heap allocation. */
 struct Small {
-    std::array<Cubie, 27> cubies{};
+    std::array<FaceColor, 54> colors{};
 
+    /** Returns the size of the reduced search puzzle. */
     [[nodiscard]] static constexpr int size() noexcept { return 3; }
 
-    [[nodiscard]] static std::size_t spot(int x, int y, int z) noexcept
-    {
-        return static_cast<std::size_t>((x * 3 + y) * 3 + z);
-    }
+    /** Borrows the exposed stickers of a search piece. */
+    [[nodiscard]] PieceView at(int x, int y, int z) const noexcept
+    { return CubeView{3, colors.data()}.at(x, y, z); }
 
-    [[nodiscard]] const Cubie& at(int x, int y, int z) const noexcept
-    {
-        return cubies[spot(x, y, z)];
-    }
-
+    /** Applies an outer face turn to the search state. */
     void turn(Face face, int turns) noexcept
     {
-        const auto move = to_move(face_turn(face, turns), 3);
-        for (int i = 0, n = normalized_turns(move.quarter_turns); i < n; ++i) {
+        const CubeMove move = to_move(face_turn(face, turns), 3);
+        for (int turn = 0, count = normalized_turns(move.quarter_turns); turn < count; ++turn) {
             quarter(move.axis, move.layers);
         }
     }
 
+    /** Permutes only selected surface cells using the domain coordinate mapping. */
     void quarter(Axis axis, LayerMask layers) noexcept
     {
-        std::array<Cubie, 27> next = cubies;
-
-        for (int x = 0; x < 3; ++x) {
-            for (int y = 0; y < 3; ++y) {
-                for (int z = 0; z < 3; ++z) {
-                    const CubiePosition from{x, y, z};
-                    if (!in_layers(layers, coordinate_on(axis, from))) continue;
-
-                    const auto& was = cubies[spot(x, y, z)];
-                    Cubie carried = was;
-                    for (std::size_t i = 0; i < kFaceCount; ++i) {
-                        const auto face = static_cast<Face>(i);
-                        carried.stickers[face_index(turned_face(axis, face))] =
-                            was.sticker(face);
-                    }
-
-                    const auto to = turned_position(axis, from, 3);
-                    next[spot(to.x, to.y, to.z)] = carried;
-                }
+        const std::array<FaceColor, 54> previous = colors;
+        for (int slice = 0; slice < 3; ++slice) {
+            if (!in_layers(layers, slice)) continue;
+            for (const SurfaceTurn& turn : surface_turns(axis, slice, 3)) {
+                colors[turn.to] = previous[turn.from];
             }
         }
-        cubies = next;
     }
 };
 
-/** The three by three a cube of any size turns as, once it is reduced. */
-[[nodiscard]] Small small_of(const CubeState& cube)
+/** Samples one wing and one centre per face from a reduced cube of any size. */
+[[nodiscard]] Small small_of(const Cube& cube)
 {
     const int last = cube.size() - 1;
-    const auto pick = [last](int coordinate) {
+    const auto pick = [last](int coordinate) -> int {
         return coordinate == 0 ? 0 : (coordinate == 2 ? last : 1);
     };
-
     Small small;
-    for (int x = 0; x < 3; ++x) {
-        for (int y = 0; y < 3; ++y) {
-            for (int z = 0; z < 3; ++z) {
-                small.cubies[Small::spot(x, y, z)] =
-                    cube.at(pick(x), pick(y), pick(z));
-            }
-        }
+    for (const SurfaceSticker sticker : surface_cells(3)) {
+        const SurfaceSticker source{pick(sticker.x), pick(sticker.y), pick(sticker.z), sticker.face};
+        small.colors[surface_index(sticker, 3)] = cube.sticker(source);
     }
     return small;
 }
@@ -1121,7 +1079,7 @@ void place_top_edges(Work& work)
  * the first sign of it is an unsolved cube at the very end with no clue as to
  * which stage let it through.
  */
-[[nodiscard]] bool flower_built(const CubeState& cube)
+[[nodiscard]] bool flower_built(const Cube& cube)
 {
     const auto bottom = home_colour(Face::Down);
     for (const Face side : kSides) {
@@ -1132,7 +1090,7 @@ void place_top_edges(Work& work)
     return true;
 }
 
-[[nodiscard]] bool bottom_cross_built(const CubeState& cube)
+[[nodiscard]] bool bottom_cross_built(const Cube& cube)
 {
     for (const Face side : kSides) {
         if (!at_home(read(cube, edge_slot(Face::Down, side, cube.size())))) {
@@ -1142,7 +1100,7 @@ void place_top_edges(Work& work)
     return true;
 }
 
-[[nodiscard]] bool bottom_corners_built(const CubeState& cube)
+[[nodiscard]] bool bottom_corners_built(const Cube& cube)
 {
     for (int frame = 0; frame < 4; ++frame) {
         const auto slot =
@@ -1153,7 +1111,7 @@ void place_top_edges(Work& work)
     return true;
 }
 
-[[nodiscard]] bool middle_layer_built(const CubeState& cube)
+[[nodiscard]] bool middle_layer_built(const Cube& cube)
 {
     for (int frame = 0; frame < 4; ++frame) {
         const auto slot = edge_slot(about_up(Face::Front, frame),
@@ -1163,7 +1121,7 @@ void place_top_edges(Work& work)
     return true;
 }
 
-[[nodiscard]] bool top_corners_turned_up(const CubeState& cube)
+[[nodiscard]] bool top_corners_turned_up(const Cube& cube)
 {
     for (int frame = 0; frame < 4; ++frame) {
         const auto slot =
@@ -1183,22 +1141,24 @@ bool LayerByLayer::supports(int size) const noexcept
     return size == 2 || size == 3;
 }
 
-std::vector<CubeMove> LayerByLayer::solve(const CubeState& state) const
+std::vector<CubeMove> LayerByLayer::solve(const Cube& state) const
 {
     assert(supports(state.size()));
-    return compress(solve_as_three_layers(state));
+    if (state.is_solved()) return {};
+    const SolverFrame frame{state};
+    return frame.restore(compress(solve_as_three_layers(frame.cube())));
 }
 
-std::vector<CubeMove> solve_as_three_layers(const CubeState& state)
+std::vector<CubeMove> solve_as_three_layers(const Cube& state)
 {
+    if (state.is_solved()) return {};
+
     // What "reduced" was only a word for until there was something that could
     // ask. A cube that fails either of these has no answer here rather than a
     // long one: the stages turn outer faces alone, and no run of those reaches
     // a position that an even cube can hold and a three by three cannot.
     assert(reduced(state));
     assert(state.size() < 3 || reachable(parities(projected(state))));
-
-    if (state.is_solved()) return {};
 
     Work work{state};
 

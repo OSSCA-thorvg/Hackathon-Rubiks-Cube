@@ -9,8 +9,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
-#include "cube/Cubie.hpp"
+#include "cube/Cube.hpp"
+#include "cube/Face.hpp"
 #include "cube/Scramble.hpp"
 #include "cube/Surface.hpp"
 

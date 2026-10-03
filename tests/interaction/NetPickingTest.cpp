@@ -6,7 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "cube/CubeMove.hpp"
-#include "cube/Cubie.hpp"
+#include "cube/Face.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/2d/net/NetGeometry.hpp"
 #include "graphics/Rect.hpp"

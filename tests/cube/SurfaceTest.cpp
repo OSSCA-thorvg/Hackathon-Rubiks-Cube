@@ -6,15 +6,15 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
-#include "cube/Cubie.hpp"
+#include "cube/Cube.hpp"
+#include "cube/Face.hpp"
 #include "cube/Surface.hpp"
 
 // Sticker identity and the ring cycles, in the same isolation as the rest of
 // the domain: this links the cube target alone.
 //
 // The permutation under test is not new code. `turned_position` and the face
-// cycle are what `CubeState` has always turned cubies with, and they are
+// cycle are what `Cube` has always turned cubies with, and they are
 // already pinned to a physical cube by the known-answer test next door. So
 // what is checked here is the exposure and the ring construction built on it:
 // a handful of answers worked out by hand, then structure.
@@ -23,7 +23,7 @@ namespace {
 
 using rubiks::cube::Axis;
 using rubiks::cube::CubeMove;
-using rubiks::cube::CubeState;
+using rubiks::cube::Cube;
 using rubiks::cube::CubiePosition;
 using rubiks::cube::Face;
 using rubiks::cube::SurfaceSticker;
@@ -126,7 +126,7 @@ TEST_CASE("a quarter turn carries a corner sticker where the cube does")
 
     REQUIRE(moved == SurfaceSticker{kLast, kLast, 0, Face::Back});
 
-    // And the position agrees with what CubeState turns cubies by.
+    // And the position agrees with what Cube turns cubies by.
     REQUIRE(turned_position(Axis::X, CubiePosition{kLast, kLast, kLast},
                             kSize) == CubiePosition{kLast, kLast, 0});
 }
@@ -217,14 +217,14 @@ TEST_CASE("a quarter turn is exactly one face's worth along the ring")
 TEST_CASE("where the ring says a sticker goes, the cube shows its color")
 {
     // Not a second reading of the same rule: this compares the ring against
-    // the colors CubeState actually ends up holding. It cannot tell stickers
+    // the colors Cube actually ends up holding. It cannot tell stickers
     // of one face apart, which is why the checks above carry the identity.
     for (const auto axis : rubiks::cube::axes()) {
         for (int index = 0; index < kSize; ++index) {
-            CubeState before(kSize);
+            Cube before(kSize);
             before.apply(CubeMove{axis, layer(index), 5});  // scrambles a little
 
-            CubeState after = before;
+            Cube after = before;
             after.apply(CubeMove{axis, layer(index), 1});
 
             const auto slots = ring_slots(axis, index, kSize);

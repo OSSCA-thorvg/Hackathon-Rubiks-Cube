@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "cube/CubeMove.hpp"
+#include "cube/CubeDraft.hpp"
 #include "cube/Surface.hpp"
 
 namespace rubiks::cube {
@@ -605,13 +606,31 @@ PaintReading read_held(const Frame& frame,
     return out;
 }
 
+/** Materializes validated, oriented colours directly into six native faces. */
+template <typename Source>
+[[nodiscard]] detail::FaceStorage normalized_storage(
+    int size, int orientation, const Source& source)
+{
+    const Frame& frame = frame_for(size);
+    const std::size_t rotation = static_cast<std::size_t>(orientation);
+    std::vector<FaceColor> colors(frame.slots().size());
+    for (std::size_t slot = 0; slot < frame.slots().size(); ++slot) {
+        const int destination = frame.turned(rotation, static_cast<int>(slot));
+        const SurfaceSticker& sticker =
+            frame.slots()[static_cast<std::size_t>(destination)];
+        colors[surface_index(sticker, size)] = source(slot);
+    }
+    return detail::FaceStorage{size, std::move(colors)};
+}
+
 }  // namespace
 
-std::vector<FaceColor> painting_of(const CubeState& cube)
+std::vector<FaceColor> painting_of(CubeView cube)
 {
     std::vector<FaceColor> out;
-    for (const auto& s : surface_stickers(cube.size())) {
-        out.push_back(cube.at(s.x, s.y, s.z).sticker(s.face));
+    out.reserve(cube.flat().size());
+    for (const SurfaceSticker& sticker : surface_stickers(cube.size())) {
+        out.push_back(cube.sticker(sticker));
     }
     return out;
 }
@@ -647,27 +666,28 @@ PaintReading read_painting(int size, const std::vector<FaceColor>& painting)
     return best;
 }
 
-std::optional<CubeState> assembled(int size,
+std::optional<Cube> assembled(int size,
                                    const std::vector<FaceColor>& painting)
 {
     const PaintReading reading = read_painting(size, painting);
     if (reading.fault != PaintFault::None) return std::nullopt;
 
-    const Frame& frame = frame_for(size);
-    const auto turned = held(frame, painting,
-                             static_cast<std::size_t>(reading.orientation));
+    return Cube{normalized_storage(
+        size, reading.orientation,
+        [&painting](std::size_t slot) -> FaceColor { return painting[slot]; })};
+}
 
-    std::vector<Cubie> cubies(
-        static_cast<std::size_t>(size) * static_cast<std::size_t>(size) *
-            static_cast<std::size_t>(size),
-        solved_cubie());
-    for (std::size_t i = 0; i < turned.size(); ++i) {
-        const auto& s = frame.slots()[i];
-        const auto at = static_cast<std::size_t>((s.x * size + s.y) * size +
-                                                 s.z);
-        cubies[at].stickers[face_index(s.face)] = turned[i];
-    }
-    return CubeState{size, std::move(cubies)};
+std::optional<Cube> CubeDraft::assemble()
+{
+    const PaintReading& result = validate();
+    if (result.fault != PaintFault::None) return std::nullopt;
+
+    const Frame& frame = frame_for(size());
+    return Cube{normalized_storage(
+        size(), result.orientation,
+        [this, &frame](std::size_t slot) -> FaceColor {
+            return view().sticker(frame.slots()[slot]);
+        })};
 }
 
 }  // namespace rubiks::cube

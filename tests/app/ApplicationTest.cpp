@@ -7,7 +7,7 @@
 
 #include "EngineLifecycle.hpp"
 #include "cube/CubeMove.hpp"
-#include "cube/Cubie.hpp"
+#include "cube/Face.hpp"
 #include "cube/Scramble.hpp"
 #include "cube/Surface.hpp"
 

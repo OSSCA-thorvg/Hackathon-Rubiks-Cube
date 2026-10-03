@@ -11,7 +11,7 @@
 #include "CubeSupport.hpp"
 #include "EngineLifecycle.hpp"
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 
 namespace {
 
@@ -59,7 +59,7 @@ TEST_CASE("every watching pattern brings the cube back round within the bound")
             const auto pattern = ambient_pattern(choice, size);
             REQUIRE_FALSE(pattern.empty());
 
-            rubiks::cube::CubeState cube(size);
+            rubiks::cube::Cube cube(size);
             int rounds = 0;
             while (rounds < kAmbientMaxPeriod) {
                 apply_all(cube, pattern);

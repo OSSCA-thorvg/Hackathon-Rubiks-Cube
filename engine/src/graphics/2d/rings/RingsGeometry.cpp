@@ -72,8 +72,8 @@ using math::kPi;
     }
 
     std::vector<Vec2> places;
-    for (const auto& sticker : cube::surface_stickers(size)) {
-        if (const auto at = slot_in_diagram(sticker, size)) {
+    for (const SurfaceSticker sticker : cube::surface_cells(size)) {
+        if (const std::optional<Vec2> at = slot_in_diagram(sticker, size)) {
             places.push_back(*at);
         }
     }
@@ -263,30 +263,6 @@ struct RingsMetrics {
                    Vec2{center.x + half, center.y + half},
                    Vec2{center.x - half, center.y + half}};
     return quad;
-}
-
-/**
- * A sticker as an index, for looking its place up rather than working it out.
- *
- * Sparse -- only 6N^2 of the 6N^3 slots are ever a sticker -- which costs a
- * hundred and eight unused entries on a 3x3x3 and saves searching for one.
- */
-[[nodiscard]] std::size_t sticker_slots(int size) noexcept
-{
-    const auto span = static_cast<std::size_t>(size);
-    return cube::kFaceCount * span * span * span;
-}
-
-[[nodiscard]] std::size_t sticker_key(const SurfaceSticker& sticker,
-                                      int size) noexcept
-{
-    const auto span = static_cast<std::size_t>(size);
-    return ((cube::face_index(sticker.face) * span +
-             static_cast<std::size_t>(sticker.x)) *
-                span +
-            static_cast<std::size_t>(sticker.y)) *
-               span +
-           static_cast<std::size_t>(sticker.z);
 }
 
 /** Where a sticker ends up after `times` positive quarter turns. */
@@ -482,36 +458,37 @@ std::optional<float> rings_slot_at(Axis axis, int layer, const Rect& rect,
     return 0.0f;
 }
 
-RenderScene build_rings_scene(const cube::CubeState& state, const Rect& rect,
+RenderScene build_rings_scene(cube::CubeView state, const Rect& rect,
                               const std::optional<ActiveRotation>& active,
                               const std::vector<RingsGuide>& guides,
                               Palette palette)
 {
     const int size = state.size();
     const RingsMetrics metrics = rings_metrics(rect, size);
-    const auto stickers = cube::surface_stickers(size);
+    const cube::SurfaceCells stickers = cube::surface_cells(size);
 
     RenderScene scene;
     scene.underlays.reserve(static_cast<std::size_t>(3 * size));
-    scene.faces.reserve(stickers.size());
+    scene.faces.reserve(state.flat().size());
 
     // Where every sticker rests, worked out once. These are the same fifty-four
     // answers a resting sticker, a turning face's middle and that face's
     // destination all ask for, so asking the layout each time meant computing
     // each of them two or three times a frame.
-    std::vector<Vec2> resting(sticker_slots(size));
+    std::vector<Vec2> resting(state.flat().size());
     std::vector<char> placed(resting.size(), 0);
-    for (const auto& sticker : stickers) {
-        const auto at = slot_in_diagram(sticker, size);
+    for (const SurfaceSticker sticker : stickers) {
+        const std::optional<Vec2> at = slot_in_diagram(sticker, size);
         if (!at) continue;
 
-        const std::size_t key = sticker_key(sticker, size);
+        const std::size_t key = cube::surface_index(sticker, size);
         resting[key] = to_screen(*at, metrics);
         placed[key] = 1;
     }
 
+    /** Looks up a surface slot's resting screen position. */
     const auto place = [&](const SurfaceSticker& sticker) -> const Vec2* {
-        const std::size_t key = sticker_key(sticker, size);
+        const std::size_t key = cube::surface_index(sticker, size);
         return placed[key] != 0 ? &resting[key] : nullptr;
     };
 
@@ -551,12 +528,11 @@ RenderScene build_rings_scene(const cube::CubeState& state, const Rect& rect,
         }
     }
 
+    /** Appends one surface colour at its current screen position. */
     const auto emit = [&](const SurfaceSticker& sticker, const Vec2& at,
-                          std::vector<RenderFace>& into) {
+                          std::vector<RenderFace>& into) -> void {
         RenderFace quad = sticker_quad(at, metrics.sticker);
-        quad.color = to_color(
-            state.at(sticker.x, sticker.y, sticker.z).sticker(sticker.face),
-            palette);
+        quad.color = to_color(state.sticker(sticker), palette);
         into.push_back(quad);
     };
 

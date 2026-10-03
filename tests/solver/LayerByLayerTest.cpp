@@ -5,7 +5,7 @@
 
 #include "CubeSupport.hpp"
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 #include "cube/Scramble.hpp"
 #include "cube/Surface.hpp"
 #include "cube/solver/LayerByLayer.hpp"
@@ -18,7 +18,7 @@ namespace {
 
 using rubiks::cube::Axis;
 using rubiks::cube::CubeMove;
-using rubiks::cube::CubeState;
+using rubiks::cube::Cube;
 using rubiks::cube::is_layer_run;
 using rubiks::cube::layer;
 using rubiks::cube::make_scramble;
@@ -38,10 +38,10 @@ constexpr int kSize = 3;
  * can break either up, so this is the state a reduction hands over -- and the
  * only way to reach one without a reduction to hand.
  */
-CubeState outer_scrambled(std::uint32_t seed, int size,
+Cube outer_scrambled(std::uint32_t seed, int size,
                           std::size_t moves = 30)
 {
-    CubeState cube(size);
+    Cube cube(size);
 
     // The generator reaches inside a big cube on purpose, so its moves are
     // filtered down here to the ones a three by three would have made.
@@ -112,7 +112,7 @@ TEST_CASE("the three-layer stages finish a reduced cube of any size")
 TEST_CASE("a solved cube needs no moves")
 {
     const LayerByLayer solver;
-    CHECK(solver.solve(CubeState(kSize)).empty());
+    CHECK(solver.solve(Cube(kSize)).empty());
 }
 
 TEST_CASE("every scramble the application can make is solved")

@@ -5,8 +5,8 @@
 #include <vector>
 
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
-#include "cube/Cubie.hpp"
+#include "cube/Cube.hpp"
+#include "cube/Face.hpp"
 #include "cube/Surface.hpp"
 #include "graphics/ActiveRotation.hpp"
 #include "graphics/Palette.hpp"
@@ -116,17 +116,10 @@ struct NetGuide {
 }
 
 /**
- * The net drawn from a colouring of stickers instead of from a cube.
+ * The net drawn from an editable colouring with validation highlights.
  *
- * What somebody is painting is not a cube yet and mostly will not be one until
- * the last square is right, so there is no `CubeState` to hand this -- and
- * making one would mean building a cube nobody has checked, which is the one
- * thing the domain will not do. A painting is the weaker thing, and this draws
- * the weaker thing.
- *
- * The colours arrive in the order `cube::surface_stickers()` counts them, the
- * same order the reading blames squares in, so that what a refusal points at
- * and what is drawn cannot disagree.
+ * The view borrows six native row-major faces, including unfinished drafts.
+ * `blamed` keeps the stable external painting order used by validation.
  *
  * `blamed` is outlined rather than filled over: the colour of a square that is
  * being complained about is exactly what its owner needs to see while mending
@@ -136,8 +129,8 @@ struct NetGuide {
  * round the sticker, so it reads apart from a complaint on the same square.
  */
 [[nodiscard]] RenderScene build_net_painting(
-    const std::vector<cube::FaceColor>& painting, int size, const Rect& rect,
-    Palette palette, const std::vector<int>& blamed,
+    cube::CubeView painting, const Rect& rect, Palette palette,
+    const std::vector<int>& blamed,
     const std::optional<NetPosition>& cursor = std::nullopt);
 
 /** Keyboard place ring thickness, as a share of one cell: dark, then light. */
@@ -249,7 +242,7 @@ struct NetTurn {
                                                    int size) noexcept;
 
 /** Builds the net as screen-space quads filling `rect`. */
-[[nodiscard]] RenderScene build_net_scene(const cube::CubeState& state,
+[[nodiscard]] RenderScene build_net_scene(cube::CubeView state,
                                           const Rect& rect,
                                           Palette palette = Palette::Classic);
 
@@ -261,7 +254,7 @@ struct NetTurn {
  * drag carried past a quarter keeps going round the loop it is on.
  */
 [[nodiscard]] RenderScene build_net_scene(
-    const cube::CubeState& state, const Rect& rect,
+    cube::CubeView state, const Rect& rect,
     const std::optional<ActiveRotation>& active,
     Palette palette = Palette::Classic);
 

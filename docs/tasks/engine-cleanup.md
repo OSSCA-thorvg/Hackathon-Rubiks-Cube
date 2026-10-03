@@ -48,7 +48,7 @@ Phase 번호가 없는 횡단 작업입니다. 2026-10-03~04에 `3f8dee4` 위에
 
 ### 큐브 저장 방식을 바꾼 뒤에 다시 볼 것
 
-큐브 상태를 cubie 배열에서 면 단위 저장으로 바꾸는 작업이 뒤따를 예정이라, 저장 방식에 기대는 중복은 정리하지 않았습니다. 그 작업 뒤에 다시 조사합니다.
+큐브 상태를 cubie 배열에서 면 단위 저장으로 바꾸는 작업이 뒤따를 예정이라, 저장 방식에 기대는 중복은 정리하지 않았습니다. 후속 작업은 [면 저장소 정리](./cube-face-storage.md)에 기록합니다. 아래 목록은 cleanup 완료 시점의 보류 항목입니다.
 
 - `Surface.hpp`가 `is_positive_face`, `faces_along`, `set_coordinate`, `is_exposed`를 내보내고 solver가 쓰는 일
 - Scramble의 layer mask를 `depth_layers`에서 얻는 일

@@ -4,7 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "CubeSupport.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 #include "cube/Scramble.hpp"
 #include "cube/PackedMove.hpp"
 #include "cube/Surface.hpp"
@@ -17,7 +17,7 @@
 
 namespace {
 
-using rubiks::cube::CubeState;
+using rubiks::cube::Cube;
 using rubiks::cube::CubiePosition;
 using rubiks::cube::Face;
 using rubiks::cube::faces;
@@ -39,7 +39,7 @@ using rubiks::test::apply_all;
 using rubiks::test::scrambled;
 
 /** Whether every face's centre block is one colour, its own. */
-bool centres_done(const CubeState& cube)
+bool centres_done(const Cube& cube)
 {
     const int size = cube.size();
     for (int x = 0; x < size; ++x) {
@@ -147,15 +147,34 @@ TEST_CASE("every size that can be built has a reduction, and nothing wider")
 
     // Cheap enough to walk in full, unlike solving them. Four is where a cube
     // stops being one the three-layer stages take on their own.
-    for (int size = 4; size <= kPackedMaxLayers; ++size) {
+    for (int size = 4; size < rubiks::cube::kLayerMaskBits; ++size) {
         INFO("size " << size);
         CHECK(solver.supports(size));
     }
 
-    // Past the field a move's layers are written into, a solution could not
-    // be recorded even if it were found.
-    CHECK_FALSE(solver.supports(kPackedMaxLayers + 1));
+    // Solver support follows the domain, independently of the narrower share format.
+    CHECK_FALSE(solver.supports(rubiks::cube::kLayerMaskBits));
     CHECK_FALSE(solver.supports(3));
+}
+
+/** Exercises the native mask boundary independently of the share format. */
+TEST_CASE("the native mask limit solves beyond the packed share limit", "[.big]")
+{
+    constexpr int size = rubiks::cube::kLayerMaskBits - 1;
+    const Reduction solver;
+    Cube state = scrambled(0x31U, size, 8);
+    state.apply(CubeMove{rubiks::cube::Axis::X, rubiks::cube::layer(size / 2), 1});
+    REQUIRE_FALSE(state.is_solved());
+    REQUIRE(solver.supports(size));
+
+    const std::vector<CubeMove> solution = solver.solve(state);
+    REQUIRE_FALSE(solution.empty());
+    for (const CubeMove& move : solution) {
+        REQUIRE(is_layer_run(move.layers, size));
+        REQUIRE(move.layers != rubiks::cube::layers_through(0, size - 1));
+        state.apply(move);
+    }
+    REQUIRE(state.is_solved());
 }
 
 TEST_CASE("a reduction is the same reduction every time")
@@ -219,7 +238,7 @@ TEST_CASE("an odd number of slices from solved is reduced all the same")
     // Without the odd move in the reduction, this stops rather than finishes.
     for (const int size : {4, 6}) {
         for (std::uint32_t seed = 0; seed < 2; ++seed) {
-            CubeState cube(size);
+            Cube cube(size);
             cube.apply(CubeMove{rubiks::cube::Axis::X, rubiks::cube::layer(1),
                                 1});
             for (const auto& move : make_scramble(size, seed, 30)) {

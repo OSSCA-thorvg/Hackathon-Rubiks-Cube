@@ -8,7 +8,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "CubeSupport.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 #include "cube/PackedMove.hpp"
 #include "cube/solver/LayerByLayer.hpp"
 #include "cube/solver/Reduction.hpp"
@@ -47,7 +47,7 @@
 
 namespace {
 
-using rubiks::cube::CubeState;
+using rubiks::cube::Cube;
 using rubiks::cube::kPackedMaxLayers;
 using rubiks::cube::solver::reduce;
 using rubiks::cube::solver::Reduction;
@@ -111,7 +111,7 @@ Measured measure(int size, std::size_t seed_count)
 
     // Preparation, which is what building the workshop costs. A solved cube
     // enters no round, so what is left is the tables.
-    const CubeState solved(size);
+    const Cube solved(size);
     out.prepare_centres = seconds([&] { (void)solve_centres(solved); });
     out.prepare_reduce = seconds([&] { (void)reduce(solved); });
 

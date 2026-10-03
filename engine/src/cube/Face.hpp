@@ -89,29 +89,4 @@ enum class FaceColor { Red, Orange, White, Yellow, Green, Blue };
     return static_cast<FaceColor>(static_cast<int>(face));
 }
 
-/**
- * One 1x1x1 cube with an independently colored sticker per face.
- *
- * A quarter turn permutes these six entries; there is no orientation
- * quaternion, because for 90 degree steps the color permutation is exactly
- * equivalent and it answers the question rendering actually asks: what color
- * does this position show on this face.
- */
-struct Cubie {
-    std::array<FaceColor, kFaceCount> stickers{};
-
-    [[nodiscard]] FaceColor sticker(Face face) const noexcept
-    {
-        return stickers[face_index(face)];
-    }
-};
-
-[[nodiscard]] inline bool operator==(const Cubie& a, const Cubie& b) noexcept
-{
-    return a.stickers == b.stickers;
-}
-
-/** A cubie whose every face shows its solved color. */
-[[nodiscard]] Cubie solved_cubie() noexcept;
-
 }  // namespace rubiks::cube

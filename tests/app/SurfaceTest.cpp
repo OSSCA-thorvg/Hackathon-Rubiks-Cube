@@ -10,7 +10,7 @@
 
 #include "EngineLifecycle.hpp"
 #include "RenderContract.hpp"
-#include "cube/Cubie.hpp"
+#include "cube/Face.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/2d/net/NetGeometry.hpp"
 #include "graphics/Palette.hpp"

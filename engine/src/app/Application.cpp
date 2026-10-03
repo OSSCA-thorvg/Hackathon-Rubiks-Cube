@@ -4,7 +4,6 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <map>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -12,7 +11,8 @@
 
 #include <thorvg.h>
 
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
+#include "cube/CubeDraft.hpp"
 #include "cube/MoveTimeline.hpp"
 #include "cube/PackedMove.hpp"
 #include "cube/Scramble.hpp"
@@ -156,7 +156,7 @@ struct Player {
      * away, and the snapshot goes with it, which is right, because the state
      * such a command makes is the one that should stand.
      */
-    std::optional<cube::CubeState> restore_to;
+    std::optional<cube::Cube> restore_to;
 };
 
 /**
@@ -208,7 +208,7 @@ struct ApplicationState {
     // than tracked at each place the cube changes: there are a dozen of
     // those, and a frame skipped because one was missed would be a picture of
     // a cube that is not the cube.
-    cube::CubeState drawn_cube{kDefaultCubeSize};
+    cube::Cube drawn_cube{kDefaultCubeSize};
     std::uint64_t cube_revision = 0;
 
     // The whole of the viewpoint state. The Camera is derived from this and
@@ -230,7 +230,7 @@ struct ApplicationState {
     // refuses moves by and it has no cube to ask -- so a change of size
     // replaces it rather than telling it, which is what makes "a gesture from
     // the cube before" a state that cannot be written down.
-    cube::CubeState cube_state{kDefaultCubeSize};
+    cube::Cube cube_state{kDefaultCubeSize};
     interaction::InteractionController interaction{kDefaultCubeSize};
     graphics::ViewMode view_mode = kDefaultViewMode;
     graphics::FlatStyle flat_style = kDefaultFlatStyle;
@@ -290,9 +290,11 @@ struct ApplicationState {
      * being mended rather than vanishing with the press that asked.
      */
     struct PaintDraft {
-        std::vector<cube::FaceColor> stickers;
+        /** Takes an independent editable copy of the logical cube. */
+        explicit PaintDraft(const cube::Cube& cube) : model(cube) {}
+
+        cube::CubeDraft model;
         cube::FaceColor brush = kDefaultBrush;
-        cube::PaintReading reading;
 
         // Whether a press covers the face it lands on rather than the one
         // square. Held with the draft because it means nothing without one.
@@ -805,7 +807,7 @@ void discard_playback() noexcept
  * is taken by value so that the draft's own stickers can be handed over; they
  * have left the draft by the time this closes it.
  */
-void install_cube(cube::CubeState next,
+void install_cube(cube::Cube next,
                   std::vector<cube::FaceColor> origin = {}) noexcept
 {
     discard_painting();
@@ -1215,9 +1217,10 @@ void note_cube_change() noexcept
         if (state->paint) {
             std::optional<graphics::NetPosition> cursor;
             if (state->paint->cursor_shown) cursor = state->paint->cursor;
-            painting = graphics::NetPainting{state->paint->stickers,
-                                             state->paint->reading.blamed,
-                                             cursor};
+            const cube::ColorView colors = state->paint->model.view().flat();
+            painting = graphics::NetPainting{
+                std::vector<cube::FaceColor>(colors.begin(), colors.end()),
+                state->paint->model.reading().blamed, cursor};
         }
         frame.net = graphics::NetDrawing{cube, rotation, state->palette,
                                          state->interaction.net_guides(),
@@ -1280,7 +1283,7 @@ bool scramble(std::uint32_t seed, std::uint32_t move_count) noexcept
     // has not published yet still counts. Everything else goes, including a
     // snap that would otherwise commit onto the new cube, and a colouring of
     // the cube that is about to stop existing.
-    install_cube(cube::CubeState(size_of_cube()));
+    install_cube(cube::Cube(size_of_cube()));
 
     // The whole sequence is recorded before any of it has happened, and the
     // cursor walks up it as the moves land -- so a scramble interrupted half
@@ -1308,7 +1311,7 @@ void reset_cube() noexcept
     if (!state) return;
 
     // Same split as scramble(): the cube is the only thing this command owns.
-    install_cube(cube::CubeState(size_of_cube()));
+    install_cube(cube::Cube(size_of_cube()));
 }
 
 bool set_cube_size(int size) noexcept
@@ -1322,7 +1325,7 @@ bool set_cube_size(int size) noexcept
 
     // A reset onto a cube of the new size: the record, the draft and whatever
     // was playing go the way they do for a reset, and nothing else does.
-    install_cube(cube::CubeState(size));
+    install_cube(cube::Cube(size));
     return true;
 }
 
@@ -1332,45 +1335,6 @@ int cube_size() noexcept
 }
 
 namespace {
-
-/**
- * Which sticker of the whole surface a cell of the net is.
- *
- * The net names a cell by face, column and row; a painting numbers it by where
- * `surface_stickers()` counts it. This is the one place the two meet, and it
- * is here rather than in either of them because neither should have to know
- * the other: the domain has no net, and the drawing has no painting.
- */
-[[nodiscard]] int painted_slot(const interaction::NetPick& pick, int size)
-{
-    // Worked out once for a size and kept, because filling a face asks this
-    // once per cell and a drag asks it once per pointer move. Built fresh each
-    // time it walked the whole surface looking for one sticker -- four
-    // thousand seven hundred of them at the widest cube, times the seven
-    // hundred and eighty-four cells of a face being filled.
-    static std::map<int, std::vector<int>> known;
-
-    auto found = known.find(size);
-    if (found == known.end()) {
-        std::vector<int> at(static_cast<std::size_t>(size) * size * size *
-                                cube::kFaceCount,
-                            -1);
-        const auto all = cube::surface_stickers(size);
-        for (std::size_t i = 0; i < all.size(); ++i) {
-            const auto& s = all[i];
-            at[static_cast<std::size_t>((s.x * size + s.y) * size + s.z) *
-                   cube::kFaceCount +
-               cube::face_index(s.face)] = static_cast<int>(i);
-        }
-        found = known.emplace(size, std::move(at)).first;
-    }
-
-    const auto cell = graphics::net_cell(pick.face, pick.col, pick.row, size);
-    return found->second[static_cast<std::size_t>(
-                             (cell.x * size + cell.y) * size + cell.z) *
-                             cube::kFaceCount +
-                         cube::face_index(cell.face)];
-}
 
 /**
  * The cell a point on one surface is over, when that surface draws the net
@@ -1396,23 +1360,18 @@ namespace {
  */
 [[nodiscard]] bool paint_cell(const interaction::NetPick& pick) noexcept
 {
-    const int slot = painted_slot(pick, size_of_cube());
-    if (slot < 0) return false;
-
-    state->paint->stickers[static_cast<std::size_t>(slot)] =
-        state->paint->brush;
+    if (!cube::face_from(static_cast<int>(pick.face))) return false;
+    if (pick.row < 0 || pick.row >= size_of_cube() ||
+        pick.col < 0 || pick.col >= size_of_cube()) return false;
+    static_cast<void>(state->paint->model.set_color(
+        pick.face, pick.row, pick.col, state->paint->brush));
     return true;
 }
 
 /** Lays the brush on every cell of one face of the draft. */
 bool fill_face(cube::Face face) noexcept
 {
-    const int size = size_of_cube();
-    for (int row = 0; row < size; ++row) {
-        for (int col = 0; col < size; ++col) {
-            static_cast<void>(paint_cell(interaction::NetPick{face, col, row}));
-        }
-    }
+    static_cast<void>(state->paint->model.fill_face(face, state->paint->brush));
     return true;
 }
 
@@ -1454,9 +1413,7 @@ bool begin_painting() noexcept
     // the draft was put away.
     state->interaction.cancel();
 
-    ApplicationState::PaintDraft draft;
-    draft.stickers = cube::painting_of(state->cube_state);
-    state->paint = std::move(draft);
+    state->paint.emplace(state->cube_state);
     return true;
 }
 
@@ -1542,40 +1499,25 @@ std::optional<PaintCursor> paint_cursor() noexcept
 {
     if (!state || !state->paint || !state->paint->cursor) return std::nullopt;
 
-    const auto& at = *state->paint->cursor;
-    const int slot = painted_slot(at, size_of_cube());
-    if (slot < 0) return std::nullopt;
+    const interaction::NetPick& at = *state->paint->cursor;
     return PaintCursor{at.face, at.col, at.row,
-                       state->paint->stickers[static_cast<std::size_t>(slot)]};
+                       state->paint->model.face(at.face).at(at.row, at.col)};
 }
 
 int painted_count(cube::FaceColor colour) noexcept
 {
     if (!state || !state->paint) return 0;
 
-    int found = 0;
-    for (const auto painted : state->paint->stickers) {
-        if (painted == colour) ++found;
-    }
-    return found;
+    return static_cast<int>(state->paint->model.count(colour));
 }
 
 bool apply_painting() noexcept
 {
     if (!state || !state->paint) return false;
 
-    // Read once. `assembled()` reads the painting on its own account, so
-    // asking for the reading first would run every check twice -- and at the
-    // widest cube a check is every piece against every one of twenty-four ways
-    // of holding it. What a refusal needs is fetched when there is one.
-    const int size = size_of_cube();
-    auto built = cube::assembled(size, state->paint->stickers);
-    if (!built) {
-        state->paint->reading =
-            cube::read_painting(size, state->paint->stickers);
-        return false;
-    }
-    state->paint->reading = cube::PaintReading{};
+    // Validation is requested here and cached until the next draft edit.
+    std::optional<cube::Cube> built = state->paint->model.assemble();
+    if (!built) return false;
 
     // Past every refusal. What arrives is a starting position and not a move,
     // so the record goes the way it goes for a change of size -- and a rewind
@@ -1584,14 +1526,16 @@ bool apply_painting() noexcept
     //
     // The draft's stickers are handed over as where the session began, which
     // is the one thing about the draft that outlives it.
-    install_cube(std::move(*built), std::move(state->paint->stickers));
+    std::vector<cube::FaceColor> origin =
+        cube::painting_of(state->paint->model.view());
+    install_cube(std::move(*built), std::move(origin));
     return true;
 }
 
 cube::PaintFault painting_fault() noexcept
 {
     if (!state || !state->paint) return cube::PaintFault::None;
-    return state->paint->reading.fault;
+    return state->paint->model.reading().fault;
 }
 
 std::uint32_t origin_painting_count() noexcept
@@ -1712,7 +1656,7 @@ bool restore_apply(int size, std::uint32_t scramble_count,
     // Past every refusal, so what follows cannot leave the cube half restored
     // -- the size included, which is why it arrives with the record rather
     // than through a call of its own before it.
-    install_cube(cube::CubeState(size));
+    install_cube(cube::Cube(size));
 
     // Built through the ordinary operations rather than through a way in of
     // its own: the scramble is begun and then walked up, and the user's moves
@@ -1806,7 +1750,7 @@ void ambient_stop() noexcept
     // Taken out of the player before the player is thrown away, and put back
     // afterwards: the discard is what stops a turn already in flight, and a
     // cube restored ahead of it would have that turn land on top of it.
-    cube::CubeState origin = std::move(*state->playback->restore_to);
+    cube::Cube origin = std::move(*state->playback->restore_to);
     discard_playback();
     state->cube_state = std::move(origin);
 }

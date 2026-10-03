@@ -3,7 +3,7 @@
 #include <optional>
 
 #include "cube/CubeMove.hpp"
-#include "cube/Cubie.hpp"
+#include "cube/Face.hpp"
 #include "graphics/Color.hpp"
 
 namespace rubiks::graphics {

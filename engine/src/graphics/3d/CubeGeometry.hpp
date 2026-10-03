@@ -2,8 +2,8 @@
 
 #include <optional>
 
-#include "cube/CubeState.hpp"
-#include "cube/Cubie.hpp"
+#include "cube/Cube.hpp"
+#include "cube/Face.hpp"
 #include "graphics/ActiveRotation.hpp"
 #include "graphics/Color.hpp"
 #include "graphics/Palette.hpp"
@@ -64,7 +64,7 @@ void append_sticker(WorldScene& scene, const math::Vec3& center,
  * Beside them goes one shadow caster, the box of the whole cube, for the
  * shadow pass to project; it is not drawn.
  */
-[[nodiscard]] WorldScene build_cube_scene(const cube::CubeState& state,
+[[nodiscard]] WorldScene build_cube_scene(cube::CubeView state,
                                           Palette palette = Palette::Classic);
 
 /**
@@ -84,7 +84,7 @@ void append_sticker(WorldScene& scene, const math::Vec3& center,
  * an angle of zero it is the same solid as the resting cube in more pieces.
  */
 [[nodiscard]] WorldScene build_cube_scene(
-    const cube::CubeState& state,
+    cube::CubeView state,
     const std::optional<ActiveRotation>& active,
     Palette palette = Palette::Classic);
 

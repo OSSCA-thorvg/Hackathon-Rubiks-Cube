@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 #include "cube/solver/Solver.hpp"
 
 /**
@@ -52,7 +52,7 @@ public:
     [[nodiscard]] bool supports(int size) const noexcept override;
 
     [[nodiscard]] std::vector<CubeMove> solve(
-        const CubeState& state) const override;
+        const Cube& state) const override;
 
 private:
     struct Workshops;

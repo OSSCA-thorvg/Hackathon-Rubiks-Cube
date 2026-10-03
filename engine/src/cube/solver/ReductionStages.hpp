@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 
 /**
  * A reduction, stopped where one of its stages ends.
@@ -17,15 +17,19 @@
  */
 namespace rubiks::cube::solver {
 
-/** The moves that make every face's centre block one colour. */
-[[nodiscard]] std::vector<CubeMove> solve_centres(const CubeState& state);
+/**
+ * The moves that give each centre block its canonical `solved_color(face)`.
+ * Odd cubes must already have their six fixed centres in the canonical frame.
+ */
+[[nodiscard]] std::vector<CubeMove> solve_centres(const Cube& state);
 
 /**
  * The moves that turn a big cube into a three by three.
  *
- * What comes back is always reduced, and always a cube the three-layer stages
- * can finish.
+ * What comes back is always reduced in the canonical colour frame, and always
+ * a cube the three-layer stages can finish. Odd cubes must already have their
+ * fixed centres in that frame; `Reduction::solve()` normalizes them first.
  */
-[[nodiscard]] std::vector<CubeMove> reduce(const CubeState& state);
+[[nodiscard]] std::vector<CubeMove> reduce(const Cube& state);
 
 }  // namespace rubiks::cube::solver

@@ -1,7 +1,9 @@
 #include "cube/Surface.hpp"
 
 #include <array>
+#include <cassert>
 #include <cstddef>
+#include <map>
 
 namespace rubiks::cube {
 namespace {
@@ -29,17 +31,7 @@ struct Vector3 {
 /** Whether a face is the one at the far end of its axis. */
 [[nodiscard]] bool is_positive_face(Face face) noexcept
 {
-    switch (face) {
-        case Face::Right:
-        case Face::Up:
-        case Face::Front:
-            return true;
-        case Face::Left:
-        case Face::Down:
-        case Face::Back:
-            break;
-    }
-    return false;
+    return detail::kFaceBases[face_index(face)].positive;
 }
 
 [[nodiscard]] Vector3 face_normal(Face face) noexcept
@@ -104,25 +96,107 @@ struct SignedAxis {
 
 }  // namespace
 
-Axis axis_of(Face face) noexcept
+std::size_t painting_index(const SurfaceSticker& sticker, int size) noexcept
 {
-    switch (face) {
-        case Face::Right:
-        case Face::Left:
-            return Axis::X;
-        case Face::Up:
-        case Face::Down:
-            return Axis::Y;
-        case Face::Front:
-        case Face::Back:
-            break;
-    }
-    return Axis::Z;
+    assert(is_surface_sticker(sticker, size));
+    const std::array<Axis, 2> across_down = other_axes(axis_of(sticker.face));
+    const int col = coordinate_on(across_down[0], sticker);
+    const int row = coordinate_on(across_down[1], sticker);
+    return face_index(sticker.face) * static_cast<std::size_t>(size * size) +
+           static_cast<std::size_t>(row * size + col);
 }
 
-int outer_layer(Face face, int size) noexcept
+SurfaceSticker SurfaceCells::Iterator::operator*() const noexcept
 {
-    return is_positive_face(face) ? size - 1 : 0;
+    const std::size_t area = static_cast<std::size_t>(size_ * size_);
+    const Face face = static_cast<Face>(index_ / area);
+    const int within = static_cast<int>(index_ % area);
+    return face_sticker(face, within / size_, within % size_, size_);
+}
+
+LayerCells::Iterator::Iterator(Axis axis, LayerMask layers, int size, bool end) noexcept
+    : axis_(axis), layers_(layers), size_(size), face_(end ? kFaceCount : 0)
+{
+    if (size < kMinCubeSize || size >= kLayerMaskBits || layers == 0) face_ = kFaceCount;
+    seek();
+}
+
+bool LayerCells::Iterator::row_along_axis() const noexcept
+{
+    return detail::kFaceBases[face_].row == axis_;
+}
+
+void LayerCells::Iterator::seek() noexcept
+{
+    while (face_ < kFaceCount) {
+        const Face face = static_cast<Face>(face_);
+        if (axis_of(face) == axis_) {
+            if (offset_ < size_ * size_ && in_layers(layers_, outer_layer(face, size_))) return;
+        } else {
+            while (line_ < size_) {
+                const SurfaceSticker first = row_along_axis()
+                    ? face_sticker(face, line_, 0, size_)
+                    : face_sticker(face, 0, line_, size_);
+                if (in_layers(layers_, coordinate_on(axis_, first))) return;
+                ++line_;
+            }
+        }
+        ++face_;
+        line_ = 0;
+        offset_ = 0;
+    }
+}
+
+SurfaceSticker LayerCells::Iterator::operator*() const noexcept
+{
+    const Face face = static_cast<Face>(face_);
+    if (axis_of(face) == axis_) return face_sticker(face, offset_ / size_, offset_ % size_, size_);
+    return row_along_axis() ? face_sticker(face, line_, offset_, size_)
+                            : face_sticker(face, offset_, line_, size_);
+}
+
+LayerCells::Iterator& LayerCells::Iterator::operator++() noexcept
+{
+    ++offset_;
+    if (axis_of(static_cast<Face>(face_)) != axis_ && offset_ == size_) {
+        offset_ = 0;
+        ++line_;
+    }
+    seek();
+    return *this;
+}
+
+bool LayerCells::Iterator::operator==(const Iterator& other) const noexcept
+{
+    return axis_ == other.axis_ && layers_ == other.layers_ && size_ == other.size_ &&
+           face_ == other.face_ && line_ == other.line_ && offset_ == other.offset_;
+}
+
+const std::vector<SurfaceTurn>& surface_turns(Axis axis, int slice, int size)
+{
+    static const std::vector<SurfaceTurn> empty;
+    if (axis_index(axis) >= kAxisCount || size < kMinCubeSize ||
+        size >= kLayerMaskBits || slice < 0 || slice >= size) return empty;
+    using LayerTurns = std::vector<std::vector<SurfaceTurn>>;
+    using AxisTurns = std::array<LayerTurns, kAxisCount>;
+    static thread_local std::map<int, AxisTurns> known;
+    std::map<int, AxisTurns>::iterator found = known.find(size);
+    if (found == known.end()) {
+        AxisTurns permutations;
+        for (const Axis along : axes()) {
+            LayerTurns& layers = permutations[axis_index(along)];
+            layers.resize(static_cast<std::size_t>(size));
+            for (int index = 0; index < size; ++index) {
+                std::vector<SurfaceTurn>& turns = layers[static_cast<std::size_t>(index)];
+                for (const SurfaceSticker from : layer_cells(along, layer(index), size)) {
+                    turns.push_back(SurfaceTurn{surface_index(from, size),
+                        surface_index(turned_sticker(from, along, size), size)});
+                }
+            }
+        }
+        found = known.emplace(size, std::move(permutations)).first;
+    }
+    return found->second[axis_index(axis)][static_cast<std::size_t>(slice)];
 }
 
 LayerMask depth_layers(Face face, int first_depth, int last_depth,
@@ -147,24 +221,6 @@ CubeMove face_move(Face face, int first_depth, int last_depth, int turns,
     return CubeMove{axis_of(face),
                     depth_layers(face, first_depth, last_depth, size),
                     is_positive_face(face) ? turns : -turns};
-}
-
-int coordinate_on(Axis axis, const CubiePosition& p) noexcept
-{
-    switch (axis) {
-        case Axis::X:
-            return p.x;
-        case Axis::Y:
-            return p.y;
-        case Axis::Z:
-            break;
-    }
-    return p.z;
-}
-
-int coordinate_on(Axis axis, const SurfaceSticker& s) noexcept
-{
-    return coordinate_on(axis, CubiePosition{s.x, s.y, s.z});
 }
 
 CubiePosition turned_position(Axis axis, const CubiePosition& p,

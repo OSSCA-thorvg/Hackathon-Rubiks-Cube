@@ -7,7 +7,7 @@
 #include "cube/Assembly.hpp"
 #include "cube/CubeMove.hpp"
 #include "cube/PackedMove.hpp"
-#include "cube/Cubie.hpp"
+#include "cube/Face.hpp"
 #include "graphics/CanvasTheme.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/Palette.hpp"

@@ -1,11 +1,12 @@
 #include "cube/solver/Projection.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstddef>
 #include <vector>
 
-#include "cube/Cubie.hpp"
+#include "cube/Face.hpp"
 #include "cube/Surface.hpp"
 #include "cube/solver/Turning.hpp"
 
@@ -126,7 +127,7 @@ template <std::size_t N>
 
 }  // namespace
 
-bool reduced(const CubeState& cube)
+bool reduced(const Cube& cube)
 {
     const int size = cube.size();
 
@@ -142,23 +143,20 @@ bool reduced(const CubeState& cube)
         }
     }
 
-    for (int x = 0; x < size; ++x) {
-        for (int y = 0; y < size; ++y) {
-            for (int z = 0; z < size; ++z) {
-                const CubiePosition at{x, y, z};
-                const auto showing = exposed_faces(at, size);
-                if (showing.size() != 1) continue;
-                if (sticker_at(cube, at, showing.front()) !=
-                    home_colour(showing.front())) {
-                    return false;
-                }
+    for (const Face face : faces()) {
+        const FaceView colors = cube.face(face);
+        for (int row = 1; row < size - 1; ++row) {
+            const ColorView middle = colors.row(row);
+            if (!std::all_of(middle.begin() + 1, middle.end() - 1,
+                             [face](FaceColor color) -> bool { return color == home_colour(face); })) {
+                return false;
             }
         }
     }
     return true;
 }
 
-Projection projected(const CubeState& cube)
+Projection projected(const Cube& cube)
 {
     assert(cube.size() >= 3);
     assert(reduced(cube));

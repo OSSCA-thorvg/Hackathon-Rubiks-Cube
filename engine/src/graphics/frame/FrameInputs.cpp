@@ -1,5 +1,7 @@
 #include "graphics/frame/FrameInputs.hpp"
 
+#include <cassert>
+
 #include "graphics/3d/AxisGizmo.hpp"
 #include "graphics/3d/Camera.hpp"
 #include "graphics/3d/CubeGeometry.hpp"
@@ -10,7 +12,7 @@ namespace rubiks::graphics {
 
 RenderScene compose(const FrameInputs& frame)
 {
-    const auto& placement = frame.placement;
+    const CanvasLayout& placement = frame.placement;
 
     // The ground the shadow may lie on: the whole canvas. The cube's viewport
     // is a square in the middle of it and its shadow leans out into the
@@ -34,7 +36,7 @@ RenderScene compose(const FrameInputs& frame)
                                   ? Lighting::unlit(drawing.lighting)
                                   : drawing.lighting;
 
-        scene = build_cube_scene(*drawing.cube.state, drawing.rotation,
+        scene = build_cube_scene(drawing.cube.state->view(), drawing.rotation,
                                  drawing.palette)  //
                 | shadow(lamp, camera)             //
                 | view(camera)                     //
@@ -70,8 +72,11 @@ RenderScene compose(const FrameInputs& frame)
             // being edited and mostly is not a cube at all until the last
             // square is right. No guides either: nothing here turns, so there
             // is nowhere for a guide to promise.
-            append_scene(scene, build_net_painting(net.painting->stickers, size,
-                                                   placement.net, net.palette,
+            assert(net.painting->stickers.size() ==
+                   cube::kFaceCount * static_cast<std::size_t>(size * size));
+            const cube::CubeView painting{size, net.painting->stickers.data()};
+            append_scene(scene, build_net_painting(painting, placement.net,
+                                                   net.palette,
                                                    net.painting->blamed,
                                                    net.painting->cursor));
         } else {
@@ -79,7 +84,7 @@ RenderScene compose(const FrameInputs& frame)
             // It gets the same rotation as the 3D scene, which is what makes
             // one gesture move every view in the same frame.
             append_scene(scene,
-                         build_net_scene(*net.cube.state, placement.net,
+                         build_net_scene(net.cube.state->view(), placement.net,
                                          net.rotation, net.palette));
 
             // The rings the pressed cell could turn on, drawn over the
@@ -97,7 +102,7 @@ RenderScene compose(const FrameInputs& frame)
         // it, since picking one out is a matter of drawing it heavier rather
         // than adding a line.
         append_scene(scene,
-                     build_rings_scene(*rings.cube.state, placement.rings,
+                     build_rings_scene(rings.cube.state->view(), placement.rings,
                                        rings.rotation, rings.guides,
                                        rings.palette));
     }

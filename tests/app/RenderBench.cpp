@@ -7,11 +7,11 @@
 #include <vector>
 
 #include "app/Application.hpp"
-#include "cube/Cubie.hpp"
+#include "cube/Face.hpp"
 
 #ifdef RUBIKS_LIGHTING
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 #include "graphics/ActiveRotation.hpp"
 #include "graphics/3d/Camera.hpp"
 #include "graphics/3d/CubeGeometry.hpp"
@@ -152,7 +152,7 @@ int main(int argc, char** argv)
     const Camera camera = home_orbit().to_camera(1.0f);
     const ActiveRotation turn{rubiks::cube::Axis::X,
                               rubiks::cube::layer(size - 1), 45.0f};
-    const RenderScene scene = build_cube_scene(rubiks::cube::CubeState(size), turn)  //
+    const RenderScene scene = build_cube_scene(rubiks::cube::Cube(size), turn)  //
                               | shadow(default_lighting(), camera)                        //
                               | view(camera)                                         //
                               | light(default_lighting(), camera)                         //

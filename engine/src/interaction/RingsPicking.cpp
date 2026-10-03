@@ -21,7 +21,7 @@ std::optional<RingsPick> pick_rings(float x, float y,
     std::optional<RingsPick> nearest;
     float closest = reach;
 
-    for (const auto& sticker : cube::surface_stickers(size)) {
+    for (const cube::SurfaceSticker sticker : cube::surface_cells(size)) {
         const auto at = graphics::rings_slot_position(sticker, rect, size);
         if (!at) continue;
 

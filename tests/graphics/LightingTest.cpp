@@ -14,7 +14,7 @@
 
 #include "CubeSupport.hpp"
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 #include "graphics/3d/Camera.hpp"
 #include "graphics/3d/ConvexHull.hpp"
 #include "graphics/3d/CubeGeometry.hpp"
@@ -34,7 +34,7 @@ namespace {
 using Catch::Approx;
 using namespace rubiks::graphics;
 using rubiks::cube::Axis;
-using rubiks::cube::CubeState;
+using rubiks::cube::Cube;
 using rubiks::cube::FaceColor;
 using rubiks::math::Vec2;
 using rubiks::math::Vec3;
@@ -107,7 +107,7 @@ int l1_distance(const Color& a, const Color& b)
 /** Every distinct sticker colour after lighting, whatever the viewpoint. */
 std::set<std::tuple<int, int, int>> lit_colors(const Camera& camera)
 {
-    const ViewScene scene = build_cube_scene(CubeState(3))  //
+    const ViewScene scene = build_cube_scene(Cube(3))  //
                             | view(camera)                  //
                             | light(default_lighting(), camera);
     std::set<std::tuple<int, int, int>> colors;
@@ -259,7 +259,7 @@ TEST_CASE("convex hull of a box's corners drops the inside and orders the rim")
 
 TEST_CASE("a resting cube casts as one box, the cube itself")
 {
-    const WorldScene scene = build_cube_scene(CubeState(3));
+    const WorldScene scene = build_cube_scene(Cube(3));
     REQUIRE(scene.casters.size() == 1);
 
     for (const auto axis : rubiks::cube::axes()) {
@@ -272,7 +272,7 @@ TEST_CASE("a resting cube casts as one box, the cube itself")
 
 TEST_CASE("a turn cuts the casters into runs along its axis alone")
 {
-    const CubeState state(3);
+    const Cube state(3);
 
     SECTION("R: the turning face and the rest")
     {
@@ -340,7 +340,7 @@ TEST_CASE("a turn cuts the casters into runs along its axis alone")
 
     SECTION("a bigger cube makes no more casters")
     {
-        const CubeState big(9);
+        const Cube big(9);
         const ActiveRotation turn{Axis::X, rubiks::cube::layers_through(2, 4), 20.0f};
         REQUIRE(build_cube_scene(big, turn).casters.size() == 3);
     }
@@ -505,7 +505,7 @@ TEST_CASE("the light stays in the world when the camera orbits")
 
     // Three of them are the visible faces at home, and they differ: that is
     // what lets the render contract tell a flipped normal from a right one.
-    const ViewScene scene = build_cube_scene(CubeState(3))     //
+    const ViewScene scene = build_cube_scene(Cube(3))     //
                             | view(home_camera())              //
                             | light(default_lighting(), home_camera());
     std::set<std::tuple<int, int, int>> whites;
@@ -528,7 +528,7 @@ TEST_CASE("the home viewpoint's sample stickers carry no highlight")
     // three visible faces, so the contract's sample stickers -- the middle of
     // each -- are plain shaded colour with no glint to reproduce. A glint
     // reaching a corner sticker is allowed; the contract does not look there.
-    const WorldScene world = build_cube_scene(CubeState(3));
+    const WorldScene world = build_cube_scene(Cube(3));
     const ViewScene scene = world | view(home_camera()) | light(default_lighting(), home_camera());
     REQUIRE(scene.faces.size() == world.faces.size());
 
@@ -603,7 +603,7 @@ TEST_CASE("a lit face shades from its near end to its far end")
 
 TEST_CASE("the shading of one plane runs on across its stickers")
 {
-    const WorldScene world = build_cube_scene(CubeState(3));
+    const WorldScene world = build_cube_scene(Cube(3));
     const ViewScene scene = world | view(home_camera()) | light(default_lighting(), home_camera());
 
     // The nine +Z stickers (green: the white top clamps and shows nothing):
@@ -649,7 +649,7 @@ TEST_CASE("the shading of one plane runs on across its stickers")
 
     SECTION("a mixed cube shares the axis too, each sticker in its own colour")
     {
-        CubeState mixed(3);
+        Cube mixed(3);
         mixed.apply(rubiks::test::moves::U(3));
         mixed.apply(rubiks::test::moves::R(3));
         const WorldScene mixed_world = build_cube_scene(mixed);
@@ -675,7 +675,7 @@ TEST_CASE("the shading of one plane runs on across its stickers")
     {
         // On the white top face the clamp makes both ends 255 wherever the
         // brightness passes 1, and those stickers carry no gradient.
-        const ViewScene fine = build_cube_scene(CubeState(28))  //
+        const ViewScene fine = build_cube_scene(Cube(28))  //
                                | view(home_camera())            //
                                | light(default_lighting(), home_camera());
         for (const auto& face : fine.faces) {
@@ -791,7 +791,7 @@ TEST_CASE("the six sticker colours stay apart at both ends of the shading")
 TEST_CASE("a resting cube casts one convex shadow onto the ground")
 {
     const WorldScene scene =
-        build_cube_scene(CubeState(3)) | shadow(default_lighting(), home_camera());
+        build_cube_scene(Cube(3)) | shadow(default_lighting(), home_camera());
 
     REQUIRE(scene.shadow.has_value());
     const auto& cast = *scene.shadow;
@@ -830,7 +830,7 @@ TEST_CASE("a light straight overhead widens the shadow by its height")
 {
     const Lighting lamp = one_lamp(Vec3{0.0f, 4.5f, 0.0f});
     const WorldScene scene =
-        build_cube_scene(CubeState(3)) | shadow(lamp, home_camera());
+        build_cube_scene(Cube(3)) | shadow(lamp, home_camera());
     REQUIRE(scene.shadow.has_value());
 
     // A point light at a finite height does not trace the footprint: the top
@@ -853,19 +853,19 @@ TEST_CASE("a light straight overhead widens the shadow by its height")
 
 TEST_CASE("a light no higher than the cube casts nothing onto the ground")
 {
-    const WorldScene scene = build_cube_scene(CubeState(3)) |
+    const WorldScene scene = build_cube_scene(Cube(3)) |
                              shadow(one_lamp(Vec3{2.0f, 0.5f, 2.0f}), home_camera());
     REQUIRE_FALSE(scene.shadow.has_value());
 
     SECTION("nor does a lighting with no lamps at all")
     {
         Lighting dark;
-        REQUIRE_FALSE((build_cube_scene(CubeState(3)) | shadow(dark, home_camera())).shadow.has_value());
+        REQUIRE_FALSE((build_cube_scene(Cube(3)) | shadow(dark, home_camera())).shadow.has_value());
     }
 
     SECTION("only the key casts: the kicker behind the cube adds no second shadow")
     {
-        const WorldScene lit = build_cube_scene(CubeState(3)) |
+        const WorldScene lit = build_cube_scene(Cube(3)) |
                                shadow(default_lighting(), home_camera());
         REQUIRE(lit.shadow.has_value());
         REQUIRE(lit.shadow->polygons.size() == 1);
@@ -880,7 +880,7 @@ TEST_CASE("the shadow thins as the eye nears the ground and is gone below it")
         return Camera{Vec3{4.0f, eye_y, 4.0f}, kCubeCenter, kWorldUp,
                       kVerticalFov, 1.0f, kNearPlane, kFarPlane};
     };
-    const WorldScene world = build_cube_scene(CubeState(3));
+    const WorldScene world = build_cube_scene(Cube(3));
 
     REQUIRE((world | shadow(default_lighting(), camera_at(3.0f))).shadow->opacity ==
             kShadowOpacity);
@@ -897,7 +897,7 @@ TEST_CASE("the shadow thins as the eye nears the ground and is gone below it")
 TEST_CASE("a turning layer's shadow turns with it")
 {
     const ActiveRotation turn{Axis::X, rubiks::cube::layer(2), 45.0f};
-    const WorldScene scene = build_cube_scene(CubeState(3), turn) |
+    const WorldScene scene = build_cube_scene(Cube(3), turn) |
                              shadow(default_lighting(), home_camera());
 
     REQUIRE(scene.shadow.has_value());
@@ -906,7 +906,7 @@ TEST_CASE("a turning layer's shadow turns with it")
     // The same turn at zero degrees: the still slab's shadow is the same, and
     // the turning slab's is not.
     const ActiveRotation settled{Axis::X, rubiks::cube::layer(2), 0.0f};
-    const WorldScene rest = build_cube_scene(CubeState(3), settled) |
+    const WorldScene rest = build_cube_scene(Cube(3), settled) |
                             shadow(default_lighting(), home_camera());
     REQUIRE(rest.shadow->polygons.size() == 2);
 
@@ -932,7 +932,7 @@ TEST_CASE("the whole chain puts the shadow below the cube inside its region")
 {
     const auto placement = layout(kCanvas, kCanvas);
     const Camera camera = camera_into(home_orbit(), placement.cube);
-    const RenderScene scene = build_cube_scene(CubeState(3))  //
+    const RenderScene scene = build_cube_scene(Cube(3))  //
                               | shadow(default_lighting(), camera) //
                               | view(camera)                  //
                               | light(default_lighting(), camera)  //
@@ -964,7 +964,7 @@ TEST_CASE("the home viewpoint's planes shade to the bytes the contract names")
     // docs/tasks/04-rubiks-cube-domain.md, contract v4: the brightness of the
     // +Y, +Z and +X planes under the resting light, as a byte out of 255. The
     // numbers are worked out there by hand; this is the engine agreeing.
-    const ViewScene scene = build_cube_scene(CubeState(3))     //
+    const ViewScene scene = build_cube_scene(Cube(3))     //
                             | view(home_camera())              //
                             | light(default_lighting(), home_camera());
 
@@ -1005,7 +1005,7 @@ TEST_CASE("the home viewpoint's planes shade to the bytes the contract names")
         // exact height moves its brightness by less than a unit of the paper
         // white's 216.
         for (const int size : {2, 4, 5, 7, 9}) {
-            const ViewScene bigger = build_cube_scene(CubeState(size))  //
+            const ViewScene bigger = build_cube_scene(Cube(size))  //
                                      | view(home_camera())               //
                                      | light(default_lighting(), home_camera());
             for (const auto& face : bigger.faces) {

@@ -13,7 +13,7 @@
 
 #include "CubeSupport.hpp"
 #include "GraphicsSupport.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 #include "graphics/3d/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/2d/net/NetGeometry.hpp"
@@ -26,7 +26,7 @@ using Catch::Approx;
 using namespace rubiks::interaction;
 using rubiks::cube::Axis;
 using rubiks::cube::CubeMove;
-using rubiks::cube::CubeState;
+using rubiks::cube::Cube;
 using rubiks::cube::Face;
 using rubiks::graphics::Camera;
 using rubiks::graphics::Rect;
@@ -668,10 +668,10 @@ TEST_CASE("a committed gesture agrees with the named move")
     const Settled settled = perform(grab, Vec2{0.0f, -1.0f}, 90.0f);
     REQUIRE(settled.move);
 
-    CubeState dragged(kSize);
+    Cube dragged(kSize);
     dragged.apply(*settled.move);
 
-    CubeState named(kSize);
+    Cube named(kSize);
     named.apply(rubiks::test::moves::R(kSize));
 
     REQUIRE(dragged == named);

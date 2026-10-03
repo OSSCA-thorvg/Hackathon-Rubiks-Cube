@@ -27,7 +27,7 @@ git clone --recurse-submodules https://github.com/OSSCA-thorvg/Hackathon-Rubiks-
 thorvg-rubiks/
 ├── web/                    # Vite + TypeScript + HTML/CSS (Browser application)
 ├── engine/
-│   ├── src/cube/           # Cube state, cubie, move (rendering과 무관)
+│   ├── src/cube/           # Cube, draft, face grids, move (rendering과 무관)
 │   ├── src/math/           # vector, matrix, quaternion, projection, angle
 │   ├── src/graphics/       # 모든 view가 함께 쓰는 타입 (Color, Rect, RenderScene, Palette, Layout)
 │   │   ├── 3d/             # camera, pipeline passes, 조명, cube geometry

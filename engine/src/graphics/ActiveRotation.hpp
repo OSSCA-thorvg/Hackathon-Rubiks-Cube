@@ -9,7 +9,7 @@ namespace rubiks::graphics {
 /**
  * A layer turn in progress, at an angle the domain cannot represent.
  *
- * CubeState only ever holds quarter turns, so the continuous angle of a drag
+ * Cube only ever holds quarter turns, so the continuous angle of a drag
  * lives here instead. Interaction produces it and the application hands it to
  * the scene builder, which keeps the dependency one-way: graphics never needs
  * to know that an interaction module exists.

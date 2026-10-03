@@ -1,12 +1,13 @@
 #pragma once
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
 
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
-#include "cube/Cubie.hpp"
+#include "cube/Cube.hpp"
+#include "cube/Face.hpp"
 #include "cube/Scramble.hpp"
 #include "cube/Surface.hpp"
 
@@ -26,6 +27,21 @@
  * belongs beside the tests that assert.
  */
 namespace rubiks::test {
+
+/** Converts a correctly shaped external painting to native row-major faces. */
+[[nodiscard]] inline std::vector<cube::FaceColor> native_painting(
+    const std::vector<cube::FaceColor>& painting, int size)
+{
+    const std::size_t span = static_cast<std::size_t>(size);
+    assert(size >= cube::kMinCubeSize &&
+           painting.size() == cube::kFaceCount * span * span);
+    std::vector<cube::FaceColor> native(painting.size());
+    for (const cube::SurfaceSticker sticker : cube::surface_cells(size)) {
+        native[cube::surface_index(sticker, size)] =
+            painting[cube::painting_index(sticker, size)];
+    }
+    return native;
+}
 
 /**
  * The six face turns of an N x N x N cube, by the letters they are written
@@ -72,7 +88,7 @@ namespace moves {
 }  // namespace moves
 
 /** Every move of `sequence` applied to `cube`, in the order written. */
-inline void apply_all(cube::CubeState& cube,
+inline void apply_all(cube::Cube& cube,
                       const std::vector<cube::CubeMove>& sequence) noexcept
 {
     for (const auto& move : sequence) {
@@ -84,10 +100,10 @@ inline void apply_all(cube::CubeState& cube,
  * A cube of `size` scrambled with the application's own generator, by forty
  * moves unless a test says otherwise.
  */
-[[nodiscard]] inline cube::CubeState scrambled(std::uint32_t seed, int size,
+[[nodiscard]] inline cube::Cube scrambled(std::uint32_t seed, int size,
                                                std::size_t moves = 40)
 {
-    cube::CubeState state(size);
+    cube::Cube state(size);
     apply_all(state, cube::make_scramble(size, seed, moves));
     return state;
 }

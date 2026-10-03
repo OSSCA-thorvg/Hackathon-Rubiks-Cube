@@ -3,8 +3,8 @@
 #include <optional>
 #include <vector>
 
-#include "cube/CubeState.hpp"
-#include "cube/Cubie.hpp"
+#include "cube/Cube.hpp"
+#include "cube/Face.hpp"
 
 /**
  * Reading a painting of stickers as a cube, or saying why it is not one.
@@ -16,27 +16,13 @@
  *
  * So this is a gate, and the shape of the gate is the whole contract.
  * `assembled()` hands back a cube or nothing at all, which is what keeps
- * `CubeState`'s promise intact -- every cube in the domain is one that turning
+ * `Cube`'s promise intact -- every cube in the domain is one that turning
  * could have reached, and this proves it a second way rather than weakening
  * it. `read_painting()` answers the other question a person actually has,
  * which is *what* is wrong and *where*.
  *
- * What makes a painting a cube was not reasoned out; it was measured, by
- * scrambling every size a few hundred times and keeping the quantities that
- * never moved. `tests/cube/InvariantSurveyTest.cpp` is that measurement and
- * `docs/tasks/18-paint-your-cube.md` is the table it produced. Two of the
- * rules are not what they look like: the corners' twist only holds still when
- * the handedness of each corner is respected, and the edges' flip holds as a
- * sum and never piece by piece.
- *
- * One thing to know about what comes back. `assembled(painting_of(cube))` is
- * the same cube to look at and not the same `CubeState`: a cubie carries six
- * stickers and shows at most three, and the hidden ones -- along with every
- * sticker of the cubies buried inside -- are nothing a painting could have
- * mentioned, so they are left as they began. `operator==` compares all six and
- * will say the two differ. Nothing that matters reads them, since `is_solved()`
- * and every solver look only at the faces. Compare paintings when comparing
- * these.
+ * Colours and blamed indices retain the legacy surface order at this input
+ * boundary. Validated cubes store only their six native outward-facing grids.
  */
 namespace rubiks::cube {
 
@@ -123,7 +109,7 @@ struct PaintReading {
 };
 
 /** Every sticker of a cube, in the order `surface_stickers()` counts them. */
-[[nodiscard]] std::vector<FaceColor> painting_of(const CubeState& cube);
+[[nodiscard]] std::vector<FaceColor> painting_of(CubeView cube);
 
 
 /** What is wrong with a painting, or that nothing is. */

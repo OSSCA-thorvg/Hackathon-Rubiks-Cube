@@ -95,7 +95,7 @@ struct OrbitDelta {
  * the same snap, so past the release nothing downstream can tell which of the
  * two views a turn was asked for in. One gesture at a time, whichever it was.
  *
- * The controller owns neither the CubeState nor the camera. A finished snap
+ * The controller owns neither the Cube nor the camera. A finished snap
  * hands back a CubeMove and an orbit hands back angles, which keeps every
  * state change visible at the call site instead of hidden behind a reference.
  */

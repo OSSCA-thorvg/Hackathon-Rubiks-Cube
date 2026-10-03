@@ -84,15 +84,13 @@ struct NetMetrics {
 }
 
 /** The sticker a cell shows, drawn as the quad it rests in. */
-[[nodiscard]] RenderFace resting_quad(const cube::CubeState& state,
-                                      const NetCell& cell, const Vec2& origin,
+[[nodiscard]] RenderFace resting_quad(cube::FaceColor color, const Vec2& origin,
                                       int col, int row,
                                       const NetMetrics& metrics,
                                       Palette palette)
 {
     RenderFace quad = sticker_quad(origin, col, row, metrics);
-    quad.color =
-        to_color(state.at(cell.x, cell.y, cell.z).sticker(cell.face), palette);
+    quad.color = to_color(color, palette);
     return quad;
 }
 
@@ -310,11 +308,9 @@ NetBlock net_block(Face face) noexcept
 
 std::optional<Face> net_face_at(int column, int row) noexcept
 {
-    // By search, for the reason net_position() gives: six faces are nothing
-    // to walk, and the one table of where they sit cannot disagree with
-    // itself.
-    for (const auto face : net_faces()) {
-        const auto block = net_block(face);
+    // The six blocks share the layout defined by net_block().
+    for (const Face face : net_faces()) {
+        const NetBlock block = net_block(face);
         if (block.column == column && block.row == row) return face;
     }
     return std::nullopt;
@@ -322,38 +318,14 @@ std::optional<Face> net_face_at(int column, int row) noexcept
 
 NetCell net_cell(Face face, int col, int row, int size) noexcept
 {
-    const int last = size - 1;
-
-    switch (face) {
-        case Face::Up:
-            return NetCell{col, last, row, Face::Up};
-        case Face::Left:
-            return NetCell{0, last - row, col, Face::Left};
-        case Face::Front:
-            return NetCell{col, last - row, last, Face::Front};
-        case Face::Right:
-            return NetCell{last, last - row, last - col, Face::Right};
-        case Face::Back:
-            return NetCell{last - col, last - row, 0, Face::Back};
-        case Face::Down:
-            break;
-    }
-    return NetCell{col, 0, last - row, Face::Down};
+    return cube::face_sticker(face, row, col, size);
 }
 
 std::optional<NetPosition> net_position(const NetCell& cell, int size) noexcept
 {
-    // The inverse by search rather than by a second set of formulas: six
-    // faces of N squared cells is nothing to walk, and one mapping cannot
-    // disagree with itself.
-    for (int row = 0; row < size; ++row) {
-        for (int col = 0; col < size; ++col) {
-            if (net_cell(cell.face, col, row, size) == cell) {
-                return NetPosition{cell.face, col, row};
-            }
-        }
-    }
-    return std::nullopt;
+    if (!cube::is_surface_sticker(cell, size)) return std::nullopt;
+    const cube::FaceCell mapped = cube::face_cell(cell, size);
+    return NetPosition{mapped.face, mapped.col, mapped.row};
 }
 
 float net_face_side(const Rect& rect) noexcept
@@ -445,7 +417,7 @@ RenderScene build_net_guides(const std::vector<NetGuide>& guides,
     return scene;
 }
 
-RenderScene build_net_scene(const cube::CubeState& state, const Rect& rect,
+RenderScene build_net_scene(cube::CubeView state, const Rect& rect,
                             Palette palette)
 {
     const int size = state.size();
@@ -454,72 +426,41 @@ RenderScene build_net_scene(const cube::CubeState& state, const Rect& rect,
     RenderScene scene;
     scene.faces.reserve(static_cast<std::size_t>(6 * size * size));
 
-    for (const auto face : net_faces()) {
+    for (const Face face : net_faces()) {
         const Vec2 origin = net_face_origin(face, rect);
+        const cube::FaceView colors = state.face(face);
 
         for (int row = 0; row < size; ++row) {
+            const cube::ColorView row_colors = colors.row(row);
             for (int col = 0; col < size; ++col) {
-                const auto source = net_cell(face, col, row, size);
-                scene.faces.push_back(resting_quad(state, source, origin, col,
-                                                   row, metrics, palette));
+                scene.faces.push_back(resting_quad(
+                    row_colors[static_cast<std::size_t>(col)], origin, col, row,
+                    metrics, palette));
             }
         }
     }
     return scene;
 }
 
-RenderScene build_net_painting(const std::vector<cube::FaceColor>& painting,
-                               int size, const Rect& rect, Palette palette,
-                               const std::vector<int>& blamed,
+RenderScene build_net_painting(cube::CubeView painting, const Rect& rect,
+                               Palette palette, const std::vector<int>& blamed,
                                const std::optional<NetPosition>& cursor)
 {
-    const auto all = cube::surface_stickers(size);
-    if (painting.size() != all.size()) return {};
-
-    // Where each sticker sits in the painting, laid out flat so that a cell of
-    // the net can be turned into a colour without a search per square.
-    std::vector<int> at(static_cast<std::size_t>(size) * size * size *
-                            cube::kFaceCount,
-                        -1);
-    const auto slot_of = [size](const cube::SurfaceSticker& s) {
-        return (static_cast<std::size_t>((s.x * size + s.y) * size + s.z)) *
-                   cube::kFaceCount +
-               cube::face_index(s.face);
-    };
-    for (std::size_t i = 0; i < all.size(); ++i) {
-        at[slot_of(all[i])] = static_cast<int>(i);
-    }
-
-    const NetMetrics metrics = net_metrics(rect, size);
-
-    RenderScene scene;
-    scene.faces.reserve(static_cast<std::size_t>(6 * size * size));
-
-    for (const auto face : net_faces()) {
-        const Vec2 origin = net_face_origin(face, rect);
-
-        for (int row = 0; row < size; ++row) {
-            for (int col = 0; col < size; ++col) {
-                const auto cell = net_cell(face, col, row, size);
-                const int index = at[slot_of(cell)];
-                if (index < 0) continue;
-
-                RenderFace quad = sticker_quad(origin, col, row, metrics);
-                quad.color = to_color(
-                    painting[static_cast<std::size_t>(index)], palette);
-                scene.faces.push_back(quad);
-            }
-        }
-    }
+    const int size = painting.size();
+    RenderScene scene = build_net_scene(painting, rect, palette);
+    const std::vector<cube::SurfaceSticker> legacy_slots =
+        blamed.empty() ? std::vector<cube::SurfaceSticker>{}
+                       : cube::surface_stickers(size);
 
     // The squares a refusal points at, ringed in the colour the axis guides do
     // not use, so a complaint reads as a complaint and not as another axis.
     const float width = kNetBlameWidthCells * net_cell_side(rect, size);
     for (const int index : blamed) {
-        if (index < 0 || static_cast<std::size_t>(index) >= all.size()) continue;
+        if (index < 0 ||
+            static_cast<std::size_t>(index) >= legacy_slots.size()) continue;
 
-        const auto placed = net_position(all[static_cast<std::size_t>(index)],
-                                         size);
+        const std::optional<NetPosition> placed = net_position(
+            legacy_slots[static_cast<std::size_t>(index)], size);
         if (!placed) continue;
 
         const Vec2 middle =
@@ -570,7 +511,7 @@ RenderScene build_net_painting(const std::vector<cube::FaceColor>& painting,
     return scene;
 }
 
-RenderScene build_net_scene(const cube::CubeState& state, const Rect& rect,
+RenderScene build_net_scene(cube::CubeView state, const Rect& rect,
                             const std::optional<ActiveRotation>& active,
                             Palette palette)
 {
@@ -618,9 +559,10 @@ RenderScene build_net_scene(const cube::CubeState& state, const Rect& rect,
     std::vector<RenderFace> turning;
     std::vector<RenderFace> band_pieces;
 
-    for (const auto face : net_faces()) {
+    for (const Face face : net_faces()) {
         const Vec2 origin = net_face_origin(face, rect);
         const Vec2 center = net_face_center(face, rect);
+        const cube::FaceView colors = state.face(face);
 
         const bool turning_face =
             axis_of(face) == active->axis &&
@@ -634,8 +576,9 @@ RenderScene build_net_scene(const cube::CubeState& state, const Rect& rect,
             (outer_layer(face, size) == size - 1 ? 1.0f : -1.0f);
 
         for (int row = 0; row < size; ++row) {
+            const cube::ColorView row_colors = colors.row(row);
             for (int col = 0; col < size; ++col) {
-                const auto source = net_cell(face, col, row, size);
+                const NetCell source = net_cell(face, col, row, size);
 
                 // The band is every cell the turn carries to another face:
                 // those off the turning axis whose layer the turn takes.
@@ -644,8 +587,9 @@ RenderScene build_net_scene(const cube::CubeState& state, const Rect& rect,
                     in_layers(active->layers,
                               coordinate_on(active->axis, source));
 
-                RenderFace quad = resting_quad(state, source, origin, col, row,
-                                               metrics, palette);
+                RenderFace quad = resting_quad(
+                    row_colors[static_cast<std::size_t>(col)], origin, col, row,
+                    metrics, palette);
 
                 // The turn carries it away, or spins it in place, or leaves it
                 // alone. Every cell is exactly one of the three.

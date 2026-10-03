@@ -6,7 +6,7 @@
 #include "CubeSupport.hpp"
 #include "cube/Assembly.hpp"
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 #include "cube/Surface.hpp"
 
 // Reading a painting of stickers back as a cube, and refusing the ones that
@@ -17,7 +17,7 @@ namespace {
 using rubiks::cube::assembled;
 using rubiks::cube::Axis;
 using rubiks::cube::CubeMove;
-using rubiks::cube::CubeState;
+using rubiks::cube::Cube;
 using rubiks::cube::FaceColor;
 using rubiks::cube::layers_through;
 using rubiks::cube::PaintFault;
@@ -27,15 +27,15 @@ using rubiks::cube::surface_stickers;
 using rubiks::test::scrambled;
 
 /** The same cube held a different way up, which is not a move the puzzle has. */
-CubeState turned_over(const CubeState& cube, Axis axis, int quarters)
+Cube turned_over(const Cube& cube, Axis axis, int quarters)
 {
-    CubeState out = cube;
+    Cube out = cube;
     out.apply(CubeMove{axis, layers_through(0, cube.size() - 1), quarters});
     return out;
 }
 
 /** A painting of a cube, with one sticker written down wrong. */
-std::vector<FaceColor> with_slip(const CubeState& cube, int slot,
+std::vector<FaceColor> with_slip(const Cube& cube, int slot,
                                  FaceColor instead)
 {
     auto painting = painting_of(cube);
@@ -134,7 +134,7 @@ TEST_CASE("centres traded between orbits are refused though the totals agree")
     // The check the plan nearly left out. A five by five has three orbits of
     // centres, and a white one swapped with a red one across two of them
     // leaves every total exactly where it was.
-    const CubeState cube(5);
+    const Cube cube(5);
     auto painting = painting_of(cube);
     const auto slots = surface_stickers(5);
 
@@ -196,7 +196,7 @@ TEST_CASE("a corner that no turn could make is refused")
     // Two of a corner's three stickers swapped. The three colours are still a
     // corner's colours, so nothing is miscounted -- what is wrong is that the
     // corner now reads round the other way, and no turn has ever reversed one.
-    const CubeState cube(3);
+    const Cube cube(3);
     auto painting = painting_of(cube);
     const auto slots = surface_stickers(3);
 
@@ -217,14 +217,8 @@ TEST_CASE("a corner that no turn could make is refused")
 
 TEST_CASE("a cube as wide as a layer mask is refused before it is read")
 {
-    // A painting of a solved cube, which nothing is wrong with -- except that
-    // a cube of thirty-two layers is as wide as a move's mask, and a mask is
-    // only checked against a cube narrower than itself. is_layer_run() and
-    // depth_layers() refuse the size, so read back it would be a cube that
-    // face_move() has no move for, and read_painting() refuses it where they
-    // do. The cube itself can still be built, which is how the painting here
-    // is made.
-    const auto painting = painting_of(CubeState(32));
+    // Malformed external input is rejected before a domain cube is constructed.
+    const std::vector<FaceColor> painting(6 * 32 * 32, FaceColor::Red);
 
     CHECK(read_painting(32, painting).fault == PaintFault::ColourCount);
     CHECK_FALSE(assembled(32, painting));

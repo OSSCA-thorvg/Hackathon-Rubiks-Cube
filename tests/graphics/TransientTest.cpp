@@ -10,7 +10,7 @@
 
 #include "CubeSupport.hpp"
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 #include "graphics/3d/CubeGeometry.hpp"
 
 namespace {
@@ -18,7 +18,7 @@ namespace {
 using Catch::Approx;
 using namespace rubiks::graphics;
 using rubiks::cube::Axis;
-using rubiks::cube::CubeState;
+using rubiks::cube::Cube;
 using rubiks::math::Vec3;
 
 constexpr int kSize = 3;
@@ -77,7 +77,7 @@ ActiveRotation turning_right_layer(float degrees)
 
 TEST_CASE("without a turn the scene is the one built for a cube at rest")
 {
-    const CubeState state(kSize);
+    const Cube state(kSize);
 
     const WorldScene resting = build_cube_scene(state);
     const WorldScene same = build_cube_scene(state, std::nullopt);
@@ -101,7 +101,7 @@ TEST_CASE("without a turn the scene is the one built for a cube at rest")
 
 TEST_CASE("a turning layer exposes two cut sheets")
 {
-    const CubeState state(kSize);
+    const Cube state(kSize);
     const WorldScene turning =
         build_cube_scene(state, turning_right_layer(45.0f));
 
@@ -115,7 +115,7 @@ TEST_CASE("a turning layer exposes two cut sheets")
 
 TEST_CASE("a turn of the whole cube cuts nothing")
 {
-    const CubeState state(kSize);
+    const Cube state(kSize);
     const ActiveRotation everything{Axis::Y,
                                     rubiks::cube::layers_through(0, kSize - 1),
                                     30.0f};
@@ -126,7 +126,7 @@ TEST_CASE("a turn of the whole cube cuts nothing")
 
 TEST_CASE("a wide turn cuts only where it meets a still layer")
 {
-    const CubeState state(kSize);
+    const Cube state(kSize);
     const ActiveRotation wide{Axis::X, rubiks::cube::layers_through(1, 2),
                               30.0f};
 
@@ -134,9 +134,38 @@ TEST_CASE("a wide turn cuts only where it meets a still layer")
             2 * kSize * kSize);
 }
 
+/** Body caps depend on moving/still interfaces, not stored internal cubies. */
+TEST_CASE("cut sheets cover every layer interface on each axis")
+{
+    for (const int size : {2, 4, 7}) {
+        const Cube state(size);
+        const rubiks::cube::LayerMask selected =
+            size == 2 ? rubiks::cube::layer(0)
+                      : rubiks::cube::layer(0) | rubiks::cube::layer(2);
+        std::size_t interfaces = 0;
+        for (int slice = 0; slice + 1 < size; ++slice) {
+            if (rubiks::cube::in_layers(selected, slice) !=
+                rubiks::cube::in_layers(selected, slice + 1)) {
+                ++interfaces;
+            }
+        }
+        const std::size_t face_area =
+            static_cast<std::size_t>(size) * static_cast<std::size_t>(size);
+        for (const Axis axis : rubiks::cube::axes()) {
+            const WorldScene scene = build_cube_scene(
+                state.view(), ActiveRotation{axis, selected, 35.0f});
+            INFO("size " << size << " axis " << static_cast<int>(axis));
+            REQUIRE(count_body_faces(scene) == 2 * interfaces * face_area);
+            REQUIRE(scene.faces.size() ==
+                    rubiks::cube::kFaceCount * face_area +
+                        2 * interfaces * face_area);
+        }
+    }
+}
+
 TEST_CASE("the cut is filled rather than left open")
 {
-    const CubeState state(kSize);
+    const Cube state(kSize);
     const WorldScene turning =
         build_cube_scene(state, turning_right_layer(45.0f));
 
@@ -154,12 +183,12 @@ TEST_CASE("turning a layer a quarter of the way draws the turned cube")
     // The strongest statement about the sign convention that geometry can
     // make: a layer drawn at ninety degrees has to look exactly like the same
     // cube after the domain applies that quarter turn.
-    CubeState state(kSize);
+    Cube state(kSize);
 
     const WorldScene mid_turn =
         build_cube_scene(state, turning_right_layer(90.0f));
 
-    CubeState turned(kSize);
+    Cube turned(kSize);
     turned.apply(rubiks::test::moves::R(kSize));
     const WorldScene settled = build_cube_scene(turned);
 
@@ -168,12 +197,12 @@ TEST_CASE("turning a layer a quarter of the way draws the turned cube")
 
 TEST_CASE("turning backwards draws the inverse move")
 {
-    CubeState state(kSize);
+    Cube state(kSize);
 
     const WorldScene mid_turn =
         build_cube_scene(state, turning_right_layer(-90.0f));
 
-    CubeState turned(kSize);
+    Cube turned(kSize);
     turned.apply(inverse(rubiks::test::moves::R(kSize)));
 
     REQUIRE(sticker_keys(mid_turn) == sticker_keys(build_cube_scene(turned)));
@@ -181,7 +210,7 @@ TEST_CASE("turning backwards draws the inverse move")
 
 TEST_CASE("only the selected layer moves")
 {
-    const CubeState state(kSize);
+    const Cube state(kSize);
 
     const WorldScene resting = build_cube_scene(state);
     const WorldScene turning =

@@ -9,7 +9,7 @@
 
 #include "GraphicsSupport.hpp"
 #include "app/Application.hpp"
-#include "cube/Cubie.hpp"
+#include "cube/Face.hpp"
 
 namespace rubiks::test {
 

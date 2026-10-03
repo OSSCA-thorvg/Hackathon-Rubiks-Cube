@@ -12,7 +12,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 #include "cube/Surface.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/Palette.hpp"
@@ -248,7 +248,7 @@ TEST_CASE("three slots along the ring is where the domain sends the sticker")
 
 TEST_CASE("a resting diagram draws every sticker and every ring")
 {
-    const rubiks::cube::CubeState state(kSize);
+    const rubiks::cube::Cube state(kSize);
     const auto scene = build_rings_scene(state, kRect, std::nullopt);
 
     REQUIRE(scene.faces.size() == 54);
@@ -267,7 +267,7 @@ TEST_CASE("a resting diagram draws every sticker and every ring")
 
 TEST_CASE("a turn drawn at nothing and at a quarter matches the cube itself")
 {
-    rubiks::cube::CubeState state(kSize);
+    rubiks::cube::Cube state(kSize);
     state.apply(rubiks::cube::CubeMove{Axis::Y, rubiks::cube::layer(1), 1});
 
     for (const Axis axis : rubiks::cube::axes()) {
@@ -289,7 +289,7 @@ TEST_CASE("a turn drawn at nothing and at a quarter matches the cube itself")
 
             // And a whole quarter turn is the cube after that move, drawn at
             // rest: every sticker on the very slot the domain gives it.
-            rubiks::cube::CubeState turned = state;
+            rubiks::cube::Cube turned = state;
             turned.apply(rubiks::cube::CubeMove{axis, mask, 1});
 
             const auto landed =
@@ -320,7 +320,7 @@ TEST_CASE("a turn drawn at nothing and at a quarter matches the cube itself")
 
 TEST_CASE("a band part way through a turn is on the ring it is riding")
 {
-    const rubiks::cube::CubeState state(kSize);
+    const rubiks::cube::Cube state(kSize);
 
     for (const Axis axis : rubiks::cube::axes()) {
         for (int layer = 0; layer < kSize; ++layer) {
@@ -351,7 +351,7 @@ TEST_CASE("a band part way through a turn is on the ring it is riding")
 
 TEST_CASE("the rings a turn runs along are drawn heavier than the rest")
 {
-    const rubiks::cube::CubeState state(kSize);
+    const rubiks::cube::Cube state(kSize);
     const auto scene =
         build_rings_scene(state, kRect,
                           ActiveRotation{Axis::Z, rubiks::cube::layer(2), 45.0f,
@@ -369,7 +369,7 @@ TEST_CASE("the rings a turn runs along are drawn heavier than the rest")
 
 TEST_CASE("the diagram stays inside the rectangle it is given")
 {
-    const rubiks::cube::CubeState state(kSize);
+    const rubiks::cube::Cube state(kSize);
 
     for (const Rect rect : {Rect{0.0f, 0.0f, 600.0f, 600.0f},
                             Rect{40.0f, 90.0f, 500.0f, 320.0f},
@@ -463,7 +463,7 @@ TEST_CASE("the slot spacing is worked out from the layout, at every size")
 
         // And the stickers drawn at that spacing keep off one another: the
         // closest pair of the 6N^2 is further apart than a sticker is wide.
-        const rubiks::cube::CubeState cube(size);
+        const rubiks::cube::Cube cube(size);
         const auto scene = build_rings_scene(cube, kRect, std::nullopt);
 
         std::vector<Vec2> middles;

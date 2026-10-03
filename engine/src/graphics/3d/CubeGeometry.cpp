@@ -5,6 +5,7 @@
 #include <cstddef>
 
 #include "graphics/Palette.hpp"
+#include "cube/Surface.hpp"
 #include "math/Angle.hpp"
 
 namespace rubiks::graphics {
@@ -45,57 +46,6 @@ constexpr float kH = 1.0f;
             Vec3{kH, kH, -kH}};
 }
 
-/**
- * The layer index a cubie must occupy for `face` to be on the outside.
- *
- * Positive faces sit in the last layer, negative faces in layer 0.
- */
-[[nodiscard]] int outer_layer(Face face, int size) noexcept
-{
-    switch (face) {
-        case Face::Right:
-        case Face::Up:
-        case Face::Front:
-            return size - 1;
-        case Face::Left:
-        case Face::Down:
-        case Face::Back:
-            break;
-    }
-    return 0;
-}
-
-/** The coordinate that decides whether `face` is exposed. */
-[[nodiscard]] int coordinate_for(Face face, int x, int y, int z) noexcept
-{
-    switch (face) {
-        case Face::Right:
-        case Face::Left:
-            return x;
-        case Face::Up:
-        case Face::Down:
-            return y;
-        case Face::Front:
-        case Face::Back:
-            break;
-    }
-    return z;
-}
-
-/** The coordinate of a cubie along a move's axis. */
-[[nodiscard]] int coordinate_on(Axis axis, int x, int y, int z) noexcept
-{
-    switch (axis) {
-        case Axis::X:
-            return x;
-        case Axis::Y:
-            return y;
-        case Axis::Z:
-            break;
-    }
-    return z;
-}
-
 /** The two faces pointing along an axis: positive direction first. */
 [[nodiscard]] std::array<Face, 2> faces_along(Axis axis) noexcept
 {
@@ -108,6 +58,21 @@ constexpr float kH = 1.0f;
             break;
     }
     return {Face::Front, Face::Back};
+}
+
+/** The cubie at one cell of a layer's cut sheet. */
+[[nodiscard]] cube::CubiePosition cap_position(
+    Axis axis, int slice, int across, int down) noexcept
+{
+    switch (axis) {
+        case Axis::X:
+            return cube::CubiePosition{slice, across, down};
+        case Axis::Y:
+            return cube::CubiePosition{across, slice, down};
+        case Axis::Z:
+            return cube::CubiePosition{across, down, slice};
+    }
+    return cube::CubiePosition{};
 }
 
 /**
@@ -196,7 +161,7 @@ math::Quaternion layer_rotation(Axis axis, float degrees) noexcept
                                             math::to_radians(-degrees));
 }
 
-WorldScene build_cube_scene(const cube::CubeState& state, Palette palette)
+WorldScene build_cube_scene(cube::CubeView state, Palette palette)
 {
     const int size = state.size();
     const float half_extent = sticker_half_extent(size);
@@ -207,29 +172,17 @@ WorldScene build_cube_scene(const cube::CubeState& state, Palette palette)
     // At rest the whole cube is one box, and one box is one shadow.
     scene.casters.push_back(slab(Axis::X, -kCubeHalfExtent, kCubeHalfExtent));
 
-    for (int x = 0; x < size; ++x) {
-        for (int y = 0; y < size; ++y) {
-            for (int z = 0; z < size; ++z) {
-                const Vec3 center{cubie_center(x, size), cubie_center(y, size),
-                                  cubie_center(z, size)};
-                const auto& cubie = state.at(x, y, z);
-
-                for (std::size_t i = 0; i < cube::kFaceCount; ++i) {
-                    const auto face = static_cast<Face>(i);
-                    if (coordinate_for(face, x, y, z) !=
-                        outer_layer(face, size)) {
-                        continue;
-                    }
-                    append_sticker(scene, center, half_extent, face,
-                                   to_lit_color(cubie.sticker(face), palette));
-                }
-            }
-        }
+    for (const cube::SurfaceSticker sticker : cube::surface_cells(size)) {
+        const Vec3 center{cubie_center(sticker.x, size),
+                          cubie_center(sticker.y, size),
+                          cubie_center(sticker.z, size)};
+        append_sticker(scene, center, half_extent, sticker.face,
+                       to_lit_color(state.sticker(sticker), palette));
     }
     return scene;
 }
 
-WorldScene build_cube_scene(const cube::CubeState& state,
+WorldScene build_cube_scene(cube::CubeView state,
                             const std::optional<ActiveRotation>& active,
                             Palette palette)
 {
@@ -237,16 +190,17 @@ WorldScene build_cube_scene(const cube::CubeState& state,
 
     const int size = state.size();
     const float half_extent = sticker_half_extent(size);
-    const auto turn = layer_rotation(active->axis, active->angle_degrees);
-    const auto body_faces = faces_along(active->axis);
+    const math::Quaternion turn =
+        layer_rotation(active->axis, active->angle_degrees);
+    const std::array<Face, 2> body_faces = faces_along(active->axis);
 
     WorldScene scene;
-    // The stickers, plus at most two cut sheets of N x N body faces.
+    // Reserve for surface stickers and the two sheets of a single interface.
     scene.faces.reserve(static_cast<std::size_t>(8 * size * size));
 
-    // Emits one quad, turned with its layer when that layer is the moving one.
+    /** Appends one quad, carrying it with its layer when that layer moves. */
     const auto emit = [&](const Vec3& center, Face face, const Color& color,
-                          bool turning) {
+                          bool turning) -> void {
         append_sticker(scene, center, half_extent, face, color);
         if (!turning) return;
 
@@ -255,42 +209,38 @@ WorldScene build_cube_scene(const cube::CubeState& state,
         }
     };
 
-    for (int x = 0; x < size; ++x) {
-        for (int y = 0; y < size; ++y) {
-            for (int z = 0; z < size; ++z) {
-                const Vec3 center{cubie_center(x, size), cubie_center(y, size),
-                                  cubie_center(z, size)};
-                const auto& cubie = state.at(x, y, z);
+    for (const cube::SurfaceSticker sticker : cube::surface_cells(size)) {
+        const Vec3 center{cubie_center(sticker.x, size),
+                          cubie_center(sticker.y, size),
+                          cubie_center(sticker.z, size)};
+        const bool turning =
+            in_layers(active->layers,
+                      cube::coordinate_on(active->axis, sticker));
+        emit(center, sticker.face,
+             to_lit_color(state.sticker(sticker), palette), turning);
+    }
 
-                const int slice = coordinate_on(active->axis, x, y, z);
-                const bool turning = in_layers(active->layers, slice);
+    // Only an interface between moving and still layers exposes a cut sheet.
+    // Both sides of each interface are body geometry, independent of colours.
+    for (int slice = 0; slice + 1 < size; ++slice) {
+        const bool lower_turning = in_layers(active->layers, slice);
+        const bool upper_turning = in_layers(active->layers, slice + 1);
+        if (lower_turning == upper_turning) continue;
 
-                for (std::size_t i = 0; i < cube::kFaceCount; ++i) {
-                    const auto face = static_cast<Face>(i);
-                    if (coordinate_for(face, x, y, z) !=
-                        outer_layer(face, size)) {
-                        continue;
-                    }
-                    emit(center, face, to_lit_color(cubie.sticker(face), palette),
-                         turning);
-                }
-
-                // A cut surface appears wherever a turning layer meets a still
-                // one; the cubies on both sides of that gap show their body.
-                // Beyond the outermost layer there is no neighbour and no cut,
-                // which is why those cases read as "same membership".
-                const bool after =
-                    slice + 1 < size ? in_layers(active->layers, slice + 1)
-                                     : turning;
-                const bool before =
-                    slice > 0 ? in_layers(active->layers, slice - 1) : turning;
-
-                if (after != turning) {
-                    emit(center, body_faces[0], kBodyColor, turning);
-                }
-                if (before != turning) {
-                    emit(center, body_faces[1], kBodyColor, turning);
-                }
+        for (int down = 0; down < size; ++down) {
+            for (int across = 0; across < size; ++across) {
+                const cube::CubiePosition lower =
+                    cap_position(active->axis, slice, across, down);
+                const cube::CubiePosition upper =
+                    cap_position(active->axis, slice + 1, across, down);
+                emit(Vec3{cubie_center(lower.x, size),
+                          cubie_center(lower.y, size),
+                          cubie_center(lower.z, size)},
+                     body_faces[0], kBodyColor, lower_turning);
+                emit(Vec3{cubie_center(upper.x, size),
+                          cubie_center(upper.y, size),
+                          cubie_center(upper.z, size)},
+                     body_faces[1], kBodyColor, upper_turning);
             }
         }
     }

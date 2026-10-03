@@ -1,12 +1,14 @@
 #pragma once
 
+#include <algorithm>
+#include <array>
 #include <cassert>
 #include <utility>
 #include <vector>
 
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
-#include "cube/Cubie.hpp"
+#include "cube/Cube.hpp"
+#include "cube/Face.hpp"
 #include "cube/Surface.hpp"
 
 /**
@@ -20,6 +22,110 @@
  * is a conversion rather than a thought.
  */
 namespace rubiks::cube::solver {
+
+/** One rigid orientation: where each face lands and the turns producing it. */
+struct FrameOrientation {
+    std::array<Face, kFaceCount> destinations;
+    std::vector<Axis> turns;
+};
+
+/** Enumerates the 24 proper orientations once using the domain's face turns. */
+[[nodiscard]] inline const std::vector<FrameOrientation>& frame_orientations()
+{
+    static const std::vector<FrameOrientation> orientations =
+        []() -> std::vector<FrameOrientation> {
+            std::vector<FrameOrientation> made;
+            made.reserve(24);
+            made.push_back(FrameOrientation{faces(), {}});
+            for (std::size_t head = 0; head < made.size(); ++head) {
+                for (const Axis axis : axes()) {
+                    FrameOrientation next = made[head];
+                    for (Face& face : next.destinations) {
+                        face = turned_face(axis, face);
+                    }
+                    const bool already = std::any_of(
+                        made.begin(), made.end(),
+                        [&next](const FrameOrientation& other) -> bool {
+                            return other.destinations == next.destinations;
+                        });
+                    if (already) continue;
+                    next.turns.push_back(axis);
+                    made.push_back(std::move(next));
+                }
+            }
+            assert(made.size() == 24);
+            return made;
+        }();
+    return orientations;
+}
+
+/** A solver's canonical copy and the inverse mapping back to the input frame. */
+class SolverFrame {
+public:
+    /** Normalizes an odd cube's six fixed centres without revalidating it. */
+    explicit SolverFrame(Cube state) : cube_(std::move(state))
+    {
+        if (cube_.size() % 2 == 0) return;
+
+        const int middle = cube_.size() / 2;
+        for (const FrameOrientation& orientation : frame_orientations()) {
+            bool canonical = true;
+            for (const Face face : faces()) {
+                const Face destination = orientation.destinations[face_index(face)];
+                if (cube_.face(face).at(middle, middle) != solved_color(destination)) {
+                    canonical = false;
+                    break;
+                }
+            }
+            if (!canonical) continue;
+
+            destinations_ = orientation.destinations;
+            const LayerMask all = layers_through(0, cube_.size() - 1);
+            for (const Axis axis : orientation.turns) {
+                cube_.apply(CubeMove{axis, all, 1});
+            }
+            return;
+        }
+        assert(false && "a reachable odd cube has a rigid fixed-centre frame");
+    }
+
+    /** Reads the canonical copy used by algorithms with fixed colour targets. */
+    [[nodiscard]] const Cube& cube() const noexcept { return cube_; }
+
+    /** Maps a solution back to the caller's axis, layers, and turn direction. */
+    [[nodiscard]] std::vector<CubeMove> restore(std::vector<CubeMove> moves) const
+    {
+        constexpr std::array<Face, kAxisCount> positive{
+            Face::Right, Face::Up, Face::Front};
+        for (CubeMove& move : moves) {
+            const Face destination = positive[static_cast<std::size_t>(move.axis)];
+            Face source = destination;
+            for (const Face face : faces()) {
+                if (destinations_[face_index(face)] == destination) {
+                    source = face;
+                    break;
+                }
+            }
+
+            if (outer_layer(source, cube_.size()) == 0) {
+                LayerMask reversed = 0;
+                for (int index = 0; index < cube_.size(); ++index) {
+                    if ((move.layers & layer(index)) != 0) {
+                        reversed |= layer(cube_.size() - 1 - index);
+                    }
+                }
+                move.layers = reversed;
+                move.quarter_turns = -move.quarter_turns;
+            }
+            move.axis = axis_of(source);
+        }
+        return moves;
+    }
+
+private:
+    Cube cube_;
+    std::array<Face, kFaceCount> destinations_ = faces();
+};
 
 /**
  * One layer measured inwards from one face, turned as seen from it.
@@ -202,7 +308,7 @@ inline void set_axis(CubiePosition& position, Axis axis, int value) noexcept
     return showing;
 }
 
-[[nodiscard]] inline FaceColor sticker_at(const CubeState& cube,
+[[nodiscard]] inline FaceColor sticker_at(const Cube& cube,
                                           const CubiePosition& position,
                                           Face face) noexcept
 {
@@ -210,13 +316,10 @@ inline void set_axis(CubiePosition& position, Axis axis, int value) noexcept
 }
 
 /**
- * The colour a face wears on a solved cube.
+ * The target colour of a face in the solver's canonical frame.
  *
- * The domain says what solved means -- `is_solved()` holds every sticker
- * against this same function -- so this is the cube's own answer rather than a
- * guess about the order an enum happens to be written in. It is also the only
- * answer that exists at every size: a two by two has no centres, and the
- * centres of a bigger one are not yet one colour while it is being reduced.
+ * Cube::is_solved() also accepts other rigid orientations. Algorithms use
+ * this fixed target after SolverFrame has normalized an odd cube's centres.
  */
 [[nodiscard]] inline FaceColor home_colour(Face face) noexcept
 {
@@ -232,9 +335,9 @@ inline void set_axis(CubiePosition& position, Axis axis, int value) noexcept
  */
 class Work {
 public:
-    explicit Work(CubeState cube) : cube_(std::move(cube)) {}
+    explicit Work(Cube cube) : cube_(std::move(cube)) {}
 
-    [[nodiscard]] const CubeState& cube() const noexcept { return cube_; }
+    [[nodiscard]] const Cube& cube() const noexcept { return cube_; }
 
     [[nodiscard]] int size() const noexcept { return cube_.size(); }
 
@@ -255,7 +358,7 @@ public:
     void turn(Face face, int turns) { apply(face_turn(face, turns)); }
 
 private:
-    CubeState cube_;
+    Cube cube_;
     std::vector<CubeMove> moves_;
 };
 

@@ -1,21 +1,25 @@
 #pragma once
 
+#include <array>
+#include <cassert>
+#include <cstddef>
+#include <iterator>
 #include <vector>
 
 #include "cube/CubeMove.hpp"
-#include "cube/Cubie.hpp"
+#include "cube/Face.hpp"
 
 namespace rubiks::cube {
 
 /**
  * The cube's surface as named stickers, and what a quarter turn does to them.
  *
- * `CubeState` answers "what color is at this position", which is the question
+ * `Cube` answers "what color is at this position", which is the question
  * rendering a still frame asks. Drawing a turn in progress asks a different
  * one: where does *this* sticker go. Color cannot answer it — six colors over
  * fifty-four stickers, so an error that permutes stickers within one face
  * reads as correct. So a sticker gets an identity here, and the permutation
- * that carries it is the same one `CubeState` already turns cubies with.
+ * that carries it is the same one `Cube` already turns cubies with.
  *
  * Screen-free on purpose: this is a property of the cube, not of any view of
  * it, and both the unfolded net and the ring diagram lay coordinates over the
@@ -35,7 +39,140 @@ struct SurfaceSticker {
     int y;
     int z;
     Face face;
+
+    /** Returns the piece coordinate shared by this sticker's other exposed faces. */
+    [[nodiscard]] constexpr CubiePosition position() const noexcept { return CubiePosition{x, y, z}; }
 };
+
+/** One native face coordinate, counted down rows and right across columns. */
+struct FaceCell {
+    Face face;
+    int row;
+    int col;
+};
+
+/** Maps a native face cell to its three-dimensional sticker identity. */
+[[nodiscard]] SurfaceSticker face_sticker(Face face, int row, int col, int size) noexcept;
+
+/** Maps an exposed sticker to a native face cell; requires a valid surface sticker. */
+[[nodiscard]] FaceCell face_cell(const SurfaceSticker& sticker, int size) noexcept;
+
+/** Whether a named sticker is exposed and inside the given cube. */
+[[nodiscard]] bool is_surface_sticker(const SurfaceSticker& sticker, int size) noexcept;
+
+/** The index of a sticker in six outward-facing row-major native faces. */
+[[nodiscard]] std::size_t surface_index(const SurfaceSticker& sticker, int size) noexcept;
+
+/** The index in the historical painting/share order returned by surface_stickers(). */
+[[nodiscard]] std::size_t painting_index(const SurfaceSticker& sticker, int size) noexcept;
+
+/** An allocation-free traversal of the native surface, face by face. */
+class SurfaceCells {
+public:
+    /** A forward iterator over sticker identities rather than stored colours. */
+    class Iterator {
+    public:
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = SurfaceSticker;
+        using difference_type = std::ptrdiff_t;
+        using pointer = void;
+        using reference = SurfaceSticker;
+        /** Constructs an empty default iterator. */
+        Iterator() noexcept : Iterator(0, 0) {}
+        /** Starts at a native index for this size. */
+        Iterator(int size, std::size_t index) noexcept : size_(size), index_(index) {}
+        /** Returns the current exposed sticker. */
+        [[nodiscard]] SurfaceSticker operator*() const noexcept;
+        /** Advances to the next native cell. */
+        Iterator& operator++() noexcept { ++index_; return *this; }
+        /** Advances while returning the preceding iterator. */
+        Iterator operator++(int) noexcept { const Iterator previous = *this; ++*this; return previous; }
+        /** Whether two iterators denote the same native cell. */
+        [[nodiscard]] bool operator==(const Iterator& other) const noexcept
+        { return size_ == other.size_ && index_ == other.index_; }
+        /** Whether two iterators denote different native cells. */
+        [[nodiscard]] bool operator!=(const Iterator& other) const noexcept { return !(*this == other); }
+    private:
+        int size_;
+        std::size_t index_;
+    };
+    /** Traverses a size's surface, or an empty surface for nonpositive sizes. */
+    explicit SurfaceCells(int size) noexcept : size_(size) {}
+    /** Returns the first exposed sticker. */
+    [[nodiscard]] Iterator begin() const noexcept { return Iterator{size_, 0}; }
+    /** Returns the end sentinel for this surface. */
+    [[nodiscard]] Iterator end() const noexcept { return Iterator{size_, size()}; }
+    /** Returns the number of exposed stickers. */
+    [[nodiscard]] std::size_t size() const noexcept
+    { return size_ > 0 ? kFaceCount * static_cast<std::size_t>(size_) * static_cast<std::size_t>(size_) : 0; }
+private:
+    int size_;
+};
+
+/** Returns the native surface traversal without constructing a coordinate array. */
+[[nodiscard]] inline SurfaceCells surface_cells(int size) noexcept { return SurfaceCells{size}; }
+
+/** An allocation-free traversal of just the surface touched by selected layers. */
+class LayerCells {
+public:
+    /** Walks selected face strips and any selected outer face caps. */
+    class Iterator {
+    public:
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = SurfaceSticker;
+        using difference_type = std::ptrdiff_t;
+        using pointer = void;
+        using reference = SurfaceSticker;
+        /** Constructs an empty default iterator. */
+        Iterator() noexcept : Iterator(Axis::X, 0, 0, true) {}
+        /** Starts a selected-layer traversal, or constructs its end sentinel. */
+        Iterator(Axis axis, LayerMask layers, int size, bool end) noexcept;
+        /** Returns the current selected surface sticker. */
+        [[nodiscard]] SurfaceSticker operator*() const noexcept;
+        /** Advances to the next selected surface sticker. */
+        Iterator& operator++() noexcept;
+        /** Advances while returning the preceding iterator. */
+        Iterator operator++(int) noexcept { const Iterator previous = *this; ++*this; return previous; }
+        /** Whether two selected-layer iterators denote the same cell. */
+        [[nodiscard]] bool operator==(const Iterator& other) const noexcept;
+        /** Whether two selected-layer iterators denote different cells. */
+        [[nodiscard]] bool operator!=(const Iterator& other) const noexcept { return !(*this == other); }
+    private:
+        /** Skips unselected strips without walking their individual cells. */
+        void seek() noexcept;
+        /** Whether the row coordinate on the current face follows this axis. */
+        [[nodiscard]] bool row_along_axis() const noexcept;
+        Axis axis_;
+        LayerMask layers_;
+        int size_;
+        std::size_t face_;
+        int line_ = 0;
+        int offset_ = 0;
+    };
+    /** Selects layers of a cube; out-of-range mask bits do not select a surface. */
+    LayerCells(Axis axis, LayerMask layers, int size) noexcept : axis_(axis), layers_(layers), size_(size) {}
+    /** Returns the first selected sticker. */
+    [[nodiscard]] Iterator begin() const noexcept { return Iterator{axis_, layers_, size_, false}; }
+    /** Returns the end sentinel. */
+    [[nodiscard]] Iterator end() const noexcept { return Iterator{axis_, layers_, size_, true}; }
+private:
+    Axis axis_;
+    LayerMask layers_;
+    int size_;
+};
+
+/** Returns a lazy traversal of selected surface layers using native face coordinates. */
+[[nodiscard]] inline LayerCells layer_cells(Axis axis, LayerMask layers, int size) noexcept
+{ return LayerCells{axis, layers, size}; }
+
+/** A quarter turn's source and destination in the native colour buffer. */
+struct SurfaceTurn {
+    std::size_t from;
+    std::size_t to;
+};
+
+/** Derives and caches a layer permutation once per thread and cube size. */
+[[nodiscard]] const std::vector<SurfaceTurn>& surface_turns(Axis axis, int layer, int size);
 
 [[nodiscard]] constexpr bool operator==(const CubiePosition& a,
                                         const CubiePosition& b) noexcept
@@ -136,5 +273,84 @@ struct SurfaceSticker {
  */
 [[nodiscard]] std::vector<SurfaceSticker> ring_slots(Axis axis, int layer,
                                                      int size);
+
+namespace detail {
+
+/** Native face directions, shared by forward and inverse coordinate conversion. */
+struct FaceBasis {
+    Axis normal;
+    bool positive;
+    Axis row;
+    bool row_reversed;
+    Axis col;
+    bool col_reversed;
+};
+
+/** One orientation table: normal, downward row direction and rightward column direction. */
+inline constexpr std::array<FaceBasis, kFaceCount> kFaceBases{{
+    {Axis::X, true,  Axis::Y, true,  Axis::Z, true},
+    {Axis::X, false, Axis::Y, true,  Axis::Z, false},
+    {Axis::Y, true,  Axis::Z, false, Axis::X, false},
+    {Axis::Y, false, Axis::Z, true,  Axis::X, false},
+    {Axis::Z, true,  Axis::Y, true,  Axis::X, false},
+    {Axis::Z, false, Axis::Y, true,  Axis::X, true},
+}};
+
+}  // namespace detail
+
+inline Axis axis_of(Face face) noexcept
+{ return detail::kFaceBases[face_index(face)].normal; }
+
+inline int outer_layer(Face face, int size) noexcept
+{ return detail::kFaceBases[face_index(face)].positive ? size - 1 : 0; }
+
+inline int coordinate_on(Axis axis, const CubiePosition& position) noexcept
+{
+    switch (axis) {
+        case Axis::X: return position.x;
+        case Axis::Y: return position.y;
+        case Axis::Z: return position.z;
+    }
+    return position.z;
+}
+
+inline int coordinate_on(Axis axis, const SurfaceSticker& sticker) noexcept
+{ return coordinate_on(axis, sticker.position()); }
+
+inline SurfaceSticker face_sticker(Face face, int row, int col, int size) noexcept
+{
+    const detail::FaceBasis& basis = detail::kFaceBases[face_index(face)];
+    const int last = size - 1;
+    std::array<int, kAxisCount> position{};
+    position[axis_index(basis.normal)] = basis.positive ? last : 0;
+    position[axis_index(basis.row)] = basis.row_reversed ? last - row : row;
+    position[axis_index(basis.col)] = basis.col_reversed ? last - col : col;
+    return SurfaceSticker{position[0], position[1], position[2], face};
+}
+
+inline bool is_surface_sticker(const SurfaceSticker& sticker, int size) noexcept
+{
+    if (size < 1 || !face_from(static_cast<int>(sticker.face))) return false;
+    if (sticker.x < 0 || sticker.x >= size || sticker.y < 0 || sticker.y >= size ||
+        sticker.z < 0 || sticker.z >= size) return false;
+    return coordinate_on(axis_of(sticker.face), sticker) == outer_layer(sticker.face, size);
+}
+
+inline FaceCell face_cell(const SurfaceSticker& sticker, int size) noexcept
+{
+    assert(is_surface_sticker(sticker, size));
+    const detail::FaceBasis& basis = detail::kFaceBases[face_index(sticker.face)];
+    const int row = coordinate_on(basis.row, sticker);
+    const int col = coordinate_on(basis.col, sticker);
+    return FaceCell{sticker.face, basis.row_reversed ? size - 1 - row : row,
+                                 basis.col_reversed ? size - 1 - col : col};
+}
+
+inline std::size_t surface_index(const SurfaceSticker& sticker, int size) noexcept
+{
+    const FaceCell cell = face_cell(sticker, size);
+    return face_index(cell.face) * static_cast<std::size_t>(size * size) +
+           static_cast<std::size_t>(cell.row * size + cell.col);
+}
 
 }  // namespace rubiks::cube

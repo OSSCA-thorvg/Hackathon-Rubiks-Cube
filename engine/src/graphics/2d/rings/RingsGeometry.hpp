@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 #include "cube/Surface.hpp"
 #include "graphics/ActiveRotation.hpp"
 #include "graphics/Palette.hpp"
@@ -171,7 +171,7 @@ struct RingsGuide {
  * screen, and here none of them is.
  */
 [[nodiscard]] RenderScene build_rings_scene(
-    const cube::CubeState& state, const Rect& rect,
+    cube::CubeView state, const Rect& rect,
     const std::optional<ActiveRotation>& active,
     const std::vector<RingsGuide>& guides = {},
     Palette palette = Palette::Classic);

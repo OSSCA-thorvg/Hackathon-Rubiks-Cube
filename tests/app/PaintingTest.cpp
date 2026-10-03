@@ -8,7 +8,7 @@
 
 #include "EngineLifecycle.hpp"
 #include "cube/Assembly.hpp"
-#include "cube/Cubie.hpp"
+#include "cube/Face.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/2d/net/NetGeometry.hpp"
 #include "graphics/Palette.hpp"
@@ -199,6 +199,28 @@ TEST_CASE("a colouring no turning reaches is refused")
     REQUIRE(rubiks::app::set_brush(rubiks::cube::FaceColor::Green));
     REQUIRE(press(aim.x, aim.y));
     CHECK(rubiks::app::apply_painting());
+    CHECK(rubiks::app::is_solved());
+}
+
+TEST_CASE("repairing a refused draft keeps its diagnostic until Apply")
+{
+    const EngineLifecycle engine(kCanvas, kCanvas);
+    REQUIRE(rubiks::app::begin_painting());
+    REQUIRE(rubiks::app::set_brush(rubiks::cube::FaceColor::Red));
+    const Aim aim = front_cell(0, 0, 3);
+    REQUIRE(press(aim.x, aim.y));
+    REQUIRE_FALSE(rubiks::app::apply_painting());
+    REQUIRE(rubiks::app::painting_fault() == rubiks::cube::PaintFault::ColourCount);
+
+    REQUIRE(rubiks::app::set_brush(rubiks::cube::FaceColor::Green));
+    REQUIRE(press(aim.x, aim.y));
+    CHECK(carried(rubiks::cube::FaceColor::Red) == 9);
+    CHECK(carried(rubiks::cube::FaceColor::Green) == 9);
+    CHECK(rubiks::app::painting_fault() == rubiks::cube::PaintFault::ColourCount);
+
+    REQUIRE(rubiks::app::apply_painting());
+    CHECK_FALSE(rubiks::app::is_painting());
+    CHECK(rubiks::app::painting_fault() == rubiks::cube::PaintFault::None);
     CHECK(rubiks::app::is_solved());
 }
 

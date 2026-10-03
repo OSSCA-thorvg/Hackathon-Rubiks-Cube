@@ -6,7 +6,7 @@
 
 #include "CubeSupport.hpp"
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 #include "cube/solver/Projection.hpp"
 
 // Reading a big cube as the three by three it has been reduced to, and the two
@@ -16,7 +16,7 @@ namespace {
 
 using rubiks::cube::Axis;
 using rubiks::cube::CubeMove;
-using rubiks::cube::CubeState;
+using rubiks::cube::Cube;
 using rubiks::cube::layer;
 using rubiks::cube::solver::parities;
 using rubiks::cube::solver::Projection;
@@ -62,9 +62,9 @@ struct Choice {
     return run;
 }
 
-[[nodiscard]] CubeState turned_by(const std::vector<Choice>& run, int size)
+[[nodiscard]] Cube turned_by(const std::vector<Choice>& run, int size)
 {
-    CubeState cube(size);
+    Cube cube(size);
     for (const auto& choice : run) {
         cube.apply(outer(choice.axis, choice.far_end, choice.turns, size));
     }
@@ -83,10 +83,10 @@ TEST_CASE("a solved cube is reduced and projects to itself")
 {
     for (const int size : {2, 3, 4, 5, 6, 7, 8, 9}) {
         INFO("size " << size);
-        REQUIRE(reduced(CubeState(size)));
+        REQUIRE(reduced(Cube(size)));
 
         if (size < 3) continue;
-        const auto projection = projected(CubeState(size));
+        const auto projection = projected(Cube(size));
         for (int i = 0; i < 8; ++i) CHECK(projection.corners[i] == i);
         for (int i = 0; i < 12; ++i) {
             CHECK(projection.edges[i] == i);
@@ -104,7 +104,7 @@ TEST_CASE("outer faces alone leave a cube reduced and reachable")
     // static cube trustworthy.
     for (const int size : {3, 4, 5, 6, 7, 8, 9}) {
         for (std::uint32_t seed = 1; seed <= 20; ++seed) {
-            CubeState cube(size);
+            Cube cube(size);
             for (const auto& choice : outer_run(seed, 60)) {
                 cube.apply(outer(choice.axis, choice.far_end, choice.turns,
                                  size));
@@ -132,7 +132,7 @@ TEST_CASE("two sizes turned the same way project to the same three by three")
 TEST_CASE("a turn that reaches inside leaves the cube unreduced")
 {
     for (const int size : {3, 4, 5, 6, 7, 8, 9}) {
-        CubeState cube(size);
+        Cube cube(size);
         cube.apply(CubeMove{Axis::X, layer(1), 1});
         INFO("size " << size);
         CHECK_FALSE(reduced(cube));
@@ -150,7 +150,7 @@ TEST_CASE("a scramble that reaches inside is not a three by three either")
 
 TEST_CASE("the two parities are read off a projection")
 {
-    const Projection solved = projected(CubeState(4));
+    const Projection solved = projected(Cube(4));
 
     SECTION("a pair turned round")
     {

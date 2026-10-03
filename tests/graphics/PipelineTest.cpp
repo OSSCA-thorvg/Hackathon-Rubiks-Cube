@@ -7,7 +7,7 @@
 
 #include "CubeSupport.hpp"
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 #include "graphics/3d/AxisGizmo.hpp"
 #include "graphics/3d/Camera.hpp"
 #include "graphics/3d/CubeGeometry.hpp"
@@ -25,7 +25,7 @@ namespace {
 
 using Catch::Approx;
 using namespace rubiks::graphics;
-using rubiks::cube::CubeState;
+using rubiks::cube::Cube;
 using rubiks::cube::Face;
 using rubiks::cube::FaceColor;
 using rubiks::math::Vec2;
@@ -86,7 +86,7 @@ std::size_t count_color(const RenderScene& scene, const Color& color)
 }
 
 /** Renders a cube state through the whole pipeline into the cube region. */
-RenderScene render_cube(const CubeState& state)
+RenderScene render_cube(const Cube& state)
 {
     const auto placement = layout(kCanvas, kCanvas);
     const Camera camera = camera_into(home_orbit(), placement.cube);
@@ -110,7 +110,7 @@ Vec2 cube_sample(float fx, float fy)
 
 TEST_CASE("build_cube_scene emits only surface stickers, wound outward")
 {
-    const WorldScene scene = build_cube_scene(CubeState(3));
+    const WorldScene scene = build_cube_scene(Cube(3));
 
     // Six faces of a 3x3 sheet. Interior and side faces are deliberately
     // absent, which is what makes every seam show the background.
@@ -353,7 +353,7 @@ TEST_CASE("the layout splits the canvas into a square cube region and a net")
 
 TEST_CASE("a solved cube renders 27 stickers, nine of each visible color")
 {
-    const RenderScene scene = render_cube(CubeState(3));
+    const RenderScene scene = render_cube(Cube(3));
 
     // Three faces of a 3x3 sheet; the other 27 stickers face away.
     REQUIRE(scene.faces.size() == 27);
@@ -367,7 +367,7 @@ TEST_CASE("a solved cube renders 27 stickers, nine of each visible color")
 
 TEST_CASE("the contract samples land on the center sticker of each face")
 {
-    const RenderScene scene = render_cube(CubeState(3));
+    const RenderScene scene = render_cube(Cube(3));
 
     // Fractions of the square cube region, from the contract in
     // docs/tasks/04-rubiks-cube-domain.md.
@@ -385,7 +385,7 @@ TEST_CASE("the contract samples land on the center sticker of each face")
 
 TEST_CASE("the seam samples fall between stickers")
 {
-    const RenderScene scene = render_cube(CubeState(3));
+    const RenderScene scene = render_cube(Cube(3));
 
     // Nothing is drawn in a seam, so these points show the background. This
     // only holds because cubies have no body faces.
@@ -396,7 +396,7 @@ TEST_CASE("the seam samples fall between stickers")
 
 TEST_CASE("the cube silhouette stays inside its region")
 {
-    const RenderScene scene = render_cube(CubeState(3));
+    const RenderScene scene = render_cube(Cube(3));
     const auto region = layout(kCanvas, kCanvas).cube;
 
     for (const auto& face : scene.faces) {
@@ -411,7 +411,7 @@ TEST_CASE("the cube silhouette stays inside its region")
 
 TEST_CASE("a move changes the colors the pipeline puts on screen")
 {
-    CubeState state(3);
+    Cube state(3);
     state.apply(rubiks::test::moves::U(3));
 
     const RenderScene scene = render_cube(state);

@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 
 /**
  * Solving a cube, kept apart from the cube itself.
@@ -29,13 +29,13 @@ namespace rubiks::cube::solver {
  *
  * Every implementation solves every cube it says it supports. There is no
  * failure path, and that is a property of the domain rather than a promise:
- * every `CubeState` is a cube that turning could have reached, so a cube that
+ * every `Cube` is a cube that turning could have reached, so a cube that
  * cannot be solved cannot be built to hand in.
  *
  * For a long time turning was the only way to build one, and that was the
  * whole of the argument. It is no longer: `cube/Assembly.hpp` reads a painting
  * of stickers -- somebody's real cube, copied onto the net -- and builds a
- * `CubeState` from it. What it does *not* do is build one from a painting that
+ * `Cube` from it. What it does *not* do is build one from a painting that
  * no turning reaches; it hands back nothing at all instead. So the property
  * above still holds, proved a second way rather than weakened. What this
  * interface relies on was never the door, only what comes through it.
@@ -59,13 +59,15 @@ public:
      * Empty for a cube already solved, which is a fact about it rather than a
      * refusal -- the caller's "a command with nothing to do is refused" is the
      * same answer it gives a rewind with nothing to rewind.
+     * A cube's rigid orientation does not affect this contract: returned
+     * moves use the input cube's axes and layers.
      *
      * Calling this for a size `supports()` denies is a precondition violation.
      * Two questions with two answers is what keeps "no solver for this size"
      * from arriving as the same empty vector a solved cube does.
      */
     [[nodiscard]] virtual std::vector<CubeMove> solve(
-        const CubeState& state) const = 0;
+        const Cube& state) const = 0;
 };
 
 }  // namespace rubiks::cube::solver

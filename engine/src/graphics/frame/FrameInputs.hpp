@@ -4,8 +4,8 @@
 #include <optional>
 #include <vector>
 
-#include "cube/CubeState.hpp"
-#include "cube/Cubie.hpp"
+#include "cube/Cube.hpp"
+#include "cube/Face.hpp"
 #include "graphics/ActiveRotation.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/3d/Light.hpp"
@@ -35,14 +35,13 @@ namespace rubiks::graphics {
 /**
  * The cube a drawing is made of, named by how many times it has changed.
  *
- * Held by address rather than copied: at the largest size it is twenty-two
- * thousand cubies, and three of the four drawings read it on every frame. Two
+ * Held by address while the scene builders borrow its six face grids. Two
  * drawings of one revision of one cube are drawings of the same cube, so that
  * is what is compared -- which leaves whoever hands one over to move the
  * number whenever the cube moves.
  */
 struct CubeRevision {
-    const cube::CubeState* state = nullptr;
+    const cube::Cube* state = nullptr;
     std::uint64_t revision = 0;
 };
 
@@ -76,7 +75,9 @@ struct CubeDrawing {
  * mended, and the keyboard's place on it while the net has the keyboard.
  */
 struct NetPainting {
+    /** Owns six native row-major faces, matching NetDrawing's cube size. */
     std::vector<cube::FaceColor> stickers;
+    /** Identifies refused squares in the stable external painting order. */
     std::vector<int> blamed;
     std::optional<NetPosition> cursor;
 };

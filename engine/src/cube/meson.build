@@ -6,7 +6,8 @@ cube_lib = static_library(
   'rubiks-cube',
   files(
     'Assembly.cpp',
-    'CubeState.cpp',
+    'Cube.cpp',
+    'CubeDraft.cpp',
     'MoveTimeline.cpp',
     'Scramble.cpp',
     'Surface.cpp',

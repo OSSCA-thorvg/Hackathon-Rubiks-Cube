@@ -15,7 +15,7 @@
 #include "CubeSupport.hpp"
 #include "cube/Assembly.hpp"
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 #include "cube/Surface.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/2d/net/NetGeometry.hpp"
@@ -28,7 +28,7 @@ namespace {
 
 using Catch::Approx;
 using namespace rubiks::graphics;
-using rubiks::cube::CubeState;
+using rubiks::cube::Cube;
 using rubiks::cube::Face;
 using rubiks::cube::FaceColor;
 using rubiks::math::Vec2;
@@ -71,9 +71,9 @@ float cell_side()
 }
 
 /** A cube whose faces are all mixed, so a cell moving shows up as a color. */
-CubeState mixed_state()
+Cube mixed_state()
 {
-    CubeState state(kSize);
+    Cube state(kSize);
     state.apply(rubiks::test::moves::R(kSize));
     state.apply(rubiks::test::moves::U(kSize));
     state.apply(rubiks::test::moves::F(kSize));
@@ -148,8 +148,8 @@ void require_same_net(const RenderScene& actual, const RenderScene& expected)
  */
 void require_ends_match(const rubiks::cube::CubeMove& move)
 {
-    const CubeState before = mixed_state();
-    CubeState after = before;
+    const Cube before = mixed_state();
+    Cube after = before;
     after.apply(move);
 
     const float angle =
@@ -359,7 +359,7 @@ TEST_CASE("a block of the cross names its face, and an empty one names none")
 
 TEST_CASE("a solved net shows nine stickers of every color")
 {
-    const RenderScene scene = build_net_scene(CubeState(kSize), test_rect());
+    const RenderScene scene = build_net_scene(Cube(kSize), test_rect());
 
     REQUIRE(scene.faces.size() == 54);
     for (const auto color : {FaceColor::Red, FaceColor::Orange,
@@ -372,7 +372,7 @@ TEST_CASE("a solved net shows nine stickers of every color")
 TEST_CASE("net stickers are squares inside the net rectangle")
 {
     const Rect rect = test_rect();
-    const RenderScene scene = build_net_scene(CubeState(kSize), rect);
+    const RenderScene scene = build_net_scene(Cube(kSize), rect);
 
     const float cell = rect.width / static_cast<float>(kNetColumns) /
                        static_cast<float>(kSize);
@@ -396,7 +396,7 @@ TEST_CASE("net stickers are squares inside the net rectangle")
 
 TEST_CASE("a move is visible in the net")
 {
-    CubeState state(kSize);
+    Cube state(kSize);
     state.apply(rubiks::test::moves::R(kSize));
 
     const RenderScene scene = build_net_scene(state, test_rect());
@@ -422,9 +422,9 @@ TEST_CASE("a move is visible in the net")
 TEST_CASE("the net scales with its rectangle")
 {
     const RenderScene small =
-        build_net_scene(CubeState(kSize), Rect{0.0f, 0.0f, 40.0f, 30.0f});
+        build_net_scene(Cube(kSize), Rect{0.0f, 0.0f, 40.0f, 30.0f});
     const RenderScene large =
-        build_net_scene(CubeState(kSize), Rect{0.0f, 0.0f, 80.0f, 60.0f});
+        build_net_scene(Cube(kSize), Rect{0.0f, 0.0f, 80.0f, 60.0f});
 
     REQUIRE(small.faces.size() == large.faces.size());
     REQUIRE(large.faces[0].points[1].x - large.faces[0].points[0].x ==
@@ -434,7 +434,7 @@ TEST_CASE("the net scales with its rectangle")
 
 TEST_CASE("a net without a turn is drawn by the resting path")
 {
-    const CubeState state = mixed_state();
+    const Cube state = mixed_state();
     require_same_net(build_net_scene(state, test_rect(), std::nullopt),
                      build_net_scene(state, test_rect()));
 }
@@ -619,7 +619,7 @@ TEST_CASE("a turning band rides its ring one face's worth at a time")
 
     const Rect rect = test_rect();
     const float cell = cell_side();
-    const CubeState state = mixed_state();
+    const Cube state = mixed_state();
 
     // A band travels as three-cell pieces, not as twelve loose stickers: the
     // ring is read at each piece's middle, and the rest of the piece is carried
@@ -707,7 +707,7 @@ TEST_CASE("a piece on the move is drawn over the cells it passes")
     using rubiks::cube::layer;
 
     const Rect rect = test_rect();
-    const CubeState state = mixed_state();
+    const Cube state = mixed_state();
 
     // The front layer, whose band and face together are every cell the turn
     // moves: nine of the face and twelve of the band.
@@ -763,7 +763,7 @@ TEST_CASE("a piece on the move is drawn over the cells it passes")
     // The storeys are in that order: on a solved cube the face turning in
     // place is nine green, and the band around it is the four other colors.
     const RenderScene solved = build_net_scene(
-        CubeState(kSize), rect,
+        Cube(kSize), rect,
         ActiveRotation{Axis::Z, layer(kLast), 45.0f, kHeldOpen});
     REQUIRE(solved.groups.size() == 2);
     for (const auto& face : solved.groups[0].faces) {
@@ -790,7 +790,7 @@ TEST_CASE("the lift follows the opening, and never by less than a pixel a storey
     using rubiks::cube::Axis;
     using rubiks::cube::layer;
 
-    const CubeState state = mixed_state();
+    const Cube state = mixed_state();
     const auto turn = [](float opening) {
         return ActiveRotation{Axis::Z, layer(kLast), 45.0f, opening};
     };
@@ -852,7 +852,7 @@ TEST_CASE("the front ring stays inside the net rectangle")
     for (int step = 0; step <= 18; ++step) {
         const auto angle = static_cast<float>(step) * 5.0f;
         const RenderScene scene = build_net_scene(
-            CubeState(kSize), rect,
+            Cube(kSize), rect,
             ActiveRotation{Axis::Z, layer(2), angle, kHeldOpen});
 
         INFO("angle " << angle);
@@ -872,7 +872,7 @@ TEST_CASE("a turning cell keeps the color of its sticker, whole")
     using rubiks::cube::layer;
 
     const Rect rect = test_rect();
-    const CubeState state = mixed_state();
+    const Cube state = mixed_state();
 
     // Nothing dims a sticker. A ring carries a band outside the drawing where
     // the cross cuts it, and the drawing used to fade a cell out by how far it
@@ -916,7 +916,7 @@ TEST_CASE("a turn leaves the drawing it is passing over exactly where it is")
     using rubiks::cube::layer;
 
     const Rect rect = test_rect();
-    const CubeState state = mixed_state();
+    const Cube state = mixed_state();
 
     // A turn moves what it carries and nothing else. Opening a margin around
     // one was tried at some length -- pushing the cells beside it aside so a
@@ -977,7 +977,7 @@ TEST_CASE("a Z turn takes the front block and its band round together")
 
     const Rect rect = test_rect();
     const float cell = cell_side();
-    const CubeState state = mixed_state();
+    const Cube state = mixed_state();
 
     // The one turn the cross draws in place. Everything it moves goes round
     // the front block's middle at once -- the face and the band it is joined
@@ -1138,7 +1138,7 @@ TEST_CASE("a turning cell never strays far outside the drawing")
             for (int step = 0; step <= 18; ++step) {
                 const auto angle = static_cast<float>(step) * 5.0f;
                 const RenderScene scene =
-                    build_net_scene(CubeState(kSize), rect,
+                    build_net_scene(Cube(kSize), rect,
                                     ActiveRotation{axis, layer(index), angle});
 
                 INFO("axis " << static_cast<int>(axis) << " layer " << index
@@ -1199,13 +1199,13 @@ TEST_CASE("a ring runs dead straight between slots that share a face")
 TEST_CASE("a painting rings the keyboard's place round the whole cell")
 {
     const Rect rect = test_rect();
-    const auto painting = rubiks::cube::painting_of(CubeState(kSize));
+    const Cube cube(kSize);
+    const rubiks::cube::CubeView painting = cube.view();
 
-    const auto plain = build_net_painting(painting, kSize, rect,
-                                          Palette::Classic, {});
-    const auto placed =
-        build_net_painting(painting, kSize, rect, Palette::Classic, {},
-                           NetPosition{Face::Front, 1, 1});
+    const RenderScene plain =
+        build_net_painting(painting, rect, Palette::Classic, {});
+    const RenderScene placed = build_net_painting(
+        painting, rect, Palette::Classic, {}, NetPosition{Face::Front, 1, 1});
 
     // Two rings, dark under light, over the same stickers.
     REQUIRE(placed.faces.size() == plain.faces.size());
@@ -1221,4 +1221,70 @@ TEST_CASE("a painting rings the keyboard's place round the whole cell")
     REQUIRE(ring.color == cursor_color());
     REQUIRE(placed.strokes[placed.strokes.size() - 2].color ==
             cursor_edge_color());
+}
+
+/** Native drafts and saved paintings show the same oriented face colours. */
+TEST_CASE("native face views and legacy paintings draw identical nets")
+{
+    const Rect rect = test_rect();
+    for (const int size : {2, 4, 7}) {
+        const std::size_t face_area =
+            static_cast<std::size_t>(size) * static_cast<std::size_t>(size);
+        std::vector<FaceColor> colors(rubiks::cube::kFaceCount * face_area);
+        for (const Face face : rubiks::cube::faces()) {
+            for (int row = 0; row < size; ++row) {
+                for (int col = 0; col < size; ++col) {
+                    const std::size_t index =
+                        rubiks::cube::face_index(face) * face_area +
+                        static_cast<std::size_t>(row * size + col);
+                    colors[index] = static_cast<FaceColor>(
+                        (2 * static_cast<int>(face) + row + 3 * col) % 6);
+                }
+            }
+        }
+
+        const rubiks::cube::CubeView view{size, colors.data()};
+        const std::vector<FaceColor> saved = rubiks::cube::painting_of(view);
+        const std::vector<int> blamed{0, static_cast<int>(saved.size() - 1)};
+        const NetPosition cursor{Face::Back, size - 1, size - 1};
+        const RenderScene native = build_net_painting(
+            view, rect, Palette::Classic, blamed, cursor);
+        const std::vector<FaceColor> restored =
+            rubiks::test::native_painting(saved, size);
+        const RenderScene legacy = build_net_painting(
+            rubiks::cube::CubeView{size, restored.data()}, rect,
+            Palette::Classic, blamed, cursor);
+
+        INFO("size " << size);
+        REQUIRE(native.faces.size() == colors.size());
+        REQUIRE(legacy.faces.size() == native.faces.size());
+        std::size_t emitted = 0;
+        for (const Face face : net_faces()) {
+            for (int row = 0; row < size; ++row) {
+                for (int col = 0; col < size; ++col) {
+                    const std::size_t index =
+                        rubiks::cube::face_index(face) * face_area +
+                        static_cast<std::size_t>(row * size + col);
+                    REQUIRE(native.faces[emitted].color == to_color(colors[index]));
+                    REQUIRE(legacy.faces[emitted].color == native.faces[emitted].color);
+                    for (std::size_t corner = 0; corner < 4; ++corner) {
+                        REQUIRE(legacy.faces[emitted].points[corner].x ==
+                                Approx(native.faces[emitted].points[corner].x));
+                        REQUIRE(legacy.faces[emitted].points[corner].y ==
+                                Approx(native.faces[emitted].points[corner].y));
+                    }
+                    ++emitted;
+                }
+            }
+        }
+        REQUIRE(native.strokes.size() == 4);
+        REQUIRE(legacy.strokes.size() == native.strokes.size());
+        for (std::size_t stroke = 0; stroke < native.strokes.size(); ++stroke) {
+            REQUIRE(legacy.strokes[stroke].start.x ==
+                    Approx(native.strokes[stroke].start.x));
+            REQUIRE(legacy.strokes[stroke].start.y ==
+                    Approx(native.strokes[stroke].start.y));
+            REQUIRE(legacy.strokes[stroke].color == native.strokes[stroke].color);
+        }
+    }
 }

@@ -7,11 +7,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <set>
+#include <tuple>
 #include <utility>
 #include <vector>
 
-#include "cube/Cubie.hpp"
-#include "cube/PackedMove.hpp"
+#include "cube/Face.hpp"
 #include "cube/Surface.hpp"
 #include "cube/solver/LayerByLayer.hpp"
 #include "cube/solver/Projection.hpp"
@@ -21,61 +21,50 @@
 namespace rubiks::cube::solver {
 namespace {
 
-/** One sticker: the slot it is on, and which way it faces. */
-struct Facelet {
-    CubiePosition at;
-    Face face;
-};
-
-/**
- * Every centre sticker of the cube, once each.
- *
- * A centre is a slot that shows exactly one face, which is a description that
- * needs no size: a three by three has six of them, a nine by nine has six
- * times forty-nine, and a two by two has none.
- */
-[[nodiscard]] std::vector<Facelet> centre_cells(int size)
+/** Keeps the solver's piece order stable while traversing native face storage. */
+void order_by_piece(std::vector<SurfaceSticker>& cells)
 {
-    std::vector<Facelet> cells;
-    for (int x = 0; x < size; ++x) {
-        for (int y = 0; y < size; ++y) {
-            for (int z = 0; z < size; ++z) {
-                const CubiePosition at{x, y, z};
-                const auto showing = exposed_faces(at, size);
-                if (showing.size() != 1) continue;
-                cells.push_back(Facelet{at, showing.front()});
+    std::sort(cells.begin(), cells.end(), [](const SurfaceSticker& a, const SurfaceSticker& b) -> bool {
+        return std::make_tuple(a.x, a.y, a.z, face_index(a.face)) <
+               std::make_tuple(b.x, b.y, b.z, face_index(b.face));
+    });
+}
+
+/** Enumerates face interiors directly, without visiting the cube's volume. */
+[[nodiscard]] std::vector<SurfaceSticker> centre_cells(int size)
+{
+    std::vector<SurfaceSticker> cells;
+    for (const Face face : faces()) {
+        for (int row = 1; row < size - 1; ++row) {
+            for (int col = 1; col < size - 1; ++col) {
+                cells.push_back(face_sticker(face, row, col, size));
             }
         }
     }
+    order_by_piece(cells);
     return cells;
 }
 
-/**
- * Every edge sticker of the cube, twice the pieces because each shows two.
- *
- * Both stickers of a piece are counted so that a piece turned the other way
- * round scores nothing rather than half -- the two are one fact, and a piece
- * that is home wearing its colours backwards is not home.
- */
-[[nodiscard]] std::vector<Facelet> edge_cells(int size)
+/** Enumerates edge stickers from face borders, excluding their corner cells. */
+[[nodiscard]] std::vector<SurfaceSticker> edge_cells(int size)
 {
-    std::vector<Facelet> cells;
-    for (int x = 0; x < size; ++x) {
-        for (int y = 0; y < size; ++y) {
-            for (int z = 0; z < size; ++z) {
-                const CubiePosition at{x, y, z};
-                const auto showing = exposed_faces(at, size);
-                if (showing.size() != 2) continue;
-                for (const Face face : showing) cells.push_back(Facelet{at, face});
-            }
+    std::vector<SurfaceSticker> cells;
+    const int last = size - 1;
+    for (const Face face : faces()) {
+        for (int offset = 1; offset < last; ++offset) {
+            cells.push_back(face_sticker(face, 0, offset, size));
+            cells.push_back(face_sticker(face, last, offset, size));
+            cells.push_back(face_sticker(face, offset, 0, size));
+            cells.push_back(face_sticker(face, offset, last, size));
         }
     }
+    order_by_piece(cells);
     return cells;
 }
 
 /** The colour each of these cells is being asked for. */
 [[nodiscard]] std::vector<FaceColor> home_colours(
-    const std::vector<Facelet>& cells)
+    const std::vector<SurfaceSticker>& cells)
 {
     std::vector<FaceColor> wants;
     wants.reserve(cells.size());
@@ -220,7 +209,7 @@ struct Commutator {
  * change what they are asking for.
  */
 [[nodiscard]] std::vector<FaceColor> edge_wants(
-    const std::vector<Facelet>& cells, int size, bool swap_two_pairs)
+    const std::vector<SurfaceSticker>& cells, int size, bool swap_two_pairs)
 {
     auto wants = home_colours(cells);
     if (!swap_two_pairs) return wants;
@@ -235,12 +224,12 @@ struct Commutator {
         const auto& cell = cells[i];
         if (cell.face == Face::Front) {
             for (const auto& at : one) {
-                if (at == cell.at) wants[i] = home_colour(Face::Back);
+                if (at == cell.position()) wants[i] = home_colour(Face::Back);
             }
         }
         if (cell.face == Face::Back) {
             for (const auto& at : other) {
-                if (at == cell.at) wants[i] = home_colour(Face::Front);
+                if (at == cell.position()) wants[i] = home_colour(Face::Front);
             }
         }
     }
@@ -345,19 +334,18 @@ struct Commutator {
 }
 
 /** Where a sticker ends up after one turn. */
-[[nodiscard]] Facelet carried_one(Facelet cell, const Turn& step, int size)
+[[nodiscard]] SurfaceSticker carried_one(SurfaceSticker cell, const Turn& step, int size)
 {
-    const auto move = to_move(step, size);
-    if (!in_layers(move.layers, coordinate_on(move.axis, cell.at))) return cell;
-    for (int i = 0, n = normalized_turns(move.quarter_turns); i < n; ++i) {
-        cell.at = turned_position(move.axis, cell.at, size);
-        cell.face = turned_face(move.axis, cell.face);
+    const CubeMove move = to_move(step, size);
+    if (!in_layers(move.layers, coordinate_on(move.axis, cell))) return cell;
+    for (int turn = 0, count = normalized_turns(move.quarter_turns); turn < count; ++turn) {
+        cell = turned_sticker(cell, move.axis, size);
     }
     return cell;
 }
 
 /** Where a sticker ends up after a run of turns. */
-[[nodiscard]] Facelet carried_through(Facelet cell,
+[[nodiscard]] SurfaceSticker carried_through(SurfaceSticker cell,
                                       const std::vector<Turn>& steps, int size)
 {
     for (const auto& step : steps) cell = carried_one(cell, step, size);
@@ -416,19 +404,22 @@ using Carries = std::array<std::uint8_t, kFaceCount>;
  */
 class Board {
 public:
-    Board(int size, std::vector<Facelet> cells)
+    Board(int size, std::vector<SurfaceSticker> cells)
         : Board(size, cells, home_colours(cells))
     {
     }
 
-    Board(int size, std::vector<Facelet> cells, std::vector<FaceColor> wants)
+    Board(int size, std::vector<SurfaceSticker> cells, std::vector<FaceColor> wants)
         : size_(size),
           cells_(std::move(cells)),
           wants_(std::move(wants)),
-          index_(static_cast<std::size_t>(size) * size * size * kFaceCount, -1)
+          index_(kFaceCount * static_cast<std::size_t>(size * size), -1),
+          color_slots_(cells_.size())
     {
         for (std::size_t i = 0; i < cells_.size(); ++i) {
-            index_[slot_of(cells_[i])] = static_cast<int>(i);
+            const std::size_t slot = slot_of(cells_[i]);
+            index_[slot] = static_cast<int>(i);
+            color_slots_[i] = slot;
         }
 
         // Whether every cell here shows exactly one face, which is what a
@@ -439,7 +430,7 @@ public:
         for (const auto& cell : cells_) {
             int extremes = 0;
             for (const Axis axis : axes()) {
-                const int at = coordinate_on(axis, cell.at);
+                const int at = coordinate_on(axis, cell.position());
                 if (at == 0 || at == size - 1) ++extremes;
             }
             if (extremes != 1) centres_only_ = false;
@@ -453,7 +444,7 @@ public:
         for (std::size_t i = 0; i < cells_.size(); ++i) {
             for (const Axis axis : axes()) {
                 const auto at = static_cast<std::size_t>(
-                    coordinate_on(axis, cells_[i].at));
+                    coordinate_on(axis, cells_[i].position()));
                 along_[axis_index(axis)][at].push_back(static_cast<int>(i));
             }
         }
@@ -468,9 +459,17 @@ public:
         }
     }
 
-    [[nodiscard]] const std::vector<Facelet>& cells() const noexcept
+    [[nodiscard]] const std::vector<SurfaceSticker>& cells() const noexcept
     {
         return cells_;
+    }
+
+    /** Read a prepared cell directly from the cube's native face storage. */
+    [[nodiscard]] FaceColor color_at(const Cube& cube,
+                                    std::size_t cell) const noexcept
+    {
+        assert(cube.size() == size_ && cell < color_slots_.size());
+        return cube.view().flat().data()[color_slots_[cell]];
     }
 
     /** How many stickers there are to get right. */
@@ -480,11 +479,11 @@ public:
     }
 
     /** How many of them are showing the colour asked of them. */
-    [[nodiscard]] int at_home(const CubeState& cube) const
+    [[nodiscard]] int at_home(const Cube& cube) const
     {
         int count = 0;
         for (std::size_t i = 0; i < cells_.size(); ++i) {
-            if (sticker_at(cube, cells_[i].at, cells_[i].face) == wants_[i]) {
+            if (color_at(cube, i) == wants_[i]) {
                 ++count;
             }
         }
@@ -592,7 +591,7 @@ public:
             for (int at = 0; at < size_; ++at) {
                 if (!in_layers(move.layers, at)) continue;
                 for (const int cell : along_[axis][static_cast<std::size_t>(at)]) {
-                    Facelet origin = cells_[static_cast<std::size_t>(cell)];
+                    SurfaceSticker origin = cells_[static_cast<std::size_t>(cell)];
                     for (std::size_t j = k; j-- > 0;) {
                         origin = carried_one(origin, undone(steps[j]), size_);
                     }
@@ -632,12 +631,11 @@ public:
     }
 
     /** The carries that would put a stranger home, read off the cube as it is. */
-    [[nodiscard]] Carries wanted(const CubeState& cube) const
+    [[nodiscard]] Carries wanted(const Cube& cube) const
     {
         Carries out{};
         for (std::size_t i = 0; i < cells_.size(); ++i) {
-            const auto colour =
-                sticker_at(cube, cells_[i].at, cells_[i].face);
+            const FaceColor colour = color_at(cube, i);
             if (colour == wants_[i]) continue;
             out[face_index(cells_[i].face)] |=
                 asked_for_[static_cast<std::size_t>(colour)];
@@ -665,7 +663,7 @@ public:
      * pieces among that face's own cells, and a cell's own colour is the same
      * all over one face.
      */
-    [[nodiscard]] int gain(const CubeState& cube,
+    [[nodiscard]] int gain(const Cube& cube,
                            const std::vector<int>& setup_source,
                            const std::vector<std::pair<int, int>>& moved) const
     {
@@ -673,8 +671,7 @@ public:
         for (const auto& [from, to] : moved) {
             const auto source = static_cast<std::size_t>(
                 setup_source[static_cast<std::size_t>(from)]);
-            const auto& was = cells_[source];
-            const auto colour = sticker_at(cube, was.at, was.face);
+            const FaceColor colour = color_at(cube, source);
             if (colour == wants_[static_cast<std::size_t>(to)]) ++delta;
             if (colour == wants_[static_cast<std::size_t>(source)]) --delta;
         }
@@ -692,7 +689,7 @@ public:
      * which is the whole reason a setup is safe to try here.
      */
     [[nodiscard]] int gain_within(
-        const CubeState& cube, const std::vector<int>& source,
+        const Cube& cube, const std::vector<int>& source,
         const std::vector<std::pair<int, int>>& moved) const
     {
         int delta = 0;
@@ -702,8 +699,7 @@ public:
             const auto lands =
                 static_cast<std::size_t>(source[static_cast<std::size_t>(to)]);
 
-            const auto colour =
-                sticker_at(cube, cells_[here].at, cells_[here].face);
+            const FaceColor colour = color_at(cube, here);
             if (colour == wants_[lands]) ++delta;
             if (colour == wants_[here]) --delta;
         }
@@ -711,19 +707,17 @@ public:
     }
 
 private:
-    [[nodiscard]] std::size_t slot_of(const Facelet& cell) const noexcept
+    [[nodiscard]] std::size_t slot_of(const SurfaceSticker& cell) const noexcept
     {
-        const auto slot =
-            static_cast<std::size_t>((cell.at.x * size_ + cell.at.y) * size_ +
-                                     cell.at.z);
-        return slot * kFaceCount + face_index(cell.face);
+        return surface_index(cell, size_);
     }
 
     int size_;
-    std::vector<Facelet> cells_;
+    std::vector<SurfaceSticker> cells_;
     std::vector<FaceColor> wants_;
     std::array<std::uint8_t, kFaceCount> asked_for_{};
     std::vector<int> index_;
+    std::vector<std::size_t> color_slots_;
     std::array<std::vector<std::vector<int>>, kAxisCount> along_;
     bool centres_only_ = false;
 };
@@ -944,7 +938,7 @@ public:
         partner_.assign(cells.size(), 0);
         for (std::size_t i = 0; i < cells.size(); ++i) {
             for (std::size_t j = 0; j < cells.size(); ++j) {
-                if (j != i && cells[j].at == cells[i].at) partner_[i] = j;
+                if (j != i && cells[j].position() == cells[i].position()) partner_[i] = j;
             }
         }
 
@@ -959,7 +953,7 @@ public:
             // the cube that layer is measured from does not matter -- a piece
             // one layer in from either end is in the same world.
             for (const Axis axis : axes()) {
-                const int at = coordinate_on(axis, cells[i].at);
+                const int at = coordinate_on(axis, cells[i].position());
                 if (at == 0 || at == size - 1) continue;
                 depths_[world] = layer_turn(axis, at, 1, size);
                 classes_[world] = at < size - 1 - at ? at : size - 1 - at;
@@ -1090,16 +1084,14 @@ public:
      * world alone. So they are counted and turned, once, rather than guessed
      * at by trying.
      */
-    [[nodiscard]] std::vector<Turn> evening_turns(const CubeState& cube) const
+    [[nodiscard]] std::vector<Turn> evening_turns(const Cube& cube) const
     {
         const auto& cells = edges_.cells();
 
         std::vector<int> home(cells.size(), 0);
         for (std::size_t i = 0; i < cells.size(); ++i) {
-            const auto colour =
-                sticker_at(cube, cells[i].at, cells[i].face);
-            const auto& mate = cells[partner_[i]];
-            const auto other = sticker_at(cube, mate.at, mate.face);
+            const FaceColor colour = edges_.color_at(cube, i);
+            const FaceColor other = edges_.color_at(cube, partner_[i]);
 
             const int lands =
                 homes_[static_cast<std::size_t>(worlds_[i])]
@@ -1439,14 +1431,14 @@ void build_reduction(Work& work, const CentreWorkshop& centres,
 
 }  // namespace
 
-std::vector<CubeMove> solve_centres(const CubeState& state)
+std::vector<CubeMove> solve_centres(const Cube& state)
 {
     Work work{state};
     build_centres(work, CentreWorkshop{state.size()});
     return work.take();
 }
 
-std::vector<CubeMove> reduce(const CubeState& state)
+std::vector<CubeMove> reduce(const Cube& state)
 {
     Work work{state};
     build_reduction(work, CentreWorkshop{state.size()},
@@ -1467,13 +1459,13 @@ bool Reduction::supports(int size) const noexcept
 {
     // Every size the application builds that is not already a three by three.
     // The method has no size in it: a workshop is derived from the cube it is
-    // asked about, so what bounds this is what can be built and written down
+    // asked about, so what bounds this is what the domain can build
     // rather than anything here. What it costs grows with the cube, and that
     // is the caller's to warn about rather than this one's to refuse.
-    return size >= 4 && size <= kPackedMaxLayers;
+    return size >= 4 && size < kLayerMaskBits;
 }
 
-std::vector<CubeMove> Reduction::solve(const CubeState& state) const
+std::vector<CubeMove> Reduction::solve(const Cube& state) const
 {
     assert(supports(state.size()));
     if (state.is_solved()) return {};
@@ -1488,14 +1480,15 @@ std::vector<CubeMove> Reduction::solve(const CubeState& state) const
         prepared_->edges_by_size.emplace(size, EdgeWorkshop{size});
     }
 
-    Work work{state};
+    const SolverFrame frame{state};
+    Work work{frame.cube()};
     build_reduction(work, prepared_->centres_by_size.at(size),
                     prepared_->edges_by_size.at(size));
 
-    auto moves = work.take();
-    const auto finish = solve_as_three_layers(work.cube());
-    for (const auto& move : finish) moves.push_back(move);
-    return compress(moves);
+    std::vector<CubeMove> moves = work.take();
+    const std::vector<CubeMove> finish = solve_as_three_layers(work.cube());
+    for (const CubeMove& move : finish) moves.push_back(move);
+    return frame.restore(compress(moves));
 }
 
 }  // namespace rubiks::cube::solver

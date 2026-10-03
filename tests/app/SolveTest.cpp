@@ -6,7 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "EngineLifecycle.hpp"
-#include "cube/Cubie.hpp"
+#include "cube/Face.hpp"
 
 // The solve command: what it writes into the record, what it refuses, and
 // what is left behind when it is broken off part way. What the solver itself

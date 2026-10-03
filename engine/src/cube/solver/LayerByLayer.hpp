@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "cube/CubeMove.hpp"
-#include "cube/CubeState.hpp"
+#include "cube/Cube.hpp"
 #include "cube/solver/Solver.hpp"
 
 namespace rubiks::cube::solver {
@@ -23,8 +23,8 @@ namespace rubiks::cube::solver {
  * here taken from how the method is done rather than how it is taught, and it
  * is worth about a fifth of the whole solution.
  *
- * Three by three only. The interface says so out loud, so a bigger cube is
- * met with "no solver for this size" rather than with a wrong answer.
+ * Two and three by three only. The interface reports the supported sizes
+ * before the application asks for a solution.
  *
  * What it gives up is length: a hundred moves or so where an optimal solution
  * is twenty. Shortening that is a different algorithm behind the same
@@ -35,7 +35,7 @@ public:
     [[nodiscard]] bool supports(int size) const noexcept override;
 
     [[nodiscard]] std::vector<CubeMove> solve(
-        const CubeState& state) const override;
+        const Cube& state) const override;
 };
 
 /**
@@ -46,16 +46,17 @@ public:
  *
  * A cube of any size may be handed in, as long as it is *reduced*: every row
  * of pieces along an edge already one pair of colours, every centre already
- * one colour. Under outer face turns such a cube behaves exactly as a three by
- * three does -- which is why the last stage of solving a big cube is this
- * function rather than a second copy of it -- and asking it about an
- * unreduced one is a precondition violation.
+ * the canonical `solved_color(face)`. Under outer face turns such a cube
+ * behaves exactly as a three by three does, so this function finishes the
+ * reduction solver's work. An unreduced cube violates the precondition.
  *
  * A two by two, which has neither edges nor centres to reduce, is always in
- * that state; so is a three by three.
+ * that state. A three by three must first have its fixed centres in the
+ * canonical frame; `LayerByLayer::solve()` performs that normalization.
+ * An already solved cube returns no moves in any rigid orientation.
  */
 [[nodiscard]] std::vector<CubeMove> solve_as_three_layers(
-    const CubeState& state);
+    const Cube& state);
 
 /**
  * The same sequence with neighbouring turns of one layer run together.

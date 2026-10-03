@@ -1,6 +1,6 @@
 solver_test = executable(
   'solver-test',
-  files('AssemblySolveTest.cpp', 'LayerByLayerTest.cpp', 'ProjectionTest.cpp',
+  files('SolverFrameTest.cpp', 'AssemblySolveTest.cpp', 'LayerByLayerTest.cpp', 'ProjectionTest.cpp',
         'ReductionBench.cpp', 'ReductionTest.cpp'),
   dependencies: [cube_solver_dep, cube_test_support_dep, catch2_dep],
 )

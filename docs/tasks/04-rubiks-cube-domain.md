@@ -300,7 +300,9 @@ High contrast palette는 `Light::unlit()`(ambient 1, diffuse 0, specular 0) 아�
 
 **허용 오차 ±1 (2차 개정).** Phase 19의 2차 개정으로 스티커가 단색이 아니라 평면 위 밝기 함수를 따르는 linear gradient로 채워집니다. 중앙 sample 스티커의 중앙 픽셀은 이론상 위 표의 값 그대로이지만(함수를 선분으로 근사한 오차는 byte 0.05), gradient 보간의 반올림이 ±1을 만들 수 있습니다. 그래서 **3D sample 세 지점과 단면 색 탐색은 채널당 ±1을 허용**합니다. 전개도, seam, 모서리, 배경은 여전히 정확히 일치해야 합니다. 노멀 부호 실수는 20~40 단위로 드러나므로 이 완화가 계약의 목적을 흔들지 않습니다.
 
-이 계약의 숫자는 test가 엔진에서 읽는 것이 아니라 여기 적힌 것을 옮겨 쓴 것입니다. 광원 위치, ambient, diffuse, 반올림 공식, `kStickerScale` 중 하나라도 바꾸면 이 표를 다시 유도하고 [`RenderContractTest.cpp`](../../tests/app/RenderContractTest.cpp), [`PointerInteractionTest.cpp`](../../tests/app/PointerInteractionTest.cpp), [`sceneContract.ts`](../../web/tests/e2e/sceneContract.ts)를 함께 고쳐야 합니다.
+이 계약의 숫자는 test가 엔진에서 읽는 것이 아니라 여기 적힌 것을 옮겨 쓴 것입니다. 광원 위치, ambient, diffuse, 반올림 공식, `kStickerScale` 중 하나라도 바꾸면 이 표를 다시 유도하고 [`RenderContract.hpp`](../../tests/app/RenderContract.hpp), [`RenderContractTest.cpp`](../../tests/app/RenderContractTest.cpp), [`sceneContract.ts`](../../web/tests/e2e/sceneContract.ts)를 함께 고쳐야 합니다.
+
+> **개정 (2026-10-04)**: 색, 평면별 밝기, `lit()`·`saturated()` 산식, 세 면의 sample 자리, 단면을 찍는 두 점은 이제 `RenderContract.hpp` 한 곳에 적혀 있고 `RenderContractTest.cpp`와 `PointerInteractionTest.cpp`가 함께 읽습니다. 그 전에는 두 파일이 같은 숫자를 각자 적어 두었습니다. `RenderContractTest.cpp`에 남은 것은 seam sample 자리와 layout 비율이고, `PointerInteractionTest.cpp`에는 손으로 옮겨 적은 숫자가 남아 있지 않습니다.
 
 ## Implementation steps
 

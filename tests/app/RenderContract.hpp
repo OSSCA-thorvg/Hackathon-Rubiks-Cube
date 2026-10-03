@@ -16,9 +16,8 @@
  * arithmetic that puts one on the other, where the three visible faces are
  * sampled, and the checks of a single pixel those tests share.
  *
- * Every value is written here by hand, from the numbers in
- * docs/tasks/04-rubiks-cube-domain.md, and none is read from the engine, so a
- * change to a colour or to the lighting has to be made in both places
+ * Every value is written here by hand and none is read from the engine, so a
+ * change to a colour or to the lighting has to be made there and here
  * deliberately.
  *
  * Beside the application's tests rather than in tests/support: require_pixel()

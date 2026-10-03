@@ -32,6 +32,9 @@ Phase 번호가 없는 횡단 작업입니다. [UI polish and showcase](./ui-pol
 시안의 다크 배경은 `#0b0c10`이었지만, 캔버스를 지우는 색은 [CanvasTheme.cpp](../../engine/src/graphics/CanvasTheme.cpp)의 상수입니다(다크 `#202020`, 라이트 `#e7ebf0`). 페이지가 고를 수 있는 것은 Light/Dark 둘 중 하나뿐입니다. 이 상수를 바꾸지 않은 이유는 셋입니다.
 
 - 두 값을 그대로 확인하는 C++ 테스트가 일곱 파일에 있습니다(이후 [Scenes and surfaces](./scenes-and-surfaces.md)의 `SurfaceTest.cpp`까지 여덟 파일).
+
+  > **개정 (2026-10-04)**: 두 값을 숫자로 적어 둔 파일은 이제 셋입니다. Application test 넷(`CanvasThemeTest.cpp`, `PointerInteractionTest.cpp`, `RenderContractTest.cpp`, `SurfaceTest.cpp`)은 [`RenderContract.hpp`](../../tests/app/RenderContract.hpp)에 한 번 적힌 `kDarkGround`·`kLightGround`를 읽고, 배경이 기대값이 아니라 renderer에 건네는 입력인 composition test 둘(`LightingRenderTest.cpp`, `NetLiftRenderTest.cpp`)은 엔진의 `canvas_background()`에서 읽습니다. 나머지 둘은 `tests/graphics`의 `CanvasThemeTest.cpp`와 `TransientTest.cpp`로, 다크 값만 적혀 있습니다. 상수를 바꿀 때 고칠 곳은 줄었고, 아래 두 이유는 그대로입니다.
+
 - 3D 바닥 그림자의 색은 배경에서 계산됩니다(`shadow_tint`, `kShadowColor {40, 48, 64}`). `#0b0c10`에서는 그림자가 `(1, 2, 4)`가 되어 배경과 거의 구분되지 않습니다. Phase 19와 19.5에서 맞춘 조명을 다시 맞춰야 합니다.
 - WASM을 다시 빌드해야 합니다.
 

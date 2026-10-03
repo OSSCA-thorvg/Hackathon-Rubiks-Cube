@@ -28,9 +28,8 @@ std::optional<Vec2> project_to_screen(const Vec3& point,
     const math::Vec4 clip = math::apply(camera.projection(), in_view);
     if (clip.w <= 0.0f) return std::nullopt;
 
-    const Vec2 ndc{clip.x / clip.w, clip.y / clip.w};
-    return Vec2{viewport.x + (ndc.x + 1.0f) * 0.5f * viewport.width,
-                viewport.y + (1.0f - ndc.y) * 0.5f * viewport.height};
+    return graphics::ndc_to_pixels(viewport,
+                                   Vec2{clip.x / clip.w, clip.y / clip.w});
 }
 
 std::optional<Vec2> turn_direction(Axis axis, const Vec3& point,

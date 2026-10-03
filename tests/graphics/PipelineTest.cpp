@@ -552,3 +552,25 @@ TEST_CASE("composing scenes carries every list across, in order")
     REQUIRE(target.groups[1].shadow.distance == Approx(6.0f));
     REQUIRE(target.groups[1].faces[0].color == Color{255, 255, 0, 255});
 }
+
+TEST_CASE("NDC and the pixels of a viewport map onto each other")
+{
+    const Rect target{40.0f, 10.0f, 200.0f, 100.0f};
+
+    // +Y is up in NDC and down in pixels, so the corners swap top for bottom.
+    const Vec2 top_left = ndc_to_pixels(target, Vec2{-1.0f, 1.0f});
+    REQUIRE(top_left.x == Approx(40.0f).margin(1e-4));
+    REQUIRE(top_left.y == Approx(10.0f).margin(1e-4));
+
+    const Vec2 bottom_right = ndc_to_pixels(target, Vec2{1.0f, -1.0f});
+    REQUIRE(bottom_right.x == Approx(240.0f).margin(1e-4));
+    REQUIRE(bottom_right.y == Approx(110.0f).margin(1e-4));
+
+    // And back: a pick has to land on the point that was drawn.
+    for (const Vec2 point : {Vec2{-1.0f, 1.0f}, Vec2{1.0f, -1.0f},
+                             Vec2{0.0f, 0.0f}, Vec2{0.25f, -0.6f}}) {
+        const Vec2 back = pixels_to_ndc(target, ndc_to_pixels(target, point));
+        REQUIRE(back.x == Approx(point.x).margin(1e-5));
+        REQUIRE(back.y == Approx(point.y).margin(1e-5));
+    }
+}

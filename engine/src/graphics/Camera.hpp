@@ -1,5 +1,6 @@
 #pragma once
 
+#include "graphics/Rect.hpp"
 #include "math/Angle.hpp"
 #include "math/Projection.hpp"
 #include "math/Types.hpp"
@@ -80,5 +81,36 @@ inline constexpr math::Vec3 kWorldUp{0.0f, 1.0f, 0.0f};
  * this viewpoint, so moving it means changing the contract too.
  */
 inline constexpr math::Vec3 kHomeEye{3.0f, 3.0f, 3.0f};
+
+/**
+ * Where a point in normalized device coordinates lands in a viewport, in
+ * pixels.
+ *
+ * NDC runs from -1 to 1 with +Y up; pixels count from the top left with y
+ * down. So (-1, 1) is the viewport's top-left corner and (1, -1) its
+ * bottom-right. The viewport pass draws by this and interaction projects a
+ * point of the cube to the screen by it, and a drag only follows what is
+ * drawn while the two are the same arithmetic.
+ */
+[[nodiscard]] inline math::Vec2 ndc_to_pixels(const Rect& viewport,
+                                              const math::Vec2& ndc) noexcept
+{
+    return math::Vec2{viewport.x + (ndc.x + 1.0f) * 0.5f * viewport.width,
+                      viewport.y + (1.0f - ndc.y) * 0.5f * viewport.height};
+}
+
+/**
+ * The inverse of ndc_to_pixels(): a pixel of the buffer as a point in NDC.
+ *
+ * Divides by the viewport's width and height, so the caller has to have
+ * turned away a viewport without either.
+ */
+[[nodiscard]] inline math::Vec2 pixels_to_ndc(const Rect& viewport,
+                                              const math::Vec2& point) noexcept
+{
+    return math::Vec2{
+        (point.x - viewport.x) / viewport.width * 2.0f - 1.0f,
+        1.0f - (point.y - viewport.y) / viewport.height * 2.0f};
+}
 
 }  // namespace rubiks::graphics

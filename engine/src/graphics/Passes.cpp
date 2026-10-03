@@ -261,8 +261,7 @@ RenderScene ViewportPass::operator()(const ClipScene& scene) const
     result.faces.reserve(scene.faces.size());
 
     const auto to_pixels = [this](const math::Vec2& ndc) {
-        return math::Vec2{rect.x + (ndc.x + 1.0f) * 0.5f * rect.width,
-                          rect.y + (1.0f - ndc.y) * 0.5f * rect.height};
+        return ndc_to_pixels(rect, ndc);
     };
 
     for (const auto& face : scene.faces) {

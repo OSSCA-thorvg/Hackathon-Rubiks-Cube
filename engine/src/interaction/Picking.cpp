@@ -57,17 +57,16 @@ std::optional<Ray> pointer_ray(float x, float y, const graphics::Camera& camera,
     if (viewport.width <= 0.0f || viewport.height <= 0.0f) return std::nullopt;
 
     // The inverse of ViewportPass.
-    const float ndc_x = (x - viewport.x) / viewport.width * 2.0f - 1.0f;
-    const float ndc_y = 1.0f - (y - viewport.y) / viewport.height * 2.0f;
-    if (ndc_x < -1.0f || ndc_x > 1.0f) return std::nullopt;
-    if (ndc_y < -1.0f || ndc_y > 1.0f) return std::nullopt;
+    const math::Vec2 ndc = graphics::pixels_to_ndc(viewport, math::Vec2{x, y});
+    if (ndc.x < -1.0f || ndc.x > 1.0f) return std::nullopt;
+    if (ndc.y < -1.0f || ndc.y > 1.0f) return std::nullopt;
 
     const math::Mat4 to_world =
         math::inverse(math::multiply(camera.projection(), camera.view()));
 
     // z = -1 is the near plane in the OpenGL-style convention math::perspective
     // targets, so this is the point the pointer sits over on that plane.
-    const math::Vec4 clip{ndc_x, ndc_y, -1.0f, 1.0f};
+    const math::Vec4 clip{ndc.x, ndc.y, -1.0f, 1.0f};
     const math::Vec4 unprojected = math::apply(to_world, clip);
     if (unprojected.w == 0.0f) return std::nullopt;
 

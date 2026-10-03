@@ -2,8 +2,6 @@
 
 #include <optional>
 
-#include "cube/CubeMove.hpp"
-#include "cube/Cubie.hpp"
 #include "graphics/NetGeometry.hpp"
 #include "graphics/Rect.hpp"
 

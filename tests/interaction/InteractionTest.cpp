@@ -848,22 +848,14 @@ Rect net_rect()
 
 float net_face_side()
 {
-    return net_rect().width /
-           static_cast<float>(rubiks::graphics::kNetColumns);
+    return rubiks::graphics::net_face_side(net_rect());
 }
 
 /** The center of one net cell, in drawing-buffer pixels. */
 Vec2 net_point(Face face, int col, int row)
 {
-    const Rect rect = net_rect();
-    const float face_side = net_face_side();
-    const float cell = face_side / static_cast<float>(kSize);
-    const auto block = rubiks::graphics::net_block(face);
-
-    return Vec2{rect.x + static_cast<float>(block.column) * face_side +
-                    (static_cast<float>(col) + 0.5f) * cell,
-                rect.y + static_cast<float>(block.row) * face_side +
-                    (static_cast<float>(row) + 0.5f) * cell};
+    return rubiks::graphics::net_cell_center(face, col, row, net_rect(),
+                                             kSize);
 }
 
 /** Presses a net cell, which must be on a face. */
@@ -1107,18 +1099,13 @@ TEST_CASE("a press offers the two rings that cell can turn on")
     using rubiks::interaction::NetPick;
 
     const auto rect = rubiks::graphics::layout(kCanvas, kCanvas).net;
-    const float cell = rect.width / 12.0f;
 
     const auto axes_offered = [&](Face face, int col, int row) {
         InteractionController controller(kSize);
-        const auto block = rubiks::graphics::net_block(face);
-        const float x = rect.x + (static_cast<float>(block.column * kSize +
-                                                     col) +
-                                  0.5f) * cell;
-        const float y = rect.y + (static_cast<float>(block.row * kSize + row) +
-                                  0.5f) * cell;
+        const Vec2 at =
+            rubiks::graphics::net_cell_center(face, col, row, rect, kSize);
 
-        REQUIRE(controller.net_pointer_down(x, y, rect,
+        REQUIRE(controller.net_pointer_down(at.x, at.y, rect,
                                             NetPick{face, col, row}));
 
         std::vector<Axis> axes;
@@ -1139,9 +1126,10 @@ TEST_CASE("a press offers the two rings that cell can turn on")
 
     // And each names the layer that cell sits in.
     InteractionController controller(kSize);
-    const float x = rect.x + 4.5f * cell;
-    const float y = rect.y + 2.5f * cell;
-    REQUIRE(controller.net_pointer_down(x, y, rect, NetPick{Face::Up, 1, 2}));
+    const Vec2 at =
+        rubiks::graphics::net_cell_center(Face::Up, 1, 2, rect, kSize);
+    REQUIRE(controller.net_pointer_down(at.x, at.y, rect,
+                                        NetPick{Face::Up, 1, 2}));
 
     for (const auto& guide : controller.net_guides()) {
         INFO("axis " << static_cast<int>(guide.axis));

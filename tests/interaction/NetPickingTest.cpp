@@ -119,15 +119,9 @@ Rect test_rect()
 /** The center of one net cell, in drawing-buffer pixels. */
 std::array<float, 2> cell_center(Face face, int col, int row, const Rect& rect)
 {
-    const float face_side =
-        rect.width / static_cast<float>(rubiks::graphics::kNetColumns);
-    const float cell = face_side / static_cast<float>(kSize);
-    const auto block = rubiks::graphics::net_block(face);
-
-    return {rect.x + static_cast<float>(block.column) * face_side +
-                (static_cast<float>(col) + 0.5f) * cell,
-            rect.y + static_cast<float>(block.row) * face_side +
-                (static_cast<float>(row) + 0.5f) * cell};
+    const auto at =
+        rubiks::graphics::net_cell_center(face, col, row, rect, kSize);
+    return {at.x, at.y};
 }
 
 }  // namespace
@@ -156,8 +150,7 @@ TEST_CASE("every net cell is picked at its own center")
 TEST_CASE("the empty corners of the cross are misses")
 {
     const Rect rect = test_rect();
-    const float face_side =
-        rect.width / static_cast<float>(rubiks::graphics::kNetColumns);
+    const float face_side = rubiks::graphics::net_face_side(rect);
 
     // The four blocks of the 4 x 3 cross that no face occupies, plus the two
     // beside Back that the second row does fill on the middle row only.

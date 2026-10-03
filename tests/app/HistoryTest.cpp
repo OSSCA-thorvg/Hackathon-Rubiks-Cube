@@ -32,16 +32,8 @@ constexpr int kCubeSize = 3;
                                                 int column, int row)
 {
     const auto net = rubiks::graphics::layout(kCanvas, kCanvas).net;
-    const float face_side =
-        net.width / static_cast<float>(rubiks::graphics::kNetColumns);
-    const float cell = face_side / static_cast<float>(kCubeSize);
-    const auto block = rubiks::graphics::net_block(face);
-
-    return rubiks::math::Vec2{
-        net.x + static_cast<float>(block.column) * face_side +
-            (static_cast<float>(column) + 0.5f) * cell,
-        net.y + static_cast<float>(block.row) * face_side +
-            (static_cast<float>(row) + 0.5f) * cell};
+    return rubiks::graphics::net_cell_center(face, column, row, net,
+                                             kCubeSize);
 }
 
 /**

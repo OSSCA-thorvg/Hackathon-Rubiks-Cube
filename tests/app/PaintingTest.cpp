@@ -35,21 +35,15 @@ struct Aim {
 /**
  * The middle of one cell of the front face, in drawing-buffer pixels.
  *
- * The same arithmetic the other pointer tests aim with: the net is a cross of
- * blocks, each block a face, each face a grid of cells.
+ * Asked of the net's own geometry, as the other pointer tests ask it: the
+ * net is a cross of blocks, each block a face, each face a grid of cells.
  */
 [[nodiscard]] Aim front_cell(int col, int row, int size)
 {
     const auto net = rubiks::graphics::layout(kCanvas, kCanvas).net;
-    const float side =
-        net.width / static_cast<float>(rubiks::graphics::kNetColumns);
-    const float cell = side / static_cast<float>(size);
-    const auto block = rubiks::graphics::net_block(rubiks::cube::Face::Front);
-
-    return Aim{net.x + static_cast<float>(block.column) * side +
-                   (static_cast<float>(col) + 0.5f) * cell,
-               net.y + static_cast<float>(block.row) * side +
-                   (static_cast<float>(row) + 0.5f) * cell};
+    const auto at = rubiks::graphics::net_cell_center(
+        rubiks::cube::Face::Front, col, row, net, size);
+    return Aim{at.x, at.y};
 }
 
 /** The four bytes drawn at a point of the canvas. */

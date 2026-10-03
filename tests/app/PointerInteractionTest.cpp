@@ -153,16 +153,8 @@ const std::uint8_t* pixel_at(float x, float y, std::uint32_t width)
 rubiks::math::Vec2 net_cell_point(rubiks::cube::Face face, int column, int row)
 {
     const auto net = rubiks::graphics::layout(kCanvas, kCanvas).net;
-    const float face_side =
-        net.width / static_cast<float>(rubiks::graphics::kNetColumns);
-    const float cell = face_side / static_cast<float>(kCubeSize);
-    const auto block = rubiks::graphics::net_block(face);
-
-    return rubiks::math::Vec2{
-        net.x + static_cast<float>(block.column) * face_side +
-            (static_cast<float>(column) + 0.5f) * cell,
-        net.y + static_cast<float>(block.row) * face_side +
-            (static_cast<float>(row) + 0.5f) * cell};
+    return rubiks::graphics::net_cell_center(face, column, row, net,
+                                             kCubeSize);
 }
 
 /** Reads the center of one net cell. */
@@ -399,8 +391,7 @@ void drag_net_cell(rubiks::cube::Face face, int column, int row, float faces_x,
                    float faces_y)
 {
     const auto net = rubiks::graphics::layout(kCanvas, kCanvas).net;
-    const float face_side =
-        net.width / static_cast<float>(rubiks::graphics::kNetColumns);
+    const float face_side = rubiks::graphics::net_face_side(net);
     const auto from = net_cell_point(face, column, row);
 
     REQUIRE(rubiks::app::pointer_down_on(0, from.x, from.y));
@@ -481,8 +472,7 @@ TEST_CASE("the net shows a 3D drag while it is happening")
     // carries it through there somewhere along the way rather than at one
     // named angle, so the whole crossing is swept.
     const auto net = rubiks::graphics::layout(kCanvas, kCanvas).net;
-    const float face_side =
-        net.width / static_cast<float>(rubiks::graphics::kNetColumns);
+    const float face_side = rubiks::graphics::net_face_side(net);
     const float cell = face_side / static_cast<float>(kCubeSize);
     const float corner_x = net.x + 3.0f * face_side + 0.5f * cell;
     const float corner_y = net.y + 2.0f * face_side + 1.5f * cell;
@@ -762,8 +752,7 @@ TEST_CASE("the net is draggable in net-only view")
     const auto net = rubiks::graphics::layout(kCanvas, kCanvas,
                                               rubiks::graphics::ViewMode::Flat)
                          .net;
-    const float face_side =
-        net.width / static_cast<float>(rubiks::graphics::kNetColumns);
+    const float face_side = rubiks::graphics::net_face_side(net);
     const float cell = face_side / static_cast<float>(kCubeSize);
 
     // The front face's top middle cell.
@@ -788,8 +777,7 @@ TEST_CASE("an empty corner of the cross is not a net cell")
     const rubiks::test::EngineLifecycle engine(kCanvas, kCanvas);
 
     const auto net = rubiks::graphics::layout(kCanvas, kCanvas).net;
-    const float face_side =
-        net.width / static_cast<float>(rubiks::graphics::kNetColumns);
+    const float face_side = rubiks::graphics::net_face_side(net);
 
     // Top left of the cross, which the unfolding leaves empty. Inside the net
     // rectangle, but on no face.
@@ -812,8 +800,7 @@ TEST_CASE("an empty corner of the cross is not a net cell")
     const auto only = rubiks::graphics::layout(kCanvas, kCanvas,
                                                rubiks::graphics::ViewMode::Flat)
                           .net;
-    const float only_face =
-        only.width / static_cast<float>(rubiks::graphics::kNetColumns);
+    const float only_face = rubiks::graphics::net_face_side(only);
     REQUIRE_FALSE(rubiks::app::pointer_down_on(0, only.x + 0.5f * only_face,
                                                only.y + 0.5f * only_face));
 

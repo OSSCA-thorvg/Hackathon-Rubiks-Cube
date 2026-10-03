@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -332,6 +333,28 @@ TEST_CASE("the six faces form a cross with Up on top and Down below")
     REQUIRE(net_block(Face::Front).column == 1);
     REQUIRE(net_block(Face::Right).column == 2);
     REQUIRE(net_block(Face::Back).column == 3);
+}
+
+TEST_CASE("a block of the cross names its face, and an empty one names none")
+{
+    for (const auto face : net_faces()) {
+        const auto block = net_block(face);
+        INFO("face " << static_cast<int>(face));
+        REQUIRE(net_face_at(block.column, block.row) == face);
+    }
+
+    // The six blocks of the 4 x 3 grid the cross does not fill.
+    constexpr std::array<std::array<int, 2>, 6> kEmpty{
+        {{0, 0}, {2, 0}, {3, 0}, {0, 2}, {2, 2}, {3, 2}}};
+    for (const auto& block : kEmpty) {
+        INFO("empty block " << block[0] << "," << block[1]);
+        REQUIRE_FALSE(net_face_at(block[0], block[1]));
+    }
+
+    // And outside the grid, which is where a step off the drawing's edge asks.
+    REQUIRE_FALSE(net_face_at(4, 0));
+    REQUIRE_FALSE(net_face_at(0, 3));
+    REQUIRE_FALSE(net_face_at(-1, 0));
 }
 
 TEST_CASE("a solved net shows nine stickers of every color")

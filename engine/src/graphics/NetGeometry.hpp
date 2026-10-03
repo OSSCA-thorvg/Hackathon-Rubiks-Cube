@@ -50,6 +50,16 @@ using NetCell = cube::SurfaceSticker;
 [[nodiscard]] NetBlock net_block(cube::Face face) noexcept;
 
 /**
+ * The face drawn in one block of the cross; the inverse of `net_block`.
+ *
+ * Nothing for a block the cross leaves empty, and nothing for one outside
+ * the cross altogether, so a step off the edge of the drawing or a point
+ * beside it can be asked about without checking where it is first.
+ */
+[[nodiscard]] std::optional<cube::Face> net_face_at(int column,
+                                                    int row) noexcept;
+
+/**
  * Maps a cell of an unfolded face to the cubie face it shows.
  *
  * `col` and `row` are 0 ... N-1 within the face, counted left to right and

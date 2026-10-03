@@ -69,16 +69,8 @@ rubiks::graphics::Rect net_alone()
 /** The middle of one net cell, in the net surface's pixels. */
 rubiks::math::Vec2 net_cell(rubiks::cube::Face face, int column, int row)
 {
-    const auto net = net_alone();
-    const float face_side =
-        net.width / static_cast<float>(rubiks::graphics::kNetColumns);
-    const float cell = face_side / 3.0f;
-    const auto block = rubiks::graphics::net_block(face);
-    return rubiks::math::Vec2{
-        net.x + static_cast<float>(block.column) * face_side +
-            (static_cast<float>(column) + 0.5f) * cell,
-        net.y + static_cast<float>(block.row) * face_side +
-            (static_cast<float>(row) + 0.5f) * cell};
+    return rubiks::graphics::net_cell_center(face, column, row, net_alone(),
+                                             3);
 }
 
 Rgba net_pixel(rubiks::cube::Face face, int column, int row)
@@ -185,8 +177,7 @@ TEST_CASE("a press lands on the surface it was made on")
     // A drag of the net's front top row to the left, in the net surface's
     // own pixels, is U -- the same as it is on one canvas.
     const auto from = net_cell(rubiks::cube::Face::Front, 1, 0);
-    const float face_side =
-        net_alone().width / static_cast<float>(rubiks::graphics::kNetColumns);
+    const float face_side = rubiks::graphics::net_face_side(net_alone());
     REQUIRE(rubiks::app::pointer_down_on(kNet, from.x, from.y));
     rubiks::app::pointer_move(from.x - 0.6f * face_side, from.y);
     rubiks::app::pointer_up();
@@ -379,8 +370,7 @@ TEST_CASE("a drag on one surface survives another surface being resized")
     open_three_canvases();
 
     const auto from = net_cell(rubiks::cube::Face::Front, 1, 0);
-    const float face_side =
-        net_alone().width / static_cast<float>(rubiks::graphics::kNetColumns);
+    const float face_side = rubiks::graphics::net_face_side(net_alone());
     REQUIRE(rubiks::app::pointer_down_on(kNet, from.x, from.y));
 
     // The page moved the cube's canvas under the drag; the net's did not.

@@ -308,6 +308,18 @@ NetBlock net_block(Face face) noexcept
     return NetBlock{1, 2};
 }
 
+std::optional<Face> net_face_at(int column, int row) noexcept
+{
+    // By search, for the reason net_position() gives: six faces are nothing
+    // to walk, and the one table of where they sit cannot disagree with
+    // itself.
+    for (const auto face : net_faces()) {
+        const auto block = net_block(face);
+        if (block.column == column && block.row == row) return face;
+    }
+    return std::nullopt;
+}
+
 NetCell net_cell(Face face, int col, int row, int size) noexcept
 {
     const int last = size - 1;

@@ -1441,17 +1441,6 @@ bool fill_on(std::uint32_t id, float x, float y) noexcept
     return fill_face(pick->face);
 }
 
-/** The face drawn in one block of the cross, or nothing for an empty one. */
-[[nodiscard]] std::optional<cube::Face> face_in_block(int column,
-                                                      int row) noexcept
-{
-    for (const auto face : graphics::net_faces()) {
-        const auto block = graphics::net_block(face);
-        if (block.column == column && block.row == row) return face;
-    }
-    return std::nullopt;
-}
-
 }  // namespace
 
 bool begin_painting() noexcept
@@ -1535,7 +1524,7 @@ bool paint_cursor_step(int columns, int rows) noexcept
     const int row = block.row * size + draft.cursor->row + rows;
     if (column < 0 || row < 0) return false;
 
-    const auto face = face_in_block(column / size, row / size);
+    const auto face = graphics::net_face_at(column / size, row / size);
     if (!face) return false;
 
     draft.cursor = interaction::NetPick{*face, column % size, row % size};

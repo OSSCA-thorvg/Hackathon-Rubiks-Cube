@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include "graphics/Layout.hpp"
 #include "graphics/NetGeometry.hpp"
 
 namespace rubiks::interaction {
@@ -19,33 +18,26 @@ std::optional<NetPick> pick_net(float x, float y, const graphics::Rect& rect,
     if (x < rect.x || x >= rect.x + rect.width) return std::nullopt;
     if (y < rect.y || y >= rect.y + rect.height) return std::nullopt;
 
-    const float face_side =
-        rect.width / static_cast<float>(graphics::kNetColumns);
+    const float face_side = graphics::net_face_side(rect);
     const auto block_column = static_cast<int>((x - rect.x) / face_side);
     const auto block_row = static_cast<int>((y - rect.y) / face_side);
 
-    for (const auto face : graphics::net_faces()) {
-        const auto block = graphics::net_block(face);
-        if (block.column != block_column || block.row != block_row) continue;
-
-        const float cell = face_side / static_cast<float>(size);
-        const float local_x =
-            x - rect.x - static_cast<float>(block_column) * face_side;
-        const float local_y =
-            y - rect.y - static_cast<float>(block_row) * face_side;
-
-        // Clamped rather than trusted: the divisions above are exact enough
-        // for a face but a point on the very last edge must not index past it.
-        const int col =
-            std::clamp(static_cast<int>(local_x / cell), 0, size - 1);
-        const int row =
-            std::clamp(static_cast<int>(local_y / cell), 0, size - 1);
-        return NetPick{face, col, row};
-    }
-
+    const auto face = graphics::net_face_at(block_column, block_row);
     // Inside the rectangle but on one of the four corners the cross leaves
     // empty, which is background like anywhere else off a face.
-    return std::nullopt;
+    if (!face) return std::nullopt;
+
+    const float cell = graphics::net_cell_side(rect, size);
+    const float local_x =
+        x - rect.x - static_cast<float>(block_column) * face_side;
+    const float local_y =
+        y - rect.y - static_cast<float>(block_row) * face_side;
+
+    // Clamped rather than trusted: the divisions above are exact enough for a
+    // face but a point on the very last edge must not index past it.
+    const int col = std::clamp(static_cast<int>(local_x / cell), 0, size - 1);
+    const int row = std::clamp(static_cast<int>(local_y / cell), 0, size - 1);
+    return NetPick{*face, col, row};
 }
 
 }  // namespace rubiks::interaction

@@ -8,12 +8,14 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "CubeSupport.hpp"
 #include "EngineLifecycle.hpp"
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
 
 namespace {
 
+using rubiks::test::apply_all;
 using rubiks::test::drawn_frame;
 using rubiks::test::kFrameMs;
 using rubiks::test::settle;
@@ -67,7 +69,7 @@ TEST_CASE("every watching pattern brings the cube back round within the bound")
             rubiks::cube::CubeState cube(size);
             int rounds = 0;
             while (rounds < kAmbientMaxPeriod) {
-                cube.apply(pattern);
+                apply_all(cube, pattern);
                 ++rounds;
                 if (cube.is_solved()) break;
             }

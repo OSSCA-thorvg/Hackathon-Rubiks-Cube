@@ -4,6 +4,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "CubeSupport.hpp"
 #include "cube/Assembly.hpp"
 #include "cube/CubeState.hpp"
 #include "cube/Scramble.hpp"
@@ -36,11 +37,12 @@ using rubiks::cube::read_painting;
 using rubiks::cube::solver::LayerByLayer;
 using rubiks::cube::solver::Reduction;
 using rubiks::cube::solver::Solver;
+using rubiks::test::apply_all;
 
 CubeState scrambled(std::uint32_t seed, int size, std::size_t moves = 40)
 {
     CubeState cube(size);
-    cube.apply(make_scramble(size, seed, moves));
+    apply_all(cube, make_scramble(size, seed, moves));
     return cube;
 }
 
@@ -106,7 +108,7 @@ TEST_CASE("a painting the gate accepts is a painting a solver finishes")
             CHECK(painting_of(*built) == painting);
 
             auto working = *built;
-            working.apply(solver_for(size, small, big).solve(working));
+            apply_all(working, solver_for(size, small, big).solve(working));
             CHECK(working.is_solved());
         }
     }
@@ -136,7 +138,7 @@ TEST_CASE("every size the application builds is read and solved", "[.big]")
         REQUIRE(painting_of(*built) == painting_of(cube));
 
         auto working = *built;
-        working.apply(big.solve(working));
+        apply_all(working, big.solve(working));
         CHECK(working.is_solved());
     }
 }

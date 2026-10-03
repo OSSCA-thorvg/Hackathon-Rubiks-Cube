@@ -7,6 +7,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "CubeSupport.hpp"
 #include "cube/CubeState.hpp"
 #include "cube/PackedMove.hpp"
 #include "cube/Scramble.hpp"
@@ -53,6 +54,7 @@ using rubiks::cube::solver::reduce;
 using rubiks::cube::solver::Reduction;
 using rubiks::cube::solver::solve_as_three_layers;
 using rubiks::cube::solver::solve_centres;
+using rubiks::test::apply_all;
 
 using Clock = std::chrono::steady_clock;
 
@@ -65,7 +67,7 @@ constexpr std::size_t kScrambleMoves = 40;
 CubeState scrambled(std::uint32_t seed, int size)
 {
     CubeState cube(size);
-    cube.apply(make_scramble(size, seed, kScrambleMoves));
+    apply_all(cube, make_scramble(size, seed, kScrambleMoves));
     return cube;
 }
 
@@ -141,7 +143,7 @@ Measured measure(int size, std::size_t seed_count)
         reductions.push_back(seconds([&] { reduction_moves = reduce(cube); }));
 
         auto reduced_cube = cube;
-        reduced_cube.apply(reduction_moves);
+        apply_all(reduced_cube, reduction_moves);
 
         std::vector<rubiks::cube::CubeMove> finish_moves;
         finishes.push_back(
@@ -151,7 +153,7 @@ Measured measure(int size, std::size_t seed_count)
         solves.push_back(seconds([&] { whole = solver.solve(cube); }));
 
         auto check = cube;
-        check.apply(whole);
+        apply_all(check, whole);
         REQUIRE(check.is_solved());
 
         out.centre_moves += centre_moves.size();

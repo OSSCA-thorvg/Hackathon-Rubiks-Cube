@@ -4,6 +4,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "CubeSupport.hpp"
 #include "cube/CubeMove.hpp"
 #include "cube/MoveTimeline.hpp"
 
@@ -32,7 +33,7 @@ static_assert(pack(CubeMove{Axis::X, layer(2), 1}) == kPackedR,
 
 TEST_CASE("a move is written as axis, turns and layers in one word")
 {
-    using namespace rubiks::cube::moves;
+    using namespace rubiks::test::moves;
 
     // Axis X = 0, turns +1 = code 1 at bit 2, layer 2 = bit 6.
     REQUIRE(pack(R(kSize)) == 0x44);
@@ -110,7 +111,7 @@ TEST_CASE("normalizing a move to write it down does not reach the record")
 
 TEST_CASE("a word read back is the move it was written from")
 {
-    using namespace rubiks::cube::moves;
+    using namespace rubiks::test::moves;
 
     // Every move a session can hold survives the round trip, direction and
     // all -- which is what makes a shared record the same cube on both sides.

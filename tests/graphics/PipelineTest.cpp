@@ -5,6 +5,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "CubeSupport.hpp"
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
 #include "graphics/AxisGizmo.hpp"
@@ -410,7 +411,7 @@ TEST_CASE("the cube silhouette stays inside its region")
 TEST_CASE("a move changes the colors the pipeline puts on screen")
 {
     CubeState state(3);
-    state.apply(rubiks::cube::moves::U(3));
+    state.apply(rubiks::test::moves::U(3));
 
     const RenderScene scene = render_cube(state);
 

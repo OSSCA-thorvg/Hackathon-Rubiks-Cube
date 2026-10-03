@@ -5,6 +5,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "CubeSupport.hpp"
 #include "graphics/Layout.hpp"
 #include "graphics/OrbitCamera.hpp"
 #include "interaction/InteractionController.hpp"
@@ -230,7 +231,7 @@ TEST_CASE("an orbit is not busy and coexists with a programmatic move")
 {
     // A sweep has no commit to protect, so it must block neither a keyboard
     // turn now nor queued playback later. Busy is about changing the cube.
-    const auto turn = rubiks::cube::moves::R(kSize);
+    const auto turn = rubiks::test::moves::R(kSize);
 
     InteractionController controller(kSize);
     press_background(controller);

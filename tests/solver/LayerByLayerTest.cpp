@@ -3,6 +3,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "CubeSupport.hpp"
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
 #include "cube/Scramble.hpp"
@@ -24,6 +25,7 @@ using rubiks::cube::make_scramble;
 using rubiks::cube::solver::compress;
 using rubiks::cube::solver::LayerByLayer;
 using rubiks::cube::solver::solve_as_three_layers;
+using rubiks::test::apply_all;
 
 constexpr int kSize = 3;
 
@@ -32,7 +34,7 @@ CubeState scrambled(std::uint32_t seed, std::size_t moves = 20,
                     int size = kSize)
 {
     CubeState cube(size);
-    cube.apply(make_scramble(size, seed, moves));
+    apply_all(cube, make_scramble(size, seed, moves));
     return cube;
 }
 
@@ -85,7 +87,7 @@ TEST_CASE("a two by two is solved by the corner stages alone")
         auto cube = scrambled(seed, 20, 2);
         const auto solution = solver.solve(cube);
 
-        cube.apply(solution);
+        apply_all(cube, solution);
         INFO("seed " << seed);
         REQUIRE(cube.is_solved());
     }
@@ -113,7 +115,7 @@ TEST_CASE("the three-layer stages finish a reduced cube of any size")
     for (const int size : {4, 5, 6, 7, 8, 9}) {
         for (std::uint32_t seed = 0; seed < 40; ++seed) {
             auto cube = outer_scrambled(seed, size);
-            cube.apply(solve_as_three_layers(cube));
+            apply_all(cube, solve_as_three_layers(cube));
             INFO("size " << size << " seed " << seed);
             REQUIRE(cube.is_solved());
         }
@@ -134,7 +136,7 @@ TEST_CASE("every scramble the application can make is solved")
         auto cube = scrambled(seed);
         const auto solution = solver.solve(cube);
 
-        cube.apply(solution);
+        apply_all(cube, solution);
         INFO("seed " << seed);
         REQUIRE(cube.is_solved());
     }
@@ -147,7 +149,7 @@ TEST_CASE("longer and shorter scrambles are solved as well")
     for (const std::size_t length : {1, 2, 3, 7, 40, 100}) {
         for (std::uint32_t seed = 0; seed < 60; ++seed) {
             auto cube = scrambled(seed, length);
-            cube.apply(solver.solve(cube));
+            apply_all(cube, solver.solve(cube));
             INFO("seed " << seed << " length " << length);
             REQUIRE(cube.is_solved());
         }
@@ -259,8 +261,8 @@ TEST_CASE("neighbouring turns of one layer are run together")
             const auto solution = solver.solve(cube);
             auto again = cube;
 
-            cube.apply(solution);
-            again.apply(compress(solution));
+            apply_all(cube, solution);
+            apply_all(again, compress(solution));
             REQUIRE(cube == again);
         }
     }

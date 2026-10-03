@@ -4,6 +4,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "CubeSupport.hpp"
 #include "cube/CubeMove.hpp"
 
 namespace {
@@ -17,7 +18,7 @@ using rubiks::cube::TimelineEffect;
 /** A scramble of two named moves, as the generator would hand one over. */
 [[nodiscard]] std::vector<CubeMove> two_move_scramble()
 {
-    using namespace rubiks::cube::moves;
+    using namespace rubiks::test::moves;
     return {R(kSize), U(kSize)};
 }
 
@@ -53,7 +54,7 @@ void arrive(MoveTimeline& timeline, const std::vector<CubeMove>& scramble)
 
 TEST_CASE("a scramble is recorded whole and arrives one commit at a time")
 {
-    using namespace rubiks::cube::moves;
+    using namespace rubiks::test::moves;
 
     MoveTimeline timeline;
     REQUIRE(timeline.size() == 0);
@@ -92,7 +93,7 @@ TEST_CASE("a scramble is recorded whole and arrives one commit at a time")
 
 TEST_CASE("a recorded move lands at the cursor and takes the cursor with it")
 {
-    using namespace rubiks::cube::moves;
+    using namespace rubiks::test::moves;
 
     MoveTimeline timeline;
     arrive(timeline, two_move_scramble());
@@ -110,7 +111,7 @@ TEST_CASE("a recorded move lands at the cursor and takes the cursor with it")
 
 TEST_CASE("a new move discards everything after the cursor, in one rule")
 {
-    using namespace rubiks::cube::moves;
+    using namespace rubiks::test::moves;
 
     SECTION("a redo tail the user rewound behind")
     {
@@ -192,7 +193,7 @@ TEST_CASE("watching leaves no trace on the record")
 
 TEST_CASE("a rewind plan is the recorded moves backwards, each inverted")
 {
-    using namespace rubiks::cube::moves;
+    using namespace rubiks::test::moves;
     using rubiks::cube::rewind_plan;
 
     MoveTimeline timeline;
@@ -217,7 +218,7 @@ TEST_CASE("a rewind plan is the recorded moves backwards, each inverted")
 
 TEST_CASE("a redo plan replays the recorded moves as they were")
 {
-    using namespace rubiks::cube::moves;
+    using namespace rubiks::test::moves;
     using rubiks::cube::redo_plan;
     using rubiks::cube::rewind_plan;
 
@@ -245,12 +246,12 @@ TEST_CASE("a redo plan replays the recorded moves as they were")
     arrive(played, two_move_scramble());
     played.record(F(kSize));
     played.record(D(kSize));
-    REQUIRE(rewind_plan(played, 0) == rubiks::cube::inverse(expected));
+    REQUIRE(rewind_plan(played, 0) == rubiks::test::inverse_of(expected));
 }
 
 TEST_CASE("a scramble on its own rewinds without running off the start")
 {
-    using namespace rubiks::cube::moves;
+    using namespace rubiks::test::moves;
     using rubiks::cube::rewind_plan;
 
     MoveTimeline timeline;

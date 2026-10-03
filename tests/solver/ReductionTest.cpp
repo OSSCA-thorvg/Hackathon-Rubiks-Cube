@@ -3,6 +3,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "CubeSupport.hpp"
 #include "cube/CubeState.hpp"
 #include "cube/Scramble.hpp"
 #include "cube/PackedMove.hpp"
@@ -33,11 +34,12 @@ using rubiks::cube::solver::reduce;
 using rubiks::cube::solver::reduced;
 using rubiks::cube::solver::solve_as_three_layers;
 using rubiks::cube::solver::solve_centres;
+using rubiks::test::apply_all;
 
 CubeState scrambled(std::uint32_t seed, int size, std::size_t moves = 40)
 {
     CubeState cube(size);
-    cube.apply(make_scramble(size, seed, moves));
+    apply_all(cube, make_scramble(size, seed, moves));
     return cube;
 }
 
@@ -75,7 +77,7 @@ TEST_CASE("centres are brought together at every size")
     for (const int size : {4, 5, 6, 7, 8, 9}) {
         for (std::uint32_t seed = 0; seed < 20; ++seed) {
             auto cube = scrambled(seed, size);
-            cube.apply(solve_centres(cube));
+            apply_all(cube, solve_centres(cube));
             INFO("size " << size << " seed " << seed);
             REQUIRE(centres_done(cube));
         }
@@ -90,7 +92,7 @@ void reduces_and_finishes(int size, std::uint32_t seed)
     auto cube = scrambled(seed, size);
 
     const auto reduction = reduce(cube);
-    cube.apply(reduction);
+    apply_all(cube, reduction);
 
     INFO("size " << size << " seed " << seed);
     REQUIRE(centres_done(cube));
@@ -108,7 +110,7 @@ void reduces_and_finishes(int size, std::uint32_t seed)
         REQUIRE(pack(move) != 0);
     }
 
-    cube.apply(solve_as_three_layers(cube));
+    apply_all(cube, solve_as_three_layers(cube));
     REQUIRE(cube.is_solved());
 }
 
@@ -191,7 +193,7 @@ TEST_CASE("both of the things a reduction can be left holding turn up")
     for (const int size : {4, 5}) {
         for (std::uint32_t seed = 0; seed < 4; ++seed) {
             auto cube = scrambled(seed, size);
-            cube.apply(reduce(cube));
+            apply_all(cube, reduce(cube));
             REQUIRE(reduced(cube));
 
             const auto projection = projected(cube);
@@ -232,12 +234,12 @@ TEST_CASE("an odd number of slices from solved is reduced all the same")
                 }
             }
 
-            cube.apply(reduce(cube));
+            apply_all(cube, reduce(cube));
             INFO("size " << size << " seed " << seed);
             REQUIRE(reduced(cube));
             REQUIRE(reachable(parities(projected(cube))));
 
-            cube.apply(solve_as_three_layers(cube));
+            apply_all(cube, solve_as_three_layers(cube));
             REQUIRE(cube.is_solved());
         }
     }

@@ -3,6 +3,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "CubeSupport.hpp"
 #include "cube/Assembly.hpp"
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
@@ -25,11 +26,12 @@ using rubiks::cube::PaintFault;
 using rubiks::cube::painting_of;
 using rubiks::cube::read_painting;
 using rubiks::cube::surface_stickers;
+using rubiks::test::apply_all;
 
 CubeState scrambled(std::uint32_t seed, int size, std::size_t moves = 40)
 {
     CubeState cube(size);
-    cube.apply(make_scramble(size, seed, moves));
+    apply_all(cube, make_scramble(size, seed, moves));
     return cube;
 }
 

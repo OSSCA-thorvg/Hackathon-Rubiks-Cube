@@ -11,6 +11,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "CubeSupport.hpp"
 #include "cube/Assembly.hpp"
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
@@ -70,9 +71,9 @@ float cell_side()
 CubeState mixed_state()
 {
     CubeState state(kSize);
-    state.apply(rubiks::cube::moves::R(kSize));
-    state.apply(rubiks::cube::moves::U(kSize));
-    state.apply(rubiks::cube::moves::F(kSize));
+    state.apply(rubiks::test::moves::R(kSize));
+    state.apply(rubiks::test::moves::U(kSize));
+    state.apply(rubiks::test::moves::F(kSize));
     return state;
 }
 
@@ -370,7 +371,7 @@ TEST_CASE("net stickers are squares inside the net rectangle")
 TEST_CASE("a move is visible in the net")
 {
     CubeState state(kSize);
-    state.apply(rubiks::cube::moves::R(kSize));
+    state.apply(rubiks::test::moves::R(kSize));
 
     const RenderScene scene = build_net_scene(state, test_rect());
 

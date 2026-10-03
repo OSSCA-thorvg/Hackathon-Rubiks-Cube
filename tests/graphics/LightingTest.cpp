@@ -12,6 +12,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "CubeSupport.hpp"
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
 #include "graphics/Camera.hpp"
@@ -645,8 +646,8 @@ TEST_CASE("the shading of one plane runs on across its stickers")
     SECTION("a mixed cube shares the axis too, each sticker in its own colour")
     {
         CubeState mixed(3);
-        mixed.apply(rubiks::cube::moves::U(3));
-        mixed.apply(rubiks::cube::moves::R(3));
+        mixed.apply(rubiks::test::moves::U(3));
+        mixed.apply(rubiks::test::moves::R(3));
         const WorldScene mixed_world = build_cube_scene(mixed);
         const ViewScene lit = mixed_world | view(home_camera()) | light(default_lighting(), home_camera());
 

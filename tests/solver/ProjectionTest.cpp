@@ -4,6 +4,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "CubeSupport.hpp"
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
 #include "cube/Scramble.hpp"
@@ -24,6 +25,7 @@ using rubiks::cube::solver::Projection;
 using rubiks::cube::solver::projected;
 using rubiks::cube::solver::reachable;
 using rubiks::cube::solver::reduced;
+using rubiks::test::apply_all;
 
 /** One outer face of a cube of any size, turned the same way at every size. */
 [[nodiscard]] CubeMove outer(Axis axis, bool far_end, int turns, int size)
@@ -143,7 +145,7 @@ TEST_CASE("a scramble that reaches inside is not a three by three either")
 {
     for (const int size : {4, 5, 6, 7, 8, 9}) {
         CubeState cube(size);
-        cube.apply(make_scramble(size, 11, 40));
+        apply_all(cube, make_scramble(size, 11, 40));
         INFO("size " << size);
         CHECK_FALSE(reduced(cube));
     }

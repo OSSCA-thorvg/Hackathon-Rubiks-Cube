@@ -7,6 +7,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "CubeSupport.hpp"
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
 #include "graphics/CubeGeometry.hpp"
@@ -158,7 +159,7 @@ TEST_CASE("turning a layer a quarter of the way draws the turned cube")
         build_cube_scene(state, turning_right_layer(90.0f));
 
     CubeState turned(kSize);
-    turned.apply(rubiks::cube::moves::R(kSize));
+    turned.apply(rubiks::test::moves::R(kSize));
     const WorldScene settled = build_cube_scene(turned);
 
     REQUIRE(sticker_keys(mid_turn) == sticker_keys(settled));
@@ -172,7 +173,7 @@ TEST_CASE("turning backwards draws the inverse move")
         build_cube_scene(state, turning_right_layer(-90.0f));
 
     CubeState turned(kSize);
-    turned.apply(inverse(rubiks::cube::moves::R(kSize)));
+    turned.apply(inverse(rubiks::test::moves::R(kSize)));
 
     REQUIRE(sticker_keys(mid_turn) == sticker_keys(build_cube_scene(turned)));
 }

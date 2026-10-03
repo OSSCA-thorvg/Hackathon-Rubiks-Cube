@@ -4,6 +4,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "CubeSupport.hpp"
 #include "cube/CubeMove.hpp"
 #include "cube/CubeState.hpp"
 #include "cube/Cubie.hpp"
@@ -24,6 +25,8 @@ using rubiks::cube::inverse;
 using rubiks::cube::layer;
 using rubiks::cube::layers_through;
 using rubiks::cube::solved_color;
+using rubiks::test::apply_all;
+using rubiks::test::inverse_of;
 
 constexpr int kSize = 3;
 constexpr int kLast = kSize - 1;
@@ -128,7 +131,7 @@ TEST_CASE("R moves the up-front-right cubie to the up-back-right slot")
     // the top front right sits at the top back right, showing the old front
     // color on top and the old top color at the back.
     CubeState state(kSize);
-    state.apply(rubiks::cube::moves::R(kSize));
+    state.apply(rubiks::test::moves::R(kSize));
 
     const auto& corner = state.at(kLast, kLast, 0);
     REQUIRE(corner.sticker(Face::Up) == FaceColor::Green);
@@ -136,27 +139,9 @@ TEST_CASE("R moves the up-front-right cubie to the up-back-right slot")
     REQUIRE(corner.sticker(Face::Right) == FaceColor::Red);
 }
 
-TEST_CASE("the named face moves carry the fields of the notation they replace")
-{
-    using namespace rubiks::cube::moves;
-
-    REQUIRE(R(kSize) == CubeMove{Axis::X, layer(kLast), 1});
-    REQUIRE(L(kSize) == CubeMove{Axis::X, layer(0), -1});
-    REQUIRE(U(kSize) == CubeMove{Axis::Y, layer(kLast), 1});
-    REQUIRE(D(kSize) == CubeMove{Axis::Y, layer(0), -1});
-    REQUIRE(F(kSize) == CubeMove{Axis::Z, layer(kLast), 1});
-    REQUIRE(B(kSize) == CubeMove{Axis::Z, layer(0), -1});
-
-    // The negative faces turn the other way about their axis; getting this
-    // sign wrong still produces a legal cube, just a mirrored one.
-    REQUIRE(L(kSize).quarter_turns == -R(kSize).quarter_turns);
-    REQUIRE(D(kSize).quarter_turns == -U(kSize).quarter_turns);
-    REQUIRE(B(kSize).quarter_turns == -F(kSize).quarter_turns);
-}
-
 TEST_CASE("every face move has order four")
 {
-    using namespace rubiks::cube::moves;
+    using namespace rubiks::test::moves;
     const CubeState solved(kSize);
 
     for (const auto& move : {R(kSize), L(kSize), U(kSize), D(kSize), F(kSize),
@@ -172,7 +157,7 @@ TEST_CASE("every face move has order four")
 
 TEST_CASE("a move followed by its inverse leaves the cube untouched")
 {
-    using namespace rubiks::cube::moves;
+    using namespace rubiks::test::moves;
     const CubeState solved(kSize);
 
     for (const auto& move : {R(kSize), L(kSize), U(kSize), D(kSize), F(kSize),
@@ -186,7 +171,7 @@ TEST_CASE("a move followed by its inverse leaves the cube untouched")
 
 TEST_CASE("quarter turns are taken modulo four")
 {
-    const auto base = rubiks::cube::moves::R(kSize);
+    const auto base = rubiks::test::moves::R(kSize);
 
     CubeState by_five(kSize);
     by_five.apply(CubeMove{base.axis, base.layers, 5});
@@ -203,7 +188,7 @@ TEST_CASE("quarter turns are taken modulo four")
 
 TEST_CASE("the sexy move returns to solved after six repetitions")
 {
-    using namespace rubiks::cube::moves;
+    using namespace rubiks::test::moves;
 
     // (R U R' U') has order exactly six. A wrong sticker permutation that
     // still happens to have order four per face will not survive this.
@@ -213,7 +198,7 @@ TEST_CASE("the sexy move returns to solved after six repetitions")
     CubeState state(kSize);
 
     for (int i = 1; i <= 6; ++i) {
-        state.apply(sequence);
+        apply_all(state, sequence);
         if (i < 6) REQUIRE(state != CubeState(kSize));
     }
     REQUIRE(state == CubeState(kSize));
@@ -244,13 +229,13 @@ TEST_CASE("wide and slice moves are built by naming layers")
 
     // Widening the layer set has to change the result, or `layers` is being
     // ignored and every move is secretly a face turn.
-    REQUIRE(after(wide, 1) != after(rubiks::cube::moves::R(kSize), 1));
+    REQUIRE(after(wide, 1) != after(rubiks::test::moves::R(kSize), 1));
     REQUIRE(after(slice, 1) != after(wide, 1));
 }
 
 TEST_CASE("a scramble is undone by the reversed inverse sequence")
 {
-    using namespace rubiks::cube::moves;
+    using namespace rubiks::test::moves;
 
     const std::vector<CubeMove> scramble{
         R(kSize), U(kSize),          F(kSize),  inverse(L(kSize)),
@@ -260,11 +245,11 @@ TEST_CASE("a scramble is undone by the reversed inverse sequence")
     };
 
     CubeState state(kSize);
-    state.apply(scramble);
+    apply_all(state, scramble);
     REQUIRE(state != CubeState(kSize));
     REQUIRE_FALSE(state.is_solved());
 
-    state.apply(inverse(scramble));
+    apply_all(state, inverse_of(scramble));
     REQUIRE(state == CubeState(kSize));
     REQUIRE(state.is_solved());
 }
@@ -318,7 +303,7 @@ TEST_CASE("a scramble reaches the layers inside a larger cube")
         }
 
         CubeState state(size);
-        state.apply(scramble);
+        apply_all(state, scramble);
         REQUIRE_FALSE(state.is_solved());
 
         // The point of the depths, read off the cube rather than off the
@@ -328,7 +313,7 @@ TEST_CASE("a scramble reaches the layers inside a larger cube")
         // every one of them where it started however long it ran.
         if (size >= 4) REQUIRE(disturbed_inner_stickers(state) > 0);
 
-        state.apply(inverse(scramble));
+        apply_all(state, inverse_of(scramble));
         REQUIRE(state.is_solved());
     }
 }
@@ -358,10 +343,10 @@ TEST_CASE("a generated scramble is restored by its inverse")
     const auto scramble = rubiks::cube::make_scramble(kSize, 42U);
     CubeState state(kSize);
 
-    state.apply(scramble);
+    apply_all(state, scramble);
     REQUIRE_FALSE(state.is_solved());
 
-    state.apply(inverse(scramble));
+    apply_all(state, inverse_of(scramble));
     REQUIRE(state.is_solved());
 }
 
@@ -382,7 +367,7 @@ TEST_CASE("the move engine holds for an even cube size")
     const CubeState solved(kSmall);
     REQUIRE(solved.size() == kSmall);
 
-    const auto move = rubiks::cube::moves::R(kSmall);
+    const auto move = rubiks::test::moves::R(kSmall);
     REQUIRE(move.layers == layer(1));
 
     REQUIRE(after(move, 1, kSmall) != solved);

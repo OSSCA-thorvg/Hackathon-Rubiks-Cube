@@ -1,7 +1,5 @@
 #include "app/Application.hpp"
 
-#include <array>
-#include <cstddef>
 #include <cstdlib>
 #include <vector>
 
@@ -11,6 +9,7 @@
 #include "cube/CubeMove.hpp"
 #include "cube/Cubie.hpp"
 #include "cube/Scramble.hpp"
+#include "cube/Surface.hpp"
 
 namespace {
 
@@ -27,9 +26,10 @@ using rubiks::test::settle;
  * `turn_face`. The sign is there because half of the six turn negatively about
  * their axis.
  *
- * Read out of the named moves rather than restated here. Which layer each face
- * is and which way it turns about its axis are facts the domain already holds,
- * and a second copy of them would go on agreeing after the first had changed.
+ * Read out of `cube::face_move()` rather than restated here. Which layer each
+ * face is and which way it turns about its axis are facts the domain already
+ * holds, and a second copy of them would go on agreeing after the first had
+ * changed.
  */
 struct NamedFace {
     rubiks::cube::Face face;
@@ -38,20 +38,15 @@ struct NamedFace {
 
 [[nodiscard]] NamedFace named_face(const rubiks::cube::CubeMove& move)
 {
-    using namespace rubiks::cube::moves;
-    const std::array<rubiks::cube::CubeMove, rubiks::cube::kFaceCount> named{
-        R(kSize), L(kSize), U(kSize), D(kSize), F(kSize), B(kSize)};
-    const auto all = rubiks::cube::faces();
-
-    for (std::size_t index = 0; index < all.size(); ++index) {
-        if (named[index].axis == move.axis &&
-            named[index].layers == move.layers) {
-            return NamedFace{all[index], named[index].quarter_turns};
+    for (const auto face : rubiks::cube::faces()) {
+        const auto named = rubiks::cube::face_move(face, 1, 1, 1, kSize);
+        if (named.axis == move.axis && named.layers == move.layers) {
+            return NamedFace{face, named.quarter_turns};
         }
     }
 
     FAIL("no outer face turns this layer");
-    return NamedFace{all[0], 1};
+    return NamedFace{rubiks::cube::Face::Right, 1};
 }
 
 /**

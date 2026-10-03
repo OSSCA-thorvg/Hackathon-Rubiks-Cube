@@ -11,6 +11,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "CubeSupport.hpp"
 #include "cube/CubeState.hpp"
 #include "graphics/CubeGeometry.hpp"
 #include "graphics/Layout.hpp"
@@ -219,7 +220,7 @@ TEST_CASE("dragging the front face's right column upward performs R")
 
     REQUIRE(settled.commits == 1);
     REQUIRE(settled.move);
-    REQUIRE(*settled.move == rubiks::cube::moves::R(kSize));
+    REQUIRE(*settled.move == rubiks::test::moves::R(kSize));
 }
 
 TEST_CASE("every grabbable face turns both ways about both of its axes")
@@ -361,7 +362,7 @@ TEST_CASE("input during the snap is ignored")
 TEST_CASE("a programmatic move uses the snap and commit path")
 {
     InteractionController controller(kSize);
-    const CubeMove move = rubiks::cube::moves::R(kSize);
+    const CubeMove move = rubiks::test::moves::R(kSize);
 
     REQUIRE(controller.start_move(move));
     REQUIRE(controller.is_busy());
@@ -403,7 +404,7 @@ TEST_CASE("a programmatic turn keeps the direction it was asked for")
 TEST_CASE("programmatic moves reject invalid or concurrent work")
 {
     InteractionController controller(kSize);
-    const CubeMove move = rubiks::cube::moves::U(kSize);
+    const CubeMove move = rubiks::test::moves::U(kSize);
 
     REQUIRE_FALSE(controller.start_move(CubeMove{Axis::X, 0, 1}));
     REQUIRE_FALSE(controller.start_move(CubeMove{Axis::X,
@@ -454,7 +455,7 @@ TEST_CASE("a played move lifts its piece from the drawing every time")
     constexpr double kTempo = kOpeningMs;
     InteractionController controller(kSize);
 
-    REQUIRE(controller.start_move(rubiks::cube::moves::R(kSize), kTempo));
+    REQUIRE(controller.start_move(rubiks::test::moves::R(kSize), kTempo));
     REQUIRE(controller.active_rotation()->opening == Approx(0.0f));
 
     // Run to the frame that commits and no further -- exactly where a
@@ -464,7 +465,7 @@ TEST_CASE("a played move lifts its piece from the drawing every time")
     }
     REQUIRE_FALSE(controller.is_busy());
 
-    REQUIRE(controller.start_move(rubiks::cube::moves::U(kSize), kTempo));
+    REQUIRE(controller.start_move(rubiks::test::moves::U(kSize), kTempo));
     REQUIRE(controller.active_rotation()->opening == Approx(0.0f));
 
     static_cast<void>(controller.advance(0.5 * kOpeningMs));
@@ -478,7 +479,7 @@ TEST_CASE("an orbit can begin without a pick, and without waiting for a snap")
     InteractionController controller(kSize);
     const Rect viewport = cube_rect();
 
-    REQUIRE(controller.start_move(rubiks::cube::moves::R(kSize)));
+    REQUIRE(controller.start_move(rubiks::test::moves::R(kSize)));
     REQUIRE(controller.start_orbit(10.0f, 10.0f, viewport));
 
     controller.pointer_move(10.0f + 0.25f * viewport.width, 10.0f);
@@ -683,7 +684,7 @@ TEST_CASE("a committed gesture agrees with the named move")
     dragged.apply(*settled.move);
 
     CubeState named(kSize);
-    named.apply(rubiks::cube::moves::R(kSize));
+    named.apply(rubiks::test::moves::R(kSize));
 
     REQUIRE(dragged == named);
 }

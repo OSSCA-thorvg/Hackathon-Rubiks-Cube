@@ -268,20 +268,16 @@ TEST_CASE("depths are counted inwards from the face they are named after")
 
     constexpr int kBig = 5;
 
-    // The named face turn, at every size, is depth one of that face.
+    // Depth one of a face, at every size, is the layer that face is the
+    // outside of: the last one for the three faces at the far end of an axis
+    // and the first for the three opposite.
     for (const int size : {2, 3, 5}) {
-        REQUIRE(depth_layers(Face::Right, 1, 1, size) ==
-                rubiks::cube::moves::R(size).layers);
-        REQUIRE(depth_layers(Face::Left, 1, 1, size) ==
-                rubiks::cube::moves::L(size).layers);
-        REQUIRE(depth_layers(Face::Up, 1, 1, size) ==
-                rubiks::cube::moves::U(size).layers);
-        REQUIRE(depth_layers(Face::Down, 1, 1, size) ==
-                rubiks::cube::moves::D(size).layers);
-        REQUIRE(depth_layers(Face::Front, 1, 1, size) ==
-                rubiks::cube::moves::F(size).layers);
-        REQUIRE(depth_layers(Face::Back, 1, 1, size) ==
-                rubiks::cube::moves::B(size).layers);
+        REQUIRE(depth_layers(Face::Right, 1, 1, size) == layer(size - 1));
+        REQUIRE(depth_layers(Face::Left, 1, 1, size) == layer(0));
+        REQUIRE(depth_layers(Face::Up, 1, 1, size) == layer(size - 1));
+        REQUIRE(depth_layers(Face::Down, 1, 1, size) == layer(0));
+        REQUIRE(depth_layers(Face::Front, 1, 1, size) == layer(size - 1));
+        REQUIRE(depth_layers(Face::Back, 1, 1, size) == layer(0));
     }
 
     // Rw, 3Rw and 2R on a 5x5, whose indices count the other way from R.

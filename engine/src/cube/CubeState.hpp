@@ -35,7 +35,7 @@ class CubeState;
 class CubeState {
 public:
     /** Builds a solved cube. */
-    explicit CubeState(int size = 3);
+    explicit CubeState(int size);
 
     [[nodiscard]] int size() const noexcept { return size_; }
 

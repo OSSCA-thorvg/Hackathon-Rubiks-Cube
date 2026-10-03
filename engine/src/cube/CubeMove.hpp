@@ -76,12 +76,6 @@ struct CubeMove {
            a.quarter_turns == b.quarter_turns;
 }
 
-[[nodiscard]] constexpr bool operator!=(const CubeMove& a,
-                                        const CubeMove& b) noexcept
-{
-    return !(a == b);
-}
-
 [[nodiscard]] constexpr CubeMove inverse(const CubeMove& move) noexcept
 {
     return CubeMove{move.axis, move.layers, -move.quarter_turns};

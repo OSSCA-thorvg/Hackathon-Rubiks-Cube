@@ -62,11 +62,6 @@ struct Cubie {
     return a.stickers == b.stickers;
 }
 
-[[nodiscard]] inline bool operator!=(const Cubie& a, const Cubie& b) noexcept
-{
-    return !(a == b);
-}
-
 /** A cubie whose every face shows its solved color. */
 [[nodiscard]] Cubie solved_cubie() noexcept;
 

@@ -112,8 +112,7 @@ struct PaintReading {
      */
     std::vector<int> blamed;
 
-    /** For `ColourCount` and `OrbitCount`, the colour that is miscounted. */
-    FaceColor colour{};
+    /** For `ColourCount` and `OrbitCount`, how many there should be and are. */
     int expected = 0;
     int found = 0;
 

@@ -13,6 +13,7 @@
 #include "cube/Scramble.hpp"
 #include "cube/solver/LayerByLayer.hpp"
 #include "cube/solver/Reduction.hpp"
+#include "cube/solver/ReductionStages.hpp"
 
 /**
  * What a reduction costs, per stage and per size.

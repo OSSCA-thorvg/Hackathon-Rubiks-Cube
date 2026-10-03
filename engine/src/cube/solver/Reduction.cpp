@@ -15,6 +15,7 @@
 #include "cube/Surface.hpp"
 #include "cube/solver/LayerByLayer.hpp"
 #include "cube/solver/Projection.hpp"
+#include "cube/solver/ReductionStages.hpp"
 #include "cube/solver/Turning.hpp"
 
 namespace rubiks::cube::solver {
@@ -1166,6 +1167,24 @@ private:
 
 };
 
+/**
+ * Every face's centre block one colour.
+ *
+ * The first half of a reduction, and the half that has no written sequences at
+ * all. Two facts about a cube shape it. A face turn cannot move a centre piece
+ * off its face -- only a slice can -- so face turns are free and slices are
+ * the whole cost. And a commutator of two turns moves centre pieces in one of
+ * exactly two sizes: a slice against a face it cuts exchanges a strip between
+ * that face and one neighbour, leaving the other four untouched, while two
+ * slices about different axes exchange one piece on each of the six faces
+ * whatever the size of the cube.
+ *
+ * The coarse one cannot finish a face -- near the end it gives back more of
+ * the colour than it fetches -- so the fine one is needed, and it touches
+ * every face. That is why nothing here works face by face: it counts every
+ * centre piece that is home, over the whole cube, and takes whichever
+ * commutator raises that count the most.
+ */
 void build_centres(Work& work, const CentreWorkshop& shop)
 {
     const Board& board = shop.centres();
@@ -1323,7 +1342,29 @@ void build_centres(Work& work, const CentreWorkshop& shop)
     return true;
 }
 
-/** The reduction proper, on a workshop somebody else is holding. */
+/**
+ * The reduction proper, on a workshop somebody else is holding: both halves,
+ * and the one thing left over when they are done.
+ *
+ * A cube can come out of a reduction in a position no three by three can be
+ * in, because pieces a three by three cannot tell apart -- the centres of one
+ * face -- can hold a permutation the rest of the cube then has to answer for.
+ * Two things follow from it, and neither is met with a written sequence.
+ *
+ * One is corners sitting in an odd order, which is seen by projecting the
+ * reduced cube and asking. What answers it is a change of target: two rows are
+ * told to want each other's colours, which is one swap of the three by three's
+ * edges and puts the same oddness on the other side of the ledger.
+ *
+ * The other is the edge pieces' own arrangement, which the stage cannot reach
+ * at all when it is an odd number of swaps from what is being asked -- every
+ * tool that keeps the centres is an even permutation of them. What answers
+ * that is the one odd move a big cube has, a quarter turn of a single inner
+ * slice, after which the centres are gathered again.
+ *
+ * What is left is always reduced, and always a cube the three-layer stages
+ * can finish.
+ */
 void build_reduction(Work& work, const CentreWorkshop& centres,
                      const EdgeWorkshop& edges)
 {

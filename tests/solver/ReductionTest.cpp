@@ -11,6 +11,7 @@
 #include "cube/solver/LayerByLayer.hpp"
 #include "cube/solver/Projection.hpp"
 #include "cube/solver/Reduction.hpp"
+#include "cube/solver/ReductionStages.hpp"
 
 // Turning a big cube into a three by three: the centres first.
 

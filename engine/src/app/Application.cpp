@@ -39,6 +39,21 @@ namespace {
 /** The size a lifecycle opens with, and the one every phase before this had. */
 constexpr int kDefaultCubeSize = 3;
 
+/**
+ * The settings a lifecycle opens with, each said once.
+ *
+ * Every one of them is read in two places: where the state is first given its
+ * value, and where the getter answers when there is nothing to ask -- no
+ * engine yet, or for the brush no draft. A control on the page reads the
+ * second while the engine is still starting, so the two have to be one value
+ * or the control shows something the engine does not start with.
+ */
+constexpr float kDefaultSpeedScale = 1.0f;
+constexpr graphics::ViewMode kDefaultViewMode = graphics::ViewMode::Both;
+constexpr graphics::FlatStyle kDefaultFlatStyle = graphics::FlatStyle::Net;
+constexpr graphics::Palette kDefaultPalette = graphics::Palette::Classic;
+constexpr cube::FaceColor kDefaultBrush = cube::FaceColor::White;
+
 /** How fast a user's own release settles, in milliseconds per quarter turn. */
 constexpr double kUserTempoMs = interaction::kSnapMsPerQuarterTurn;
 
@@ -203,7 +218,7 @@ struct ApplicationState {
     // How much faster than the written tempos everything turns. One value for
     // every animation, because a person setting a speed means the speed of the
     // cube and not of one of the ways it can be moved.
-    float speed_scale = 1.0f;
+    float speed_scale = kDefaultSpeedScale;
 
     // The logical cube, only ever holding quarter turns. A drag in progress
     // lives in the controller instead, and reaches this through a committed
@@ -216,12 +231,12 @@ struct ApplicationState {
     // the cube before" a state that cannot be written down.
     cube::CubeState cube_state{kDefaultCubeSize};
     interaction::InteractionController interaction{kDefaultCubeSize};
-    graphics::ViewMode view_mode = graphics::ViewMode::Both;
-    graphics::FlatStyle flat_style = graphics::FlatStyle::Net;
+    graphics::ViewMode view_mode = kDefaultViewMode;
+    graphics::FlatStyle flat_style = kDefaultFlatStyle;
 
     // Which six shades the stickers are drawn in. Nothing but drawing reads
     // it, so it is the one setting a turn in progress can be changed under.
-    graphics::Palette palette = graphics::Palette::Classic;
+    graphics::Palette palette = kDefaultPalette;
 
     // The lights the 3D view is drawn under, in world space. The studio setup
     // by default; set_lighting() replaces it so the lamps can be tuned by eye
@@ -275,7 +290,7 @@ struct ApplicationState {
      */
     struct PaintDraft {
         std::vector<cube::FaceColor> stickers;
-        cube::FaceColor brush = cube::FaceColor::White;
+        cube::FaceColor brush = kDefaultBrush;
         cube::PaintReading reading;
 
         // Whether a press covers the face it lands on rather than the one
@@ -1465,7 +1480,7 @@ bool set_brush(cube::FaceColor colour) noexcept
 
 cube::FaceColor brush() noexcept
 {
-    if (!state || !state->paint) return cube::FaceColor::White;
+    if (!state || !state->paint) return kDefaultBrush;
     return state->paint->brush;
 }
 
@@ -1968,7 +1983,7 @@ bool set_view_mode(graphics::ViewMode mode) noexcept
 
 graphics::ViewMode view_mode() noexcept
 {
-    return state ? state->view_mode : graphics::ViewMode::Both;
+    return state ? state->view_mode : kDefaultViewMode;
 }
 
 bool set_flat_style(graphics::FlatStyle style) noexcept
@@ -1988,7 +2003,7 @@ bool set_flat_style(graphics::FlatStyle style) noexcept
 
 graphics::FlatStyle flat_style() noexcept
 {
-    return state ? state->flat_style : graphics::FlatStyle::Net;
+    return state ? state->flat_style : kDefaultFlatStyle;
 }
 
 bool set_palette(graphics::Palette palette) noexcept
@@ -2006,7 +2021,7 @@ bool set_palette(graphics::Palette palette) noexcept
 
 graphics::Palette palette() noexcept
 {
-    return state ? state->palette : graphics::Palette::Classic;
+    return state ? state->palette : kDefaultPalette;
 }
 
 std::uintptr_t lighting_buffer(std::uint32_t count) noexcept
@@ -2089,7 +2104,7 @@ bool set_speed_scale(float scale) noexcept
 
 float speed_scale() noexcept
 {
-    return state ? state->speed_scale : 1.0f;
+    return state ? state->speed_scale : kDefaultSpeedScale;
 }
 
 void reset_view() noexcept

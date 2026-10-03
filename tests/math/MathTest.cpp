@@ -168,7 +168,6 @@ TEST_CASE("inverse undoes a projection times a view")
     SECTION("the product with the original is the identity")
     {
         const Mat4 product = multiply(inverse(combined), combined);
-        const Mat4 expected = identity();
 
         // A wider margin than the rest of this file: a projection spanning
         // near 0.1 to far 100 is poorly conditioned in z, so single precision
@@ -176,7 +175,7 @@ TEST_CASE("inverse undoes a projection times a view")
         for (int column = 0; column < 4; ++column) {
             for (int row = 0; row < 4; ++row) {
                 REQUIRE(product[column][row] ==
-                        Approx(expected[column][row]).margin(1e-4));
+                        Approx(column == row ? 1.0f : 0.0f).margin(1e-4));
             }
         }
     }

@@ -29,12 +29,6 @@ using linalg::cross;
 using linalg::dot;
 using linalg::length;
 
-/** Identity matrix. */
-[[nodiscard]] inline Mat4 identity() noexcept
-{
-    return Mat4{linalg::identity};
-}
-
 /**
  * Unit-length direction of a vector.
  *

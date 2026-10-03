@@ -67,7 +67,6 @@ TEST_CASE("the ground starts dark and stays the old pixel contract")
 {
     EngineLifecycle engine(kWidth, kHeight);
 
-    REQUIRE(rubiks::app::canvas_theme() == CanvasTheme::Dark);
     require_ground(drawn_frame(), kDarkGround);
 }
 
@@ -76,7 +75,6 @@ TEST_CASE("light fills the whole ground")
     EngineLifecycle engine(kWidth, kHeight);
 
     REQUIRE(rubiks::app::set_canvas_theme(CanvasTheme::Light));
-    REQUIRE(rubiks::app::canvas_theme() == CanvasTheme::Light);
     require_ground(drawn_frame(), kLightGround);
 
     // And back, because a person switching a page twice is the ordinary case
@@ -95,14 +93,12 @@ TEST_CASE("a value naming no theme is refused and changes nothing")
     REQUIRE_FALSE(rubiks::app::set_canvas_theme(static_cast<CanvasTheme>(7)));
     REQUIRE_FALSE(rubiks::app::set_canvas_theme(static_cast<CanvasTheme>(-1)));
 
-    REQUIRE(rubiks::app::canvas_theme() == CanvasTheme::Light);
     REQUIRE(drawn_frame() == before);
 }
 
-TEST_CASE("outside a lifecycle the theme is dark and cannot be set")
+TEST_CASE("outside a lifecycle the theme cannot be set")
 {
     REQUIRE_FALSE(rubiks::app::set_canvas_theme(CanvasTheme::Light));
-    REQUIRE(rubiks::app::canvas_theme() == CanvasTheme::Dark);
 }
 
 TEST_CASE("the theme leaves the cube, the record and the palette alone")

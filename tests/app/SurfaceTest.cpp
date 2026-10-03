@@ -269,8 +269,9 @@ TEST_CASE("a surface whose picture has not changed keeps its frame")
     REQUIRE(rubiks::app::render());
     REQUIRE(frames() == turned);
 
-    // Asking for every surface is what a measurement does.
-    rubiks::app::invalidate();
+    // The ground is the renderer's and no frame's inputs describe it, so
+    // setting it -- even to what it already is -- draws every surface again.
+    REQUIRE(rubiks::app::set_canvas_theme(rubiks::graphics::CanvasTheme::Dark));
     REQUIRE(rubiks::app::render());
     const auto again = frames();
     for (std::size_t i = 0; i < again.size(); ++i) {
@@ -470,5 +471,4 @@ TEST_CASE("surface calls are refused before initialization")
     REQUIRE_FALSE(rubiks::app::pointer_down_on(1, 1.0f, 1.0f));
     REQUIRE(rubiks::app::surface_frame(1) == 0);
     REQUIRE(rubiks::app::surface_pixel_buffer(1) == 0);
-    rubiks::app::invalidate();
 }

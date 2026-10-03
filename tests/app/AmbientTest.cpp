@@ -34,12 +34,18 @@ void run_frames(int count)
  */
 constexpr int kFramesIntoPattern = 200;
 
+/**
+ * How many times a written pattern may repeat before the cube is back where
+ * it began. A bound rather than the exact orders, which nothing in the engine
+ * reads, so it goes on holding when the table is edited.
+ */
+constexpr int kAmbientMaxPeriod = 200;
+
 }  // namespace
 
 TEST_CASE("every watching pattern brings the cube back round within the bound")
 {
     using rubiks::app::ambient_pattern;
-    using rubiks::app::kAmbientMaxPeriod;
     using rubiks::app::kAmbientPatternCount;
 
     // Arithmetic rather than animation: what is being checked is a property of

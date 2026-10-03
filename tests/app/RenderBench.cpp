@@ -74,16 +74,28 @@ int main(int argc, char** argv)
     const auto time_frames = [&](std::vector<double>& samples) {
         // A few frames first, so the caches and the allocator are warm. Every
         // one of them drawn: render() skips a frame whose picture would not
-        // change, and a skipped frame measures nothing.
+        // change, and a skipped frame measures nothing. The ground is the one
+        // thing no frame's inputs describe, so setting it -- to the dark it
+        // already is -- has every surface drawn again.
         for (int i = 0; i < 5; ++i) {
-            rubiks::app::invalidate();
+            if (!rubiks::app::set_canvas_theme(
+                    rubiks::graphics::CanvasTheme::Dark)) {
+                return false;
+            }
             if (!rubiks::app::render()) return false;
         }
         for (int i = 0; i < frames; ++i) {
-            rubiks::app::invalidate();
+            if (!rubiks::app::set_canvas_theme(
+                    rubiks::graphics::CanvasTheme::Dark)) {
+                return false;
+            }
+            const std::uint32_t drawn = rubiks::app::surface_frame(0);
             const auto start = std::chrono::steady_clock::now();
             if (!rubiks::app::render()) return false;
             const auto end = std::chrono::steady_clock::now();
+            // A frame that was skipped after all ends the run rather than
+            // going into the numbers as one that took no time.
+            if (rubiks::app::surface_frame(0) == drawn) return false;
             samples.push_back(
                 std::chrono::duration<double, std::milli>(end - start).count());
         }

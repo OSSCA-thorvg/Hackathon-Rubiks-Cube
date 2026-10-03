@@ -21,6 +21,7 @@
 namespace {
 
 using rubiks::test::EngineLifecycle;
+using rubiks::test::drawn_frame;
 using rubiks::test::settle;
 
 constexpr std::uint32_t kCanvas = 512;
@@ -61,6 +62,18 @@ const std::uint8_t* pixel_at(float x, float y)
     return bytes + (row * kCanvas + column) * 4;
 }
 
+/**
+ * A press and its release at one point, the way a tap arrives from the page.
+ *
+ * @return what the press answered: whether it had anything to start.
+ */
+[[nodiscard]] bool press(float x, float y)
+{
+    const bool began = rubiks::app::pointer_down_on(0, x, y);
+    rubiks::app::pointer_up();
+    return began;
+}
+
 /** How many stickers of the draft carry a colour. */
 [[nodiscard]] int carried(rubiks::cube::FaceColor colour)
 {
@@ -75,8 +88,6 @@ TEST_CASE("a draft opens on the cube as it stands and closes without a trace")
     REQUIRE(rubiks::app::scramble(7, 12));
     settle();
 
-    const auto before = rubiks::app::painting_draft();
-    CHECK(before.empty());
     CHECK_FALSE(rubiks::app::is_painting());
 
     REQUIRE(rubiks::app::begin_painting());
@@ -84,8 +95,6 @@ TEST_CASE("a draft opens on the cube as it stands and closes without a trace")
 
     // The draft starts as what is on the cube, because somebody copying a
     // muddled cube has far less to change than somebody starting from nothing.
-    const auto opened = rubiks::app::painting_draft();
-    CHECK(opened.size() == 9 * 6);
     for (const auto face : rubiks::cube::faces()) {
         CHECK(carried(rubiks::cube::solved_color(face)) == 9);
     }
@@ -108,7 +117,7 @@ TEST_CASE("a press on the net colours instead of turning while a draft is open")
     REQUIRE(rubiks::app::set_brush(rubiks::cube::FaceColor::Red));
 
     const auto aim = front_cell(1, 1, 3);
-    CHECK(rubiks::app::paint_at(aim.x, aim.y));
+    CHECK(press(aim.x, aim.y));
 
     // One green sticker became red, and nothing about the cube moved.
     CHECK(carried(rubiks::cube::FaceColor::Red) == 10);
@@ -116,8 +125,8 @@ TEST_CASE("a press on the net colours instead of turning while a draft is open")
     CHECK(rubiks::app::committed_move_count() == record_before);
     CHECK(rubiks::app::is_solved());
 
-    // And the same press arriving as a gesture goes the same way: a drag
-    // across the net carries the brush rather than a layer.
+    // And a press that is dragged goes the same way: across the net it
+    // carries the brush rather than a layer.
     CHECK(rubiks::app::pointer_down_on(0, aim.x, aim.y));
     const auto along = front_cell(2, 1, 3);
     rubiks::app::pointer_move(along.x, along.y);
@@ -137,7 +146,8 @@ TEST_CASE("a face is filled in one stroke")
     REQUIRE(rubiks::app::set_brush(rubiks::cube::FaceColor::Yellow));
 
     const auto aim = front_cell(2, 3, 6);
-    CHECK(rubiks::app::fill_face_at(aim.x, aim.y));
+    REQUIRE(rubiks::app::set_filling(true));
+    CHECK(press(aim.x, aim.y));
 
     // Thirty-six of one face, on top of the thirty-six that were already
     // yellow on the face below. A six by six is two hundred and sixteen cells
@@ -175,22 +185,17 @@ TEST_CASE("a draft of the cube as it stands is applied and becomes the start")
     CHECK(rubiks::app::is_solved());
 }
 
-TEST_CASE("a colouring no turning reaches is refused and says where")
+TEST_CASE("a colouring no turning reaches is refused")
 {
     const EngineLifecycle engine(kCanvas, kCanvas);
     REQUIRE(rubiks::app::begin_painting());
     REQUIRE(rubiks::app::set_brush(rubiks::cube::FaceColor::Red));
 
     const auto aim = front_cell(0, 0, 3);
-    REQUIRE(rubiks::app::paint_at(aim.x, aim.y));
+    REQUIRE(press(aim.x, aim.y));
 
     CHECK_FALSE(rubiks::app::apply_painting());
     CHECK(rubiks::app::painting_fault() == rubiks::cube::PaintFault::ColourCount);
-    CHECK(rubiks::app::painting_blamed_count() > 0);
-    CHECK(rubiks::app::painting_blamed_at(0) >= 0);
-    CHECK(rubiks::app::painting_blamed_at(-1) == -1);
-    CHECK(rubiks::app::painting_blamed_at(rubiks::app::painting_blamed_count()) ==
-          -1);
 
     // A refusal leaves the draft open and exactly as it was, so what is wrong
     // stays on screen while it is being mended.
@@ -200,7 +205,7 @@ TEST_CASE("a colouring no turning reaches is refused and says where")
 
     // Mended, it goes through.
     REQUIRE(rubiks::app::set_brush(rubiks::cube::FaceColor::Green));
-    REQUIRE(rubiks::app::paint_at(aim.x, aim.y));
+    REQUIRE(press(aim.x, aim.y));
     CHECK(rubiks::app::apply_painting());
     CHECK(rubiks::app::is_solved());
 }
@@ -328,7 +333,7 @@ TEST_CASE("a key colours what a press on the same cell colours")
     REQUIRE(rubiks::app::paint_cursor_step(0, 0));
     REQUIRE(rubiks::app::paint_at_cursor());
     const auto beside = front_cell(2, 1, 3);
-    REQUIRE(rubiks::app::paint_at(beside.x, beside.y));
+    REQUIRE(press(beside.x, beside.y));
     CHECK(carried(rubiks::cube::FaceColor::Red) == 11);
     CHECK(carried(rubiks::cube::FaceColor::Green) == 7);
     CHECK(rubiks::app::paint_cursor()->colour ==
@@ -376,12 +381,11 @@ TEST_CASE("nothing about painting answers before the engine is up")
     CHECK_FALSE(rubiks::app::is_painting());
     CHECK_FALSE(rubiks::app::begin_painting());
     CHECK_FALSE(rubiks::app::apply_painting());
-    CHECK_FALSE(rubiks::app::paint_at(0.0f, 0.0f));
-    CHECK_FALSE(rubiks::app::fill_face_at(0.0f, 0.0f));
+    CHECK_FALSE(press(0.0f, 0.0f));
+    CHECK_FALSE(rubiks::app::set_filling(true));
     CHECK_FALSE(rubiks::app::set_brush(rubiks::cube::FaceColor::Blue));
     CHECK(rubiks::app::painted_count(rubiks::cube::FaceColor::Blue) == 0);
-    CHECK(rubiks::app::painting_blamed_count() == 0);
-    CHECK(rubiks::app::painting_draft().empty());
+    CHECK(rubiks::app::painting_fault() == rubiks::cube::PaintFault::None);
     rubiks::app::cancel_painting();
 }
 
@@ -395,8 +399,19 @@ TEST_CASE("the net draws the draft, and rings what a refusal points at")
     REQUIRE(rubiks::app::set_brush(rubiks::cube::FaceColor::Red));
 
     const auto aim = front_cell(1, 1, 3);
-    REQUIRE(rubiks::app::paint_at(aim.x, aim.y));
+    REQUIRE(press(aim.x, aim.y));
     REQUIRE(rubiks::app::render());
+
+    // A refusal's ring runs along the edge of the square it points at, in a
+    // near-white. Until there is one, nothing at this red square's left edge
+    // is anywhere near white.
+    const float cell = rubiks::graphics::net_cell_side(
+        rubiks::graphics::layout(kCanvas, kCanvas).net, 3);
+    const float edge = 0.5f * rubiks::graphics::kNetStickerScale * cell;
+    const auto near_white = [](const std::uint8_t* pixel) {
+        return pixel[0] >= 200 && pixel[1] >= 200 && pixel[2] >= 200;
+    };
+    CHECK_FALSE(near_white(pixel_at(aim.x - edge, aim.y)));
 
     // What is on screen is the draft and not the cube: the cube's front face
     // is still every bit green, and this square is not.
@@ -412,8 +427,8 @@ TEST_CASE("the net draws the draft, and rings what a refusal points at")
     // is still there to be looked at, which is the point of ringing rather
     // than painting over.
     CHECK_FALSE(rubiks::app::apply_painting());
-    REQUIRE(rubiks::app::painting_blamed_count() > 0);
     REQUIRE(rubiks::app::render());
+    CHECK(near_white(pixel_at(aim.x - edge, aim.y)));
 
     const auto* middle = pixel_at(aim.x, aim.y);
     CHECK(middle[0] == red.r);
@@ -461,7 +476,7 @@ TEST_CASE("a painted session travels as colours and comes back the same")
     }
     REQUIRE(words.size() == 1);
 
-    const auto arrived = rubiks::app::cube_painting();
+    const auto arrived = drawn_frame();
 
     // A fresh cube, and then the link read back onto it.
     rubiks::app::reset_cube();
@@ -483,7 +498,7 @@ TEST_CASE("a painted session travels as colours and comes back the same")
     // The same cube, the move still on it, and the record still saying so --
     // and the colouring is still what this session began from, so the link can
     // be passed on again.
-    CHECK(rubiks::app::cube_painting() == arrived);
+    CHECK(drawn_frame() == arrived);
     CHECK(rubiks::app::timeline_length() == 1);
     CHECK(rubiks::app::committed_move_count() == 1);
     CHECK(rubiks::app::origin_painting_count() == count);
@@ -492,7 +507,7 @@ TEST_CASE("a painted session travels as colours and comes back the same")
 TEST_CASE("a link whose colours are not a cube is refused whole")
 {
     const EngineLifecycle engine(kCanvas, kCanvas);
-    const auto before = rubiks::app::cube_painting();
+    const auto before = drawn_frame();
 
     // Every sticker white, which is nobody's cube.
     auto* painting =
@@ -502,7 +517,7 @@ TEST_CASE("a link whose colours are not a cube is refused whole")
               static_cast<std::uint8_t>(rubiks::cube::FaceColor::White));
 
     CHECK_FALSE(rubiks::app::restore_painting(3, 0));
-    CHECK(rubiks::app::cube_painting() == before);
+    CHECK(drawn_frame() == before);
 
     // And a buffer belongs to one restore: the refusal took it, so asking
     // again without filling one is refused by the same emptiness.

@@ -148,17 +148,17 @@ surface마다 마지막 프레임을 그린 입력(`graphics::FrameInputs`)을 �
 
 ```text
 engine/src/
-├── app/Application.{hpp,cpp}     Surface, 장면별 배치, surface별 누름, frame_for와 건너뛰기
-├── graphics/frame/FrameInputs.{hpp,cpp} 그림마다 읽는 값과 그 비교, compose
-├── graphics/3d/AxisGizmo.{hpp,cpp}  draw_arms, build_axis_badge
-└── bindings/capi.cpp             surface ABI
+├── app/Application.{hpp,cpp}             Surface, 장면별 배치, surface별 누름, frame_for와 건너뛰기
+├── graphics/frame/FrameInputs.{hpp,cpp}  그림마다 읽는 값과 그 비교, compose
+├── graphics/3d/AxisGizmo.{hpp,cpp}       draw_arms, build_axis_badge
+└── bindings/capi.cpp                     surface ABI
 
 web/src/
-├── wasm/CubeEngine.ts            CubeSurface, CubeScene, 모든 캔버스(surface 0 포함)를 한 경로로 표시와 복사
-├── AppLifecycle.ts               StageView, stageDensity와 픽셀 상한, 한 밀도로 맞추기, 캔버스별 포인터
-├── input/PointerController.ts    PointerFallback, GestureLock
-├── ui/GameShell.ts               무대의 캔버스 넷
-└── style.css                     stage grid, container query, 축 배지
+├── wasm/CubeEngine.ts                    CubeSurface, CubeScene, 모든 캔버스(surface 0 포함)를 한 경로로 표시와 복사
+├── AppLifecycle.ts                       StageView, stageDensity와 픽셀 상한, 한 밀도로 맞추기, 캔버스별 포인터
+├── input/PointerController.ts            PointerFallback, GestureLock
+├── ui/GameShell.ts                       무대의 캔버스 넷
+└── style.css                             stage grid, container query, 축 배지
 ```
 
 ## Verification

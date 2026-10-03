@@ -45,7 +45,7 @@ std::optional<Vec2> turn_direction(Axis axis, const Vec3& point,
     const auto to = project_to_screen(turned, camera, viewport);
     if (!from || !to) return std::nullopt;
 
-    const Vec2 delta{to->x - from->x, to->y - from->y};
+    const Vec2 delta = *to - *from;
     const float distance = math::length(delta);
     if (distance <= kMinScreenDelta) return std::nullopt;
 
@@ -69,8 +69,7 @@ std::optional<AxisCandidate> resolve_axis(
                                               viewport);
         if (!direction) continue;
 
-        const float score =
-            std::abs(drag.x * direction->x + drag.y * direction->y);
+        const float score = std::abs(math::dot(drag, *direction));
 
         // Strictly greater, so an exact tie keeps the earlier axis.
         if (best && score <= best_score) continue;

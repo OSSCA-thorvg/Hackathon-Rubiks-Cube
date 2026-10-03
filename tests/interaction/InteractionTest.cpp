@@ -153,11 +153,6 @@ Settled perform(const Vec3& grab, const Vec2& direction, float degrees)
     return settle(controller);
 }
 
-float dot(const Vec2& a, const Vec2& b)
-{
-    return a.x * b.x + a.y * b.y;
-}
-
 // The centers of the three faces a fixed camera can reach. World coordinates,
 // on the surface of a cube of half extent one.
 constexpr Vec3 kUpCenter{0.0f, 1.0f, 0.0f};
@@ -196,7 +191,7 @@ TEST_CASE("a positive turn moves the grabbed point where the camera shows it")
 
         // Within about 25 degrees of the direction worked out by hand, which
         // is far tighter than any sign mistake could survive.
-        REQUIRE(dot(actual, handle.expected) > 0.9f);
+        REQUIRE(rubiks::math::dot(actual, handle.expected) > 0.9f);
     }
 }
 

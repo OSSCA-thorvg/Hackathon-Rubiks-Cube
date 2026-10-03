@@ -469,7 +469,7 @@ bool glow_face(tvg::Shape& shape, const graphics::RenderFace& face,
     const Vec2 axis_a{(rims[0].x - rims[1].x) * 0.5f, (rims[0].y - rims[1].y) * 0.5f};
     const Vec2 axis_b{(rims[2].x - rims[3].x) * 0.5f, (rims[2].y - rims[3].y) * 0.5f};
     // Too thin to hold a pixel: nothing to draw, and nothing to invert.
-    if (std::abs(axis_a.x * axis_b.y - axis_a.y * axis_b.x) < 0.25f) return true;
+    if (std::abs(math::cross(axis_a, axis_b)) < 0.25f) return true;
     // White laid over at the glint's alpha. This is the same arithmetic as a
     // screen blend of white -- c + a(255 - c) either way -- so it brightens a
     // sticker towards white without hiding which colour it was, and without

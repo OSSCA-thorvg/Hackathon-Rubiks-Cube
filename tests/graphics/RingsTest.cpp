@@ -27,6 +27,7 @@ using rubiks::cube::Axis;
 using rubiks::cube::Face;
 using rubiks::cube::SurfaceSticker;
 using rubiks::math::Vec2;
+using rubiks::math::distance;
 using rubiks::math::kPi;
 
 constexpr int kSize = 3;
@@ -37,11 +38,6 @@ const Rect kRect{0.0f, 0.0f, 600.0f, 600.0f};
 [[nodiscard]] std::tuple<int, int, int, int> key_of(const SurfaceSticker& s)
 {
     return {s.x, s.y, s.z, static_cast<int>(s.face)};
-}
-
-[[nodiscard]] float distance(const Vec2& a, const Vec2& b)
-{
-    return std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
 }
 
 /** How far a ring's slots sit from the centre the layout gives it. */
@@ -188,11 +184,10 @@ TEST_CASE("each ring's slots come round its own centre in the domain's order")
                     ring.at(static_cast<float>((slot + 1) % ring.slot_count()))
                         .position;
 
-                const Vec2 from{here.x - middle.x, here.y - middle.y};
-                const Vec2 to{next.x - middle.x, next.y - middle.y};
-                const float step =
-                    std::atan2(from.x * to.y - from.y * to.x,
-                               from.x * to.x + from.y * to.y);
+                const Vec2 from = here - middle;
+                const Vec2 to = next - middle;
+                const float step = std::atan2(rubiks::math::cross(from, to),
+                                              rubiks::math::dot(from, to));
 
                 REQUIRE(std::abs(step) > 1e-3f);
                 if (slot > 0) REQUIRE(step * swept > 0.0f);

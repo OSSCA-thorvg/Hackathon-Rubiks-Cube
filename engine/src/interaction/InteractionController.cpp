@@ -229,8 +229,8 @@ void InteractionController::pointer_move(float x, float y) noexcept
     // Always measured from where the finger went down, so the angle is one
     // formula rather than an accumulation that could drift.
     const auto& direction = gesture_->lock->direction;
-    gesture_->angle_degrees = (drag.x * direction.x + drag.y * direction.y) *
-                              degrees_per_pixel(gesture_->viewport);
+    gesture_->angle_degrees =
+        math::dot(drag, direction) * degrees_per_pixel(gesture_->viewport);
 }
 
 void InteractionController::advance_net_gesture(float x, float y) noexcept
@@ -260,7 +260,7 @@ void InteractionController::advance_net_gesture(float x, float y) noexcept
     }
 
     const auto& lock = *net_gesture_->lock;
-    const float along = drag.x * lock.direction.x + drag.y * lock.direction.y;
+    const float along = math::dot(drag, lock.direction);
 
     // Uncapped, as a drag on the cube is. The net used to stop at a quarter
     // because it only drew one, and a drag carried further would have settled
@@ -295,7 +295,7 @@ void InteractionController::advance_rings_gesture(float x, float y) noexcept
                 rings_gesture_->pick.sticker);
             if (!tangent) continue;
 
-            const float along = drag.x * tangent->x + drag.y * tangent->y;
+            const float along = math::dot(drag, *tangent);
             if (std::abs(along) <= std::abs(strongest)) continue;
 
             strongest = along;

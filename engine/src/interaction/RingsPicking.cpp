@@ -24,8 +24,7 @@ std::optional<RingsPick> pick_rings(float x, float y,
         const auto at = graphics::rings_slot_position(sticker, rect, size);
         if (!at) continue;
 
-        const float away =
-            std::sqrt((at->x - x) * (at->x - x) + (at->y - y) * (at->y - y));
+        const float away = math::distance(*at, math::Vec2{x, y});
         if (away >= closest) continue;
 
         closest = away;

@@ -254,7 +254,6 @@ TEST_CASE("a highlight brightens its own face and never a face in front")
     // A face at the back with a glint spread across all of it.
     RenderFace behind = quad(40.0f, 40.0f, 216.0f, 216.0f, Color{40, 90, 160, 255});
     RenderHighlight glint;
-    glint.centre = Vec2{128.0f, 128.0f};
     glint.rims = {Vec2{228.0f, 128.0f}, Vec2{28.0f, 128.0f}, Vec2{128.0f, 228.0f},
                   Vec2{128.0f, 28.0f}};
     glint.stops = {255, 230, 200, 120, 0};

@@ -301,7 +301,6 @@ RenderScene ViewportPass::operator()(const ClipScene& scene) const
         }
         for (const auto& glint : face.highlights) {
             RenderHighlight pixels;
-            pixels.centre = to_pixels(glint.centre);
             for (std::size_t i = 0; i < glint.rims.size(); ++i) {
                 pixels.rims[i] = to_pixels(glint.rims[i]);
             }

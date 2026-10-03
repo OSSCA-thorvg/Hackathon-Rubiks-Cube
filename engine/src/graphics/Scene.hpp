@@ -49,17 +49,10 @@ struct ShadowGroup {
     std::uint8_t opacity = 0;
 };
 
-/**
- * The glint on one face, as geometry rather than as a colour.
- *
- * `centre` is where the light reflects straight into the eye, pulled onto the
- * face if it falls outside; `rim` is one radius away from it along the face,
- * so that projecting both gives the renderer a screen radius that shrinks with
- * distance the way the face does. Peak strength is `alpha`.
- */
 /** Stops of a glint's falloff, centre to rim. */
 inline constexpr std::size_t kGlintStops = 5;
 
+/** The glint on one face, as geometry rather than as a colour. */
 template <typename Point>
 struct HighlightOf {
     /**

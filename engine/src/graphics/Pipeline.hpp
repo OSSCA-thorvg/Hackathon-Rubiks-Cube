@@ -4,7 +4,6 @@
 #include <utility>
 
 #include "graphics/Passes.hpp"
-#include "graphics/RenderScene.hpp"
 #include "graphics/Scene.hpp"
 
 /**
@@ -44,9 +43,6 @@ struct is_pipeline_value<ViewScene> : std::true_type {};
 
 template <>
 struct is_pipeline_value<ClipScene> : std::true_type {};
-
-template <>
-struct is_pipeline_value<RenderScene> : std::true_type {};
 
 template <typename Scene, typename Pass,
           typename = std::enable_if_t<

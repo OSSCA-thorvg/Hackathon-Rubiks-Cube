@@ -19,11 +19,10 @@ namespace rubiks::graphics {
  *
  * Drawn over the face it belongs to and nowhere else: the renderer lays it
  * down straight after that face, so a highlight on a face at the back cannot
- * land on a face drawn later in front of it. Rendered as a radial falloff from
- * `centre` to the distance of `rim`, screened onto the face.
+ * land on a face drawn later in front of it. Rendered as an elliptical falloff
+ * from the middle of the four `rims` out to them, screened onto the face.
  */
 struct RenderHighlight {
-    math::Vec2 centre{};
     /** The ends of the footprint's two axes on screen: +u, -u, +v, -v. */
     std::array<math::Vec2, 4> rims{};
     /** Strength at evenly spaced distances from centre to rim; the rim is 0. */

@@ -49,8 +49,8 @@ struct ShadowPass {
     [[nodiscard]] WorldScene operator()(WorldScene scene) const;
 };
 
-[[nodiscard]] ShadowPass shadow(const Lighting& lighting, const Camera& camera,
-                                float ground_y = kGroundY) noexcept;
+[[nodiscard]] ShadowPass shadow(const Lighting& lighting,
+                                const Camera& camera) noexcept;
 
 /** World space to view space, faces and shadow alike. */
 struct ViewPass {

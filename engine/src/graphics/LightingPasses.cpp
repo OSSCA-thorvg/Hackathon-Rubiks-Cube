@@ -430,7 +430,6 @@ WorldScene ShadowPass::operator()(WorldScene scene) const
 
     ShadowGroup<math::Vec3> shadow;
     math::Vec3 centre{0.0f, 0.0f, 0.0f};
-    float half_extent = 0.0f;
     std::size_t corner_count = 0;
 
     for (const auto& caster : scene.casters) {
@@ -459,13 +458,6 @@ WorldScene ShadowPass::operator()(WorldScene scene) const
     if (shadow.polygons.empty()) return scene;
 
     centre /= static_cast<float>(corner_count);
-    for (const auto& caster : scene.casters) {
-        for (const auto& corner : caster.corners) {
-            half_extent = std::max(
-                {half_extent, std::abs(corner.x - centre.x),
-                 std::abs(corner.z - centre.z)});
-        }
-    }
 
     shadow.fade_start = math::Vec3{centre.x, ground_y, centre.z};
     shadow.fade_end = shadow.fade_start;
@@ -495,12 +487,11 @@ WorldScene ShadowPass::operator()(WorldScene scene) const
     return scene;
 }
 
-ShadowPass shadow(const Lighting& lighting, const Camera& camera,
-                  float ground_y) noexcept
+ShadowPass shadow(const Lighting& lighting, const Camera& camera) noexcept
 {
     std::optional<Light> key;
     if (!lighting.lamps.empty()) key = lighting.lamps.front();
-    return ShadowPass{key, ground_y, camera.eye()};
+    return ShadowPass{key, kGroundY, camera.eye()};
 }
 
 }  // namespace rubiks::graphics

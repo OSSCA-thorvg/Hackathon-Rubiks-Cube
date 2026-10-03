@@ -28,7 +28,6 @@ constexpr float kPi = 3.14159265358979323846f;
 
 /** Where one cell of the net lands, given the rectangle the net fills. */
 struct NetMetrics {
-    float face_side;
     float cell;
     float inset;
     float sticker;
@@ -38,7 +37,7 @@ struct NetMetrics {
 {
     const float cell = net_cell_side(rect, size);
 
-    return NetMetrics{net_face_side(rect), cell,
+    return NetMetrics{cell,
                       cell * (1.0f - kNetStickerScale) * 0.5f,
                       cell * kNetStickerScale};
 }

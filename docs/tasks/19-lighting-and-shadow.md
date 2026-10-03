@@ -18,7 +18,7 @@ Phase 17(Solve hint and step-through)과 Phase 18(Paint your cube) 어느 쪽도
 
 ### 파이프라인은 패스를 끼울 자리를 이미 갖고 있습니다
 
-[`Pipeline.hpp`](../../engine/src/graphics/Pipeline.hpp)의 `operator|`는 왼쪽 scene에 오른쪽 callable을 적용하는 문법일 뿐이고, 왼쪽에 올 수 있는 타입은 `is_pipeline_value`로 WorldScene, ViewScene, ClipScene, RenderScene 넷이 열려 있습니다. 새 패스는 이 넷 중 하나를 받아 같은 타입을 돌려주면 등록 없이 체인에 들어갑니다. 체인은 [`Application.cpp`](../../engine/src/app/Application.cpp) 한 곳입니다.
+[`Pipeline.hpp`](../../engine/src/graphics/Pipeline.hpp)의 `operator|`는 왼쪽 scene에 오른쪽 callable을 적용하는 문법일 뿐이고, 왼쪽에 올 수 있는 타입은 `is_pipeline_value`로 WorldScene, ViewScene, ClipScene 셋이 열려 있습니다. 새 패스는 이 셋 중 하나를 받아 같은 타입을 돌려주면 등록 없이 체인에 들어갑니다. 체인은 [`Application.cpp`](../../engine/src/app/Application.cpp) 한 곳입니다.
 
 ### 기존 패스는 `faces`만 만집니다
 

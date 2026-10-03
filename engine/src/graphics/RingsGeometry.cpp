@@ -23,16 +23,6 @@ using cube::outer_layer;
 using math::Vec2;
 using math::kPi;
 
-[[nodiscard]] Vec2 subtracted(const Vec2& a, const Vec2& b) noexcept
-{
-    return Vec2{a.x - b.x, a.y - b.y};
-}
-
-[[nodiscard]] float length_of(const Vec2& v) noexcept
-{
-    return std::sqrt(v.x * v.x + v.y * v.y);
-}
-
 /**
  * Where an axis's circles are centred, in the diagram's own coordinates.
  *
@@ -91,8 +81,8 @@ using math::kPi;
     float closest = 1.0f;
     for (std::size_t i = 0; i < places.size(); ++i) {
         for (std::size_t j = i + 1; j < places.size(); ++j) {
-            closest = std::fmin(closest,
-                                length_of(subtracted(places[i], places[j])));
+            closest =
+                std::fmin(closest, math::distance(places[j], places[i]));
         }
     }
 
@@ -208,8 +198,8 @@ struct RingsMetrics {
     const Vec2& first, float first_radius, const Vec2& second,
     float second_radius) noexcept
 {
-    const Vec2 between = subtracted(second, first);
-    const float span = length_of(between);
+    const Vec2 between = second - first;
+    const float span = math::length(between);
     if (span <= 0.0f) return std::nullopt;
 
     const float along = (first_radius * first_radius -
@@ -345,11 +335,10 @@ struct ScreenRing {
     // could turn the wrong way round.
     float swept = 0.0f;
     for (std::size_t i = 0; i < ring.points.size(); ++i) {
-        const Vec2 here = subtracted(ring.points[i], ring.center);
+        const Vec2 here = ring.points[i] - ring.center;
         const Vec2 next =
-            subtracted(ring.points[(i + 1) % ring.points.size()], ring.center);
-        swept += std::atan2(here.x * next.y - here.y * next.x,
-                            here.x * next.x + here.y * next.y);
+            ring.points[(i + 1) % ring.points.size()] - ring.center;
+        swept += std::atan2(math::cross(here, next), math::dot(here, next));
     }
     ring.sense = swept >= 0.0f ? 1.0f : -1.0f;
     return ring;
@@ -399,8 +388,8 @@ std::optional<math::Vec2> rings_slot_tangent(Axis axis, int layer,
 
         // A circle's tangent is its radius turned a right angle, the way the
         // slots run.
-        const Vec2 out = subtracted(ring->points[slot], ring->center);
-        const float reach = length_of(out);
+        const Vec2 out = ring->points[slot] - ring->center;
+        const float reach = math::length(out);
         if (reach <= 0.0f) return std::nullopt;
 
         return Vec2{-out.y * ring->sense / reach, out.x * ring->sense / reach};
@@ -443,7 +432,7 @@ SlotRing rings_ring(Axis axis, int layer, const Rect& rect, int size)
 
     for (std::size_t i = 0; i < points.size(); ++i) {
         const float here = angle_at(points[i]);
-        const float reach = length_of(subtracted(points[i], center));
+        const float reach = math::distance(center, points[i]);
 
         slot_knots[i] = knots.size();
         knots.push_back(on_circle(here, reach));
@@ -601,14 +590,13 @@ RenderScene build_rings_scene(const cube::CubeState& state, const Rect& rect,
             const Vec2* at = place(sticker);
             if (!at) continue;
 
-            total = Vec2{total.x + at->x, total.y + at->y};
+            total = total + *at;
             ++counted;
         }
         if (counted == 0) continue;
 
         const auto share = static_cast<float>(counted);
-        middles[cube::face_index(face)] =
-            Vec2{total.x / share, total.y / share};
+        middles[cube::face_index(face)] = total / share;
     }
 
     // Pieces the turn is carrying wait here until every resting sticker has
@@ -668,13 +656,13 @@ RenderScene build_rings_scene(const cube::CubeState& state, const Rect& rect,
         }
 
         const Vec2 middle = middles[cube::face_index(sticker.face)];
-        const Vec2 out = subtracted(*from, middle);
-        const Vec2 in = subtracted(*to, middle);
+        const Vec2 out = *from - middle;
+        const Vec2 in = *to - middle;
 
         const float angle = std::atan2(out.y, out.x);
         const float swept = toward_angle(angle, std::atan2(in.y, in.x)) * part;
-        const float reach =
-            length_of(out) + (length_of(in) - length_of(out)) * part;
+        const float reach = math::length(out) +
+                            (math::length(in) - math::length(out)) * part;
 
         emit(sticker,
              Vec2{middle.x + reach * std::cos(angle + swept),

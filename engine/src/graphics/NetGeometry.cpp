@@ -433,9 +433,7 @@ RenderScene build_net_guides(const std::vector<NetGuide>& guides,
 
             const auto center = net_cell_center(placed->face, placed->col,
                                                 placed->row, rect, size);
-            const float radius =
-                std::sqrt((center.x - pivot.x) * (center.x - pivot.x) +
-                          (center.y - pivot.y) * (center.y - pivot.y));
+            const float radius = math::distance(pivot, center);
             scene.strokes.push_back(circle_stroke(pivot, radius, width, color));
             continue;
         }

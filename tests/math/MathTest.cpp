@@ -232,3 +232,17 @@ TEST_CASE("a value is wrapped into one period, half either side of zero")
     REQUIRE(wrapped_centred(6.0f, 12.0f) == 6.0f);
     REQUIRE(wrapped_centred(-6.0f, 12.0f) == 6.0f);
 }
+
+TEST_CASE("a 2D vector has a unit direction, and a fallback when it has none")
+{
+    const Vec2 direction = unit(Vec2{3.0f, 4.0f});
+    REQUIRE(direction.x == Approx(0.6f).margin(kDefaultMargin));
+    REQUIRE(direction.y == Approx(0.8f).margin(kDefaultMargin));
+
+    // No length, no direction: +X unless the caller names another.
+    REQUIRE(unit(Vec2{0.0f, 0.0f}) == Vec2{1.0f, 0.0f});
+    REQUIRE(unit(Vec2{0.0f, 0.0f}, Vec2{0.0f, 1.0f}) == Vec2{0.0f, 1.0f});
+
+    REQUIRE(distance(Vec2{1.0f, 2.0f}, Vec2{4.0f, 6.0f}) ==
+            Approx(5.0f).margin(kDefaultMargin));
+}

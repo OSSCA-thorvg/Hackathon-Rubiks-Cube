@@ -26,6 +26,7 @@ using Vec4 = linalg::vec<float, 4>;
 using Mat4 = linalg::mat<float, 4, 4>;
 
 using linalg::cross;
+using linalg::distance;
 using linalg::dot;
 using linalg::length;
 
@@ -38,6 +39,24 @@ using linalg::length;
 [[nodiscard]] inline Vec3 normalize(const Vec3& v) noexcept
 {
     return linalg::normalize(v);
+}
+
+/**
+ * Unit-length direction of a 2D vector, or `fallback` for one with no length.
+ *
+ * Unlike normalize(), a zero-length input yields the fallback rather than NaN
+ * components. The flat drawings take directions from pairs of points that
+ * may coincide, and have a curve to go on drawing when they do.
+ *
+ * Multiplies by the reciprocal of the length rather than dividing by it. The
+ * two differ in the last bit, and the rings are drawn with this one.
+ */
+[[nodiscard]] inline Vec2 unit(const Vec2& v,
+                               const Vec2& fallback = Vec2{1.0f, 0.0f}) noexcept
+{
+    const float magnitude = length(v);
+    if (magnitude <= 0.0f) return fallback;
+    return v * (1.0f / magnitude);
 }
 
 /** Matrix product: multiply(a, b) applies b first, then a. */

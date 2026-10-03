@@ -12,38 +12,6 @@ namespace {
 using cube::SurfaceSticker;
 using math::Vec2;
 
-[[nodiscard]] float length_of(const Vec2& v) noexcept
-{
-    return std::sqrt(v.x * v.x + v.y * v.y);
-}
-
-[[nodiscard]] Vec2 scaled(const Vec2& v, float factor) noexcept
-{
-    return Vec2{v.x * factor, v.y * factor};
-}
-
-[[nodiscard]] Vec2 added(const Vec2& a, const Vec2& b) noexcept
-{
-    return Vec2{a.x + b.x, a.y + b.y};
-}
-
-[[nodiscard]] Vec2 subtracted(const Vec2& a, const Vec2& b) noexcept
-{
-    return Vec2{a.x - b.x, a.y - b.y};
-}
-
-[[nodiscard]] float dot_product(const Vec2& a, const Vec2& b) noexcept
-{
-    return a.x * b.x + a.y * b.y;
-}
-
-[[nodiscard]] Vec2 unit(const Vec2& v) noexcept
-{
-    const float magnitude = length_of(v);
-    if (magnitude <= 0.0f) return Vec2{1.0f, 0.0f};
-    return scaled(v, 1.0f / magnitude);
-}
-
 }  // namespace
 
 float arc_arm(float chord, float turn) noexcept
@@ -65,14 +33,14 @@ SlotRing::SlotRing(std::vector<Knot> knots, std::vector<std::size_t> slot_knots,
         const auto& from = knots_[knot];
         const auto& to = knots_[(knot + 1) % knots_.size()];
 
-        const float chord = length_of(subtracted(to.point, from.point));
+        const float chord = math::distance(from.point, to.point);
         const float turn = std::acos(std::clamp(
-            dot_product(from.out_direction, to.in_direction), -1.0f, 1.0f));
+            math::dot(from.out_direction, to.in_direction), -1.0f, 1.0f));
         const float arm = arc_arm(chord, turn);
 
         segments_.push_back(RenderSegment{
-            added(from.point, scaled(from.out_direction, arm)),
-            subtracted(to.point, scaled(to.in_direction, arm)), to.point});
+            from.point + from.out_direction * arm,
+            to.point - to.in_direction * arm, to.point});
     }
 }
 
@@ -107,7 +75,7 @@ RingPoint SlotRing::at(float slot) const noexcept
     const auto chord = [&](std::size_t knot) {
         const auto& start = knots_[knot % knot_count].point;
         const auto& end = knots_[(knot + 1) % knot_count].point;
-        return length_of(subtracted(end, start));
+        return math::distance(start, end);
     };
 
     float total = 0.0f;
@@ -155,10 +123,10 @@ RingPoint SlotRing::at(float slot) const noexcept
     // Where a corner's arc reaches all the way to its slots the run between
     // them has no length left, so there is no slope to read and the knot's own
     // direction is the answer.
-    if (length_of(slope) <= 0.0f) {
+    if (math::length(slope) <= 0.0f) {
         return RingPoint{point, knots_[knot].out_direction};
     }
-    return RingPoint{point, unit(slope)};
+    return RingPoint{point, math::unit(slope)};
 }
 
 RenderStroke SlotRing::stroke(float width, const Color& color) const

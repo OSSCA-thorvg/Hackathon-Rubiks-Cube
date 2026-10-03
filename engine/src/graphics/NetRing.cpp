@@ -18,43 +18,6 @@ using math::Vec2;
 /** Points closer together than this are the same point. */
 constexpr float kTouching = 1e-3f;
 
-[[nodiscard]] float length_of(const Vec2& v) noexcept
-{
-    return std::sqrt(v.x * v.x + v.y * v.y);
-}
-
-[[nodiscard]] Vec2 scaled(const Vec2& v, float factor) noexcept
-{
-    return Vec2{v.x * factor, v.y * factor};
-}
-
-[[nodiscard]] Vec2 added(const Vec2& a, const Vec2& b) noexcept
-{
-    return Vec2{a.x + b.x, a.y + b.y};
-}
-
-[[nodiscard]] Vec2 subtracted(const Vec2& a, const Vec2& b) noexcept
-{
-    return Vec2{a.x - b.x, a.y - b.y};
-}
-
-[[nodiscard]] float dot_product(const Vec2& a, const Vec2& b) noexcept
-{
-    return a.x * b.x + a.y * b.y;
-}
-
-[[nodiscard]] float cross_product(const Vec2& a, const Vec2& b) noexcept
-{
-    return a.x * b.y - a.y * b.x;
-}
-
-[[nodiscard]] Vec2 unit(const Vec2& v) noexcept
-{
-    const float magnitude = length_of(v);
-    if (magnitude <= 0.0f) return Vec2{1.0f, 0.0f};
-    return scaled(v, 1.0f / magnitude);
-}
-
 /** Where the loop leaves the drawing, given a direction of travel. */
 [[nodiscard]] Vec2 beyond_edge(const Vec2& point, const Vec2& direction,
                                const Rect& rect, float reach) noexcept
@@ -115,11 +78,11 @@ struct PathPoint {
         const std::size_t before = previous_of(i);
 
         leaving[i] = same_face(i, after)
-                         ? unit(subtracted(centers[after], centers[i]))
-                         : unit(subtracted(centers[i], centers[before]));
+                         ? math::unit(centers[after] - centers[i])
+                         : math::unit(centers[i] - centers[before]);
         arriving[i] = same_face(before, i)
-                          ? unit(subtracted(centers[i], centers[before]))
-                          : unit(subtracted(centers[after], centers[i]));
+                          ? math::unit(centers[i] - centers[before])
+                          : math::unit(centers[after] - centers[i]);
     }
 
     const float reach = kNetBreakReachCells * net_cell_side(rect, size);
@@ -133,22 +96,22 @@ struct PathPoint {
         path.push_back(PathPoint{centers[i], false, i});
 
         const std::size_t after = next_of(i);
-        const Vec2 step = subtracted(centers[after], centers[i]);
+        const Vec2 step = centers[after] - centers[i];
         const Vec2 out = leaving[i];
         const Vec2 in = arriving[after];
 
         // Already running the right way and already pointing at the next slot:
         // one straight piece, nothing to round.
-        if (std::abs(cross_product(out, in)) < kTouching &&
-            dot_product(out, in) > 0.0f &&
-            std::abs(cross_product(step, out)) < kTouching &&
-            dot_product(step, out) > 0.0f) {
+        if (std::abs(math::cross(out, in)) < kTouching &&
+            math::dot(out, in) > 0.0f &&
+            std::abs(math::cross(step, out)) < kTouching &&
+            math::dot(step, out) > 0.0f) {
             continue;
         }
 
         // A quarter turn between two faces the cross draws side by side: the
         // corner is where the two runs would meet if they carried on.
-        if (std::abs(dot_product(out, in)) < kTouching) {
+        if (std::abs(math::dot(out, in)) < kTouching) {
             const Vec2 corner = std::abs(out.x) > std::abs(out.y)
                                     ? Vec2{centers[after].x, centers[i].y}
                                     : Vec2{centers[i].x, centers[after].y};
@@ -160,7 +123,7 @@ struct PathPoint {
         // drawing and comes back where the next face is.
         const Vec2 away = beyond_edge(centers[i], out, rect, reach);
         const Vec2 back =
-            beyond_edge(centers[after], scaled(in, -1.0f), rect, reach);
+            beyond_edge(centers[after], in * -1.0f, rect, reach);
 
         path.push_back(PathPoint{away, true, 0});
 
@@ -168,7 +131,7 @@ struct PathPoint {
         // -- the way straight back would lie along the band itself. It is
         // lifted clear of the drawing instead, over the empty margin rather
         // than across the faces stacked beside the row.
-        if (dot_product(subtracted(back, away), out) < 0.0f) {
+        if (math::dot(back - away, out) < 0.0f) {
             const Vec2 aside{std::abs(out.y), -std::abs(out.x)};
             path.push_back(
                 PathPoint{beyond_edge(away, aside, rect, reach), true, 0});
@@ -203,9 +166,9 @@ struct PathPoint {
         // A corner shares its room with a neighbouring corner, and takes all
         // of it from a slot, which the loop has to reach.
         const float room = std::fmin(
-            length_of(subtracted(path[i].point, before.point)) *
+            math::distance(before.point, path[i].point) *
                 (before.corner ? 0.5f : 1.0f),
-            length_of(subtracted(after.point, path[i].point)) *
+            math::distance(path[i].point, after.point) *
                 (after.corner ? 0.5f : 1.0f));
 
         radius = bounded ? std::fmin(radius, room) : room;
@@ -223,7 +186,7 @@ struct PathPoint {
                               const Vec2& out_of, bool is_slot,
                               std::size_t slot) {
         if (!knots.empty() &&
-            length_of(subtracted(knots.back().point, point)) < kTouching) {
+            math::distance(point, knots.back().point) < kTouching) {
             knots.back().out_direction = out_of;
         } else {
             knots.push_back(SlotRing::Knot{point, into, out_of});
@@ -243,20 +206,17 @@ struct PathPoint {
         const auto& before = path[(i + path.size() - 1) % path.size()];
         const auto& after = path[(i + 1) % path.size()];
 
-        const Vec2 into = unit(subtracted(here.point, before.point));
-        const Vec2 out_of = unit(subtracted(after.point, here.point));
+        const Vec2 into = math::unit(here.point - before.point);
+        const Vec2 out_of = math::unit(after.point - here.point);
 
-        add_knot(subtracted(here.point, scaled(into, radius)), into, into,
-                 false, 0);
-        add_knot(added(here.point, scaled(out_of, radius)), out_of, out_of,
-                 false, 0);
+        add_knot(here.point - into * radius, into, into, false, 0);
+        add_knot(here.point + out_of * radius, out_of, out_of, false, 0);
     }
 
     // The loop's last knot may be the first one over again, where the walk
     // began part way along a run that a corner then reached back to.
     if (knots.size() > 1 &&
-        length_of(subtracted(knots.front().point, knots.back().point)) <
-            kTouching) {
+        math::distance(knots.back().point, knots.front().point) < kTouching) {
         knots.front().in_direction = knots.back().in_direction;
         const std::size_t dropped = knots.size() - 1;
         for (auto& knot : slot_knots) {

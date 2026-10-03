@@ -1211,10 +1211,7 @@ void note_cube_change() noexcept
         std::optional<graphics::NetPainting> painting;
         if (state->paint) {
             std::optional<graphics::NetPosition> cursor;
-            if (state->paint->cursor_shown && state->paint->cursor) {
-                const auto& at = *state->paint->cursor;
-                cursor = graphics::NetPosition{at.face, at.col, at.row};
-            }
+            if (state->paint->cursor_shown) cursor = state->paint->cursor;
             painting = graphics::NetPainting{state->paint->stickers,
                                              state->paint->reading.blamed,
                                              cursor};

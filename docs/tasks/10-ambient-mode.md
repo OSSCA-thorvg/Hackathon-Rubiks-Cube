@@ -131,6 +131,8 @@ npm --prefix web run build
 
 ## 개정 기록
 
+> **개정 (2026-10-03)**: `kAmbientMaxPeriod`는 이제 엔진 header가 아니라 그 값을 읽는 test(`tests/app/AmbientTest.cpp`)의 상수입니다. 엔진은 이 상한을 읽은 적이 없고, 읽는 것은 상한을 지키는 test 하나였습니다. `ambient_pattern`과 `kAmbientPatternCount`는 아래에 적은 이유 그대로 header에 남아 있습니다.
+
 ### 1. 구현하며 달라진 것
 
 **Snapshot을 Player 안에 넣었습니다.** 계획은 Application의 상태로 따로 두는 것이었지만, snapshot과 반복 재생은 수명이 정확히 하나입니다 — 관람이 시작될 때 함께 생기고 끝날 때 함께 없어집니다. Player의 주석이 "수명이 같은 두 상태는 한 객체"라고 스스로 정해 둔 것을 그대로 따랐고, 그 덕에 "scramble·reset·shutdown은 복원 없이 ambient를 끝낸다"는 규칙이 **코드 한 줄도 없이** 성립합니다. 그 셋은 이미 `discard_playback()`을 부르고, snapshot이 Player와 함께 버려지는 것이 곧 그 규칙이기 때문입니다. `is_ambient()`도 별도 flag가 아니라 "되돌릴 곳이 있는 재생인가"입니다.

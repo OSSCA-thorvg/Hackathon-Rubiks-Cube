@@ -613,13 +613,11 @@ private:
 
 ```text
 thorvg_rubiks_set_canvas_theme(theme: int) -> int
-thorvg_rubiks_canvas_theme() -> int
 ```
 
 - ABI 값: `Light = 0`, `Dark = 1`
 - 초기값은 web이 첫 render 전에 effective theme을 전달합니다.
 - 잘못된 값은 0을 반환하고 기존 background와 모든 application state를 유지합니다.
-- Query는 lifecycle 밖에서 `Dark`를 반환합니다. 기존 native rendered-scene 기본값을 유지하기 위한 선택입니다.
 
 TypeScript engine boundary도 primitive enum만 사용합니다.
 

@@ -39,7 +39,7 @@ Phase 번호가 없는 횡단 작업입니다. [Stage and panels](./stage-and-pa
 
 `initialize()`가 만드는 surface 0은 모든 장면(`kAllScenes`)을 가집니다. 그래서 surface를 지정하지 않는 기존 ABI 호출(`resize`, `pixel_buffer`, `pointer_down` …)은 뜻이 그대로이고, 기존 native test는 수정 없이 통과했습니다.
 
-다른 surface는 크기 0으로 시작합니다. 크기를 0×0으로 주면 surface를 치워 둡니다. 치운 surface는 버퍼가 없고 그리지도 않습니다. surface 0도 치울 수 있고, `resize()`로 돌아옵니다.
+다른 surface는 크기 0으로 시작합니다. 크기를 0×0으로 주면 surface를 치워 둡니다. 치운 surface는 버퍼가 없고 그리지도 않습니다. surface 0도 치울 수 있고, `resize_surface()`로 돌아옵니다.
 
 ### 한 장면만 가진 surface는 그 장면을 가득 채웁니다
 
@@ -98,7 +98,7 @@ surface마다 마지막 프레임을 그린 입력(`graphics::FrameInputs`)을 �
 
 배경색은 장면이 아니라 renderer가 들고 있습니다. 그래서 프레임의 입력에 없고, theme이 바뀌면 모든 surface의 마지막 프레임을 잊습니다. 크기가 바뀌었을 때와 같습니다.
 
-`surface_frame(id)`는 실제로 그린 횟수입니다. 웹은 그 값이 움직인 캔버스만 `putImageData`합니다. `invalidate()`를 부르면 다음 render가 모두 그립니다. render bench는 측정하는 프레임마다 앞에서 이를 부릅니다. 건너뛴 프레임은 아무것도 재지 않기 때문입니다.
+`surface_frame(id)`는 실제로 그린 횟수입니다. 웹은 그 값이 움직인 캔버스만 `putImageData`합니다. theme을 다시 정하면, 같은 값이어도 다음 render가 모든 surface를 다시 그립니다. render bench는 측정하는 프레임마다 앞에서 그렇게 합니다. 건너뛴 프레임은 아무것도 재지 않기 때문입니다.
 
 브라우저에서 캔버스별 복사 횟수를 세어 확인했습니다.
 
@@ -134,16 +134,15 @@ surface마다 마지막 프레임을 그린 입력(`graphics::FrameInputs`)을 �
 
 | 함수 | 뜻 |
 | --- | --- |
-| `thorvg_rubiks_resize_surface(id, w, h)` | surface의 크기를 정합니다. 0×0이면 치워 둡니다(surface 0도). `resize()`는 surface 0에 대한 이 호출이지만 0×0은 받지 않습니다. |
+| `thorvg_rubiks_resize_surface(id, w, h)` | surface의 크기를 정합니다. 0×0이면 치워 둡니다(surface 0도). |
 | `thorvg_rubiks_set_surface_scenes(id, scenes)` | 장면 비트(cube 1, net 2, rings 4, axes 8)를 정합니다. 없는 비트는 거절합니다. |
-| `thorvg_rubiks_surface_scenes(id)` | 현재 장면 비트를 돌려줍니다. |
 | `thorvg_rubiks_surface_pixel_buffer(id)` / `_pixel_byte_length(id)` | surface의 픽셀 버퍼입니다. 치운 surface는 0이고, 그 surface의 크기가 바뀔 때까지 유효합니다. |
 | `thorvg_rubiks_surface_frame(id)` | 실제로 그린 횟수입니다. |
 | `thorvg_rubiks_pointer_down_on(id, x, y)` | 그 surface의 픽셀에서 제스처를 시작합니다. |
 
 모두 초기화 전에는 0을 돌려주고, 없는 surface id도 거절합니다. `CubeEngine`은 `presentSurface`, `setSurfaceScenes`, `resizeSurface`, `pointerDownOn`으로 이들을 감쌉니다. `render()`는 frame 수가 움직인 캔버스만 복사합니다.
 
-큐브 캔버스(surface 0)도 같은 호출로 다룹니다. 처음에는 surface 0만 예전 한 캔버스 호출(`resize`, `pixel_buffer`, `pointer_down`)로 따로 다뤘는데, 치웠다가 되돌릴 때 크기를 0으로 만들어 호출을 억지로 다시 일으켜야 했고 고칠 때마다 두 곳을 고쳐야 했습니다. 엔진은 그 호출들을 여전히 내보내지만 페이지는 쓰지 않습니다. `resizeSurface`는 크기가 바뀌었는지를 돌려주고, AppLifecycle은 크기를 따로 들고 있지 않습니다. 크기는 엔진이 들고 있는 것 하나뿐입니다.
+큐브 캔버스(surface 0)도 같은 호출로 다룹니다. 처음에는 surface 0만 예전 한 캔버스 호출(`resize`, `pixel_buffer`, `pointer_down`)로 따로 다뤘는데, 치웠다가 되돌릴 때 크기를 0으로 만들어 호출을 억지로 다시 일으켜야 했고 고칠 때마다 두 곳을 고쳐야 했습니다. 그 호출들은 엔진에서도 지웠습니다. `resizeSurface`는 크기가 바뀌었는지를 돌려주고, AppLifecycle은 크기를 따로 들고 있지 않습니다. 크기는 엔진이 들고 있는 것 하나뿐입니다.
 
 ## Source organization
 
@@ -211,3 +210,4 @@ npm --prefix web run test:e2e
 ## 개정 기록
 
 - **건너뛰기의 네 목록을 하나로 모았습니다.** 처음에는 한 프레임이 무엇으로 그려졌는지를 네 곳이 따로 적었습니다. 입력을 담는 구조체(`DrawnInputs`), 장면마다 무엇을 채울지(`inputs_for`), 필드마다 비교(`same_inputs`), 그리고 앱의 상태를 직접 읽는 그리기(`scene_for`)입니다. 그리기가 새로 읽는 것을 나머지 셋 중 하나에 빠뜨리면, 그림이 바뀌었는데도 프레임을 건너뛰어 옛 그림이 남습니다. 게다가 조용히 남습니다. 지금은 그림마다 값 하나가 그 그림이 읽는 것 전부이고, `compose()`는 graphics 라이브러리에서 그 값만 받습니다. 빠뜨리는 방향이 바뀌었습니다. 값에 없는 것은 그릴 수 없으므로, 빠뜨리면 조용히 남는 옛 그림이 아니라 눈에 보이는 틀린 그림이 됩니다. 조명과 draft도 이제 값으로 비교하므로 `lighting_revision`, `paint_revision`, `drawn_draft`는 없어졌습니다. `tests/graphics/FrameTest.cpp`(suite `frame inputs`)는 모든 입력이 비교에 들어가는지 보고, `surfaces`에는 palette, 조명, 칠하기, theme이 각각 그것을 보여 주는 surface만 다시 그리는지 보는 test를 더했습니다. 조명 비교를 빼거나 theme에서 프레임을 잊지 않게 바꾸면 이 test들이 실패하는 것을 확인했습니다. native suite는 30개가 되었습니다.
+- **한 캔버스 호출과 읽히지 않던 getter를 지웠습니다 (2026-10-03).** surface 이전의 호출 여섯(`resize`, `pixel_buffer`, `pixel_byte_length`, `pointer_down`, `paint_at`, `paint_fill`)은 surface 0에 대한 한 줄짜리 forward였고, 페이지는 쓰지 않았습니다. `surface_scenes`, `canvas_theme`, `paint_blamed_count`, `paint_blamed_at`은 내보내기만 하고 읽는 곳이 없었습니다. 이 열 개를 지워 export는 78개에서 68개가 되었고, native test도 페이지와 같은 호출로 surface 0을 다룹니다. '`resize()`는 0×0을 받지 않는다'는 규칙은 그 호출과 함께 없어졌습니다. surface 0도 `resize_surface(0, 0, 0)`으로 치우고, 크기를 다시 주면 돌아옵니다. 페이지가 box 없는 큐브 캔버스에 이미 하던 일이고, `surfaces` suite에 그 test를 더했습니다. `invalidate()`도 지웠습니다. render bench는 theme을 다시 정해 프레임을 강제하고, 그 성질은 같은 suite가 고정합니다.

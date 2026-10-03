@@ -11,8 +11,10 @@ namespace rubiks::render {
  * Rendering boundary owned by the application.
  *
  * Implementations own their render target. The application never observes
- * target allocation, pointers, or pixel formats through this interface, and
- * hands over a finished 2D RenderScene rather than anything 3D.
+ * how the target is allocated or what its pixel format is through this
+ * interface, and it borrows the pixel buffer's address and byte length only
+ * to pass them on to its own caller. What it gives a renderer is a finished
+ * 2D RenderScene rather than anything 3D.
  */
 class Renderer {
 public:

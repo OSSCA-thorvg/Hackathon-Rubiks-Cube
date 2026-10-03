@@ -80,7 +80,7 @@ struct Cubie {
 
 class CubeState {
 public:
-    explicit CubeState(int size = 3);            // solved
+    explicit CubeState(int size);            // solved
     [[nodiscard]] int size() const noexcept;
     [[nodiscard]] const Cubie& at(int x, int y, int z) const noexcept;
     void apply(const CubeMove& move) noexcept;

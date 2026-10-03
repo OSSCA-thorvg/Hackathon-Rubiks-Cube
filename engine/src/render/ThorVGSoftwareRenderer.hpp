@@ -5,6 +5,7 @@
 
 #include <thorvg.h>
 
+#include "graphics/CanvasTheme.hpp"
 #include "graphics/Color.hpp"
 #include "graphics/RenderScene.hpp"
 #include "render/Renderer.hpp"
@@ -120,7 +121,8 @@ private:
 
     // Dark by default, which is the ground the renderer has always had and
     // the one the native build with no UI in front of it still wants.
-    graphics::Color background_{32, 32, 32, 255};
+    graphics::Color background_ =
+        graphics::canvas_background(graphics::CanvasTheme::Dark);
 
     tvg::SwCanvas* canvas_ = nullptr;
     std::uint32_t* buffer_ = nullptr;

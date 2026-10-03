@@ -48,11 +48,12 @@ using LayerMask = std::uint32_t;
 /**
  * How many layers a mask has a bit for.
  *
- * A cube has to be narrower than this to be turned at all. Whether a mask
+ * A cube exactly this wide has a bit for each of its layers, and the two
+ * functions that check a mask against a size or form one for it,
+ * is_layer_run() and depth_layers(), refuse it all the same. Whether a mask
  * stays inside a cube is asked by shifting it down by the cube's size, and a
- * shift by the whole width of the type is not defined, so the widest cube the
- * domain turns is one layer short of the mask and every function that is
- * handed a size refuses one this wide.
+ * shift by the whole width of the type is not defined, so the widest cube
+ * those two answer for is one layer short of the mask.
  */
 inline constexpr int kLayerMaskBits = std::numeric_limits<LayerMask>::digits;
 

@@ -215,12 +215,15 @@ TEST_CASE("a corner that no turn could make is refused")
     CHECK_FALSE(assembled(3, painting));
 }
 
-TEST_CASE("a cube too wide for a layer mask is refused before it is read")
+TEST_CASE("a cube as wide as a layer mask is refused before it is read")
 {
     // A painting of a solved cube, which nothing is wrong with -- except that
-    // a cube of thirty-two layers has one more than a move's mask can name.
-    // Read back it would be a cube nothing could turn, so the size is refused
-    // here where every other function of the domain refuses it.
+    // a cube of thirty-two layers is as wide as a move's mask, and a mask is
+    // only checked against a cube narrower than itself. is_layer_run() and
+    // depth_layers() refuse the size, so read back it would be a cube that
+    // face_move() has no move for, and read_painting() refuses it where they
+    // do. The cube itself can still be built, which is how the painting here
+    // is made.
     const auto painting = painting_of(CubeState(32));
 
     CHECK(read_painting(32, painting).fault == PaintFault::ColourCount);

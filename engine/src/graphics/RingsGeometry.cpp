@@ -13,6 +13,8 @@ namespace {
 
 using cube::Axis;
 using cube::SurfaceSticker;
+using cube::axes;
+using cube::axis_index;
 using cube::axis_of;
 using cube::coordinate_on;
 using cube::outer_layer;
@@ -20,22 +22,6 @@ using math::Vec2;
 
 constexpr float kPi = 3.14159265358979323846f;
 constexpr float kDegreesPerQuarterTurn = 90.0f;
-
-/** The three axes, in the order their centres are placed around the middle. */
-constexpr std::array<Axis, 3> kAxes{Axis::X, Axis::Y, Axis::Z};
-
-[[nodiscard]] std::size_t axis_index(Axis axis) noexcept
-{
-    switch (axis) {
-        case Axis::X:
-            return 0;
-        case Axis::Y:
-            return 1;
-        case Axis::Z:
-            break;
-    }
-    return 2;
-}
 
 [[nodiscard]] Vec2 subtracted(const Vec2& a, const Vec2& b) noexcept
 {
@@ -55,9 +41,10 @@ constexpr std::array<Axis, 3> kAxes{Axis::X, Axis::Y, Axis::Z};
 /**
  * Where an axis's circles are centred, in the diagram's own coordinates.
  *
- * A third of a turn apart with the first pointing up, written out rather than
- * computed: they are constants of the layout, and every slot placement asks
- * for three of them.
+ * The three centres are placed around the middle in the order the axes are
+ * listed, a third of a turn apart with the first pointing up. They are written
+ * out rather than computed: they are constants of the layout, and every slot
+ * placement asks for three of them.
  */
 [[nodiscard]] Vec2 axis_center(Axis axis) noexcept
 {
@@ -144,7 +131,7 @@ struct RingsBounds {
     RingsBounds bounds{0.0f, 0.0f, 0.0f, 0.0f};
     bool started = false;
 
-    for (const Axis axis : kAxes) {
+    for (const Axis axis : axes()) {
         const Vec2 at = axis_center(axis);
         if (!started) {
             bounds = RingsBounds{at.x - reach, at.x + reach, at.y - reach,
@@ -264,7 +251,7 @@ struct RingsMetrics {
     Axis first = Axis::X;
     Axis second = Axis::X;
     bool found_first = false;
-    for (const Axis axis : kAxes) {
+    for (const Axis axis : axes()) {
         if (axis == free) continue;
         if (!found_first) {
             first = axis;
@@ -567,7 +554,7 @@ RenderScene build_rings_scene(const cube::CubeState& state, const Rect& rect,
     // largest thing a frame did.
     std::vector<SlotRing> rings;
     rings.reserve(static_cast<std::size_t>(3 * size));
-    for (const Axis axis : kAxes) {
+    for (const Axis axis : axes()) {
         for (int layer = 0; layer < size; ++layer) {
             rings.push_back(rings_ring(axis, layer, rect, size));
         }
@@ -577,7 +564,7 @@ RenderScene build_rings_scene(const cube::CubeState& state, const Rect& rect,
                      static_cast<std::size_t>(layer)];
     };
 
-    for (const Axis axis : kAxes) {
+    for (const Axis axis : axes()) {
         for (int layer = 0; layer < size; ++layer) {
             const SlotRing& ring = ring_of(axis, layer);
             if (ring.empty()) continue;

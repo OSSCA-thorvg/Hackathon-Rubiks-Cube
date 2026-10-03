@@ -40,12 +40,11 @@ private:
 [[nodiscard]] Axis next_axis(XorShift32& random,
                              std::optional<Axis> previous) noexcept
 {
-    constexpr std::array<Axis, 3> kAxes{Axis::X, Axis::Y, Axis::Z};
-    if (!previous) return kAxes[random.below(3)];
+    if (!previous) return axes()[random.below(3)];
 
     std::array<Axis, 2> choices{};
     std::size_t count = 0;
-    for (const Axis axis : kAxes) {
+    for (const Axis axis : axes()) {
         if (axis != *previous) choices[count++] = axis;
     }
     return choices[random.below(2)];

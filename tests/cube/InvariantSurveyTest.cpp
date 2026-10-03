@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <array>
 #include <cstdint>
 #include <iostream>
 #include <map>
@@ -50,8 +49,6 @@ using rubiks::cube::outer_layer;
 using rubiks::cube::SurfaceSticker;
 using rubiks::cube::surface_stickers;
 using rubiks::cube::turned_sticker;
-
-constexpr std::array<Axis, 3> kAxes{Axis::X, Axis::Y, Axis::Z};
 
 /** The stickers of a size, and the index each one answers to. */
 class Slots {
@@ -176,7 +173,7 @@ private:
 [[nodiscard]] std::vector<CubeMove> quarter_turns(int size)
 {
     std::vector<CubeMove> moves;
-    for (const Axis axis : kAxes) {
+    for (const Axis axis : rubiks::cube::axes()) {
         for (int at = 0; at < size; ++at) {
             moves.push_back(CubeMove{axis, layer(at), 1});
         }
@@ -366,7 +363,7 @@ void survey(int size, std::uint32_t scrambles, Seen& seen)
             slots.stickers_of(piece).front())];
         const CubiePosition at{s.x, s.y, s.z};
         int depth = size;
-        for (const Axis axis : kAxes) {
+        for (const Axis axis : rubiks::cube::axes()) {
             const int c = coordinate_on(axis, at);
             if (c == 0 || c == size - 1) continue;
             depth = std::min({depth, c, size - 1 - c});

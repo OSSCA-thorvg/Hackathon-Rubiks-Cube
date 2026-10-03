@@ -14,8 +14,6 @@
 namespace rubiks::cube {
 namespace {
 
-constexpr std::array<Axis, 3> kAxes{Axis::X, Axis::Y, Axis::Z};
-
 /** A cubie slot, as something that can be looked up. */
 struct Where {
     int x, y, z;
@@ -146,7 +144,7 @@ public:
         const auto& s = slots_[static_cast<std::size_t>(
             pieces_[static_cast<std::size_t>(piece)].front())];
         int depth = size_;
-        for (const Axis axis : kAxes) {
+        for (const Axis axis : axes()) {
             const int c = coordinate_on(axis, CubiePosition{s.x, s.y, s.z});
             if (c == 0 || c == size_ - 1) continue;
             depth = std::min(depth, std::min(c, size_ - 1 - c));
@@ -180,7 +178,7 @@ private:
         // them generate all twenty-four, so they are grown from the three
         // rather than written out.
         std::vector<std::vector<int>> seeds;
-        for (const Axis axis : kAxes) {
+        for (const Axis axis : axes()) {
             std::vector<int> perm(slots_.size(), 0);
             for (std::size_t i = 0; i < slots_.size(); ++i) {
                 perm[i] = at_.at(
@@ -225,7 +223,7 @@ private:
         // Every quarter turn the puzzle allows, which is what a piece can
         // actually be carried by -- unlike the rotations above.
         std::vector<std::vector<int>> steps;
-        for (const Axis axis : kAxes) {
+        for (const Axis axis : axes()) {
             for (int at = 0; at < size_; ++at) {
                 std::vector<int> lands(slots_.size(), 0);
                 for (std::size_t i = 0; i < slots_.size(); ++i) {

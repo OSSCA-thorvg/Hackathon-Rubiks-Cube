@@ -44,7 +44,7 @@ constexpr std::uint32_t kAxesSide = 96;
 /** The surfaces a page with a canvas per view would make. */
 constexpr std::uint32_t kCube = 0;
 constexpr std::uint32_t kNet = 1;
-constexpr std::uint32_t kAxes = 2;
+constexpr std::uint32_t kAxesSurface = 2;
 
 /** One pixel of a surface's last frame. */
 Rgba pixel(std::uint32_t id, std::uint32_t width, float x, float y)
@@ -98,8 +98,8 @@ void open_three_canvases()
     REQUIRE(rubiks::app::set_surface_scenes(kCube, kSceneCube));
     REQUIRE(rubiks::app::resize_surface(kNet, kNetWidth, kNetHeight));
     REQUIRE(rubiks::app::set_surface_scenes(kNet, kSceneNet));
-    REQUIRE(rubiks::app::resize_surface(kAxes, kAxesSide, kAxesSide));
-    REQUIRE(rubiks::app::set_surface_scenes(kAxes, kSceneAxes));
+    REQUIRE(rubiks::app::resize_surface(kAxesSurface, kAxesSide, kAxesSide));
+    REQUIRE(rubiks::app::set_surface_scenes(kAxesSurface, kSceneAxes));
 }
 
 /** Sweeps the viewpoint a little, from the cube surface's empty corner. */
@@ -149,9 +149,10 @@ TEST_CASE("a surface holding one scene draws it alone, filling the surface")
     REQUIRE(pixel(kCube, kCubeSide, 2.0f, 2.0f) == kDarkGround);
 
     // The axes meet in the middle of theirs, and leave its corners bare.
-    REQUIRE(pixel(kAxes, kAxesSide, kAxesSide * 0.5f, kAxesSide * 0.5f) !=
+    REQUIRE(pixel(kAxesSurface, kAxesSide, kAxesSide * 0.5f,
+                  kAxesSide * 0.5f) != kDarkGround);
+    REQUIRE(pixel(kAxesSurface, kAxesSide, 1.0f, kAxesSide - 2.0f) ==
             kDarkGround);
-    REQUIRE(pixel(kAxes, kAxesSide, 1.0f, kAxesSide - 2.0f) == kDarkGround);
 }
 
 TEST_CASE("a surface draws only what the view mode shows")
@@ -172,8 +173,8 @@ TEST_CASE("a surface draws only what the view mode shows")
             kDarkGround);
 
     // The axes go with the cube, because they say where its axes point.
-    REQUIRE(pixel(kAxes, kAxesSide, kAxesSide * 0.5f, kAxesSide * 0.5f) ==
-            kDarkGround);
+    REQUIRE(pixel(kAxesSurface, kAxesSide, kAxesSide * 0.5f,
+                  kAxesSide * 0.5f) == kDarkGround);
 }
 
 TEST_CASE("a press lands on the surface it was made on")
@@ -201,7 +202,7 @@ TEST_CASE("a press lands on the surface it was made on")
     REQUIRE_FALSE(rubiks::app::pointer_down_on(kNet, 1.0f, 1.0f));
 
     // The axes hold no layers and no viewpoint of their own either.
-    REQUIRE_FALSE(rubiks::app::pointer_down_on(kAxes, kAxesSide * 0.5f,
+    REQUIRE_FALSE(rubiks::app::pointer_down_on(kAxesSurface, kAxesSide * 0.5f,
                                                kAxesSide * 0.5f));
 }
 
@@ -233,9 +234,9 @@ TEST_CASE("a surface whose picture has not changed keeps its frame")
     REQUIRE(rubiks::app::render());
 
     const auto frames = []() {
-        return std::array<std::uint32_t, 3>{rubiks::app::surface_frame(kCube),
-                                            rubiks::app::surface_frame(kNet),
-                                            rubiks::app::surface_frame(kAxes)};
+        return std::array<std::uint32_t, 3>{
+            rubiks::app::surface_frame(kCube), rubiks::app::surface_frame(kNet),
+            rubiks::app::surface_frame(kAxesSurface)};
     };
     const auto drawn = frames();
 
@@ -291,7 +292,7 @@ TEST_CASE("each change draws the surfaces that show it, and no others")
         REQUIRE(rubiks::app::render());
         const std::array<std::uint32_t, 3> now{
             rubiks::app::surface_frame(kCube), rubiks::app::surface_frame(kNet),
-            rubiks::app::surface_frame(kAxes)};
+            rubiks::app::surface_frame(kAxesSurface)};
         const std::array<bool, 3> moved{now[0] != last[0], now[1] != last[1],
                                         now[2] != last[2]};
         last = now;
@@ -347,7 +348,7 @@ TEST_CASE("a change of look reaches every surface, even one sized after it")
 
     REQUIRE(pixel(kCube, kCubeSide, 2.0f, 2.0f) == kLightGround);
     REQUIRE(pixel(kNet, kNetWidth, 2.0f, 2.0f) == kLightGround);
-    REQUIRE(pixel(kAxes, kAxesSide, 1.0f, 1.0f) == kLightGround);
+    REQUIRE(pixel(kAxesSurface, kAxesSide, 1.0f, 1.0f) == kLightGround);
     REQUIRE(pixel(3, 64, 1.0f, 1.0f) == kLightGround);
 }
 

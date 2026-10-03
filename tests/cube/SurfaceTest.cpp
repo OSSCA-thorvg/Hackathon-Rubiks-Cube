@@ -136,7 +136,7 @@ TEST_CASE("turning stickers is a permutation of the surface that repeats at 4")
     const auto stickers = all_stickers(kSize);
     REQUIRE(stickers.size() == 54);
 
-    for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
+    for (const auto axis : rubiks::cube::axes()) {
         std::set<std::tuple<int, int, int, int>> images;
 
         for (const auto& sticker : stickers) {
@@ -162,7 +162,7 @@ TEST_CASE("turning stickers is a permutation of the surface that repeats at 4")
 
 TEST_CASE("a ring is the layer's whole band, once each")
 {
-    for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
+    for (const auto axis : rubiks::cube::axes()) {
         for (int index = 0; index < kSize; ++index) {
             const auto slots = ring_slots(axis, index, kSize);
             REQUIRE(slots.size() == 4 * kSize);
@@ -187,7 +187,7 @@ TEST_CASE("a ring is the layer's whole band, once each")
 
 TEST_CASE("a ring is a closed walk over neighbouring stickers")
 {
-    for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
+    for (const auto axis : rubiks::cube::axes()) {
         for (int index = 0; index < kSize; ++index) {
             const auto slots = ring_slots(axis, index, kSize);
 
@@ -202,7 +202,7 @@ TEST_CASE("a ring is a closed walk over neighbouring stickers")
 
 TEST_CASE("a quarter turn is exactly one face's worth along the ring")
 {
-    for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
+    for (const auto axis : rubiks::cube::axes()) {
         for (int index = 0; index < kSize; ++index) {
             const auto slots = ring_slots(axis, index, kSize);
 
@@ -219,7 +219,7 @@ TEST_CASE("where the ring says a sticker goes, the cube shows its color")
     // Not a second reading of the same rule: this compares the ring against
     // the colors CubeState actually ends up holding. It cannot tell stickers
     // of one face apart, which is why the checks above carry the identity.
-    for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
+    for (const auto axis : rubiks::cube::axes()) {
         for (int index = 0; index < kSize; ++index) {
             CubeState before(kSize);
             before.apply(CubeMove{axis, layer(index), 5});  // scrambles a little

@@ -224,7 +224,7 @@ std::vector<SurfaceSticker> surface_stickers(int size)
                 set_coordinate(position, normal, outer_layer(face, size));
 
                 bool first = true;
-                for (const Axis axis : {Axis::X, Axis::Y, Axis::Z}) {
+                for (const Axis axis : axes()) {
                     if (axis == normal) continue;
                     set_coordinate(position, axis, first ? across : down);
                     first = false;

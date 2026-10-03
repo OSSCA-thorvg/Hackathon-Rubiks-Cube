@@ -21,8 +21,6 @@
 namespace rubiks::cube::solver {
 namespace {
 
-constexpr std::array<Axis, 3> kAxes{Axis::X, Axis::Y, Axis::Z};
-
 /** One sticker: the slot it is on, and which way it faces. */
 struct Facelet {
     CubiePosition at;
@@ -152,7 +150,7 @@ struct Commutator {
 
     for (const Face face : faces()) {
         for (const int face_turns : {1, -1, 2}) {
-            for (const Axis axis : kAxes) {
+            for (const Axis axis : axes()) {
                 if (axis == axis_of(face)) continue;
                 for (int layer = 1; layer <= size - 2; ++layer) {
                     for (const int slice_turns : {1, -1, 2}) {
@@ -165,8 +163,8 @@ struct Commutator {
         }
     }
 
-    for (const Axis first : kAxes) {
-        for (const Axis second : kAxes) {
+    for (const Axis first : axes()) {
+        for (const Axis second : axes()) {
             if (first == second) continue;
             for (int a = 1; a <= size - 2; ++a) {
                 for (int b = 1; b <= size - 2; ++b) {
@@ -182,7 +180,7 @@ struct Commutator {
         }
     }
 
-    for (const Axis axis : kAxes) {
+    for (const Axis axis : axes()) {
         for (const Face face : faces()) {
             if (axis_of(face) == axis) continue;
             for (const int hold : {1, -1, 2}) {
@@ -292,7 +290,7 @@ struct Commutator {
         }
     }
 
-    for (const Axis axis : kAxes) {
+    for (const Axis axis : axes()) {
         for (int layer = 1; layer <= size - 2; ++layer) {
             for (const int slice_turns : {1, -1, 2}) {
                 const Turn slice = layer_turn(axis, layer, slice_turns, size);
@@ -443,7 +441,7 @@ public:
         centres_only_ = true;
         for (const auto& cell : cells_) {
             int extremes = 0;
-            for (const Axis axis : kAxes) {
+            for (const Axis axis : axes()) {
                 const int at = coordinate_on(axis, cell.at);
                 if (at == 0 || at == size - 1) ++extremes;
             }
@@ -456,11 +454,10 @@ public:
             axis.assign(static_cast<std::size_t>(size), {});
         }
         for (std::size_t i = 0; i < cells_.size(); ++i) {
-            for (const Axis axis : kAxes) {
+            for (const Axis axis : axes()) {
                 const auto at = static_cast<std::size_t>(
                     coordinate_on(axis, cells_[i].at));
-                along_[static_cast<std::size_t>(axis)][at].push_back(
-                    static_cast<int>(i));
+                along_[axis_index(axis)][at].push_back(static_cast<int>(i));
             }
         }
 
@@ -564,7 +561,7 @@ public:
         for (std::size_t k = 0; k < steps.size(); ++k) {
             if (skip_faces && is_face_turn(steps[k])) continue;
             const auto move = to_move(steps[k], size_);
-            const auto axis = static_cast<std::size_t>(move.axis);
+            const auto axis = axis_index(move.axis);
             for (int at = 0; at < size_; ++at) {
                 if ((move.layers & layer(at)) == 0) continue;
                 named += along_[axis][static_cast<std::size_t>(at)].size();
@@ -593,7 +590,7 @@ public:
         for (std::size_t k = 0; k < steps.size(); ++k) {
             if (skip_faces && is_face_turn(steps[k])) continue;
             const auto move = to_move(steps[k], size_);
-            const auto axis = static_cast<std::size_t>(move.axis);
+            const auto axis = axis_index(move.axis);
 
             for (int at = 0; at < size_; ++at) {
                 if ((move.layers & layer(at)) == 0) continue;
@@ -730,7 +727,7 @@ private:
     std::vector<FaceColor> wants_;
     std::array<std::uint8_t, kFaceCount> asked_for_{};
     std::vector<int> index_;
-    std::array<std::vector<std::vector<int>>, 3> along_;
+    std::array<std::vector<std::vector<int>>, kAxisCount> along_;
     bool centres_only_ = false;
 };
 
@@ -964,7 +961,7 @@ public:
             // quarter of the one inner layer its pieces sit in. Which end of
             // the cube that layer is measured from does not matter -- a piece
             // one layer in from either end is in the same world.
-            for (const Axis axis : kAxes) {
+            for (const Axis axis : axes()) {
                 const int at = coordinate_on(axis, cells[i].at);
                 if (at == 0 || at == size - 1) continue;
                 depths_[world] = layer_turn(axis, at, 1, size);
@@ -1420,9 +1417,10 @@ void build_reduction(Work& work, const CentreWorkshop& centres,
     for (int attempt = 0;; ++attempt) {
         assert(attempt < 8);
 
-        work.apply(layer_turn(kAxes[static_cast<std::size_t>(attempt) % 3],
-                              1 + (attempt / 3) % (work.size() - 2),
-                              attempt % 2 == 0 ? 1 : -1, work.size()));
+        work.apply(
+            layer_turn(axes()[static_cast<std::size_t>(attempt) % kAxisCount],
+                       1 + (attempt / 3) % (work.size() - 2),
+                       attempt % 2 == 0 ? 1 : -1, work.size()));
         build_centres(work, centres);
 
         for (const auto& turn : edges.evening_turns(work.cube())) {

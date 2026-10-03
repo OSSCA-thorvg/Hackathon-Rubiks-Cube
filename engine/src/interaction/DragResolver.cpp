@@ -1,6 +1,5 @@
 #include "interaction/DragResolver.hpp"
 
-#include <array>
 #include <cmath>
 
 #include "graphics/CubeGeometry.hpp"
@@ -12,8 +11,6 @@ namespace {
 using cube::Axis;
 using math::Vec2;
 using math::Vec3;
-
-constexpr std::array<Axis, 3> kAxes{Axis::X, Axis::Y, Axis::Z};
 
 /** Screen distance below which a direction is noise rather than a direction. */
 constexpr float kMinScreenDelta = 1e-4f;
@@ -64,7 +61,7 @@ std::optional<AxisCandidate> resolve_axis(
     std::optional<AxisCandidate> best;
     float best_score = 0.0f;
 
-    for (const Axis axis : kAxes) {
+    for (const Axis axis : cube::axes()) {
         // Turning about the axis the grabbed face points along would spin the
         // sticker in place, which no drag can ask for.
         if (axis == face_axis) continue;

@@ -1,10 +1,25 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 
 namespace rubiks::cube {
 
 enum class Axis { X, Y, Z };
+
+inline constexpr std::size_t kAxisCount = 3;
+
+/** The three axes, in the order the enum declares them. */
+[[nodiscard]] constexpr std::array<Axis, kAxisCount> axes() noexcept
+{
+    return {Axis::X, Axis::Y, Axis::Z};
+}
+
+[[nodiscard]] constexpr std::size_t axis_index(Axis axis) noexcept
+{
+    return static_cast<std::size_t>(axis);
+}
 
 /** Bitmask over layer indices 0 ... N-1 along a move's axis. */
 using LayerMask = std::uint32_t;

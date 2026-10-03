@@ -32,8 +32,6 @@ constexpr float kPi = 3.14159265358979323846f;
 
 const Rect kRect{0.0f, 0.0f, 600.0f, 600.0f};
 
-constexpr std::array<Axis, 3> kAxes{Axis::X, Axis::Y, Axis::Z};
-
 /** A sticker as something orderable, for putting into sets and maps. */
 [[nodiscard]] std::tuple<int, int, int, int> key_of(const SurfaceSticker& s)
 {
@@ -88,7 +86,7 @@ TEST_CASE("every sticker sits on exactly two rings, of the two axes that are "
     std::map<std::tuple<int, int, int, int>, std::vector<Axis>> memberships;
 
     std::size_t total = 0;
-    for (const Axis axis : kAxes) {
+    for (const Axis axis : rubiks::cube::axes()) {
         for (int layer = 0; layer < kSize; ++layer) {
             const auto slots = rubiks::cube::ring_slots(axis, layer, kSize);
             REQUIRE(slots.size() == 4 * kSize);
@@ -123,8 +121,8 @@ TEST_CASE("two rings of different axes share exactly two stickers")
 
     for (std::size_t first = 0; first < 9; ++first) {
         for (std::size_t second = first + 1; second < 9; ++second) {
-            const Axis first_axis = kAxes[first / 3];
-            const Axis second_axis = kAxes[second / 3];
+            const Axis first_axis = rubiks::cube::axes()[first / 3];
+            const Axis second_axis = rubiks::cube::axes()[second / 3];
             if (first_axis == second_axis) continue;
 
             const auto here = rubiks::cube::ring_slots(
@@ -160,7 +158,7 @@ TEST_CASE("the layout places fifty-four distinct slots, twelve to a ring")
     }
     REQUIRE(placed.size() == 54);
 
-    for (const Axis axis : kAxes) {
+    for (const Axis axis : rubiks::cube::axes()) {
         for (int layer = 0; layer < kSize; ++layer) {
             const auto ring = rings_ring(axis, layer, kRect, kSize);
             REQUIRE(ring.slot_count() == 4 * kSize);
@@ -173,7 +171,7 @@ TEST_CASE("each ring's slots come round its own centre in the domain's order")
     // This is the condition the radii were chosen for. Get it wrong and a ring
     // still holds the right stickers, but the loop drawn through them doubles
     // back and crosses itself.
-    for (const Axis axis : kAxes) {
+    for (const Axis axis : rubiks::cube::axes()) {
         for (int layer = 0; layer < kSize; ++layer) {
             const auto ring = rings_ring(axis, layer, kRect, kSize);
             REQUIRE_FALSE(ring.empty());
@@ -206,7 +204,7 @@ TEST_CASE("each ring's slots come round its own centre in the domain's order")
 
 TEST_CASE("a ring's loop is the circle its slots lie on")
 {
-    for (const Axis axis : kAxes) {
+    for (const Axis axis : rubiks::cube::axes()) {
         for (int layer = 0; layer < kSize; ++layer) {
             const auto ring = rings_ring(axis, layer, kRect, kSize);
             REQUIRE_FALSE(ring.empty());
@@ -229,7 +227,7 @@ TEST_CASE("a ring's loop is the circle its slots lie on")
 
 TEST_CASE("three slots along the ring is where the domain sends the sticker")
 {
-    for (const Axis axis : kAxes) {
+    for (const Axis axis : rubiks::cube::axes()) {
         for (int layer = 0; layer < kSize; ++layer) {
             const auto slots = rubiks::cube::ring_slots(axis, layer, kSize);
             const auto ring = rings_ring(axis, layer, kRect, kSize);
@@ -276,7 +274,7 @@ TEST_CASE("a turn drawn at nothing and at a quarter matches the cube itself")
     rubiks::cube::CubeState state(kSize);
     state.apply(rubiks::cube::CubeMove{Axis::Y, rubiks::cube::layer(1), 1});
 
-    for (const Axis axis : kAxes) {
+    for (const Axis axis : rubiks::cube::axes()) {
         for (int layer = 0; layer < kSize; ++layer) {
             const auto mask = rubiks::cube::layer(layer);
 
@@ -328,7 +326,7 @@ TEST_CASE("a band part way through a turn is on the ring it is riding")
 {
     const rubiks::cube::CubeState state(kSize);
 
-    for (const Axis axis : kAxes) {
+    for (const Axis axis : rubiks::cube::axes()) {
         for (int layer = 0; layer < kSize; ++layer) {
             const auto ring = rings_ring(axis, layer, kRect, kSize);
 

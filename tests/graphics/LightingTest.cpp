@@ -261,7 +261,7 @@ TEST_CASE("a resting cube casts as one box, the cube itself")
     const WorldScene scene = build_cube_scene(CubeState(3));
     REQUIRE(scene.casters.size() == 1);
 
-    for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
+    for (const auto axis : rubiks::cube::axes()) {
         const auto [low, high] = extent_along(scene.casters[0], axis);
         REQUIRE(low == Approx(-kCubeHalfExtent));
         REQUIRE(high == Approx(kCubeHalfExtent));

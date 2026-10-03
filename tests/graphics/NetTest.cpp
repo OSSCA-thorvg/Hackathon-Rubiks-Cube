@@ -471,7 +471,7 @@ TEST_CASE("every band is one closed ring through its twelve resting slots")
 
     const Rect rect = test_rect();
 
-    for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
+    for (const auto axis : rubiks::cube::axes()) {
         for (int index = 0; index < kSize; ++index) {
             const auto ring = net_ring(axis, index, rect, kSize);
             const auto slots = rubiks::cube::ring_slots(axis, index, kSize);
@@ -502,7 +502,7 @@ TEST_CASE("a ring runs along a drawn direction wherever a cell rests")
 
     const Rect rect = test_rect();
 
-    for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
+    for (const auto axis : rubiks::cube::axes()) {
         for (int index = 0; index < kSize; ++index) {
             const auto ring = net_ring(axis, index, rect, kSize);
 
@@ -536,7 +536,7 @@ TEST_CASE("a ring read a hair below a whole turn is read at its first slot")
     using rubiks::cube::Axis;
 
     const Rect rect = test_rect();
-    for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
+    for (const auto axis : rubiks::cube::axes()) {
         const auto ring = net_ring(axis, 0, rect, kSize);
         const float count = static_cast<float>(ring.slot_count());
         REQUIRE(static_cast<float>(-1e-7f + count) == count);
@@ -581,7 +581,7 @@ TEST_CASE("a ring's direction never jumps")
     // from a tight bend, so this looks at what happens when the sampling is
     // refined: across a bend the step shrinks with it, across a jump it does
     // not shrink at all.
-    for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
+    for (const auto axis : rubiks::cube::axes()) {
         for (int index = 0; index < kSize; ++index) {
             const auto ring = net_ring(axis, index, rect, kSize);
             const float coarse = worst_turn(ring, 4000);
@@ -862,7 +862,7 @@ TEST_CASE("a turning cell keeps the color of its sticker, whole")
     // had gone -- which reads as the cubie changing color rather than as it
     // leaving. Whatever is drawn is drawn in the color the cube says, at full
     // strength, and the only quads that are not are the shadows.
-    for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
+    for (const auto axis : rubiks::cube::axes()) {
         for (int index = 0; index < kSize; ++index) {
             for (int step = 0; step <= 18; ++step) {
                 const auto angle = static_cast<float>(step) * 5.0f;
@@ -912,7 +912,7 @@ TEST_CASE("a turn leaves the drawing it is passing over exactly where it is")
     //
     // Resting cells are the ones drawn first; the pieces the turn carries and
     // their shadows are held back to the end.
-    for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
+    for (const auto axis : rubiks::cube::axes()) {
         for (int index = 0; index < kSize; ++index) {
             const std::size_t carried =
                 4 * kSize +
@@ -1061,7 +1061,7 @@ TEST_CASE("a guide line takes the color of the axis it turns about")
 
     // Three colors that can actually be told apart, and none of them a
     // sticker's.
-    for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
+    for (const auto axis : rubiks::cube::axes()) {
         for (const auto sticker : {FaceColor::Red, FaceColor::Orange,
                                    FaceColor::White, FaceColor::Yellow,
                                    FaceColor::Green, FaceColor::Blue}) {
@@ -1096,7 +1096,7 @@ TEST_CASE("a turning cell never strays far outside the drawing")
     // canvas. What this pins is that it is a little way and not a wander.
     const float margin = 2.0f * cell;
 
-    for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
+    for (const auto axis : rubiks::cube::axes()) {
         for (int index = 0; index < kSize; ++index) {
             for (int step = 0; step <= 18; ++step) {
                 const auto angle = static_cast<float>(step) * 5.0f;
@@ -1153,7 +1153,7 @@ TEST_CASE("a ring runs dead straight between slots that share a face")
         }
     };
 
-    for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
+    for (const auto axis : rubiks::cube::axes()) {
         for (int index = 0; index < kSize; ++index) {
             require_straight(net_ring(axis, index, rect, kSize),
                              rubiks::cube::ring_slots(axis, index, kSize));

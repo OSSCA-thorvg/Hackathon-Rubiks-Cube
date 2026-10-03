@@ -137,7 +137,7 @@ inline void set_axis(CubiePosition& position, Axis axis, int value) noexcept
 /** The axis that is neither of these two. */
 [[nodiscard]] inline Axis remaining_axis(Axis a, Axis b) noexcept
 {
-    for (const Axis axis : {Axis::X, Axis::Y, Axis::Z}) {
+    for (const Axis axis : axes()) {
         if (axis != a && axis != b) return axis;
     }
     assert(false);

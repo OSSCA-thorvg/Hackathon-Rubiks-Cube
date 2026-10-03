@@ -397,9 +397,7 @@ int guide_pixels(float left, float top, float right, float bottom,
              x < static_cast<std::uint32_t>(right) && x < width; ++x) {
             const auto* pixel = pixel_at(x, y, width);
 
-            for (const auto axis : {rubiks::cube::Axis::X,
-                                    rubiks::cube::Axis::Y,
-                                    rubiks::cube::Axis::Z}) {
+            for (const auto axis : rubiks::cube::axes()) {
                 // A guide line is not quite opaque, so what lands on an empty
                 // margin is its color over the background, not the color.
                 const auto guide = rubiks::graphics::guide_color(axis);

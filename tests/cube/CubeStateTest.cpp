@@ -211,7 +211,7 @@ TEST_CASE("a whole-cube rotation has order four on every axis")
 {
     const CubeState solved(kSize);
 
-    for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) {
+    for (const auto axis : rubiks::cube::axes()) {
         const auto rotation = whole_cube(axis, kSize);
         REQUIRE_FALSE(after(rotation, 1) == solved);
         REQUIRE(after(rotation, 4) == solved);
@@ -391,4 +391,23 @@ TEST_CASE("the move engine holds for an even cube size")
 TEST_CASE("cubes of different sizes are never equal")
 {
     REQUIRE_FALSE(CubeState(2) == CubeState(3));
+}
+
+TEST_CASE("the axes are listed in the order the enum declares them")
+{
+    using rubiks::cube::axes;
+    using rubiks::cube::axis_index;
+
+    // Written out by hand rather than looped over: a seeded scramble draws
+    // its axis by this order and the solver builds its tools in it, so the
+    // order is part of what a seed and a solution mean.
+    const auto listed = axes();
+    REQUIRE(listed.size() == 3);
+    REQUIRE(listed[0] == Axis::X);
+    REQUIRE(listed[1] == Axis::Y);
+    REQUIRE(listed[2] == Axis::Z);
+
+    REQUIRE(axis_index(Axis::X) == 0);
+    REQUIRE(axis_index(Axis::Y) == 1);
+    REQUIRE(axis_index(Axis::Z) == 2);
 }

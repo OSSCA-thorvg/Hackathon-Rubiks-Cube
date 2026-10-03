@@ -84,7 +84,7 @@ TEST_CASE("a cube held any way up is read all the same")
     for (const int size : {2, 3, 4, 5, 6, 7}) {
         const auto cube = scrambled(3, size);
 
-        for (const Axis axis : {Axis::X, Axis::Y, Axis::Z}) {
+        for (const Axis axis : rubiks::cube::axes()) {
             for (const int quarters : {1, 2, 3}) {
                 const auto held = turned_over(cube, axis, quarters);
                 INFO("size " << size << " axis " << static_cast<int>(axis)
@@ -107,7 +107,7 @@ TEST_CASE("an odd cube read from a different way up comes back the same cube")
     // inventing an answer.
     for (const int size : {3, 5, 7}) {
         const auto cube = scrambled(5, size);
-        for (const Axis axis : {Axis::X, Axis::Y, Axis::Z}) {
+        for (const Axis axis : rubiks::cube::axes()) {
             const auto held = turned_over(cube, axis, 1);
             INFO("size " << size << " axis " << static_cast<int>(axis));
             const auto built = assembled(size, painting_of(held));

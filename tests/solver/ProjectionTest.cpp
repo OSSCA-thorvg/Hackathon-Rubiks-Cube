@@ -49,7 +49,6 @@ struct Choice {
 [[nodiscard]] std::vector<Choice> outer_run(std::uint32_t seed,
                                             std::size_t count)
 {
-    constexpr std::array<Axis, 3> kAxes{Axis::X, Axis::Y, Axis::Z};
     constexpr std::array<int, 3> kTurns{-1, 1, 2};
 
     std::vector<Choice> run;
@@ -58,7 +57,8 @@ struct Choice {
         state ^= state << 13U;
         state ^= state >> 17U;
         state ^= state << 5U;
-        run.push_back(Choice{kAxes[state % 3U], (state >> 3U) % 2U != 0U,
+        run.push_back(Choice{rubiks::cube::axes()[state % 3U],
+                             (state >> 3U) % 2U != 0U,
                              kTurns[(state >> 5U) % 3U]});
     }
     return run;

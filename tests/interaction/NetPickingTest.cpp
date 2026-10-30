@@ -90,7 +90,7 @@ FaceFrame frame_of(Face face)
 /** The pressed sticker's position, measured from the middle of the cube. */
 Vec centered(Face face, int col, int row)
 {
-    const auto cell = rubiks::graphics::net_cell(face, col, row, kSize);
+    const auto cell = rubiks::cube::face_sticker(face, row, col, kSize);
     return Vec{cell.x - 1, cell.y - 1, cell.z - 1};
 }
 
@@ -120,7 +120,7 @@ Rect test_rect()
 std::array<float, 2> cell_center(Face face, int col, int row, const Rect& rect)
 {
     const auto at =
-        rubiks::graphics::net_cell_center(face, col, row, rect, kSize);
+        rubiks::graphics::net_cell_center({face, row, col}, rect, kSize);
     return {at.x, at.y};
 }
 
@@ -200,7 +200,7 @@ TEST_CASE("every cell and direction names a turn that moves it that way")
                                  << "," << direction[1]);
 
                     const auto turn =
-                        net_step_turn(face, col, row, direction[0],
+                        net_step_turn({face, row, col}, direction[0],
                                       direction[1], kSize);
                     REQUIRE(turn);
                     REQUIRE((turn->sign == 1 || turn->sign == -1));
@@ -227,7 +227,7 @@ TEST_CASE("every cell and direction names a turn that moves it that way")
                     // And the layer it turns is the one the pressed cell is
                     // in, so the drag moves the cell it started on.
                     const auto cell =
-                        rubiks::graphics::net_cell(face, col, row, kSize);
+                        rubiks::cube::face_sticker(face, row, col, kSize);
                     const int index = turn->axis == Axis::X   ? cell.x
                                       : turn->axis == Axis::Y ? cell.y
                                                               : cell.z;
@@ -242,10 +242,10 @@ TEST_CASE("the four gestures on a corner cell name four different turns")
 {
     // The same cell dragged four ways must not collapse onto fewer turns, or
     // one of the directions is being read as another.
-    const auto right = net_step_turn(Face::Front, 0, 0, 1, 0, kSize);
-    const auto left = net_step_turn(Face::Front, 0, 0, -1, 0, kSize);
-    const auto down = net_step_turn(Face::Front, 0, 0, 0, 1, kSize);
-    const auto up = net_step_turn(Face::Front, 0, 0, 0, -1, kSize);
+    const auto right = net_step_turn({Face::Front, 0, 0}, 1, 0, kSize);
+    const auto left = net_step_turn({Face::Front, 0, 0}, -1, 0, kSize);
+    const auto down = net_step_turn({Face::Front, 0, 0}, 0, 1, kSize);
+    const auto up = net_step_turn({Face::Front, 0, 0}, 0, -1, kSize);
 
     REQUIRE(right);
     REQUIRE(left);
@@ -268,7 +268,7 @@ TEST_CASE("dragging the front face's top row sideways is the U layer")
 {
     // The one case worth pinning by name: it is the gesture the browser test
     // performs, and the Up layer is the one a person expects to move.
-    const auto left = net_step_turn(Face::Front, 1, 0, -1, 0, kSize);
+    const auto left = net_step_turn({Face::Front, 0, 1}, -1, 0, kSize);
 
     REQUIRE(left);
     REQUIRE(left->axis == Axis::Y);
@@ -278,11 +278,11 @@ TEST_CASE("dragging the front face's top row sideways is the U layer")
 
 TEST_CASE("a direction that is not a single step names no turn")
 {
-    REQUIRE_FALSE(net_step_turn(Face::Front, 1, 1, 0, 0, kSize));
-    REQUIRE_FALSE(net_step_turn(Face::Front, 1, 1, 1, 1, kSize));
-    REQUIRE_FALSE(net_step_turn(Face::Front, 1, 1, 2, 0, kSize));
+    REQUIRE_FALSE(net_step_turn({Face::Front, 1, 1}, 0, 0, kSize));
+    REQUIRE_FALSE(net_step_turn({Face::Front, 1, 1}, 1, 1, kSize));
+    REQUIRE_FALSE(net_step_turn({Face::Front, 1, 1}, 2, 0, kSize));
 
     // And a cell that is not on the face it claims to be on.
-    REQUIRE_FALSE(net_step_turn(Face::Front, kSize, 0, 1, 0, kSize));
-    REQUIRE_FALSE(net_step_turn(Face::Front, 0, -1, 1, 0, kSize));
+    REQUIRE_FALSE(net_step_turn({Face::Front, 0, kSize}, 1, 0, kSize));
+    REQUIRE_FALSE(net_step_turn({Face::Front, -1, 0}, 1, 0, kSize));
 }

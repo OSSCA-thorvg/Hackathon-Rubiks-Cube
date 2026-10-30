@@ -840,7 +840,7 @@ float net_face_side()
 /** The center of one net cell, in drawing-buffer pixels. */
 Vec2 net_point(Face face, int col, int row)
 {
-    return rubiks::graphics::net_cell_center(face, col, row, net_rect(),
+    return rubiks::graphics::net_cell_center({face, row, col}, net_rect(),
                                              kSize);
 }
 
@@ -1068,7 +1068,7 @@ TEST_CASE("a net press with nothing to draw on is refused")
 {
     InteractionController controller(kSize);
     const Vec2 at = net_point(Face::Front, 1, 0);
-    const NetPick pick{Face::Front, 1, 0};
+    const NetPick pick{Face::Front, 0, 1};
     const float nan = std::numeric_limits<float>::quiet_NaN();
 
     REQUIRE_FALSE(controller.net_pointer_down(nan, at.y, net_rect(), pick));
@@ -1088,10 +1088,10 @@ TEST_CASE("a press offers the two rings that cell can turn on")
     const auto axes_offered = [&](Face face, int col, int row) {
         InteractionController controller(kSize);
         const Vec2 at =
-            rubiks::graphics::net_cell_center(face, col, row, rect, kSize);
+            rubiks::graphics::net_cell_center({face, row, col}, rect, kSize);
 
         REQUIRE(controller.net_pointer_down(at.x, at.y, rect,
-                                            NetPick{face, col, row}));
+                                            NetPick{face, row, col}));
 
         std::vector<Axis> axes;
         for (const auto& guide : controller.net_guides()) axes.push_back(
@@ -1112,9 +1112,9 @@ TEST_CASE("a press offers the two rings that cell can turn on")
     // And each names the layer that cell sits in.
     InteractionController controller(kSize);
     const Vec2 at =
-        rubiks::graphics::net_cell_center(Face::Up, 1, 2, rect, kSize);
+        rubiks::graphics::net_cell_center({Face::Up, 2, 1}, rect, kSize);
     REQUIRE(controller.net_pointer_down(at.x, at.y, rect,
-                                        NetPick{Face::Up, 1, 2}));
+                                        NetPick{Face::Up, 2, 1}));
 
     for (const auto& guide : controller.net_guides()) {
         INFO("axis " << static_cast<int>(guide.axis));

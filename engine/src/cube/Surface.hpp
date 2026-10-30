@@ -51,6 +51,12 @@ struct FaceCell {
     int col;
 };
 
+[[nodiscard]] constexpr bool operator==(const FaceCell& a,
+                                        const FaceCell& b) noexcept
+{
+    return a.face == b.face && a.row == b.row && a.col == b.col;
+}
+
 /**
  * Where a native cell sits in storage: six row-major faces in `Face` order.
  *

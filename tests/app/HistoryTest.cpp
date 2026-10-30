@@ -33,7 +33,7 @@ constexpr int kCubeSize = 3;
                                                 int column, int row)
 {
     const auto net = rubiks::graphics::layout(kCanvas, kCanvas).net;
-    return rubiks::graphics::net_cell_center(face, column, row, net,
+    return rubiks::graphics::net_cell_center({face, row, column}, net,
                                              kCubeSize);
 }
 

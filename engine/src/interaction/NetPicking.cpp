@@ -37,7 +37,7 @@ std::optional<NetPick> pick_net(float x, float y, const graphics::Rect& rect,
     // face but a point on the very last edge must not index past it.
     const int col = std::clamp(static_cast<int>(local_x / cell), 0, size - 1);
     const int row = std::clamp(static_cast<int>(local_y / cell), 0, size - 1);
-    return NetPick{*face, col, row};
+    return NetPick{*face, row, col};
 }
 
 }  // namespace rubiks::interaction

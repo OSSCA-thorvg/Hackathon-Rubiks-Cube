@@ -42,8 +42,7 @@ struct Aim {
 [[nodiscard]] Aim front_cell(int col, int row, int size)
 {
     const auto net = rubiks::graphics::layout(kCanvas, kCanvas).net;
-    const auto at = rubiks::graphics::net_cell_center(
-        rubiks::cube::Face::Front, col, row, net, size);
+    const auto at = rubiks::graphics::net_cell_center({rubiks::cube::Face::Front, row, col}, net, size);
     return Aim{at.x, at.y};
 }
 
@@ -304,37 +303,37 @@ TEST_CASE("the keyboard's place walks the cross a cell at a time")
     REQUIRE(rubiks::app::paint_cursor_step(-1, 0));
     auto at = rubiks::app::paint_cursor();
     REQUIRE(at.has_value());
-    CHECK(at->face == Face::Front);
-    CHECK(at->col == 1);
-    CHECK(at->row == 1);
+    CHECK(at->cell.face == Face::Front);
+    CHECK(at->cell.col == 1);
+    CHECK(at->cell.row == 1);
     CHECK(at->colour == rubiks::cube::FaceColor::Green);
 
     // Off the front's right edge onto R, which the cross draws beside it.
     REQUIRE(rubiks::app::paint_cursor_step(2, 0));
     at = rubiks::app::paint_cursor();
-    CHECK(at->face == Face::Right);
-    CHECK(at->col == 0);
-    CHECK(at->row == 1);
+    CHECK(at->cell.face == Face::Right);
+    CHECK(at->cell.col == 0);
+    CHECK(at->cell.row == 1);
 
     // Back, and up off the front's top onto U.
     REQUIRE(rubiks::app::paint_cursor_step(-2, -2));
     at = rubiks::app::paint_cursor();
-    CHECK(at->face == Face::Up);
-    CHECK(at->col == 1);
-    CHECK(at->row == 2);
+    CHECK(at->cell.face == Face::Up);
+    CHECK(at->cell.col == 1);
+    CHECK(at->cell.row == 2);
 
     // Left from U's first column is an empty corner of the cross: refused,
     // and the place stays where it was.
     REQUIRE(rubiks::app::paint_cursor_step(-1, 0));
     CHECK_FALSE(rubiks::app::paint_cursor_step(-1, 0));
     at = rubiks::app::paint_cursor();
-    CHECK(at->face == Face::Up);
-    CHECK(at->col == 0);
+    CHECK(at->cell.face == Face::Up);
+    CHECK(at->cell.col == 0);
 
     // And off the top of the net altogether.
     REQUIRE(rubiks::app::paint_cursor_step(0, -2));
     CHECK_FALSE(rubiks::app::paint_cursor_step(0, -1));
-    CHECK(rubiks::app::paint_cursor()->row == 0);
+    CHECK(rubiks::app::paint_cursor()->cell.row == 0);
 }
 
 TEST_CASE("a key colours what a press on the same cell colours")

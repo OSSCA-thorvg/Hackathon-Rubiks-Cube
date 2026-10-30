@@ -483,8 +483,9 @@ int thorvg_rubiks_paint_cursor() noexcept
 {
     const auto at = rubiks::app::paint_cursor();
     if (!at) return -1;
-    return static_cast<int>(at->face) * 0x1000000 +
-           static_cast<int>(at->colour) * 0x10000 + at->row * 0x100 + at->col;
+    return static_cast<int>(at->cell.face) * 0x1000000 +
+           static_cast<int>(at->colour) * 0x10000 + at->cell.row * 0x100 +
+           at->cell.col;
 }
 
 /** Whether a press covers the whole face it lands on. */

@@ -65,7 +65,7 @@ rubiks::graphics::Rect net_alone()
 /** The middle of one net cell, in the net surface's pixels. */
 rubiks::math::Vec2 net_cell(rubiks::cube::Face face, int column, int row)
 {
-    return rubiks::graphics::net_cell_center(face, column, row, net_alone(),
+    return rubiks::graphics::net_cell_center({face, row, column}, net_alone(),
                                              3);
 }
 

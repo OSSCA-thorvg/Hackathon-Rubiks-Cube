@@ -22,7 +22,7 @@ namespace rubiks::interaction {
  * own type under the name that reads here. What was pressed can be handed
  * back to the net to be drawn, or compared with a cell of it, as it is.
  */
-using NetPick = graphics::NetPosition;
+using NetPick = cube::FaceCell;
 
 /**
  * Finds the net cell under a point in the drawing buffer.

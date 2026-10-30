@@ -25,7 +25,9 @@ using namespace rubiks::graphics;
 using rubiks::cube::Axis;
 using rubiks::cube::Cube;
 using rubiks::cube::Face;
+using rubiks::cube::FaceCell;
 using rubiks::cube::FaceColor;
+using rubiks::cube::face_sticker;
 
 /** A canvas showing all four drawings, with something in every input. */
 FrameInputs every_drawing(const Cube& cube)
@@ -41,7 +43,7 @@ FrameInputs every_drawing(const Cube& cube)
                              Lighting::standard(), home_orbit()};
     frame.net = NetDrawing{revision, turn, Palette::Classic,
                            {NetGuide{Axis::Y, 0,
-                                     net_cell(Face::Front, 0, 0, 3)}},
+                                     face_sticker(Face::Front, 0, 0, 3)}},
                            std::nullopt};
     frame.rings = RingsDrawing{revision, turn, Palette::Classic,
                                {RingsGuide{Axis::Z, 2}}};
@@ -124,7 +126,7 @@ TEST_CASE("a painting is compared by what is painted on it")
 
     // The keyboard's place is drawn on it too, so a step is a new frame.
     FrameInputs placed = before;
-    placed.net->painting->cursor = NetPosition{Face::Front, 1, 1};
+    placed.net->painting->cursor = FaceCell{Face::Front, 1, 1};
     REQUIRE_FALSE(placed == before);
     FrameInputs stepped = placed;
     stepped.net->painting->cursor->col = 2;
@@ -160,7 +162,7 @@ TEST_CASE("a painting frame draws its native snapshot directly")
             }
         }
 
-        const NetPosition marked{Face::Right, size - 1, 0};
+        const FaceCell marked{Face::Right, 0, size - 1};
         const rubiks::cube::SurfaceSticker sticker =
             rubiks::cube::face_sticker(marked.face, marked.row, marked.col, size);
         const int blamed = static_cast<int>(
@@ -188,8 +190,7 @@ TEST_CASE("a painting frame draws its native snapshot directly")
             }
         }
 
-        const rubiks::math::Vec2 center = net_cell_center(
-            marked.face, marked.col, marked.row, frame.placement.net, size);
+        const rubiks::math::Vec2 center = net_cell_center(marked, frame.placement.net, size);
         const float half =
             0.5f * kNetStickerScale * net_cell_side(frame.placement.net, size);
         REQUIRE(scene.strokes.size() == 1);

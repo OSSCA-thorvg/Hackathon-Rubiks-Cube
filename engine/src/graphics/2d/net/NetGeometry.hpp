@@ -60,31 +60,17 @@ using NetCell = cube::SurfaceSticker;
                                                     int row) noexcept;
 
 /**
- * Maps a cell of an unfolded face to the cubie face it shows.
+ * Which cell of the drawing shows a sticker, or nothing for one that is not
+ * on the surface.
  *
- * `col` and `row` are 0 ... N-1 within the face, counted left to right and
- * top to bottom as drawn. The mapping is the standard unfolding with Front
- * facing the viewer, chosen so that cells meeting at a seam in the net are
- * the two faces of the same cubie edge on the real cube.
+ * A cell of the drawing is a native `cube::FaceCell`: within each block of
+ * the cross rows count down and columns right, as the domain stores a face.
+ * That is the standard unfolding with Front facing the viewer, so cells that
+ * meet at a seam in the net are the two faces of one cubie edge, and
+ * `cube::face_sticker()` is the way back from a cell to its sticker.
  */
-[[nodiscard]] NetCell net_cell(cube::Face face, int col, int row,
-                               int size) noexcept;
-
-/** Which cell of the drawing shows a sticker; the inverse of `net_cell`. */
-struct NetPosition {
-    cube::Face face;
-    int col;
-    int row;
-};
-
-[[nodiscard]] constexpr bool operator==(const NetPosition& a,
-                                        const NetPosition& b) noexcept
-{
-    return a.face == b.face && a.col == b.col && a.row == b.row;
-}
-
-[[nodiscard]] std::optional<NetPosition> net_position(const NetCell& cell,
-                                                      int size) noexcept;
+[[nodiscard]] std::optional<cube::FaceCell> net_position(const NetCell& cell,
+                                                         int size) noexcept;
 
 /** Side of one unfolded face in the rectangle the net fills. */
 [[nodiscard]] float net_face_side(const Rect& rect) noexcept;
@@ -93,7 +79,7 @@ struct NetPosition {
 [[nodiscard]] float net_cell_side(const Rect& rect, int size) noexcept;
 
 /** Center of one cell of an unfolded face, in the rectangle's space. */
-[[nodiscard]] math::Vec2 net_cell_center(cube::Face face, int col, int row,
+[[nodiscard]] math::Vec2 net_cell_center(const cube::FaceCell& cell,
                                          const Rect& rect, int size) noexcept;
 
 /**
@@ -131,7 +117,7 @@ struct NetGuide {
 [[nodiscard]] RenderScene build_net_painting(
     cube::CubeView painting, const Rect& rect, Palette palette,
     const std::vector<int>& blamed,
-    const std::optional<NetPosition>& cursor = std::nullopt);
+    const std::optional<cube::FaceCell>& cursor = std::nullopt);
 
 /** Keyboard place ring thickness, as a share of one cell: dark, then light. */
 inline constexpr float kNetCursorEdgeCells = 0.16f;
@@ -236,9 +222,8 @@ struct NetTurn {
  * drawing need it: one to turn a drag into a move, the other to send a cell
  * the way its sticker goes.
  */
-[[nodiscard]] std::optional<NetTurn> net_step_turn(cube::Face face, int col,
-                                                   int row, int col_step,
-                                                   int row_step,
+[[nodiscard]] std::optional<NetTurn> net_step_turn(const cube::FaceCell& cell,
+                                                   int col_step, int row_step,
                                                    int size) noexcept;
 
 /** Builds the net as screen-space quads filling `rect`. */

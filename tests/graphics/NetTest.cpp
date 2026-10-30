@@ -30,7 +30,9 @@ using Catch::Approx;
 using namespace rubiks::graphics;
 using rubiks::cube::Cube;
 using rubiks::cube::Face;
+using rubiks::cube::FaceCell;
 using rubiks::cube::FaceColor;
+using rubiks::cube::face_sticker;
 using rubiks::math::Vec2;
 
 constexpr int kSize = 3;
@@ -51,7 +53,7 @@ std::size_t count_color(const RenderScene& scene, const Color& color)
 /** The cubie position a net cell reads, ignoring which face it shows. */
 std::tuple<int, int, int> position_of(Face face, int col, int row)
 {
-    const auto cell = net_cell(face, col, row, kSize);
+    const auto cell = face_sticker(face, row, col, kSize);
     return {cell.x, cell.y, cell.z};
 }
 
@@ -234,7 +236,7 @@ TEST_CASE("every net cell reads a sticker that is actually on the surface")
     for (const auto face : net_faces()) {
         for (int row = 0; row < kSize; ++row) {
             for (int col = 0; col < kSize; ++col) {
-                const auto cell = net_cell(face, col, row, kSize);
+                const auto cell = face_sticker(face, row, col, kSize);
 
                 REQUIRE(cell.face == face);
                 REQUIRE(cell.x >= 0);
@@ -278,7 +280,7 @@ TEST_CASE("the net covers each surface sticker exactly once")
     for (const auto face : net_faces()) {
         for (int row = 0; row < kSize; ++row) {
             for (int col = 0; col < kSize; ++col) {
-                const auto cell = net_cell(face, col, row, kSize);
+                const auto cell = face_sticker(face, row, col, kSize);
                 seen.insert({cell.x, cell.y, cell.z,
                              static_cast<int>(cell.face)});
             }
@@ -413,7 +415,7 @@ TEST_CASE("a move is visible in the net")
     // R lifts the front face's right column onto the top face, so the up
     // face's right column turns green.
     for (int row = 0; row < kSize; ++row) {
-        const auto cell = net_cell(Face::Up, kLast, row, kSize);
+        const auto cell = face_sticker(Face::Up, row, kLast, kSize);
         REQUIRE(state.at(cell.x, cell.y, cell.z).sticker(cell.face) ==
                 FaceColor::Green);
     }
@@ -508,8 +510,7 @@ TEST_CASE("every band is one closed ring through its twelve resting slots")
 
                 // The curve is fitted to the drawing, not the other way round:
                 // at rest every slot is exactly the middle of its cell.
-                const auto centre = net_cell_center(placed->face, placed->col,
-                                                    placed->row, rect, kSize);
+                const auto centre = net_cell_center(*placed, rect, kSize);
                 const auto point = ring.at(static_cast<float>(slot));
                 REQUIRE(point.position.x == Approx(centre.x).margin(0.001));
                 REQUIRE(point.position.y == Approx(centre.y).margin(0.001));
@@ -1001,8 +1002,7 @@ TEST_CASE("a Z turn takes the front block and its band round together")
                 for (const auto& sticker : band_of(Axis::Z, index)) {
                     const auto placed = net_position(sticker, kSize);
                     REQUIRE(placed);
-                    const auto rest = net_cell_center(
-                        placed->face, placed->col, placed->row, rect, kSize);
+                    const auto rest = net_cell_center(*placed, rect, kSize);
 
                     const float dx = rest.x - pivot_x;
                     const float dy = rest.y - pivot_y;
@@ -1084,7 +1084,7 @@ TEST_CASE("a guide line takes the color of the axis it turns about")
 
     const Rect rect = test_rect();
     // The Z guide is the pressed cell's own circle, so it needs the cell.
-    const auto pressed = net_cell(Face::Up, 1, 2, kSize);
+    const auto pressed = face_sticker(Face::Up, 2, 1, kSize);
     const RenderScene scene =
         build_net_guides({NetGuide{Axis::X, 1, pressed},
                           NetGuide{Axis::Y, 2, pressed},
@@ -1205,7 +1205,7 @@ TEST_CASE("a painting rings the keyboard's place round the whole cell")
     const RenderScene plain =
         build_net_painting(painting, rect, Palette::Classic, {});
     const RenderScene placed = build_net_painting(
-        painting, rect, Palette::Classic, {}, NetPosition{Face::Front, 1, 1});
+        painting, rect, Palette::Classic, {}, FaceCell{Face::Front, 1, 1});
 
     // Two rings, dark under light, over the same stickers.
     REQUIRE(placed.faces.size() == plain.faces.size());
@@ -1214,7 +1214,7 @@ TEST_CASE("a painting rings the keyboard's place round the whole cell")
     // Round the cell rather than the sticker, so it sits in the gap a
     // complaint's ring does not.
     const float cell = net_cell_side(rect, kSize);
-    const auto middle = net_cell_center(Face::Front, 1, 1, rect, kSize);
+    const auto middle = net_cell_center({Face::Front, 1, 1}, rect, kSize);
     const auto& ring = placed.strokes.back();
     REQUIRE(ring.start.x == Approx(middle.x - 0.5f * cell));
     REQUIRE(ring.start.y == Approx(middle.y - 0.5f * cell));
@@ -1246,7 +1246,7 @@ TEST_CASE("native face views and legacy paintings draw identical nets")
         const rubiks::cube::CubeView view{size, colors.data()};
         const std::vector<FaceColor> saved = rubiks::cube::painting_of(view);
         const std::vector<int> blamed{0, static_cast<int>(saved.size() - 1)};
-        const NetPosition cursor{Face::Back, size - 1, size - 1};
+        const FaceCell cursor{Face::Back, size - 1, size - 1};
         const RenderScene native = build_net_painting(
             view, rect, Palette::Classic, blamed, cursor);
         const std::vector<FaceColor> restored =

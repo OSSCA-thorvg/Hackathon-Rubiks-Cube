@@ -247,9 +247,8 @@ void InteractionController::advance_net_gesture(float x, float y) noexcept
         const int col_step = sideways ? (drag.x < 0.0f ? -1 : 1) : 0;
         const int row_step = sideways ? 0 : (drag.y < 0.0f ? -1 : 1);
 
-        const auto turn = graphics::net_step_turn(
-            net_gesture_->pick.face, net_gesture_->pick.col,
-            net_gesture_->pick.row, col_step, row_step, size_);
+        const auto turn = graphics::net_step_turn(net_gesture_->pick, col_step,
+                                                  row_step, size_);
         if (!turn) return;
 
         net_gesture_->lock =
@@ -464,8 +463,8 @@ std::vector<graphics::NetGuide> InteractionController::net_guides() const
     if (!net_gesture_) return guides;
 
     const auto pressed =
-        graphics::net_cell(net_gesture_->pick.face, net_gesture_->pick.col,
-                           net_gesture_->pick.row, size_);
+        cube::face_sticker(net_gesture_->pick.face, net_gesture_->pick.row,
+                           net_gesture_->pick.col, size_);
 
     if (net_gesture_->lock) {
         guides.push_back(graphics::NetGuide{
@@ -480,9 +479,8 @@ std::vector<graphics::NetGuide> InteractionController::net_guides() const
         {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}};
 
     for (const auto& [col_step, row_step] : kSteps) {
-        const auto turn = graphics::net_step_turn(
-            net_gesture_->pick.face, net_gesture_->pick.col,
-            net_gesture_->pick.row, col_step, row_step, size_);
+        const auto turn = graphics::net_step_turn(net_gesture_->pick, col_step,
+                                                  row_step, size_);
         if (!turn) continue;
 
         const bool seen =

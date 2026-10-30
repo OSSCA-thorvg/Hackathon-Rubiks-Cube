@@ -316,16 +316,10 @@ std::optional<Face> net_face_at(int column, int row) noexcept
     return std::nullopt;
 }
 
-NetCell net_cell(Face face, int col, int row, int size) noexcept
-{
-    return cube::face_sticker(face, row, col, size);
-}
-
-std::optional<NetPosition> net_position(const NetCell& cell, int size) noexcept
+std::optional<cube::FaceCell> net_position(const NetCell& cell, int size) noexcept
 {
     if (!cube::is_surface_sticker(cell, size)) return std::nullopt;
-    const cube::FaceCell mapped = cube::face_cell(cell, size);
-    return NetPosition{mapped.face, mapped.col, mapped.row};
+    return cube::face_cell(cell, size);
 }
 
 float net_face_side(const Rect& rect) noexcept
@@ -338,19 +332,22 @@ float net_cell_side(const Rect& rect, int size) noexcept
     return net_face_side(rect) / static_cast<float>(size);
 }
 
-math::Vec2 net_cell_center(Face face, int col, int row, const Rect& rect,
+math::Vec2 net_cell_center(const cube::FaceCell& cell, const Rect& rect,
                            int size) noexcept
 {
-    const Vec2 origin = net_face_origin(face, rect);
-    const float cell = net_cell_side(rect, size);
+    const Vec2 origin = net_face_origin(cell.face, rect);
+    const float side = net_cell_side(rect, size);
 
-    return Vec2{origin.x + (static_cast<float>(col) + 0.5f) * cell,
-                origin.y + (static_cast<float>(row) + 0.5f) * cell};
+    return Vec2{origin.x + (static_cast<float>(cell.col) + 0.5f) * side,
+                origin.y + (static_cast<float>(cell.row) + 0.5f) * side};
 }
 
-std::optional<NetTurn> net_step_turn(Face face, int col, int row, int col_step,
+std::optional<NetTurn> net_step_turn(const cube::FaceCell& at, int col_step,
                                      int row_step, int size) noexcept
 {
+    const Face face = at.face;
+    const int col = at.col;
+    const int row = at.row;
     // The two cell positions a step apart have to be distinguishable, which
     // needs a face at least two cells across.
     if (size < 2) return std::nullopt;
@@ -360,9 +357,11 @@ std::optional<NetTurn> net_step_turn(Face face, int col, int row, int col_step,
     // What one step along each of the face's drawn directions is in cube
     // space. Taken as a difference so it comes from the same mapping that
     // decides which sticker each cell shows.
-    const auto origin = net_cell(face, 0, 0, size);
-    const Step along_col = step_between(origin, net_cell(face, 1, 0, size));
-    const Step along_row = step_between(origin, net_cell(face, 0, 1, size));
+    const auto origin = cube::face_sticker(face, 0, 0, size);
+    const Step along_col =
+        step_between(origin, cube::face_sticker(face, 0, 1, size));
+    const Step along_row =
+        step_between(origin, cube::face_sticker(face, 1, 0, size));
 
     const Step travel{along_col.x * col_step + along_row.x * row_step,
                       along_col.y * col_step + along_row.y * row_step,
@@ -377,7 +376,7 @@ std::optional<NetTurn> net_step_turn(Face face, int col, int row, int col_step,
     // its direction matters, and it is always one of the six axis directions,
     // because both inputs are.
     const Step turn = cross_product(travel, normal);
-    const auto cell = net_cell(face, col, row, size);
+    const auto cell = cube::face_sticker(face, row, col, size);
 
     if (turn.x != 0) return NetTurn{Axis::X, cell.x, turn.x > 0 ? 1 : -1};
     if (turn.y != 0) return NetTurn{Axis::Y, cell.y, turn.y > 0 ? 1 : -1};
@@ -403,8 +402,7 @@ RenderScene build_net_guides(const std::vector<NetGuide>& guides,
             const auto placed = net_position(guide.cell, size);
             if (!placed) continue;
 
-            const auto center = net_cell_center(placed->face, placed->col,
-                                                placed->row, rect, size);
+            const auto center = net_cell_center(*placed, rect, size);
             const float radius = math::distance(pivot, center);
             scene.strokes.push_back(circle_stroke(pivot, radius, width, color));
             continue;
@@ -444,7 +442,7 @@ RenderScene build_net_scene(cube::CubeView state, const Rect& rect,
 
 RenderScene build_net_painting(cube::CubeView painting, const Rect& rect,
                                Palette palette, const std::vector<int>& blamed,
-                               const std::optional<NetPosition>& cursor)
+                               const std::optional<cube::FaceCell>& cursor)
 {
     const int size = painting.size();
     RenderScene scene = build_net_scene(painting, rect, palette);
@@ -459,12 +457,12 @@ RenderScene build_net_painting(cube::CubeView painting, const Rect& rect,
         if (index < 0 ||
             static_cast<std::size_t>(index) >= legacy_slots.size()) continue;
 
-        const std::optional<NetPosition> placed = net_position(
+        const std::optional<cube::FaceCell> placed = net_position(
             legacy_slots[static_cast<std::size_t>(index)], size);
         if (!placed) continue;
 
         const Vec2 middle =
-            net_cell_center(placed->face, placed->col, placed->row, rect, size);
+            net_cell_center(*placed, rect, size);
         const float half = 0.5f * kNetStickerScale * net_cell_side(rect, size);
 
         RenderStroke ring;
@@ -488,7 +486,7 @@ RenderScene build_net_painting(cube::CubeView painting, const Rect& rect,
     if (cursor) {
         const float cell = net_cell_side(rect, size);
         const Vec2 middle =
-            net_cell_center(cursor->face, cursor->col, cursor->row, rect, size);
+            net_cell_center(*cursor, rect, size);
         const float half = 0.5f * cell;
         for (const auto& [share, color] :
              {std::pair{kNetCursorEdgeCells, cursor_edge_color()},
@@ -578,7 +576,7 @@ RenderScene build_net_scene(cube::CubeView state, const Rect& rect,
         for (int row = 0; row < size; ++row) {
             const cube::ColorView row_colors = colors.row(row);
             for (int col = 0; col < size; ++col) {
-                const NetCell source = net_cell(face, col, row, size);
+                const NetCell source = cube::face_sticker(face, row, col, size);
 
                 // The band is every cell the turn carries to another face:
                 // those off the turning axis whose layer the turn takes.

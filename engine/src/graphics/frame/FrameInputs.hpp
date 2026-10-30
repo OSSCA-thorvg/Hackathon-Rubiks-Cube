@@ -79,7 +79,7 @@ struct NetPainting {
     std::vector<cube::FaceColor> stickers;
     /** Identifies refused squares in the stable external painting order. */
     std::vector<int> blamed;
-    std::optional<NetPosition> cursor;
+    std::optional<cube::FaceCell> cursor;
 };
 
 [[nodiscard]] inline bool operator==(const NetPainting& a,

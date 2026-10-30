@@ -1215,7 +1215,7 @@ void note_cube_change() noexcept
     if ((drawn & kSceneNet) != 0) {
         std::optional<graphics::NetPainting> painting;
         if (state->paint) {
-            std::optional<graphics::NetPosition> cursor;
+            std::optional<cube::FaceCell> cursor;
             if (state->paint->cursor_shown) cursor = state->paint->cursor;
             const cube::ColorView colors = state->paint->model.view().flat();
             painting = graphics::NetPainting{
@@ -1478,7 +1478,7 @@ bool paint_cursor_step(int columns, int rows) noexcept
     const auto face = graphics::net_face_at(column / size, row / size);
     if (!face) return false;
 
-    draft.cursor = interaction::NetPick{*face, column % size, row % size};
+    draft.cursor = interaction::NetPick{*face, row % size, column % size};
     return true;
 }
 
@@ -1500,8 +1500,7 @@ std::optional<PaintCursor> paint_cursor() noexcept
     if (!state || !state->paint || !state->paint->cursor) return std::nullopt;
 
     const interaction::NetPick& at = *state->paint->cursor;
-    return PaintCursor{at.face, at.col, at.row,
-                       state->paint->model.face(at.face).at(at.row, at.col)};
+    return PaintCursor{at, state->paint->model.face(at.face).at(at.row, at.col)};
 }
 
 int painted_count(cube::FaceColor colour) noexcept

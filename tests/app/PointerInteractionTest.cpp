@@ -78,7 +78,7 @@ float pixels_per_degree(std::uint32_t width, std::uint32_t height)
 rubiks::math::Vec2 net_cell_point(rubiks::cube::Face face, int column, int row)
 {
     const auto net = rubiks::graphics::layout(kCanvas, kCanvas).net;
-    return rubiks::graphics::net_cell_center(face, column, row, net,
+    return rubiks::graphics::net_cell_center({face, row, column}, net,
                                              kCubeSize);
 }
 

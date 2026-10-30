@@ -541,9 +541,7 @@ void cancel_painting() noexcept;
  * its own copy of the net would be one more thing to keep in step.
  */
 struct PaintCursor {
-    cube::Face face;
-    int col;
-    int row;
+    cube::FaceCell cell;
     /** The colour the draft has there now. */
     cube::FaceColor colour;
 };

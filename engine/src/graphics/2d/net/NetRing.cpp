@@ -55,8 +55,7 @@ struct PathPoint {
     for (const auto& slot : slots) {
         const auto placed = net_position(slot, size);
         if (!placed) return SlotRing{};
-        centers.push_back(net_cell_center(placed->face, placed->col,
-                                          placed->row, rect, size));
+        centers.push_back(net_cell_center(*placed, rect, size));
     }
 
     const auto next_of = [&](std::size_t i) { return (i + 1) % count; };

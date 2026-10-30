@@ -445,6 +445,27 @@ TEST_CASE("copying a cube owns its colours and borrowed views follow their owner
     REQUIRE(snapshot(copied_view.flat()) == before);
 }
 
+TEST_CASE("a cube moved from is still the cube it was", "[cube-storage]")
+{
+    // A move is a copy, so nothing can hold a Cube with a size and no
+    // colours. The source is read on purpose after it has been moved from.
+    Cube original(5);
+    ReferenceCube reference(5);
+    mix(original, reference);
+    const Cube kept = original;
+
+    const Cube constructed = std::move(original);
+    REQUIRE(constructed == kept);
+    REQUIRE(original == kept);
+    REQUIRE(original.view().flat().size() == 6U * 5U * 5U);
+
+    Cube assigned(3);
+    assigned = std::move(original);
+    REQUIRE(assigned == kept);
+    REQUIRE(original == kept);
+    REQUIRE_FALSE(original.is_solved());
+}
+
 TEST_CASE("equal visible paintings remain equal through the same later moves",
           "[cube-storage]")
 {

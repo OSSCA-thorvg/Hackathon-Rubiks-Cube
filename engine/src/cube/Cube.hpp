@@ -191,6 +191,15 @@ public:
     /** Takes ownership of six native faces whose shape has already been
      * checked. */
     FaceStorage(int size, std::vector<FaceColor> colors) noexcept;
+
+    // Copied, and copied even from a temporary. A move would leave the source
+    // with its size and no colours, which is no cube at all, and Cube promises
+    // that every Cube is one turning could reach. Declaring the copies keeps
+    // the compiler from writing the moves, so a move is a copy instead; the
+    // most colours copied is 6 * 31 * 31, and nothing moves a cube in a loop.
+    FaceStorage(const FaceStorage&) = default;
+    FaceStorage& operator=(const FaceStorage&) = default;
+
     /** Returns the common side length. */
     [[nodiscard]] int size() const noexcept
     {

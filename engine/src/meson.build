@@ -18,6 +18,7 @@ application_lib = static_library(
     'app/History.cpp',
     'app/Ambient.cpp',
     'app/Sharing.cpp',
+    'app/Solve.cpp',
     'render/ThorVGSoftwareRenderer.cpp',
   ),
   dependencies: [interaction_dep, cube_solver_dep, thorvg_dep],

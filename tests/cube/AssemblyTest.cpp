@@ -217,9 +217,18 @@ TEST_CASE("a corner that no turn could make is refused")
 
 TEST_CASE("a cube as wide as a layer mask is refused before it is read")
 {
-    // Malformed external input is rejected before a domain cube is constructed.
-    const std::vector<FaceColor> painting(6 * 32 * 32, FaceColor::Red);
+    // A solved 32-layer painting, which every check after the size guard
+    // would accept. So only the guard can refuse it, and it says so with
+    // nothing blamed, which the colour count never does.
+    constexpr int kSize = 32;
+    std::vector<FaceColor> painting;
+    for (const rubiks::cube::Face face : rubiks::cube::faces()) {
+        painting.insert(painting.end(), kSize * kSize,
+                        rubiks::cube::solved_color(face));
+    }
 
-    CHECK(read_painting(32, painting).fault == PaintFault::ColourCount);
-    CHECK_FALSE(assembled(32, painting));
+    const auto reading = read_painting(kSize, painting);
+    CHECK(reading.fault == PaintFault::ColourCount);
+    CHECK(reading.blamed.empty());
+    CHECK_FALSE(assembled(kSize, painting));
 }

@@ -2,7 +2,7 @@
 
 #include <optional>
 
-#include "cube/Face.hpp"
+#include "cube/Surface.hpp"
 #include "graphics/3d/Camera.hpp"
 #include "graphics/Rect.hpp"
 #include "math/Types.hpp"
@@ -22,12 +22,9 @@ struct Ray {
     math::Vec3 direction;
 };
 
-/** The sticker a ray hit, in the domain's index coordinates. */
+/** The sticker a ray hit, and where it was hit. */
 struct Pick {
-    cube::Face face;
-    int x;
-    int y;
-    int z;
+    cube::SurfaceSticker sticker;
     /** Where the ray met the cube, in world space. */
     math::Vec3 point;
 };

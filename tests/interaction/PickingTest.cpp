@@ -60,24 +60,24 @@ TEST_CASE("the contract samples pick the center sticker of each visible face")
     // green and red, so picking has to agree with what is drawn there.
     const auto up = pick_at(0.50f, 0.29f);
     REQUIRE(up);
-    REQUIRE(up->face == Face::Up);
-    REQUIRE(up->x == 1);
-    REQUIRE(up->y == 2);
-    REQUIRE(up->z == 1);
+    REQUIRE(up->sticker.face == Face::Up);
+    REQUIRE(up->sticker.x == 1);
+    REQUIRE(up->sticker.y == 2);
+    REQUIRE(up->sticker.z == 1);
 
     const auto front = pick_at(0.31f, 0.61f);
     REQUIRE(front);
-    REQUIRE(front->face == Face::Front);
-    REQUIRE(front->x == 1);
-    REQUIRE(front->y == 1);
-    REQUIRE(front->z == 2);
+    REQUIRE(front->sticker.face == Face::Front);
+    REQUIRE(front->sticker.x == 1);
+    REQUIRE(front->sticker.y == 1);
+    REQUIRE(front->sticker.z == 2);
 
     const auto right = pick_at(0.69f, 0.61f);
     REQUIRE(right);
-    REQUIRE(right->face == Face::Right);
-    REQUIRE(right->x == 2);
-    REQUIRE(right->y == 1);
-    REQUIRE(right->z == 1);
+    REQUIRE(right->sticker.face == Face::Right);
+    REQUIRE(right->sticker.x == 2);
+    REQUIRE(right->sticker.y == 1);
+    REQUIRE(right->sticker.z == 1);
 }
 
 TEST_CASE("a seam is grabbed rather than missed")
@@ -137,15 +137,15 @@ TEST_CASE("the far edge of a face belongs to the last cell")
     // Without the clamp this corner would index one cell past the end.
     const auto corner = pick_cube(ray_at_right_face(1.0f, 1.0f), kSize);
     REQUIRE(corner);
-    REQUIRE(corner->face == Face::Right);
-    REQUIRE(corner->x == kSize - 1);
-    REQUIRE(corner->y == kSize - 1);
-    REQUIRE(corner->z == kSize - 1);
+    REQUIRE(corner->sticker.face == Face::Right);
+    REQUIRE(corner->sticker.x == kSize - 1);
+    REQUIRE(corner->sticker.y == kSize - 1);
+    REQUIRE(corner->sticker.z == kSize - 1);
 
     const auto opposite = pick_cube(ray_at_right_face(-1.0f, -1.0f), kSize);
     REQUIRE(opposite);
-    REQUIRE(opposite->y == 0);
-    REQUIRE(opposite->z == 0);
+    REQUIRE(opposite->sticker.y == 0);
+    REQUIRE(opposite->sticker.z == 0);
 }
 
 TEST_CASE("cell boundaries are half-open towards the larger index")
@@ -157,12 +157,12 @@ TEST_CASE("cell boundaries are half-open towards the larger index")
     const auto below = pick_cube(ray_at_right_face(kBoundary - kNudge, 0.0f),
                                  kSize);
     REQUIRE(below);
-    REQUIRE(below->y == 0);
+    REQUIRE(below->sticker.y == 0);
 
     const auto above = pick_cube(ray_at_right_face(kBoundary + kNudge, 0.0f),
                                  kSize);
     REQUIRE(above);
-    REQUIRE(above->y == 1);
+    REQUIRE(above->sticker.y == 1);
 }
 
 TEST_CASE("a ray leaving the cube behind it does not hit")

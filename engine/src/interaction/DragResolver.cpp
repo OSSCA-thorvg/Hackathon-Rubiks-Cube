@@ -56,7 +56,7 @@ std::optional<AxisCandidate> resolve_axis(
     const Pick& pick, const Vec2& drag, const graphics::Camera& camera,
     const graphics::Rect& viewport) noexcept
 {
-    const Axis face_axis = cube::axis_of(pick.face);
+    const Axis face_axis = cube::axis_of(pick.sticker.face);
 
     std::optional<AxisCandidate> best;
     float best_score = 0.0f;

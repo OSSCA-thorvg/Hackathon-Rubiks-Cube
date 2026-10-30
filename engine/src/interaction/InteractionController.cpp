@@ -567,10 +567,8 @@ InteractionController::locked_turn() const noexcept
     if (gesture_ && gesture_->lock) {
         return LockedTurn{
             gesture_->lock->axis,
-            cube::layer(cube::coordinate_on(
-                gesture_->lock->axis,
-                cube::CubiePosition{gesture_->pick.x, gesture_->pick.y,
-                                    gesture_->pick.z})),
+            cube::layer(cube::coordinate_on(gesture_->lock->axis,
+                                            gesture_->pick.sticker)),
             gesture_->angle_degrees};
     }
 

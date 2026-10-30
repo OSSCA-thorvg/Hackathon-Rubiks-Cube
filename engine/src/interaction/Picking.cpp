@@ -107,8 +107,9 @@ std::optional<Pick> pick_cube(const Ray& ray, int size) noexcept
         if (nearest && distance >= nearest_distance) continue;
 
         nearest_distance = distance;
-        nearest = Pick{face, cell_index(point.x, size),
-                       cell_index(point.y, size), cell_index(point.z, size),
+        nearest = Pick{cube::SurfaceSticker{cell_index(point.x, size),
+                                            cell_index(point.y, size),
+                                            cell_index(point.z, size), face},
                        point};
     }
 

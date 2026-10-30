@@ -414,15 +414,6 @@ void commit_move(const cube::CubeMove& move) noexcept
     }
 }
 
-/** How many of the moves on the cube right now are the user's own. */
-[[nodiscard]] std::size_t applied_user_moves() noexcept
-{
-    const auto& timeline = state->timeline;
-    return timeline.cursor() > timeline.scramble_end()
-               ? timeline.cursor() - timeline.scramble_end()
-               : 0;
-}
-
 /** Whether anything at all owns the cube, playback included. */
 [[nodiscard]] bool busy() noexcept
 {
@@ -505,46 +496,6 @@ void advance_playback() noexcept
 
     // Nothing left to take, and nothing left turning.
     state->playback.reset();
-}
-
-/**
- * Hands a rewind or a replay to the player, if there is anything in it.
- *
- * What the three commands share once each has worked out its own target: the
- * plan is made in full here and consumed by the ordinary playback loop, so
- * this phase adds no second way of playing moves into the cube. An empty plan
- * is a refusal, which is what a command with nothing to do amounts to.
- */
-[[nodiscard]] bool play_rewind(std::vector<cube::CubeMove> plan,
-                               cube::TimelineEffect effect) noexcept
-{
-    if (plan.empty()) return false;
-
-    // Stoppable, unlike either of the other two producers: this is the one
-    // sequence a user waits through, and a solve can be dozens of moves.
-    state->playback = Player{std::move(plan), 0,    kRewindTempoMs, effect,
-                             false,           true, std::nullopt};
-    return true;
-}
-
-/**
- * Whether the cube is not to be moved by a command now.
- *
- * While anything owns it, and while a draft is open. A draft is a copy of this
- * cube that somebody is mending, and the promise made of it is that backing
- * out leaves the cube as it was -- which a turn made behind it would break.
- * The commands that put a different cube there instead (a scramble, a reset,
- * a new size) close the draft rather than wait for it.
- */
-[[nodiscard]] bool cube_held() noexcept
-{
-    return busy() || state->paint.has_value();
-}
-
-/** Whether a rewind may be started at all, whatever it would rewind. */
-[[nodiscard]] bool can_rewind() noexcept
-{
-    return state && !cube_held();
 }
 
 /**
@@ -634,6 +585,20 @@ void install_cube(cube::Cube next,
     state->interaction = interaction::InteractionController(size);
     state->timeline.clear();
     state->origin = std::move(origin);
+}
+
+/**
+ * Whether the cube is not to be moved by a command now.
+ *
+ * While anything owns it, and while a draft is open. A draft is a copy of this
+ * cube that somebody is mending, and the promise made of it is that backing
+ * out leaves the cube as it was -- which a turn made behind it would break.
+ * The commands that put a different cube there instead (a scramble, a reset,
+ * a new size) close the draft rather than wait for it.
+ */
+[[nodiscard]] bool cube_held() noexcept
+{
+    return busy() || state->paint.has_value();
 }
 
 }  // namespace detail
@@ -1464,50 +1429,6 @@ bool is_solved() noexcept
     return state && state->cube_state.is_solved();
 }
 
-std::uint32_t committed_move_count() noexcept
-{
-    return state ? static_cast<std::uint32_t>(applied_user_moves()) : 0;
-}
-
-bool undo() noexcept
-{
-    if (!can_rewind()) return false;
-
-    const auto& timeline = state->timeline;
-
-    // The lower bound is the policy: what is below the end of the scramble is
-    // not the user's to take back, so a cube that has only been scrambled and
-    // one a solve has rewound into the scramble both refuse here without a
-    // case of their own.
-    if (timeline.cursor() <= timeline.scramble_end()) return false;
-
-    return play_rewind(cube::rewind_plan(timeline, timeline.cursor() - 1),
-                       cube::TimelineEffect::Rewind);
-}
-
-bool redo() noexcept
-{
-    if (!can_rewind()) return false;
-
-    const auto& timeline = state->timeline;
-    if (timeline.cursor() >= timeline.size()) return false;
-
-    // Forward through the record, which is the same thing a scramble arriving
-    // does -- so it carries the same effect.
-    return play_rewind(cube::redo_plan(timeline, timeline.cursor() + 1),
-                       cube::TimelineEffect::Advance);
-}
-
-bool solve_rewind() noexcept
-{
-    if (!can_rewind()) return false;
-
-    // Undo with a different target and nothing else: the plan is longer, and
-    // the length of it is the whole difference between the two commands.
-    return play_rewind(cube::rewind_plan(state->timeline, 0),
-                       cube::TimelineEffect::Rewind);
-}
-
 namespace {
 
 /** The solver that handles a cube of this size, or nothing. */
@@ -1560,31 +1481,6 @@ void stop_playback() noexcept
     }
 
     state->playback.reset();
-}
-
-std::uint32_t timeline_length() noexcept
-{
-    return state ? static_cast<std::uint32_t>(state->timeline.size()) : 0;
-}
-
-std::uint32_t timeline_cursor() noexcept
-{
-    return state ? static_cast<std::uint32_t>(state->timeline.cursor()) : 0;
-}
-
-std::uint32_t timeline_scramble_end() noexcept
-{
-    return state ? static_cast<std::uint32_t>(state->timeline.scramble_end())
-                 : 0;
-}
-
-std::uint32_t timeline_move(std::uint32_t index) noexcept
-{
-    if (!state || index >= state->timeline.size()) return 0;
-
-    // The record hands over the move as it was played; normalizing the turns
-    // happens in the packing, which is on nobody's replay path.
-    return cube::pack(state->timeline.at(index));
 }
 
 bool turn_face(cube::Face face, int first_depth, int last_depth,

@@ -327,5 +327,11 @@ void relayout_all() noexcept;
 void drain_orbit() noexcept;
 void install_cube(cube::Cube next,
                   std::vector<cube::FaceColor> origin = {}) noexcept;
+[[nodiscard]] bool cube_held() noexcept;
+
+// Defined in History.cpp, where each is described.
+[[nodiscard]] bool play_rewind(std::vector<cube::CubeMove> plan,
+                               cube::TimelineEffect effect) noexcept;
+[[nodiscard]] bool can_rewind() noexcept;
 
 }  // namespace rubiks::app::detail

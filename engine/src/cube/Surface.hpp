@@ -289,6 +289,28 @@ void set_coordinate(CubiePosition& position, Axis axis, int value) noexcept;
                                            int size) noexcept;
 
 /**
+ * One of the twenty-four ways of holding the whole cube.
+ *
+ * `destinations[face]` is the face that `face` ends up as, and `turns` is a
+ * run of positive whole-cube quarter turns, about the axes listed in order,
+ * that reaches this way of holding it from the home one.
+ */
+struct CubeOrientation {
+    std::array<Face, kFaceCount> destinations;
+    std::vector<Axis> turns;
+};
+
+/**
+ * The twenty-four ways of holding the cube, home first.
+ *
+ * Grown breadth first from the home orientation by quarter turns about X, Y
+ * and Z in that order, so the list and its numbering are fixed. A painting is
+ * read in each of them in this order, and a solver finds an odd cube's frame
+ * among them.
+ */
+[[nodiscard]] const std::vector<CubeOrientation>& cube_orientations();
+
+/**
  * Every sticker of the cube's surface, once each, face by face.
  *
  * Screen-free like the rest of this header, which is why it lives here rather

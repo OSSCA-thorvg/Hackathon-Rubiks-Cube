@@ -4,7 +4,6 @@
 #include <array>
 #include <cstddef>
 #include <map>
-#include <set>
 #include <utility>
 #include <vector>
 
@@ -156,33 +155,20 @@ private:
     void build_rotations()
     {
         // A whole-cube rotation is every layer turned at once, which is not a
-        // move the puzzle allows -- it is how the cube is *held*. Three of
-        // them generate all twenty-four, so they are grown from the three
-        // rather than written out.
-        std::vector<std::vector<int>> seeds;
-        for (const Axis axis : axes()) {
+        // move the puzzle allows -- it is how the cube is *held*. Each of the
+        // twenty-four is carried out on every slot, in the order the domain
+        // lists them, so a reading's orientation numbers the same holding a
+        // solver's frame does.
+        for (const CubeOrientation& orientation : cube_orientations()) {
             std::vector<int> perm(slots_.size(), 0);
             for (std::size_t i = 0; i < slots_.size(); ++i) {
-                perm[i] = slot_of(turned_sticker(slots_[i], axis, size_));
-            }
-            seeds.push_back(std::move(perm));
-        }
-
-        std::vector<int> identity(slots_.size(), 0);
-        for (std::size_t i = 0; i < identity.size(); ++i) {
-            identity[i] = static_cast<int>(i);
-        }
-
-        std::set<std::vector<int>> seen{identity};
-        turn_.push_back(identity);
-        for (std::size_t head = 0; head < turn_.size(); ++head) {
-            for (const auto& seed : seeds) {
-                std::vector<int> next(slots_.size(), 0);
-                for (std::size_t i = 0; i < next.size(); ++i) {
-                    next[i] = seed[static_cast<std::size_t>(turn_[head][i])];
+                SurfaceSticker held = slots_[i];
+                for (const Axis axis : orientation.turns) {
+                    held = turned_sticker(held, axis, size_);
                 }
-                if (seen.insert(next).second) turn_.push_back(std::move(next));
+                perm[i] = slot_of(held);
             }
+            turn_.push_back(std::move(perm));
         }
 
         // The same rotations read as "which piece arrives here", which is the

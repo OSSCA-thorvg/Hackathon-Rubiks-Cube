@@ -1,9 +1,11 @@
 #include "cube/Surface.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstddef>
 #include <map>
+#include <utility>
 
 namespace rubiks::cube {
 namespace {
@@ -238,6 +240,35 @@ Face turned_face(Axis axis, Face face, int quarter_turns) noexcept
         face = turned_face(axis, face);
     }
     return face;
+}
+
+const std::vector<CubeOrientation>& cube_orientations()
+{
+    static const std::vector<CubeOrientation> orientations =
+        []() -> std::vector<CubeOrientation> {
+            std::vector<CubeOrientation> made;
+            made.reserve(24);
+            made.push_back(CubeOrientation{faces(), {}});
+            for (std::size_t head = 0; head < made.size(); ++head) {
+                for (const Axis axis : axes()) {
+                    CubeOrientation next = made[head];
+                    for (Face& face : next.destinations) {
+                        face = turned_face(axis, face);
+                    }
+                    const bool already = std::any_of(
+                        made.begin(), made.end(),
+                        [&next](const CubeOrientation& other) -> bool {
+                            return other.destinations == next.destinations;
+                        });
+                    if (already) continue;
+                    next.turns.push_back(axis);
+                    made.push_back(std::move(next));
+                }
+            }
+            assert(made.size() == 24);
+            return made;
+        }();
+    return orientations;
 }
 
 SurfaceSticker turned_sticker(const SurfaceSticker& sticker, Axis axis,

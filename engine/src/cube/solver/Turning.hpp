@@ -1,6 +1,5 @@
 #pragma once
 
-#include <algorithm>
 #include <array>
 #include <cassert>
 #include <utility>
@@ -23,42 +22,6 @@
  */
 namespace rubiks::cube::solver {
 
-/** One rigid orientation: where each face lands and the turns producing it. */
-struct FrameOrientation {
-    std::array<Face, kFaceCount> destinations;
-    std::vector<Axis> turns;
-};
-
-/** Enumerates the 24 proper orientations once using the domain's face turns. */
-[[nodiscard]] inline const std::vector<FrameOrientation>& frame_orientations()
-{
-    static const std::vector<FrameOrientation> orientations =
-        []() -> std::vector<FrameOrientation> {
-            std::vector<FrameOrientation> made;
-            made.reserve(24);
-            made.push_back(FrameOrientation{faces(), {}});
-            for (std::size_t head = 0; head < made.size(); ++head) {
-                for (const Axis axis : axes()) {
-                    FrameOrientation next = made[head];
-                    for (Face& face : next.destinations) {
-                        face = turned_face(axis, face);
-                    }
-                    const bool already = std::any_of(
-                        made.begin(), made.end(),
-                        [&next](const FrameOrientation& other) -> bool {
-                            return other.destinations == next.destinations;
-                        });
-                    if (already) continue;
-                    next.turns.push_back(axis);
-                    made.push_back(std::move(next));
-                }
-            }
-            assert(made.size() == 24);
-            return made;
-        }();
-    return orientations;
-}
-
 /** A solver's canonical copy and the inverse mapping back to the input frame. */
 class SolverFrame {
 public:
@@ -68,7 +31,7 @@ public:
         if (cube_.size() % 2 == 0) return;
 
         const int middle = cube_.size() / 2;
-        for (const FrameOrientation& orientation : frame_orientations()) {
+        for (const CubeOrientation& orientation : cube_orientations()) {
             bool canonical = true;
             for (const Face face : faces()) {
                 const Face destination = orientation.destinations[face_index(face)];

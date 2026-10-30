@@ -335,10 +335,20 @@ void install_cube(cube::Cube next,
                                                        int turns,
                                                        int size) noexcept;
 void discard_playback() noexcept;
+[[nodiscard]] std::uint32_t drawn_scenes(const Surface& surface) noexcept;
+[[nodiscard]] bool live_surface(std::uint32_t id) noexcept;
 
 // Defined in History.cpp, where each is described.
 [[nodiscard]] bool play_rewind(std::vector<cube::CubeMove> plan,
                                cube::TimelineEffect effect) noexcept;
 [[nodiscard]] bool can_rewind() noexcept;
+
+// Defined in Painting.cpp, where each is described.
+void discard_painting() noexcept;
+[[nodiscard]] bool paint_pointer_down(std::uint32_t id, float x,
+                                      float y) noexcept;
+void paint_pointer_move(float x, float y) noexcept;
+void paint_pointer_up() noexcept;
+[[nodiscard]] std::optional<graphics::NetPainting> net_painting() noexcept;
 
 }  // namespace rubiks::app::detail

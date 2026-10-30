@@ -81,8 +81,7 @@ std::size_t painting_index(const SurfaceSticker& sticker, int size) noexcept
     const std::array<Axis, 2> across_down = other_axes(axis_of(sticker.face));
     const int col = coordinate_on(across_down[0], sticker);
     const int row = coordinate_on(across_down[1], sticker);
-    return face_index(sticker.face) * static_cast<std::size_t>(size * size) +
-           static_cast<std::size_t>(row * size + col);
+    return native_index(sticker.face, row, col, size);
 }
 
 SurfaceSticker SurfaceCells::Iterator::operator*() const noexcept
@@ -252,26 +251,11 @@ SurfaceSticker turned_sticker(const SurfaceSticker& sticker, Axis axis,
 
 std::vector<SurfaceSticker> surface_stickers(int size)
 {
-    std::vector<SurfaceSticker> stickers;
-    if (size < 1) return stickers;
-
-    stickers.reserve(static_cast<std::size_t>(6 * size * size));
-
-    for (const Face face : faces()) {
-        const Axis normal = axis_of(face);
-
-        // The face pins its own axis; the other two run over the whole face.
-        const auto [across_axis, down_axis] = other_axes(normal);
-        for (int down = 0; down < size; ++down) {
-            for (int across = 0; across < size; ++across) {
-                CubiePosition position{0, 0, 0};
-                set_coordinate(position, normal, outer_layer(face, size));
-                set_coordinate(position, across_axis, across);
-                set_coordinate(position, down_axis, down);
-                stickers.push_back(SurfaceSticker{position.x, position.y,
-                                                  position.z, face});
-            }
-        }
+    // Laid out by painting_index() rather than walked in an order of its own,
+    // so the legacy order is written down once, there.
+    std::vector<SurfaceSticker> stickers(surface_cells(size).size());
+    for (const SurfaceSticker sticker : surface_cells(size)) {
+        stickers[painting_index(sticker, size)] = sticker;
     }
     return stickers;
 }

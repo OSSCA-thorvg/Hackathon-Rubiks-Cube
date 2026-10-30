@@ -131,8 +131,7 @@ public:
     /** Borrows one face without reordering or copying colours. */
     [[nodiscard]] FaceView face(Face face) const noexcept
     {
-        const std::size_t offset =
-            face_index(face) * static_cast<std::size_t>(size_ * size_);
+        const std::size_t offset = native_index(face, 0, 0, size_);
         return FaceView{data_ == nullptr ? nullptr : data_ + offset, size_};
     }
     /** Borrows every face in Face enum order, each in row-major order. */

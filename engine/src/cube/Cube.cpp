@@ -32,15 +32,14 @@ FaceStorage::FaceStorage(int size, std::vector<FaceColor> colors) noexcept
 void FaceStorage::set(Face face, int row, int col, FaceColor color) noexcept
 {
     assert(row >= 0 && row < size_ && col >= 0 && col < size_);
-    colors_[face_index(face) * static_cast<std::size_t>(size_ * size_) +
-            static_cast<std::size_t>(row * size_ + col)] = color;
+    colors_[native_index(face, row, col, size_)] = color;
 }
 
 void FaceStorage::fill(Face face, FaceColor color) noexcept
 {
     const std::size_t area = static_cast<std::size_t>(size_ * size_);
     const std::vector<FaceColor>::iterator first =
-        colors_.begin() + face_index(face) * area;
+        colors_.begin() + static_cast<std::ptrdiff_t>(native_index(face, 0, 0, size_));
     std::fill(first, first + area, color);
 }
 

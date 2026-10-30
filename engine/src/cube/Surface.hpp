@@ -51,6 +51,20 @@ struct FaceCell {
     int col;
 };
 
+/**
+ * Where a native cell sits in storage: six row-major faces in `Face` order.
+ *
+ * The one statement of the layout. Storage, its views and the sticker lookup
+ * below all index through it, and the legacy painting order reuses it with
+ * its own reading of row and column.
+ */
+[[nodiscard]] constexpr std::size_t native_index(Face face, int row, int col,
+                                                 int size) noexcept
+{
+    return face_index(face) * static_cast<std::size_t>(size * size) +
+           static_cast<std::size_t>(row * size + col);
+}
+
 /** Maps a native face cell to its three-dimensional sticker identity. */
 [[nodiscard]] SurfaceSticker face_sticker(Face face, int row, int col, int size) noexcept;
 
@@ -63,7 +77,14 @@ struct FaceCell {
 /** The index of a sticker in six outward-facing row-major native faces. */
 [[nodiscard]] std::size_t surface_index(const SurfaceSticker& sticker, int size) noexcept;
 
-/** The index in the historical painting/share order returned by surface_stickers(). */
+/**
+ * The index in the legacy painting and share order.
+ *
+ * Face by face like native storage, but each face is read across the first of
+ * the other two axes and down the second, in the order `other_axes()` gives
+ * them, rather than in the net's rows and columns. `surface_stickers()` lists
+ * the stickers in this order.
+ */
 [[nodiscard]] std::size_t painting_index(const SurfaceSticker& sticker, int size) noexcept;
 
 /** An allocation-free traversal of the native surface, face by face. */
@@ -388,8 +409,7 @@ inline FaceCell face_cell(const SurfaceSticker& sticker, int size) noexcept
 inline std::size_t surface_index(const SurfaceSticker& sticker, int size) noexcept
 {
     const FaceCell cell = face_cell(sticker, size);
-    return face_index(cell.face) * static_cast<std::size_t>(size * size) +
-           static_cast<std::size_t>(cell.row * size + cell.col);
+    return native_index(cell.face, cell.row, cell.col, size);
 }
 
 }  // namespace rubiks::cube

@@ -15,33 +15,19 @@
 namespace rubiks::cube {
 namespace {
 
-/** A cubie slot, as something that can be looked up. */
-struct Where {
-    int x, y, z;
-    [[nodiscard]] bool operator<(const Where& other) const noexcept
+/**
+ * Cubie positions in x, then y, then z order, which is the order pieces are
+ * numbered in.
+ */
+struct PositionOrder {
+    [[nodiscard]] bool operator()(const CubiePosition& a,
+                                  const CubiePosition& b) const noexcept
     {
-        if (x != other.x) return x < other.x;
-        if (y != other.y) return y < other.y;
-        return z < other.z;
+        if (a.x != b.x) return a.x < b.x;
+        if (a.y != b.y) return a.y < b.y;
+        return a.z < b.z;
     }
 };
-
-/** A sticker, as something that can be looked up. */
-struct Which {
-    int x, y, z, face;
-    [[nodiscard]] bool operator<(const Which& other) const noexcept
-    {
-        if (x != other.x) return x < other.x;
-        if (y != other.y) return y < other.y;
-        if (z != other.z) return z < other.z;
-        return face < other.face;
-    }
-};
-
-[[nodiscard]] Which which_of(const SurfaceSticker& s) noexcept
-{
-    return Which{s.x, s.y, s.z, static_cast<int>(s.face)};
-}
 
 /**
  * Everything about a size that a painting of it can be read against.
@@ -54,18 +40,13 @@ class Frame {
 public:
     explicit Frame(int size) : size_(size), slots_(surface_stickers(size))
     {
-        for (std::size_t i = 0; i < slots_.size(); ++i) {
-            at_[which_of(slots_[i])] = static_cast<int>(i);
-        }
-
         // The stickers of one cubie, kept in the order the faces are declared.
         // A corner's three then read as one from each axis, X then Y then Z,
         // at every corner of every size -- which is what lets "the piece's
         // up-or-down sticker" be asked without a special case.
-        std::map<Where, std::vector<int>> gathered;
+        std::map<CubiePosition, std::vector<int>, PositionOrder> gathered;
         for (std::size_t i = 0; i < slots_.size(); ++i) {
-            const auto& s = slots_[i];
-            gathered[Where{s.x, s.y, s.z}].push_back(static_cast<int>(i));
+            gathered[slots_[i].position()].push_back(static_cast<int>(i));
         }
         for (auto& [where, list] : gathered) {
             std::sort(list.begin(), list.end(), [&](int a, int b) {
@@ -124,8 +105,7 @@ public:
     }
     [[nodiscard]] int piece_of(int slot) const
     {
-        const auto& s = slots_[static_cast<std::size_t>(slot)];
-        return piece_at_.at(Where{s.x, s.y, s.z});
+        return piece_at_.at(slots_[static_cast<std::size_t>(slot)].position());
     }
     /** How many faces a piece shows: three for a corner, one for a centre. */
     [[nodiscard]] int arms(int piece) const noexcept
@@ -146,7 +126,7 @@ public:
             pieces_[static_cast<std::size_t>(piece)].front())];
         int depth = size_;
         for (const Axis axis : axes()) {
-            const int c = coordinate_on(axis, CubiePosition{s.x, s.y, s.z});
+            const int c = coordinate_on(axis, s);
             if (c == 0 || c == size_ - 1) continue;
             depth = std::min(depth, std::min(c, size_ - 1 - c));
         }
@@ -182,8 +162,7 @@ private:
         for (const Axis axis : axes()) {
             std::vector<int> perm(slots_.size(), 0);
             for (std::size_t i = 0; i < slots_.size(); ++i) {
-                perm[i] = at_.at(
-                    which_of(turned_sticker(slots_[i], axis, size_)));
+                perm[i] = slot_of(turned_sticker(slots_[i], axis, size_));
             }
             seeds.push_back(std::move(perm));
         }
@@ -232,7 +211,7 @@ private:
                     if (coordinate_on(axis, s) == at) {
                         s = turned_sticker(s, axis, size_);
                     }
-                    lands[i] = at_.at(which_of(s));
+                    lands[i] = slot_of(s);
                 }
                 steps.push_back(std::move(lands));
             }
@@ -261,10 +240,15 @@ private:
         for (const int which : orbit_) ++held_[static_cast<std::size_t>(which)];
     }
 
+    /** A sticker's slot: the slots are listed in the legacy painting order. */
+    [[nodiscard]] int slot_of(const SurfaceSticker& sticker) const noexcept
+    {
+        return static_cast<int>(painting_index(sticker, size_));
+    }
+
     int size_;
     std::vector<SurfaceSticker> slots_;
-    std::map<Which, int> at_;
-    std::map<Where, int> piece_at_;
+    std::map<CubiePosition, int, PositionOrder> piece_at_;
     std::vector<std::vector<int>> pieces_;
     std::vector<std::vector<int>> turn_;
     std::vector<std::vector<int>> arrives_;

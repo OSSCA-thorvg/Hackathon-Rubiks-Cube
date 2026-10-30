@@ -328,6 +328,7 @@ void drain_orbit() noexcept;
 void install_cube(cube::Cube next,
                   std::vector<cube::FaceColor> origin = {}) noexcept;
 [[nodiscard]] bool cube_held() noexcept;
+[[nodiscard]] bool turnable_layers(cube::LayerMask layers, int size) noexcept;
 [[nodiscard]] std::optional<cube::CubeMove> depth_move(cube::Face face,
                                                        int first_depth,
                                                        int last_depth,

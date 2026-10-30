@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "cube/Face.hpp"
+#include "cube/Permutation.hpp"
 #include "cube/Surface.hpp"
 #include "cube/solver/LayerByLayer.hpp"
 #include "cube/solver/Projection.hpp"
@@ -738,27 +739,7 @@ private:
     std::vector<std::vector<int>> steps;
     steps.reserve(generators.size());
     for (const auto& turn : generators) steps.push_back(board.landing({turn}));
-
-    std::vector<int> which(board.cells().size(), -1);
-    int next = 0;
-    for (std::size_t start = 0; start < which.size(); ++start) {
-        if (which[start] >= 0) continue;
-
-        which[start] = next;
-        std::vector<int> waiting{static_cast<int>(start)};
-        while (!waiting.empty()) {
-            const auto here = static_cast<std::size_t>(waiting.back());
-            waiting.pop_back();
-            for (const auto& lands : steps) {
-                const auto there = static_cast<std::size_t>(lands[here]);
-                if (which[there] >= 0) continue;
-                which[there] = next;
-                waiting.push_back(static_cast<int>(there));
-            }
-        }
-        ++next;
-    }
-    return which;
+    return orbits(steps, board.cells().size());
 }
 
 /** One tool, worked out once and read every round. */
@@ -1100,20 +1081,23 @@ public:
         for (std::size_t world = 0; world < homes_.size(); ++world) {
             if (counted[world]) continue;
 
-            std::vector<bool> seen(cells.size(), false);
-            bool odd = false;
+            // This world's cells numbered among themselves, and the cell
+            // each one's piece belongs in, numbered the same way.
+            std::vector<int> place(cells.size(), -1);
+            std::vector<std::size_t> members;
             for (std::size_t i = 0; i < cells.size(); ++i) {
-                if (static_cast<std::size_t>(worlds_[i]) != world || seen[i]) {
-                    continue;
-                }
-                std::size_t length = 0;
-                for (std::size_t at = i; !seen[at];
-                     at = static_cast<std::size_t>(home[at])) {
-                    seen[at] = true;
-                    ++length;
-                }
-                if (length % 2 == 0) odd = !odd;
+                if (static_cast<std::size_t>(worlds_[i]) != world) continue;
+                place[i] = static_cast<int>(members.size());
+                members.push_back(i);
             }
+            std::vector<int> belongs;
+            belongs.reserve(members.size());
+            for (const std::size_t i : members) {
+                const int there = place[static_cast<std::size_t>(home[i])];
+                assert(there >= 0 && "a piece stays in its own world");
+                belongs.push_back(there);
+            }
+            const bool odd = is_odd_permutation(belongs);
 
             // The two worlds of one pair of depths are the same pieces read
             // from their two ends, so they are one count and one turn.

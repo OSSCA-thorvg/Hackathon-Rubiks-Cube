@@ -9,6 +9,7 @@ cube_lib = static_library(
     'Cube.cpp',
     'CubeDraft.cpp',
     'MoveTimeline.cpp',
+    'Permutation.cpp',
     'Scramble.cpp',
     'Surface.cpp',
   ),

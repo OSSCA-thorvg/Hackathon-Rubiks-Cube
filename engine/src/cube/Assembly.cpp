@@ -10,6 +10,7 @@
 
 #include "cube/CubeMove.hpp"
 #include "cube/CubeDraft.hpp"
+#include "cube/Permutation.hpp"
 #include "cube/Surface.hpp"
 
 namespace rubiks::cube {
@@ -214,24 +215,10 @@ private:
             }
         }
 
-        orbit_.assign(slots_.size(), -1);
-        orbits_ = 0;
-        for (std::size_t start = 0; start < orbit_.size(); ++start) {
-            if (orbit_[start] >= 0) continue;
-            orbit_[start] = orbits_;
-            std::vector<int> waiting{static_cast<int>(start)};
-            while (!waiting.empty()) {
-                const auto here = static_cast<std::size_t>(waiting.back());
-                waiting.pop_back();
-                for (const auto& lands : steps) {
-                    const auto there = static_cast<std::size_t>(lands[here]);
-                    if (orbit_[there] >= 0) continue;
-                    orbit_[there] = orbits_;
-                    waiting.push_back(static_cast<int>(there));
-                }
-            }
-            ++orbits_;
-        }
+        orbit_ = orbits(steps, slots_.size());
+        orbits_ = orbit_.empty()
+                      ? 0
+                      : *std::max_element(orbit_.begin(), orbit_.end()) + 1;
 
         held_.assign(static_cast<std::size_t>(orbits_), 0);
         for (const int which : orbit_) ++held_[static_cast<std::size_t>(which)];
@@ -319,24 +306,6 @@ private:
             frame.turned(rotation, static_cast<int>(i)))] = painting[i];
     }
     return out;
-}
-
-/** Whether a permutation takes an odd number of swaps to undo. */
-[[nodiscard]] int parity_of(const std::vector<int>& perm)
-{
-    std::vector<bool> seen(perm.size(), false);
-    int odd = 0;
-    for (std::size_t i = 0; i < perm.size(); ++i) {
-        if (seen[i]) continue;
-        std::size_t length = 0;
-        for (std::size_t at = i; !seen[at];
-             at = static_cast<std::size_t>(perm[at])) {
-            seen[at] = true;
-            ++length;
-        }
-        if (length % 2 == 0) odd ^= 1;
-    }
-    return odd;
 }
 
 /** One painting read in one way of holding the cube. */
@@ -574,7 +543,8 @@ PaintReading read_held(const Frame& frame,
         };
 
         const auto& edges = edges_by_depth.at(1);
-        if (parity_of(renumbered(corners)) != parity_of(renumbered(edges))) {
+        if (is_odd_permutation(renumbered(corners)) !=
+            is_odd_permutation(renumbered(edges))) {
             out.fault = PaintFault::Permutation;
             for (const int p : corners) {
                 const auto& here = frame.pieces()[static_cast<std::size_t>(p)];

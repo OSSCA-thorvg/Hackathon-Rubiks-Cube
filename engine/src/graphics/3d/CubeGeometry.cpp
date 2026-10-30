@@ -46,33 +46,16 @@ constexpr float kH = 1.0f;
             Vec3{kH, kH, -kH}};
 }
 
-/** The two faces pointing along an axis: positive direction first. */
-[[nodiscard]] std::array<Face, 2> faces_along(Axis axis) noexcept
-{
-    switch (axis) {
-        case Axis::X:
-            return {Face::Right, Face::Left};
-        case Axis::Y:
-            return {Face::Up, Face::Down};
-        case Axis::Z:
-            break;
-    }
-    return {Face::Front, Face::Back};
-}
-
 /** The cubie at one cell of a layer's cut sheet. */
 [[nodiscard]] cube::CubiePosition cap_position(
     Axis axis, int slice, int across, int down) noexcept
 {
-    switch (axis) {
-        case Axis::X:
-            return cube::CubiePosition{slice, across, down};
-        case Axis::Y:
-            return cube::CubiePosition{across, slice, down};
-        case Axis::Z:
-            return cube::CubiePosition{across, down, slice};
-    }
-    return cube::CubiePosition{};
+    const std::array<Axis, 2> sheet = cube::other_axes(axis);
+    cube::CubiePosition position{0, 0, 0};
+    cube::set_coordinate(position, axis, slice);
+    cube::set_coordinate(position, sheet[0], across);
+    cube::set_coordinate(position, sheet[1], down);
+    return position;
 }
 
 /**
@@ -192,7 +175,10 @@ WorldScene build_cube_scene(cube::CubeView state,
     const float half_extent = sticker_half_extent(size);
     const math::Quaternion turn =
         layer_rotation(active->axis, active->angle_degrees);
-    const std::array<Face, 2> body_faces = faces_along(active->axis);
+    // The cut sheets face along the turning axis: the lower layer's towards
+    // its positive end, the upper layer's towards the end opposite.
+    const std::array<Face, 2> body_faces{cube::end_face(active->axis, true),
+                                         cube::end_face(active->axis, false)};
 
     WorldScene scene;
     // Reserve for surface stickers and the two sheets of a single interface.

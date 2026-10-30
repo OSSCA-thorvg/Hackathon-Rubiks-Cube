@@ -1,25 +1,26 @@
 diff --git a/engine/src/cube/solver/Reduction.cpp b/engine/src/cube/solver/Reduction.cpp
+index d228384..d7116f5 100644
 --- a/engine/src/cube/solver/Reduction.cpp
 +++ b/engine/src/cube/solver/Reduction.cpp
-@@ -476,6 +476,14 @@
-     [[nodiscard]] int target() const noexcept
-     {
+@@ -478,6 +478,14 @@ public:
          return static_cast<int>(cells_.size());
-+    }
-+
+     }
+ 
 +    /** Whether a cell is showing the colour asked of it. */
 +    [[nodiscard]] bool settled(const Cube& cube, int cell) const
 +    {
 +        const auto& at = cells_[static_cast<std::size_t>(cell)];
 +        return sticker_at(cube, at.position(), at.face) ==
 +               wants_[static_cast<std::size_t>(cell)];
-     }
-
++    }
++
      /** How many of them are showing the colour asked of them. */
-@@ -766,11 +774,31 @@
+     [[nodiscard]] int at_home(const Cube& cube) const
+     {
+@@ -766,11 +774,31 @@ private:
      return which;
  }
-
+ 
 +/** Every quarter turn a cube of this size has: the six faces and the slices. */
 +[[nodiscard]] std::vector<Turn> quarter_turns(int size)
 +{
@@ -46,9 +47,9 @@ diff --git a/engine/src/cube/solver/Reduction.cpp b/engine/src/cube/solver/Reduc
 +    /// Whether this is a slice against a face it cuts, the broad family.
 +    bool coarse = false;
  };
-
+ 
  /** One choice of setup and tool, or nothing when none was any good. */
-@@ -805,6 +833,7 @@
+@@ -805,6 +833,7 @@ public:
              prepared.steps = written_out(tool);
              prepared.moved = centres_.hops(prepared.steps);
              prepared.carries = centres_.carries(prepared.moved);
@@ -56,10 +57,10 @@ diff --git a/engine/src/cube/solver/Reduction.cpp b/engine/src/cube/solver/Reduc
              if (prepared.moved.empty()) continue;
              centre_tools_.push_back(std::move(prepared));
          }
-@@ -817,6 +846,51 @@
+@@ -817,6 +846,51 @@ public:
                      : sources_after(centres_, {setup}));
          }
-
+ 
 +        // The closed sets, and which tools stay inside one of them.
 +        //
 +        // A piece cannot leave the set of slots it can reach, so the centres
@@ -106,13 +107,12 @@ diff --git a/engine/src/cube/solver/Reduction.cpp b/engine/src/cube/solver/Reduc
 +            if (centre_tools_[i].coarse) coarse_.push_back(i);
 +        }
      }
-
+ 
      [[nodiscard]] const Board& centres() const noexcept { return centres_; }
-@@ -831,6 +905,20 @@
-     [[nodiscard]] const std::vector<std::vector<int>>& sources() const noexcept
+@@ -832,6 +906,20 @@ public:
      {
          return centre_sources_;
-+    }
+     }
 +    [[nodiscard]] const std::vector<std::size_t>& coarse() const noexcept
 +    {
 +        return coarse_;
@@ -126,10 +126,11 @@ diff --git a/engine/src/cube/solver/Reduction.cpp b/engine/src/cube/solver/Reduc
 +        const noexcept
 +    {
 +        return local_tools_;
-     }
-
++    }
+ 
  private:
-@@ -866,6 +954,10 @@
+     /** Each cell answering for itself, which is what no setup at all does. */
+@@ -866,6 +954,10 @@ private:
      std::vector<Prepared> centre_tools_;
      std::vector<Turn> centre_setups_;
      std::vector<std::vector<int>> centre_sources_;
@@ -138,28 +139,13 @@ diff --git a/engine/src/cube/solver/Reduction.cpp b/engine/src/cube/solver/Reduc
 +    std::vector<std::vector<std::size_t>> local_tools_;
 +    std::vector<std::size_t> coarse_;
  };
-
+ 
  /**
-@@ -1154,22 +1246,68 @@
+@@ -1154,22 +1246,68 @@ private:
  };
-
+ 
  /**
 - * Every face's centre block one colour.
-- *
-- * The first half of a reduction, and the half that has no written sequences at
-- * all. Two facts about a cube shape it. A face turn cannot move a centre piece
-- * off its face -- only a slice can -- so face turns are free and slices are
-- * the whole cost. And a commutator of two turns moves centre pieces in one of
-- * exactly two sizes: a slice against a face it cuts exchanges a strip between
-- * that face and one neighbour, leaving the other four untouched, while two
-- * slices about different axes exchange one piece on each of the six faces
-- * whatever the size of the cube.
-- *
-- * The coarse one cannot finish a face -- near the end it gives back more of
-- * the colour than it fetches -- so the fine one is needed, and it touches
-- * every face. That is why nothing here works face by face: it counts every
-- * centre piece that is home, over the whole cube, and takes whichever
-- * commutator raises that count the most.
 + * The best of a list of tools, under every setup, or nothing worth doing.
 + *
 + * The one place a round is decided, so that the passes below differ in which
@@ -203,14 +189,27 @@ diff --git a/engine/src/cube/solver/Reduction.cpp b/engine/src/cube/solver/Reduc
 + * comes from, and doing it here keeps the answer short -- a stage built only
 + * from three-cycles would gain two or three a round from the beginning and run
 + * to twice the moves.
-+ *
+  *
+- * The first half of a reduction, and the half that has no written sequences at
+- * all. Two facts about a cube shape it. A face turn cannot move a centre piece
+- * off its face -- only a slice can -- so face turns are free and slices are
+- * the whole cost. And a commutator of two turns moves centre pieces in one of
+- * exactly two sizes: a slice against a face it cuts exchanges a strip between
+- * that face and one neighbour, leaving the other four untouched, while two
+- * slices about different axes exchange one piece on each of the six faces
+- * whatever the size of the cube.
 + * **Then one cluster at a time.** When no strip is worth trading, what is left
 + * is scattered pieces, and those are moved by tools that stay inside a single
 + * closed set. A cluster has a few dozen to a few hundred of those against the
 + * tens of thousands in the whole list, and -- this is the point -- that number
 + * does not grow with the cube. So the last and longest part of the stage, the
 + * part that used to cost the most, stops caring how big the cube is.
-+ *
+  *
+- * The coarse one cannot finish a face -- near the end it gives back more of
+- * the colour than it fetches -- so the fine one is needed, and it touches
+- * every face. That is why nothing here works face by face: it counts every
+- * centre piece that is home, over the whole cube, and takes whichever
+- * commutator raises that count the most.
 + * Judging a local tool by the whole board is not a shortcut that needs
 + * checking: it moves nothing outside its cluster, and a setup is a face turn
 + * which carries a cluster to itself, so its count over the board and its count
@@ -225,10 +224,10 @@ diff --git a/engine/src/cube/solver/Reduction.cpp b/engine/src/cube/solver/Reduc
   */
  void build_centres(Work& work, const CentreWorkshop& shop)
  {
-@@ -1182,28 +1320,52 @@
-
+@@ -1182,28 +1320,52 @@ void build_centres(Work& work, const CentreWorkshop& shop)
+ 
      const int target = board.target();
-
+ 
 +    std::vector<std::size_t> everything(tools.size());
 +    for (std::size_t i = 0; i < everything.size(); ++i) everything[i] = i;
 +
@@ -240,10 +239,18 @@ diff --git a/engine/src/cube/solver/Reduction.cpp b/engine/src/cube/solver/Reduc
      for (int guard = 0; board.at_home(work.cube()) < target; ++guard) {
          assert(guard < target * 2 + 8);
 -        const auto wanted = board.wanted(work.cube());
--
++        const auto choice = best_centre_tool(work, board, tools, sources,
++                                             shop.coarse(),
++                                             board.wanted(work.cube()));
++        if (!choice.found) break;
++        play(choice);
++    }
+ 
 -        Choice choice;
 -        int best = 0;
--
++    const auto& cluster_cells = shop.cluster_cells();
++    const auto& local_tools = shop.local_tools();
+ 
 -        for (std::size_t i = 0; i < tools.size(); ++i) {
 -            if (!worth_trying(tools[i].carries, wanted)) continue;
 -            for (std::size_t s = 0; s < sources.size(); ++s) {
@@ -252,23 +259,6 @@ diff --git a/engine/src/cube/solver/Reduction.cpp b/engine/src/cube/solver/Reduc
 -                if (delta <= best) continue;
 -                best = delta;
 -                choice = Choice{i, s, true};
--            }
--        }
--
--        assert(choice.found);
--        work.apply(before[choice.setup]);
--        for (const auto& step : tools[choice.tool].steps) work.apply(step);
--    }
-+        const auto choice = best_centre_tool(work, board, tools, sources,
-+                                             shop.coarse(),
-+                                             board.wanted(work.cube()));
-+        if (!choice.found) break;
-+        play(choice);
-+    }
-+
-+    const auto& cluster_cells = shop.cluster_cells();
-+    const auto& local_tools = shop.local_tools();
-+
 +    for (std::size_t which = 0; which < cluster_cells.size(); ++which) {
 +        const auto& cells = cluster_cells[which];
 +
@@ -287,14 +277,18 @@ diff --git a/engine/src/cube/solver/Reduction.cpp b/engine/src/cube/solver/Reduc
 +            if (!choice.found) {
 +                choice = best_centre_tool(work, board, tools, sources,
 +                                          everything, wanted);
-+            }
-+
+             }
+-        }
+ 
+-        assert(choice.found);
+-        work.apply(before[choice.setup]);
+-        for (const auto& step : tools[choice.tool].steps) work.apply(step);
 +            assert(choice.found);
 +            play(choice);
 +        }
-+    }
+     }
 +
 +    assert(board.at_home(work.cube()) == target);
  }
-
+ 
  /**

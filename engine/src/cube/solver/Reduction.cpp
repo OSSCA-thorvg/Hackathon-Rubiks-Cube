@@ -1028,7 +1028,7 @@ public:
             for (const Face face : faces()) {
                 Face lands = face;
                 for (const auto& step : setup) {
-                    lands = carried_by(step.face, step.turns, lands, size);
+                    lands = carried_by(step.face, step.turns, lands);
                 }
                 carried[face_index(face)] = lands;
             }

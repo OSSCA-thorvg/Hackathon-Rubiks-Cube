@@ -3,6 +3,8 @@
 #include <array>
 #include <optional>
 
+#include "cube/Surface.hpp"
+
 namespace rubiks::cube {
 namespace {
 
@@ -83,9 +85,9 @@ std::vector<CubeMove> make_scramble(int size, std::uint32_t seed,
 
         const int quarter_turns = turn_from(random.below(3));
 
+        // A wide move from the face at whichever end of the axis was drawn.
         const LayerMask layers =
-            from_far_end ? layers_through(size - depth, size - 1)
-                         : layers_through(0, depth - 1);
+            depth_layers(end_face(axis, from_far_end), 1, depth, size);
 
         sequence.push_back(CubeMove{axis, layers, quarter_turns});
         previous = axis;

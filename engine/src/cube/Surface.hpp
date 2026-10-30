@@ -192,6 +192,12 @@ struct SurfaceTurn {
 /** The layer along a face's own axis where that face is the outer surface. */
 [[nodiscard]] int outer_layer(Face face, int size) noexcept;
 
+/** Whether a face is the one at the positive end of its axis. */
+[[nodiscard]] bool is_positive_face(Face face) noexcept;
+
+/** The face at one end of an axis: the positive end, or the one opposite. */
+[[nodiscard]] Face end_face(Axis axis, bool positive) noexcept;
+
 /**
  * The layers a run of depths measured from `face` selects.
  *
@@ -203,7 +209,7 @@ struct SurfaceTurn {
  * with two implementations is a convention with two chances to differ.
  *
  * Which end of the axis a face sits at is the whole of the difference between
- * the two directions, and `outer_layer()` above already answers it.
+ * the two directions, and `is_positive_face()` below already answers it.
  *
  * @return zero for a run that is empty, reversed, or reaches past the far
  *         side, which is the mask no move can have.
@@ -230,6 +236,9 @@ struct SurfaceTurn {
 [[nodiscard]] int coordinate_on(Axis axis, const CubiePosition& p) noexcept;
 [[nodiscard]] int coordinate_on(Axis axis, const SurfaceSticker& s) noexcept;
 
+/** Writes the one coordinate of a position that lies along `axis`. */
+void set_coordinate(CubiePosition& position, Axis axis, int value) noexcept;
+
 /** Where a cubie lands after one positive quarter turn about `axis`. */
 [[nodiscard]] CubiePosition turned_position(Axis axis, const CubiePosition& p,
                                             int size) noexcept;
@@ -241,6 +250,9 @@ struct SurfaceTurn {
  * themselves.
  */
 [[nodiscard]] Face turned_face(Axis axis, Face face) noexcept;
+
+/** The same, after any number of positive quarter turns, taken modulo four. */
+[[nodiscard]] Face turned_face(Axis axis, Face face, int quarter_turns) noexcept;
 
 /** Where a sticker is after one positive quarter turn about `axis`. */
 [[nodiscard]] SurfaceSticker turned_sticker(const SurfaceSticker& sticker,
@@ -301,8 +313,20 @@ inline constexpr std::array<FaceBasis, kFaceCount> kFaceBases{{
 inline Axis axis_of(Face face) noexcept
 { return detail::kFaceBases[face_index(face)].normal; }
 
+inline bool is_positive_face(Face face) noexcept
+{ return detail::kFaceBases[face_index(face)].positive; }
+
 inline int outer_layer(Face face, int size) noexcept
-{ return detail::kFaceBases[face_index(face)].positive ? size - 1 : 0; }
+{ return is_positive_face(face) ? size - 1 : 0; }
+
+inline Face end_face(Axis axis, bool positive) noexcept
+{
+    for (const Face face : faces()) {
+        if (axis_of(face) == axis && is_positive_face(face) == positive) return face;
+    }
+    assert(false && "every axis has a face at each end");
+    return Face::Right;
+}
 
 inline int coordinate_on(Axis axis, const CubiePosition& position) noexcept
 {
@@ -316,6 +340,21 @@ inline int coordinate_on(Axis axis, const CubiePosition& position) noexcept
 
 inline int coordinate_on(Axis axis, const SurfaceSticker& sticker) noexcept
 { return coordinate_on(axis, sticker.position()); }
+
+inline void set_coordinate(CubiePosition& position, Axis axis, int value) noexcept
+{
+    switch (axis) {
+        case Axis::X:
+            position.x = value;
+            return;
+        case Axis::Y:
+            position.y = value;
+            return;
+        case Axis::Z:
+            break;
+    }
+    position.z = value;
+}
 
 inline SurfaceSticker face_sticker(Face face, int row, int col, int size) noexcept
 {

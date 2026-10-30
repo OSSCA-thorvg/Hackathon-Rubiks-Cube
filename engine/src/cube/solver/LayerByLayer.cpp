@@ -566,7 +566,7 @@ void build_flower(Work& work)
             const Face carrying = wearing(piece, bottom);
             const Face lift = besides(piece, carrying).front();
             free_slot_above(work, lift);
-            work.turn(lift, carried_by(lift, 1, carrying, work.size()) ==
+            work.turn(lift, carried_by(lift, 1, carrying) ==
                                     Face::Up
                                 ? 1
                                 : -1);

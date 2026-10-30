@@ -244,8 +244,7 @@ struct RingsMetrics {
 
     const float toward =
         side_of(axis_center(free), first_center, second_center);
-    const bool positive_face = outer_layer(sticker.face, size) == size - 1;
-    const float wanted = positive_face ? -toward : toward;
+    const float wanted = cube::is_positive_face(sticker.face) ? -toward : toward;
 
     return side_of((*met)[0], first_center, second_center) * wanted > 0.0f
                ? (*met)[0]

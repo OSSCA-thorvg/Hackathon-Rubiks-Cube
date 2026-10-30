@@ -1,9 +1,9 @@
 #include "interaction/Picking.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 
+#include "cube/Surface.hpp"
 #include "graphics/3d/CubeGeometry.hpp"
 
 namespace rubiks::interaction {
@@ -12,26 +12,16 @@ namespace {
 using cube::Face;
 using math::Vec3;
 
-/** One of the cube's six outer planes. */
-struct OuterPlane {
-    int axis;     // 0 = x, 1 = y, 2 = z
-    float sign;   // which side of the origin the plane sits on
-    Face face;
-};
-
-constexpr std::array<OuterPlane, 6> kOuterPlanes{{
-    {0, +1.0f, Face::Right},
-    {0, -1.0f, Face::Left},
-    {1, +1.0f, Face::Up},
-    {1, -1.0f, Face::Down},
-    {2, +1.0f, Face::Front},
-    {2, -1.0f, Face::Back},
-}};
-
-[[nodiscard]] float component(const Vec3& v, int axis) noexcept
+[[nodiscard]] float component(const Vec3& v, cube::Axis axis) noexcept
 {
-    if (axis == 0) return v.x;
-    if (axis == 1) return v.y;
+    switch (axis) {
+        case cube::Axis::X:
+            return v.x;
+        case cube::Axis::Y:
+            return v.y;
+        case cube::Axis::Z:
+            break;
+    }
     return v.z;
 }
 
@@ -89,22 +79,24 @@ std::optional<Pick> pick_cube(const Ray& ray, int size) noexcept
     std::optional<Pick> nearest;
     float nearest_distance = 0.0f;
 
-    for (const auto& plane : kOuterPlanes) {
-        const float along = component(ray.direction, plane.axis);
+    // Each face is the outer plane at one end of its axis.
+    for (const Face face : cube::faces()) {
+        const cube::Axis normal = cube::axis_of(face);
+        const float sign = cube::is_positive_face(face) ? 1.0f : -1.0f;
+        const float along = component(ray.direction, normal);
 
         // Only a plane whose outward normal opposes the ray can be the
         // surface the pointer sees; the rest are the far side or edge on.
-        if (plane.sign * along >= -kRayEpsilon) continue;
+        if (sign * along >= -kRayEpsilon) continue;
 
         const float distance =
-            (plane.sign * half - component(ray.origin, plane.axis)) / along;
+            (sign * half - component(ray.origin, normal)) / along;
         if (distance <= kRayEpsilon) continue;
 
         const Vec3 point = ray.origin + ray.direction * distance;
 
         bool within_face = true;
-        for (int axis = 0; axis < 3; ++axis) {
-            if (axis == plane.axis) continue;
+        for (const cube::Axis axis : cube::other_axes(normal)) {
             if (std::abs(component(point, axis)) > half) {
                 within_face = false;
                 break;
@@ -115,7 +107,7 @@ std::optional<Pick> pick_cube(const Ray& ray, int size) noexcept
         if (nearest && distance >= nearest_distance) continue;
 
         nearest_distance = distance;
-        nearest = Pick{plane.face, cell_index(point.x, size),
+        nearest = Pick{face, cell_index(point.x, size),
                        cell_index(point.y, size), cell_index(point.z, size),
                        point};
     }

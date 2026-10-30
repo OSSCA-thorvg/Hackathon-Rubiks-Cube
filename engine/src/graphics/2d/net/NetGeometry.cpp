@@ -573,7 +573,7 @@ RenderScene build_net_scene(cube::CubeView state, const Rect& rect,
         // it and the one at the far end sees that same turn mirrored.
         const float face_degrees =
             progress * kDegreesPerQuarterTurn *
-            (outer_layer(face, size) == size - 1 ? 1.0f : -1.0f);
+            (cube::is_positive_face(face) ? 1.0f : -1.0f);
 
         for (int row = 0; row < size; ++row) {
             const cube::ColorView row_colors = colors.row(row);

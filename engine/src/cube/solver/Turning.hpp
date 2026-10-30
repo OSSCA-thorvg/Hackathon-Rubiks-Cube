@@ -95,10 +95,8 @@ public:
     /** Maps a solution back to the caller's axis, layers, and turn direction. */
     [[nodiscard]] std::vector<CubeMove> restore(std::vector<CubeMove> moves) const
     {
-        constexpr std::array<Face, kAxisCount> positive{
-            Face::Right, Face::Up, Face::Front};
         for (CubeMove& move : moves) {
-            const Face destination = positive[static_cast<std::size_t>(move.axis)];
+            const Face destination = end_face(move.axis, true);
             Face source = destination;
             for (const Face face : faces()) {
                 if (destinations_[face_index(face)] == destination) {
@@ -107,7 +105,7 @@ public:
                 }
             }
 
-            if (outer_layer(source, cube_.size()) == 0) {
+            if (!is_positive_face(source)) {
                 LayerMask reversed = 0;
                 for (int index = 0; index < cube_.size(); ++index) {
                     if ((move.layers & layer(index)) != 0) {
@@ -142,12 +140,6 @@ struct Turn {
     int turns;
 };
 
-/** Whether a face is the one at the far end of its axis. */
-[[nodiscard]] inline bool positive_face(Face face, int size) noexcept
-{
-    return outer_layer(face, size) == size - 1;
-}
-
 /** One outer face, turned as seen from outside it. */
 [[nodiscard]] inline Turn face_turn(Face face, int turns) noexcept
 {
@@ -164,11 +156,7 @@ struct Turn {
 [[nodiscard]] inline Turn layer_turn(Axis axis, int layer, int turns,
                                      int size) noexcept
 {
-    const Face from = axis == Axis::X   ? Face::Right
-                      : axis == Axis::Y ? Face::Up
-                                        : Face::Front;
-    const int depth = size - layer;
-    return Turn{from, depth, turns};
+    return Turn{end_face(axis, true), size - layer, turns};
 }
 
 /**
@@ -192,11 +180,7 @@ struct Turn {
 /** A face carried round by `quarters` turns of the up face. */
 [[nodiscard]] inline Face about_up(Face face, int quarters) noexcept
 {
-    Face carried = face;
-    for (int i = 0, n = normalized_turns(quarters); i < n; ++i) {
-        carried = turned_face(Axis::Y, carried);
-    }
-    return carried;
+    return turned_face(Axis::Y, face, quarters);
 }
 
 /**
@@ -206,33 +190,11 @@ struct Turn {
  * themselves. Asking this rather than asking for a coordinate is what lets one
  * body of code serve every size: a cube of any size has the same six faces.
  */
-[[nodiscard]] inline Face carried_by(Face turning, int turns, Face showing,
-                                     int size) noexcept
+[[nodiscard]] inline Face carried_by(Face turning, int turns,
+                                     Face showing) noexcept
 {
-    if (axis_of(showing) == axis_of(turning)) return showing;
-
-    const int quarters =
-        normalized_turns(positive_face(turning, size) ? turns : -turns);
-    Face landed = showing;
-    for (int i = 0; i < quarters; ++i) {
-        landed = turned_face(axis_of(turning), landed);
-    }
-    return landed;
-}
-
-inline void set_axis(CubiePosition& position, Axis axis, int value) noexcept
-{
-    switch (axis) {
-        case Axis::X:
-            position.x = value;
-            return;
-        case Axis::Y:
-            position.y = value;
-            return;
-        case Axis::Z:
-            break;
-    }
-    position.z = value;
+    return turned_face(axis_of(turning), showing,
+                       is_positive_face(turning) ? turns : -turns);
 }
 
 /** The axis that is neither of these two. */
@@ -251,7 +213,7 @@ inline void set_axis(CubiePosition& position, Axis axis, int value) noexcept
 {
     CubiePosition position{0, 0, 0};
     for (const Face face : {a, b, c}) {
-        set_axis(position, axis_of(face), outer_layer(face, size));
+        set_coordinate(position, axis_of(face), outer_layer(face, size));
     }
     return position;
 }
@@ -267,8 +229,8 @@ inline void set_axis(CubiePosition& position, Axis axis, int value) noexcept
 [[nodiscard]] inline CubiePosition edge_slot(Face a, Face b, int size) noexcept
 {
     CubiePosition position{1, 1, 1};
-    set_axis(position, axis_of(a), outer_layer(a, size));
-    set_axis(position, axis_of(b), outer_layer(b, size));
+    set_coordinate(position, axis_of(a), outer_layer(a, size));
+    set_coordinate(position, axis_of(b), outer_layer(b, size));
     return position;
 }
 
@@ -289,7 +251,7 @@ inline void set_axis(CubiePosition& position, Axis axis, int value) noexcept
     std::vector<CubiePosition> row;
     for (int i = 1; i <= size - 2; ++i) {
         auto position = edge_slot(a, b, size);
-        set_axis(position, along, i);
+        set_coordinate(position, along, i);
         row.push_back(position);
     }
     return row;

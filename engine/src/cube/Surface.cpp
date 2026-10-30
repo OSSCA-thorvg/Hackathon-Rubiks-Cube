@@ -28,12 +28,6 @@ struct Vector3 {
     return Vector3{0, 0, 1};
 }
 
-/** Whether a face is the one at the far end of its axis. */
-[[nodiscard]] bool is_positive_face(Face face) noexcept
-{
-    return detail::kFaceBases[face_index(face)].positive;
-}
-
 [[nodiscard]] Vector3 face_normal(Face face) noexcept
 {
     const auto along = axis_vector(axis_of(face));
@@ -64,21 +58,6 @@ struct Vector3 {
             break;
     }
     return {Face::Up, Face::Right, Face::Down, Face::Left};
-}
-
-void set_coordinate(CubiePosition& p, Axis axis, int value) noexcept
-{
-    switch (axis) {
-        case Axis::X:
-            p.x = value;
-            return;
-        case Axis::Y:
-            p.y = value;
-            return;
-        case Axis::Z:
-            break;
-    }
-    p.z = value;
 }
 
 /** The axis a direction lies along, together with which way it points. */
@@ -209,7 +188,7 @@ LayerMask depth_layers(Face face, int first_depth, int last_depth,
 
     // Counting inwards from a face at the far end of its axis is counting
     // down through the indices, so the run's two ends swap over with it.
-    if (outer_layer(face, size) == size - 1) {
+    if (is_positive_face(face)) {
         return layers_through(size - last_depth, size - first_depth);
     }
     return layers_through(first_depth - 1, last_depth - 1);
@@ -250,6 +229,14 @@ Face turned_face(Axis axis, Face face) noexcept
     const auto cycle = sticker_cycle(axis);
     for (std::size_t i = 0; i < cycle.size(); ++i) {
         if (cycle[i] == face) return cycle[(i + 1) % cycle.size()];
+    }
+    return face;
+}
+
+Face turned_face(Axis axis, Face face, int quarter_turns) noexcept
+{
+    for (int turn = 0, count = normalized_turns(quarter_turns); turn < count; ++turn) {
+        face = turned_face(axis, face);
     }
     return face;
 }

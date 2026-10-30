@@ -226,9 +226,8 @@ struct Turn {
 {
     std::vector<Face> showing;
     for (const Face face : faces()) {
-        if (coordinate_on(axis_of(face), position) == outer_layer(face, size)) {
-            showing.push_back(face);
-        }
+        const SurfaceSticker sticker{position.x, position.y, position.z, face};
+        if (is_surface_sticker(sticker, size)) showing.push_back(face);
     }
     return showing;
 }

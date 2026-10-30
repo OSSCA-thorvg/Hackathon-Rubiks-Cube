@@ -1,7 +1,5 @@
 #include "graphics/frame/FrameInputs.hpp"
 
-#include <cassert>
-
 #include "graphics/3d/AxisGizmo.hpp"
 #include "graphics/3d/Camera.hpp"
 #include "graphics/3d/CubeGeometry.hpp"
@@ -72,13 +70,20 @@ RenderScene compose(const FrameInputs& frame)
             // being edited and mostly is not a cube at all until the last
             // square is right. No guides either: nothing here turns, so there
             // is nowhere for a guide to promise.
-            assert(net.painting->stickers.size() ==
-                   cube::kFaceCount * static_cast<std::size_t>(size * size));
-            const cube::CubeView painting{size, net.painting->stickers.data()};
-            append_scene(scene, build_net_painting(painting, placement.net,
-                                                   net.palette,
-                                                   net.painting->blamed,
-                                                   net.painting->cursor));
+            //
+            // The snapshot is read as a cube of the drawing's size, so one of
+            // another size is drawn as nothing rather than read past its end.
+            // The application discards a draft before it changes size, but
+            // this is the reader, and one comparison is all it costs.
+            if (net.painting->stickers.size() ==
+                cube::surface_cells(size).size()) {
+                const cube::CubeView painting{size,
+                                              net.painting->stickers.data()};
+                append_scene(scene, build_net_painting(painting, placement.net,
+                                                       net.palette,
+                                                       net.painting->blamed,
+                                                       net.painting->cursor));
+            }
         } else {
             // The net is already screen-space, so it only has to be appended.
             // It gets the same rotation as the 3D scene, which is what makes

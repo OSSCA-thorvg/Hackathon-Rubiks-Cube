@@ -190,11 +190,31 @@ TEST_CASE("a painting frame draws its native snapshot directly")
             }
         }
 
-        const rubiks::math::Vec2 center = net_cell_center(marked, frame.placement.net, size);
+        const rubiks::math::Vec2 center =
+            net_cell_center(marked, frame.placement.net, size);
         const float half =
             0.5f * kNetStickerScale * net_cell_side(frame.placement.net, size);
         REQUIRE(scene.strokes.size() == 1);
         REQUIRE(scene.strokes.front().start.x == Catch::Approx(center.x - half));
         REQUIRE(scene.strokes.front().start.y == Catch::Approx(center.y - half));
     }
+}
+
+TEST_CASE("a painting snapshot of another size draws no net")
+{
+    // Read as a cube of the drawing's size, a snapshot of any other size
+    // would be read past its end; it is drawn as nothing instead.
+    const Cube cube(4);
+    FrameInputs frame;
+    frame.width = 600;
+    frame.height = 600;
+    frame.placement = layout(600, 600, ViewMode::Flat);
+    frame.net = NetDrawing{
+        CubeRevision{&cube, 0}, std::nullopt, Palette::Classic, {},
+        NetPainting{std::vector<FaceColor>(6 * 3 * 3, FaceColor::Red), {0},
+                    FaceCell{Face::Front, 1, 1}}};
+
+    const RenderScene scene = compose(frame);
+    REQUIRE(scene.faces.empty());
+    REQUIRE(scene.strokes.empty());
 }

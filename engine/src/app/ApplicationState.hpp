@@ -328,6 +328,12 @@ void drain_orbit() noexcept;
 void install_cube(cube::Cube next,
                   std::vector<cube::FaceColor> origin = {}) noexcept;
 [[nodiscard]] bool cube_held() noexcept;
+[[nodiscard]] std::optional<cube::CubeMove> depth_move(cube::Face face,
+                                                       int first_depth,
+                                                       int last_depth,
+                                                       int turns,
+                                                       int size) noexcept;
+void discard_playback() noexcept;
 
 // Defined in History.cpp, where each is described.
 [[nodiscard]] bool play_rewind(std::vector<cube::CubeMove> plan,

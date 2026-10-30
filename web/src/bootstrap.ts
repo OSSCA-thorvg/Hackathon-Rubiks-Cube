@@ -373,8 +373,8 @@ export function bootstrap(
   ];
 
   // The minimal page is the cube, its net and three buttons: none of the
-  // page's own small controllers below is attached, and nothing listens for
-  // a key. A drag still turns and orbits, which is the engine's own.
+  // page's own small controllers below is attached, and no key turns the
+  // cube. A drag still turns and orbits, which is the engine's own.
   if (mode === 'minimal') {
     return start({
       canvas: shell.views.cube,

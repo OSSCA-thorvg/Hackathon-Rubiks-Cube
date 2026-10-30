@@ -130,10 +130,14 @@ thorvg-rubiks/
 │       │   └── Painting.cpp
 │       │
 │       ├── cube/
-│       │   ├── CubeState.cpp
-│       │   ├── CubeMove.cpp
-│       │   ├── Cubie.cpp
-│       │   └── CubeNotation.cpp
+│       │   ├── Cube.cpp
+│       │   ├── CubeDraft.cpp
+│       │   ├── Surface.cpp
+│       │   ├── Assembly.cpp
+│       │   ├── Permutation.cpp
+│       │   ├── Scramble.cpp
+│       │   ├── MoveTimeline.cpp
+│       │   └── solver/
 │       │
 │       ├── graphics/
 │       │   ├── Camera.cpp

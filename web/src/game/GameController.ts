@@ -690,10 +690,12 @@ export function attachGameController(
       return;
     }
 
+    // The minimal page has no Rewind to point to; it is reached at this size
+    // only through a link made before that page existed.
     ui.solverNote.textContent =
       `Solve works on a ${size}×${size}, but it can take minutes and the ` +
-      'page will not respond while it runs. Rewind undoes the scramble ' +
-      'instead.';
+      'page will not respond while it runs.' +
+      (extended ? ' Rewind undoes the scramble instead.' : '');
     ui.solverNote.hidden = false;
   };
 

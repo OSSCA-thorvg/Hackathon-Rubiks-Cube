@@ -110,3 +110,18 @@ Phase 번호가 없는 횡단 작업입니다. 2026-10-03~04에 `3f8dee4` 위에
   같은 검토의 작은 지적도 고쳤습니다. 이동된 `Cube`는 복사로 남아 크기만 있고 색이 없는 상태가 없습니다(`7fe469c`). 전개도 painting 크기 검사는 다시 runtime 검사입니다(`414797a`). 32층 assembly test는 크기 검사만 거절할 수 있는 painting을 씁니다(`a0bd211`). `Reduction::supports`는 domain 범위 그대로 두고, packing 범위는 application 상한 옆의 `static_assert`가 지킵니다(`72f9f6e`). cubie를 말하던 주석을 고치고 `SolverFrame`이 runtime 검사를 두지 않는 이유를 적었습니다(`766a740`).
 
   Solver 동작은 바뀌지 않았습니다. `solver-test "[.dump]"`와 `cube-test "[.survey]"` 출력이 cube나 solver를 고친 커밋마다 시작 전과 같았고, pixel 단언은 그대로입니다. `Reduction.cpp`를 고친 커밋마다 16.6 패치를 다시 떴습니다. 확인 결과는 native 30 suite, 기본 실행 463 case, solver `[.big]` 4 case(단언 37,442개), wasm(export 68), web unit 382개, e2e 84개입니다.
+
+- **Application layer를 기능별 파일로 나눴습니다 (2026-10-30).** 약 2,100줄이던 `engine/src/app/Application.cpp`가 core 경로와 모든 기능을 함께 들고 있었습니다. 동작 변경도, build option도, `#if`도 없는 파일 이동이고, 모든 파일은 같은 `rubiks-engine` static library에 들어갑니다. 공개 header `Application.hpp`는 바뀌지 않았습니다.
+
+  | 파일 | 담은 것 |
+  |---|---|
+  | `ApplicationState.hpp` | 내부 header. `ApplicationState`, `Player`, `Surface`, 기본값과 tempo 상수, `state` 포인터, 파일 사이에서 쓰는 helper 선언. `rubiks::app::detail`에 있고 `engine/src/app`의 파일만 include합니다 |
+  | `Application.cpp` | Core. 시작과 종료, surface의 크기·장면·pixel, `render`와 `frame_for`, pointer down/move/up/cancel, `advance`와 재생, `stop_playback`, scramble, reset, `turn_face`, `reset_view`, `is_busy`, `is_solved` |
+  | `Settings.cpp` | 크기, view mode, flat style, palette, lighting, canvas theme, 속도 |
+  | `History.cpp` | Undo, redo, rewind, timeline 질의, 사용자 move 수 |
+  | `Solve.cpp` | `can_solve`, `solve` |
+  | `Ambient.cpp` | 관람 패턴 표와 walk, `ambient_start`·`ambient_stop`·`is_ambient` |
+  | `Sharing.cpp` | 링크가 싣고 나가는 것과 다시 읽는 것: 두 restore buffer, `restore_apply`, `restore_painting`, 시작 colouring |
+  | `Painting.cpp` | Draft 명령과 붓질 helper, 그리고 core가 부르는 `paint_pointer_down`·`paint_pointer_move`·`paint_pointer_up`·`net_painting` |
+
+  한 파일만 쓰는 helper는 그 파일의 anonymous namespace에 남고, 여러 파일이 쓰는 것만 `detail`에 정의해 내부 header에 선언합니다. 설명 주석은 정의 쪽에만 있습니다. Painting이 core에 닿는 자리는 pointer 함수 넷과 `frame_for`, 그리고 `install_cube`의 `discard_painting()`이고, 모두 Painting.cpp의 함수를 그냥 부릅니다. Draft가 pointer를 가져가는지는 여전히 core의 `if (state->paint)`가 정합니다. 기능 하나를 커밋 하나로 옮겼고(`9f9af8f`..`448092f`) 커밋마다 native 30 suite·463 case, wasm build(export 68개, 이전과 같은 목록), web unit 382개가 통과했습니다. 끝에서 e2e 84개와 16.6 패치의 `git apply --check`도 통과했습니다.

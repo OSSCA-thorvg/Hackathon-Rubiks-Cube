@@ -35,7 +35,7 @@ thorvg-rubiks/
 │   │   └── frame/          # 캔버스 한 장의 입력과 compose
 │   ├── src/interaction/    # picking, drag 해석, snap animation, 시점 orbit
 │   ├── src/render/         # ThorVG rendering backend
-│   ├── src/app/            # engine lifecycle
+│   ├── src/app/            # engine lifecycle (Application.cpp)과 기능마다 한 파일
 │   └── third_party/        # vendored headers (linalg.h)
 ├── tests/                  # Native unit tests
 ├── subprojects/            # external C++ dependencies (ThorVG)

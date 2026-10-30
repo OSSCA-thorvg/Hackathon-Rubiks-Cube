@@ -119,7 +119,15 @@ thorvg-rubiks/
 │   ├── meson.build
 │   └── src/
 │       ├── app/
-│       │   └── Application.cpp
+│       │   ├── Application.hpp
+│       │   ├── ApplicationState.hpp
+│       │   ├── Application.cpp
+│       │   ├── Settings.cpp
+│       │   ├── History.cpp
+│       │   ├── Solve.cpp
+│       │   ├── Ambient.cpp
+│       │   ├── Sharing.cpp
+│       │   └── Painting.cpp
 │       │
 │       ├── cube/
 │       │   ├── CubeState.cpp

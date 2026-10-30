@@ -273,6 +273,12 @@ surface 0은 `initialize()`가 만드는 원래의 캔버스이고 모든 장면
 C ABI는 78개에서 68개가 되었고 `engine/src/bindings/capi.cpp`에 있습니다. `graphics/`는 루트, `3d/`, `2d/`, `frame/`으로 나뉩니다. Face와 depth를 move로 바꾸는 규칙은 `cube::face_move` 하나입니다.
 큐브의 저장 방식에 기대는 중복은 그 저장 방식을 바꾸는 작업 뒤로 남겼고, 코어 경량화는 조사와 측정만 해 두었습니다.
 
+## [x] 횡단 작업: [Minimal mode](./minimal-mode.md)
+
+페이지는 기본으로 ThorVG 데모로 열립니다. 제목, 상태 줄, 큐브와 Net을 나란히 둔 무대, 그리고 Scramble·Reset·Solve와 `Full version` 링크가 전부입니다. 지금까지의 앱 전체는 `?extended`로 열립니다.
+모드는 `bootstrap`이 주소에서 한 번 읽어 shell과 controller에 넘깁니다. Minimal은 같은 markup을 `data-mode`로 덜 보여 주고, 명령 메뉴·Settings·패널은 붙이지 않으며, 면 회전 키와 click sound, `?lighting=`도 없습니다. Reset은 Settings의 Home view와 Reset session을 차례로 누릅니다.
+Extended에서 만든 공유 링크는 `?extended`를 지니고, `?extended` 없는 `#s=` 링크는 minimal에서 그 큐브를 엽니다. 엔진은 바뀌지 않았습니다.
+
 ---
 
 ## 남은 일

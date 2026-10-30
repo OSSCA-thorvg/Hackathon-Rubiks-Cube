@@ -320,4 +320,12 @@ struct ApplicationState {
 
 extern std::unique_ptr<ApplicationState> state;
 
+// Defined in Application.cpp, where each is described.
+[[nodiscard]] int size_of_cube() noexcept;
+[[nodiscard]] bool valid_cube_size(int size) noexcept;
+void relayout_all() noexcept;
+void drain_orbit() noexcept;
+void install_cube(cube::Cube next,
+                  std::vector<cube::FaceColor> origin = {}) noexcept;
+
 }  // namespace rubiks::app::detail

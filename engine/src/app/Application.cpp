@@ -44,16 +44,6 @@ std::unique_ptr<ApplicationState> detail::state;
 namespace {
 
 /**
- * The bounds a speed multiplier is held inside.
- *
- * Four times either way. Faster than that and a quarter turn is over inside
- * two frames, so a sequence stops being an animation and becomes a slideshow;
- * slower and a scramble outlasts anyone's patience for watching it.
- */
-constexpr float kMinSpeedScale = 0.25f;
-constexpr float kMaxSpeedScale = 4.0f;
-
-/**
  * How a multiplier turns a tempo into a duration.
  *
  * `duration = base / scale`, so 2 is twice as fast and 0.5 is half. Written
@@ -63,18 +53,6 @@ constexpr float kMaxSpeedScale = 4.0f;
 [[nodiscard]] double scaled_tempo(double base_ms, float scale) noexcept
 {
     return base_ms / static_cast<double>(scale);
-}
-
-/** How many layers the cube in hand has, which nothing else stores. */
-[[nodiscard]] int size_of_cube() noexcept
-{
-    return state->cube_state.size();
-}
-
-/** Whether a size is one this application builds. */
-[[nodiscard]] bool valid_cube_size(int size) noexcept
-{
-    return size >= kMinCubeSize && size <= kMaxCubeSize;
 }
 
 /** The camera looking into one cube region, the one it was drawn with. */
@@ -402,11 +380,6 @@ void relayout(Surface& surface) noexcept
         graphics::layout(surface.width, surface.height, mode, style);
 }
 
-void relayout_all() noexcept
-{
-    for (auto& surface : state->surfaces) relayout(surface);
-}
-
 /** Whether `id` names a surface, and that surface has a target to draw on. */
 [[nodiscard]] bool live_surface(std::uint32_t id) noexcept
 {
@@ -469,20 +442,6 @@ void commit_move(const cube::CubeMove& move) noexcept
 }
 
 /**
- * Applies whatever sweep the controller has accumulated.
- *
- * Called from every point where a camera is about to be used, so the camera
- * rendered with, the camera picked against, and the camera a gesture captures
- * are always the same one.
- */
-void drain_orbit() noexcept
-{
-    if (const auto delta = state->interaction.take_orbit_delta()) {
-        state->orbit.turn(delta->yaw_degrees, delta->pitch_degrees);
-    }
-}
-
-/**
  * Drops a draft that has stopped describing the cube it was taken from.
  *
  * A draft is a colouring of one cube of one size, so every command that puts a
@@ -510,40 +469,6 @@ void discard_playback() noexcept
     drain_orbit();
     state->interaction.reset();
     state->playback.reset();
-}
-
-/**
- * Puts a different cube in the place of the one that is there.
- *
- * Every command that replaces the cube comes through here, so the order is
- * written once. The draft goes, because it is a colouring of the cube being
- * replaced. Whatever was playing goes, with any turn of it still in flight,
- * before the cube that turn would have landed on arrives. Then the cube, a
- * controller for it, and an empty record: a command that has a record to put
- * on the new cube writes it afterwards.
- *
- * The controller is replaced rather than told, because the size is the rule
- * it turns moves down by and a gesture half made on the cube before is not
- * something to carry across.
- *
- * `origin` is the colouring the session begins from when the cube was read
- * from one, and nothing otherwise, so every fresh cube forgets where the last
- * session began. Closing a draft does not do that on its own: only replacing
- * the cube makes the colouring this session started from stop being true. It
- * is taken by value so that the draft's own stickers can be handed over; they
- * have left the draft by the time this closes it.
- */
-void install_cube(cube::Cube next,
-                  std::vector<cube::FaceColor> origin = {}) noexcept
-{
-    discard_painting();
-    discard_playback();
-
-    const int size = next.size();
-    state->cube_state = std::move(next);
-    state->interaction = interaction::InteractionController(size);
-    state->timeline.clear();
-    state->origin = std::move(origin);
 }
 
 /**
@@ -643,6 +568,75 @@ void advance_playback() noexcept
 }
 
 }  // namespace
+
+namespace detail {
+
+/** How many layers the cube in hand has, which nothing else stores. */
+[[nodiscard]] int size_of_cube() noexcept
+{
+    return state->cube_state.size();
+}
+
+/** Whether a size is one this application builds. */
+[[nodiscard]] bool valid_cube_size(int size) noexcept
+{
+    return size >= kMinCubeSize && size <= kMaxCubeSize;
+}
+
+void relayout_all() noexcept
+{
+    for (auto& surface : state->surfaces) relayout(surface);
+}
+
+/**
+ * Applies whatever sweep the controller has accumulated.
+ *
+ * Called from every point where a camera is about to be used, so the camera
+ * rendered with, the camera picked against, and the camera a gesture captures
+ * are always the same one.
+ */
+void drain_orbit() noexcept
+{
+    if (const auto delta = state->interaction.take_orbit_delta()) {
+        state->orbit.turn(delta->yaw_degrees, delta->pitch_degrees);
+    }
+}
+
+/**
+ * Puts a different cube in the place of the one that is there.
+ *
+ * Every command that replaces the cube comes through here, so the order is
+ * written once. The draft goes, because it is a colouring of the cube being
+ * replaced. Whatever was playing goes, with any turn of it still in flight,
+ * before the cube that turn would have landed on arrives. Then the cube, a
+ * controller for it, and an empty record: a command that has a record to put
+ * on the new cube writes it afterwards.
+ *
+ * The controller is replaced rather than told, because the size is the rule
+ * it turns moves down by and a gesture half made on the cube before is not
+ * something to carry across.
+ *
+ * `origin` is the colouring the session begins from when the cube was read
+ * from one, and nothing otherwise, so every fresh cube forgets where the last
+ * session began. Closing a draft does not do that on its own: only replacing
+ * the cube makes the colouring this session started from stop being true. It
+ * is taken by value so that the draft's own stickers can be handed over; they
+ * have left the draft by the time this closes it.
+ */
+void install_cube(cube::Cube next,
+                  std::vector<cube::FaceColor> origin) noexcept
+{
+    discard_painting();
+    discard_playback();
+
+    const int size = next.size();
+    state->cube_state = std::move(next);
+    state->interaction = interaction::InteractionController(size);
+    state->timeline.clear();
+    state->origin = std::move(origin);
+}
+
+}  // namespace detail
 
 bool initialize(std::uint32_t width, std::uint32_t height) noexcept
 {
@@ -1038,26 +1032,6 @@ void reset_cube() noexcept
 
     // Same split as scramble(): the cube is the only thing this command owns.
     install_cube(cube::Cube(size_of_cube()));
-}
-
-bool set_cube_size(int size) noexcept
-{
-    if (!state || !valid_cube_size(size)) return false;
-
-    // Already this size, so nothing to do and nothing to throw away. The same
-    // answer the view commands give, and for the same reason: asking for what
-    // is there is not a command.
-    if (size == size_of_cube()) return true;
-
-    // A reset onto a cube of the new size: the record, the draft and whatever
-    // was playing go the way they do for a reset, and nothing else does.
-    install_cube(cube::Cube(size));
-    return true;
-}
-
-int cube_size() noexcept
-{
-    return state ? size_of_cube() : 0;
 }
 
 namespace {
@@ -1633,148 +1607,6 @@ bool turn_face(cube::Face face, int first_depth, int last_depth,
     if (!move) return false;
 
     return state->interaction.start_move(*move);
-}
-
-bool set_view_mode(graphics::ViewMode mode) noexcept
-{
-    if (!state || !graphics::view_mode_from(static_cast<int>(mode))) {
-        return false;
-    }
-    if (mode == state->view_mode) return true;
-
-    // Preserve every orbit step produced before the command, then end only
-    // gestures that still depend on the old viewport. Snaps survive cancel.
-    drain_orbit();
-    state->interaction.cancel();
-    state->view_mode = mode;
-    relayout_all();
-    return true;
-}
-
-graphics::ViewMode view_mode() noexcept
-{
-    return state ? state->view_mode : kDefaultViewMode;
-}
-
-bool set_flat_style(graphics::FlatStyle style) noexcept
-{
-    if (!state || !graphics::flat_style_from(static_cast<int>(style))) {
-        return false;
-    }
-    if (style == state->flat_style) return true;
-
-    // A drag holds a rectangle that is about to move or vanish, so it goes the
-    // same way a resize sends it. A snap only animates an angle and carries on.
-    state->interaction.cancel();
-    state->flat_style = style;
-    relayout_all();
-    return true;
-}
-
-graphics::FlatStyle flat_style() noexcept
-{
-    return state ? state->flat_style : kDefaultFlatStyle;
-}
-
-bool set_palette(graphics::Palette palette) noexcept
-{
-    if (!state || !graphics::palette_from(static_cast<int>(palette))) {
-        return false;
-    }
-
-    // No cancel and no relayout: the palette is read where a sticker becomes
-    // pixels and nowhere else, so a drag keeps its grip and a snap keeps its
-    // angle. The change shows on the next frame that is drawn anyway.
-    state->palette = palette;
-    return true;
-}
-
-graphics::Palette palette() noexcept
-{
-    return state ? state->palette : kDefaultPalette;
-}
-
-std::uintptr_t lighting_buffer(std::uint32_t count) noexcept
-{
-    if (!state) return 0;
-    if (!graphics::Lighting::valid_count(count)) return 0;
-
-    state->lighting_values.assign(count, 0.0f);
-    return reinterpret_cast<std::uintptr_t>(state->lighting_values.data());
-}
-
-bool set_lighting(std::uint32_t count) noexcept
-{
-    if (!state) return false;
-    if (count != state->lighting_values.size()) return false;
-
-    // Read into a copy and swap only when the whole list is good, so a
-    // refused list leaves the lights exactly as they were.
-    graphics::Lighting next = state->lighting;
-    if (!next.from_values(state->lighting_values.data(), count)) return false;
-    state->lighting = std::move(next);
-    return true;
-}
-
-std::uint32_t lighting_count() noexcept
-{
-    if (!state) return 0;
-    return static_cast<std::uint32_t>(state->lighting.value_count());
-}
-
-std::uintptr_t lighting_values(std::uint32_t count) noexcept
-{
-    if (!state) return 0;
-    if (count != state->lighting.value_count()) return 0;
-
-    state->lighting_values.assign(count, 0.0f);
-    state->lighting.to_values(state->lighting_values.data());
-    return reinterpret_cast<std::uintptr_t>(state->lighting_values.data());
-}
-
-bool set_canvas_theme(graphics::CanvasTheme theme) noexcept
-{
-    if (!state || !graphics::canvas_theme_from(static_cast<int>(theme))) {
-        return false;
-    }
-
-    // Both, in one place: the field is what a surface sized later is cleared
-    // to and the renderer is what a frame reads, and a refused value has
-    // already left above, so neither can be written without the other.
-    //
-    // The ground is the renderer's rather than the scene's, so no frame's
-    // inputs describe it: every target holds the old one until it is drawn
-    // again, which is what forgetting its last frame says.
-    state->canvas_theme = theme;
-    for (auto& surface : state->surfaces) {
-        if (surface.renderer) {
-            surface.renderer->set_background(graphics::canvas_background(theme));
-        }
-        surface.drawn.reset();
-    }
-    return true;
-}
-
-bool set_speed_scale(float scale) noexcept
-{
-    if (!state) return false;
-
-    // Not-a-number and infinity are refused rather than clamped: they are not
-    // a speed someone asked for and got trimmed, they are not a speed at all,
-    // and a duration made from either stops an animation from ever ending.
-    if (!std::isfinite(scale)) return false;
-
-    state->speed_scale = std::clamp(scale, kMinSpeedScale, kMaxSpeedScale);
-
-    // A turn already running keeps the duration it started with. The value is
-    // read where a move begins, so nothing in flight is re-timed halfway and
-    // no frame jumps under a slider being dragged.
-    return true;
-}
-
-float speed_scale() noexcept
-{
-    return state ? state->speed_scale : kDefaultSpeedScale;
 }
 
 void reset_view() noexcept

@@ -14,6 +14,7 @@ application_lib = static_library(
   'rubiks-engine',
   files(
     'app/Application.cpp',
+    'app/Settings.cpp',
     'render/ThorVGSoftwareRenderer.cpp',
   ),
   dependencies: [interaction_dep, cube_solver_dep, thorvg_dep],

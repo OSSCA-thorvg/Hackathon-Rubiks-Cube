@@ -8,10 +8,7 @@
  */
 export type AppMode = 'minimal' | 'extended';
 
-/**
- * The query parameter that opens the full app. index.html repeats the name in
- * its inline theme script, which runs before any module can be imported.
- */
+/** The query parameter that opens the full app. */
 export const EXTENDED_PARAM = 'extended';
 
 /** Where the minimal page's "Full version" link goes: this page, extended. */

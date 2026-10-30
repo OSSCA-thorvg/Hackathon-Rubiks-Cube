@@ -44,6 +44,11 @@ export type GameShell = {
    * full app, which has those buttons themselves.
    */
   readonly minimalReset: HTMLButtonElement | null;
+  /**
+   * The minimal page's sun-and-moon button, which stands in for the full
+   * app's three theme choices; null on the full app.
+   */
+  readonly themeToggle: HTMLButtonElement | null;
 };
 
 /** The canvas each view is drawn on. */
@@ -132,6 +137,8 @@ export const ICONS = {
   minus: '<path d="M5 12h14"/>',
   plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
   home: '<path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9"/>',
+  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+  more: '<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><path d="M17 14v6"/><path d="M14 17h6"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
   sound: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/>',
   reset: '<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/>',
@@ -295,7 +302,7 @@ export function createGameShell(
   // The minimal page is the same page with less of it on show: the game
   // controller is handed every control either way, and what the minimal page
   // has no use for the stylesheet keeps off the screen by `data-mode`. Only
-  // its own two controls are written for it alone.
+  // its own three controls are written for it alone.
   const minimal = mode === 'minimal';
   host.innerHTML = `
 <main class="game-shell" data-mode="${mode}" data-game-state="idle" data-sticker-palette="classic" data-panels="closed">
@@ -308,6 +315,7 @@ export function createGameShell(
       </div>
       <button class="chip-button size-chip" type="button" id="cube-size-chip"><span class="visually-hidden">Cube size </span><span id="cube-size-label">${DEFAULT_CUBE_SIZE}×${DEFAULT_CUBE_SIZE}×${DEFAULT_CUBE_SIZE}</span>${icon(ICONS.chevron, 16)}</button>
     </div>
+    ${minimal ? `<button class="pill-button pill-button--icon theme-toggle" type="button" id="theme-toggle" aria-label="Dark theme" aria-pressed="false"><span class="theme-toggle__light">${icon(ICONS.sun, 18)}</span><span class="theme-toggle__dark">${icon(ICONS.moon, 18)}</span></button>` : ''}
 
     <div class="app-header__tools">
       <button class="pill-button command-trigger" type="button" id="command-trigger"
@@ -401,7 +409,7 @@ export function createGameShell(
     ${minimal ? `<button class="dock-button dock-button--side" type="button" id="minimal-reset" disabled>${icon(ICONS.reset, 18)}<span class="dock-button__label">Reset</span></button>` : ''}
     <button class="dock-button dock-button--round" type="button" id="redo" aria-label="Redo">${icon(ICONS.redo)}</button>
     <button class="dock-button dock-button--side" type="button" id="solve">${icon(ICONS.solve, 18)}<span class="dock-button__label">Solve</span></button>
-    ${minimal ? `<a class="dock-button dock-button--link" id="full-version" href="${EXTENDED_HREF}">Full version</a>` : ''}
+    ${minimal ? `<a class="dock-button dock-button--round dock-button--link" id="full-version" href="${EXTENDED_HREF}" aria-label="Full version" title="Full version">${icon(ICONS.more)}</a>` : ''}
   </div>
 
   <div class="details-rail" role="group" aria-label="Details">
@@ -682,6 +690,9 @@ export function createGameShell(
     },
     minimalReset: minimal
       ? requireElement<HTMLButtonElement>(root, '#minimal-reset')
+      : null,
+    themeToggle: minimal
+      ? requireElement<HTMLButtonElement>(root, '#theme-toggle')
       : null,
   };
 }

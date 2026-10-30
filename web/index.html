@@ -23,13 +23,11 @@
        * module, and a third value here would only ever be a value the
        * controller demotes to System on the very next line it runs.
        *
-       * Only on the full app, which `?extended` opens (src/AppMode.ts): the
-       * minimal page has no theme choice and follows the system.
+       * Both pages read it: the minimal page's sun and moon save the same
+       * choice the full app's Settings do.
        */
       try {
-        var saved = new URLSearchParams(location.search).has('extended')
-          ? localStorage.getItem('thorvg-rubiks-theme')
-          : null;
+        var saved = localStorage.getItem('thorvg-rubiks-theme');
         if (saved === 'light' || saved === 'dark') {
           document.documentElement.dataset.theme = saved;
         }

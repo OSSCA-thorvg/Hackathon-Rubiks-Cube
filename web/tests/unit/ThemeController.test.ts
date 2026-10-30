@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   attachThemeController,
   attachThemeSelector,
+  attachThemeToggle,
   canvasThemeOf,
   effectiveTheme,
   loadThemePreference,
@@ -243,6 +244,57 @@ describe('attachThemeSelector', () => {
     selector.teardown();
 
     buttons[1]!.click();
+    expect(controller.preference()).toBe('system');
+  });
+});
+
+describe('attachThemeToggle', () => {
+  function build(systemDark: boolean) {
+    const media = createMediaQuery(systemDark);
+    const root = document.createElement('html');
+    const storage = createStorage();
+    const controller = attachThemeController({
+      root,
+      systemDark: media.query,
+      storage,
+    });
+    const button = document.createElement('button');
+    const toggle = attachThemeToggle({ button, controller });
+    return { button, controller, toggle, media, root, storage };
+  }
+
+  it('shows the theme the page is in, the machine\'s while it decides', () => {
+    const { button, media } = build(false);
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+
+    media.set(true);
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('chooses the other theme outright and saves it', () => {
+    const { button, controller, media, root, storage } = build(true);
+
+    button.click();
+    expect(controller.preference()).toBe('light');
+    expect(root.dataset.theme).toBe('light');
+    expect(storage.getItem(THEME_STORAGE_KEY)).toBe('light');
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+
+    // Chosen, so the machine no longer moves it.
+    media.set(false);
+    media.set(true);
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+
+    button.click();
+    expect(controller.preference()).toBe('dark');
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('stops answering the button at teardown', () => {
+    const { button, controller, toggle } = build(false);
+    toggle.teardown();
+
+    button.click();
     expect(controller.preference()).toBe('system');
   });
 });

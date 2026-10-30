@@ -2354,12 +2354,36 @@ kbd {
   display: none;
 }
 
-/* The link to the full app sits in the dock as a button would, and says what
-   it is in words at every width. */
+/* The link to the full app sits in the dock as a round button would, its
+   name in a tooltip: an icon of more panels than this page shows. */
 .dock-button--link {
-  padding: 0 16px;
   color: var(--color-text-soft);
   text-decoration: none;
+}
+
+/* The sun-and-moon button stands where the full app's tools would, and shows
+   the theme the page is in: the sun while light, the moon while dark. */
+/* Quieter than the pills it stands in for: the icon with the faintest ring
+   at rest, the ring and a fill coming up under the pointer. */
+.theme-toggle {
+  border-color: var(--color-line);
+  color: var(--color-text-soft);
+  background: transparent;
+}
+
+.theme-toggle:hover:not(:disabled) {
+  border-color: var(--color-line-strong);
+  color: var(--color-text);
+  background: var(--color-hover);
+}
+
+.theme-toggle > span {
+  display: flex;
+}
+
+.theme-toggle:not([aria-pressed="true"]) .theme-toggle__dark,
+.theme-toggle[aria-pressed="true"] .theme-toggle__light {
+  display: none;
 }
 
 /* Page states */
@@ -2398,7 +2422,10 @@ kbd {
 /* The clock, the link, the menu and the size go, because there is no session
    to time, share, command or size. The gear stays: the theme is the page's
    own and works whether or not an engine ever arrived, and a browser that
-   cannot run the cube is still a browser somebody reads this message on. */
+   cannot run the cube is still a browser somebody reads this message on.
+   The minimal page's sun and moon go: it is given a theme only once the
+   browser is known to run the cube. */
+#app[data-state="unsupported"] #theme-toggle,
 #app[data-state="unsupported"] #timer,
 #app[data-state="unsupported"] #share,
 #app[data-state="unsupported"] #command-trigger,

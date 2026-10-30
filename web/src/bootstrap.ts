@@ -24,6 +24,7 @@ import {
 import {
   attachThemeController,
   attachThemeSelector,
+  attachThemeToggle,
   type StorageLike,
   type ThemeController,
 } from './ui/ThemeController.ts';
@@ -41,7 +42,7 @@ export type SupportCheckFn = () => boolean;
  * is not exercising the theme rather than having to stand in for a media
  * query and a storage.
  */
-export type ThemeFactory = (mode: AppMode) => ThemeController | null;
+export type ThemeFactory = () => ThemeController | null;
 
 /**
  * The width from which the rails sit beside the stage and the panels can be
@@ -242,15 +243,15 @@ function readableStorage(): StorageLike | null {
 /**
  * Builds the real theme controller from the page's own globals.
  *
- * The minimal page has no theme selector and follows the system, so it is
- * given no storage: a choice saved on the full app is neither read nor
- * written there.
+ * Both pages keep the one saved choice, so a theme picked with the minimal
+ * page's sun and moon is the one the full app opens in, and the other way
+ * round.
  */
-export function createPageTheme(mode: AppMode = 'extended'): ThemeController {
+export function createPageTheme(): ThemeController {
   return attachThemeController({
     root: document.documentElement,
     systemDark: window.matchMedia('(prefers-color-scheme: dark)'),
-    storage: mode === 'extended' ? readableStorage() : null,
+    storage: readableStorage(),
   });
 }
 
@@ -335,7 +336,7 @@ export function bootstrap(
 
   // After the support check, so a browser that cannot run the cube is told so
   // rather than failing on a media query on the way there.
-  const theme: ThemeController | null = createTheme(mode);
+  const theme: ThemeController | null = createTheme();
 
   // The hint is a first-visit line and nothing else: the first gesture is
   // proof it was read, and there is nothing to remember past that. A reload
@@ -372,10 +373,13 @@ export function bootstrap(
     },
   ];
 
-  // The minimal page is the cube, its net and three buttons: none of the
-  // page's own small controllers below is attached, and no key turns the
-  // cube. A drag still turns and orbits, which is the engine's own.
+  // The minimal page is the cube, its net, three buttons and the sun and
+  // moon: none of the page's own small controllers below is attached, and no
+  // key turns the cube. A drag still turns and orbits, which is the engine's own.
   if (mode === 'minimal') {
+    if (theme !== null && shell.themeToggle !== null) {
+      attachThemeToggle({ button: shell.themeToggle, controller: theme });
+    }
     return start({
       canvas: shell.views.cube,
       views,

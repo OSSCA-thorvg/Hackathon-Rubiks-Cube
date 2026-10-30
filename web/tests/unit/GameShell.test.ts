@@ -78,6 +78,7 @@ describe('the two pages', () => {
     const shell = createGameShell(document.createElement('div'));
     expect(shell.root.dataset.mode).toBe('extended');
     expect(shell.minimalReset).toBeNull();
+    expect(shell.themeToggle).toBeNull();
     expect(shell.root.querySelector('#full-version')).toBeNull();
   });
 
@@ -104,5 +105,11 @@ describe('the two pages', () => {
     expect(
       shell.root.querySelector('#full-version')?.getAttribute('href'),
     ).toBe('./?extended');
+  });
+
+  it('gives the minimal page a sun-and-moon button in the header', () => {
+    const shell = createGameShell(document.createElement('div'), 'minimal');
+    expect(shell.themeToggle?.closest('.app-header')).not.toBeNull();
+    expect(shell.themeToggle?.getAttribute('aria-label')).toBe('Dark theme');
   });
 });

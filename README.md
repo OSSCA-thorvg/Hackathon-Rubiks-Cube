@@ -10,7 +10,7 @@ ThorVG를 submodule로 포함하고 있어 `--recurse-submodules` 옵션을 사�
 git clone --recurse-submodules https://github.com/OSSCA-thorvg/Hackathon-Rubiks-Cube
 ```
 
-👉 **[Live Demo](https://ossca-thorvg.github.io/Hackathon-Rubiks-Cube/)** — 기본은 큐브와 전개도, Scramble·Reset·Solve만 있는 minimal 데모이고, [`?extended`](https://ossca-thorvg.github.io/Hackathon-Rubiks-Cube/?extended)를 붙이면 전체 앱이 열립니다.
+👉 **[Live Demo](https://ossca-thorvg.github.io/Hackathon-Rubiks-Cube/)** — 기본은 큐브와 전개도, Scramble·Reset·Solve와 해·달 테마 토글만 있는 minimal 데모이고, [`?extended`](https://ossca-thorvg.github.io/Hackathon-Rubiks-Cube/?extended)를 붙이면 전체 앱이 열립니다.
 
 ## 기술 스택
 

@@ -72,12 +72,15 @@ for (const [name, viewport] of [
       'Ready. Scramble the cube to begin.',
     );
     expect(await visibleControls(page)).toEqual([
+      'theme-toggle',
       'scramble',
       'minimal-reset',
       'solve',
       'full-version',
     ]);
-    await expect(page.locator('#full-version')).toHaveText('Full version');
+    await expect(page.locator('#full-version')).toHaveAccessibleName(
+      'Full version',
+    );
 
     // Everything else the full app has is off the screen.
     for (const selector of [
@@ -232,6 +235,36 @@ test('Full version opens this page as the full app', async ({ page }) => {
   await expect(page.locator('#settings-trigger')).toBeVisible();
   await expect(page.locator('.view-rail')).toBeVisible();
   await expect(page.locator('#full-version')).toHaveCount(0);
+});
+
+test('the sun and moon switch the theme, and the full app keeps it', async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.setViewportSize(DESKTOP);
+  await open(page);
+  const toggle = page.locator('#theme-toggle');
+  const background = (): Promise<string> =>
+    page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+
+  // The machine is light, so the sun shows and nothing is chosen yet.
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('html')).not.toHaveAttribute('data-theme');
+  const light = await background();
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  expect(await background()).not.toBe(light);
+
+  // The full app opens dark, with Dark chosen in its Settings.
+  await page.locator('#full-version').click();
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.locator('[data-theme-choice="dark"]')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
 });
 
 test('a shared link without ?extended opens its cube on the minimal page', async ({

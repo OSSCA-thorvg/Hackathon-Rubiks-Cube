@@ -283,7 +283,7 @@ describe('bootstrap', () => {
         'view-rings',
         'view-axes',
       ]);
-      expect(theme).toHaveBeenCalledWith('minimal');
+      expect(theme).toHaveBeenCalledOnce();
     });
 
     it('has its own Reset and a link to the full app', async () => {
@@ -292,7 +292,7 @@ describe('bootstrap', () => {
 
       const link = app.querySelector<HTMLAnchorElement>('#full-version')!;
       expect(link.getAttribute('href')).toBe('./?extended');
-      expect(link.textContent).toBe('Full version');
+      expect(link.getAttribute('aria-label')).toBe('Full version');
       expect(link.closest('.action-dock')).not.toBeNull();
       expect(app.querySelector('#minimal-reset')?.closest('.action-dock')).not.toBeNull();
     });

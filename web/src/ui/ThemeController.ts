@@ -273,3 +273,45 @@ export function attachThemeSelector(
     },
   };
 }
+
+export type ThemeToggleOptions = {
+  /** The one button, pressed while the page is dark. */
+  readonly button: HTMLButtonElement;
+  readonly controller: ThemeController;
+};
+
+export type ThemeToggle = {
+  teardown(): void;
+};
+
+/**
+ * Points the minimal page's one sun-and-moon button at the controller.
+ *
+ * Unlike the selector it shows the effective theme, because two states are
+ * all one button has: a page following a machine that has gone dark shows the
+ * moon. A press chooses the other theme outright, so from then on the machine
+ * no longer decides -- the full app's selector shows that as Light or Dark.
+ */
+export function attachThemeToggle(options: ThemeToggleOptions): ThemeToggle {
+  const { button, controller } = options;
+
+  const show = (): void => {
+    button.setAttribute('aria-pressed', String(controller.effective() === 'dark'));
+  };
+
+  const onClick = (): void => {
+    controller.setPreference(controller.effective() === 'dark' ? 'light' : 'dark');
+    show();
+  };
+
+  button.addEventListener('click', onClick);
+  const unsubscribe = controller.subscribe(show);
+  show();
+
+  return {
+    teardown: (): void => {
+      button.removeEventListener('click', onClick);
+      unsubscribe();
+    },
+  };
+}

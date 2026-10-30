@@ -14,7 +14,7 @@
 // the domain: this links the cube target alone.
 //
 // The permutation under test is not new code. `turned_position` and the face
-// cycle are what `Cube` has always turned cubies with, and they are
+// cycle are what `Cube` turns its stored faces by, and they are
 // already pinned to a physical cube by the known-answer test next door. So
 // what is checked here is the exposure and the ring construction built on it:
 // a handful of answers worked out by hand, then structure.
@@ -127,7 +127,7 @@ TEST_CASE("a quarter turn carries a corner sticker where the cube does")
 
     REQUIRE(moved == SurfaceSticker{kLast, kLast, 0, Face::Back});
 
-    // And the position agrees with what Cube turns cubies by.
+    // And the piece's position moves the same way.
     REQUIRE(turned_position(Axis::X, CubiePosition{kLast, kLast, kLast},
                             kSize) == CubiePosition{kLast, kLast, 0});
 }

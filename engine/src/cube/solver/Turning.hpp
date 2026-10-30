@@ -49,6 +49,11 @@ public:
             }
             return;
         }
+        // No runtime answer past this, deliberately. Every Cube was turned
+        // from a solved one or assembled from a painting proven to be one,
+        // and turning carries the six centres round as one rigid frame, so
+        // some orientation above always matches. A release build that ever
+        // got here would keep the home frame and solve towards it.
         assert(false && "a reachable odd cube has a rigid fixed-centre frame");
     }
 

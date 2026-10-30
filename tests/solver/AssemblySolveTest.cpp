@@ -124,10 +124,11 @@ TEST_CASE("every size the application builds is read and solved", "[.big]")
         INFO("size " << size);
         REQUIRE(built.has_value());
 
-        // Paintings and not cubes: a cubie's hidden stickers are nothing a
-        // painting could have mentioned, so the two are the same cube to look
-        // at without being the same `Cube`.
+        // Compared as paintings, because a painting is what was read. A
+        // scramble never turns an odd cube's middle layer, so the reading
+        // keeps the cube the way it was held and the cubes are equal too.
         REQUIRE(painting_of(*built) == painting_of(cube));
+        REQUIRE(*built == cube);
 
         auto working = *built;
         apply_all(working, big.solve(working));

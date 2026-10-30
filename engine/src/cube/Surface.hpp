@@ -19,7 +19,7 @@ namespace rubiks::cube {
  * one: where does *this* sticker go. Color cannot answer it — six colors over
  * fifty-four stickers, so an error that permutes stickers within one face
  * reads as correct. So a sticker gets an identity here, and the permutation
- * that carries it is the same one `Cube` already turns cubies with.
+ * that carries it is the same one `Cube` turns its stored faces by.
  *
  * Screen-free on purpose: this is a property of the cube, not of any view of
  * it, and both the unfolded net and the ring diagram lay coordinates over the

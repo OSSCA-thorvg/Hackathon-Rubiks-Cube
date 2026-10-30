@@ -1177,9 +1177,9 @@ namespace {
  * By looking rather than by being told. Every command that replaces the cube
  * and every commit that turns it would otherwise have to remember to say so,
  * and a skipped frame is only safe if none of them ever forgets. The look is
- * not free -- a cube of N layers is N^3 cubies, about twenty-two thousand at
- * the largest and half a megabyte to compare -- but it is a fraction of a
- * millisecond next to a frame of that cube that takes a dozen.
+ * not free -- a cube of N layers is 6N^2 colours, 4704 at the largest -- but
+ * it is a fraction of a millisecond next to a frame of that cube that takes a
+ * dozen.
  */
 void note_cube_change() noexcept
 {

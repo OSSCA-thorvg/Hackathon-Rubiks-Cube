@@ -264,17 +264,6 @@ struct RingsMetrics {
     return quad;
 }
 
-/** Where a sticker ends up after `times` positive quarter turns. */
-[[nodiscard]] SurfaceSticker turned_times(SurfaceSticker sticker, Axis axis,
-                                          int size, int times) noexcept
-{
-    const int steps = cube::normalized_turns(times);
-    for (int step = 0; step < steps; ++step) {
-        sticker = cube::turned_sticker(sticker, axis, size);
-    }
-    return sticker;
-}
-
 /**
  * One ring's slots as the drawing places them, with the way round they run.
  *
@@ -621,10 +610,11 @@ RenderScene build_rings_scene(cube::CubeView state, const Rect& rect,
         // cluster. Carrying the angle and the reach separately, from the slot
         // it leaves to the slot it takes, reads as that same rotation and
         // arrives where the cube says it should.
-        const Vec2* from = place(turned_times(sticker, active->axis, size,
-                                              whole));
-        const Vec2* to =
-            place(turned_times(sticker, active->axis, size, whole + 1));
+        const Vec2* from = place(cube::moved_sticker(
+            sticker, cube::CubeMove{active->axis, active->layers, whole}, size));
+        const Vec2* to = place(cube::moved_sticker(
+            sticker, cube::CubeMove{active->axis, active->layers, whole + 1},
+            size));
         if (!from || !to) {
             emit(sticker, *at_rest, scene.faces);
             continue;

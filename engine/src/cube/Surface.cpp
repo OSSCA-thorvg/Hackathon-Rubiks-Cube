@@ -249,6 +249,17 @@ SurfaceSticker turned_sticker(const SurfaceSticker& sticker, Axis axis,
     return SurfaceSticker{to.x, to.y, to.z, turned_face(axis, sticker.face)};
 }
 
+SurfaceSticker moved_sticker(const SurfaceSticker& sticker, const CubeMove& move,
+                             int size) noexcept
+{
+    if (!in_layers(move.layers, coordinate_on(move.axis, sticker))) return sticker;
+    SurfaceSticker moved = sticker;
+    for (int turn = 0, count = normalized_turns(move.quarter_turns); turn < count; ++turn) {
+        moved = turned_sticker(moved, move.axis, size);
+    }
+    return moved;
+}
+
 std::vector<SurfaceSticker> surface_stickers(int size)
 {
     // Laid out by painting_index() rather than walked in an order of its own,

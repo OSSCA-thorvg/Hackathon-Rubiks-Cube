@@ -336,12 +336,7 @@ struct Commutator {
 /** Where a sticker ends up after one turn. */
 [[nodiscard]] SurfaceSticker carried_one(SurfaceSticker cell, const Turn& step, int size)
 {
-    const CubeMove move = to_move(step, size);
-    if (!in_layers(move.layers, coordinate_on(move.axis, cell))) return cell;
-    for (int turn = 0, count = normalized_turns(move.quarter_turns); turn < count; ++turn) {
-        cell = turned_sticker(cell, move.axis, size);
-    }
-    return cell;
+    return moved_sticker(cell, to_move(step, size), size);
 }
 
 /** Where a sticker ends up after a run of turns. */

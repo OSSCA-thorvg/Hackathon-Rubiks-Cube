@@ -1,8 +1,8 @@
 diff --git a/engine/src/cube/solver/Reduction.cpp b/engine/src/cube/solver/Reduction.cpp
-index d228384..d7116f5 100644
+index 6c303b2..2fc0056 100644
 --- a/engine/src/cube/solver/Reduction.cpp
 +++ b/engine/src/cube/solver/Reduction.cpp
-@@ -478,6 +478,14 @@ public:
+@@ -473,6 +473,14 @@ public:
          return static_cast<int>(cells_.size());
      }
  
@@ -17,7 +17,7 @@ index d228384..d7116f5 100644
      /** How many of them are showing the colour asked of them. */
      [[nodiscard]] int at_home(const Cube& cube) const
      {
-@@ -766,11 +774,31 @@ private:
+@@ -761,11 +769,31 @@ private:
      return which;
  }
  
@@ -49,7 +49,7 @@ index d228384..d7116f5 100644
  };
  
  /** One choice of setup and tool, or nothing when none was any good. */
-@@ -805,6 +833,7 @@ public:
+@@ -800,6 +828,7 @@ public:
              prepared.steps = written_out(tool);
              prepared.moved = centres_.hops(prepared.steps);
              prepared.carries = centres_.carries(prepared.moved);
@@ -57,7 +57,7 @@ index d228384..d7116f5 100644
              if (prepared.moved.empty()) continue;
              centre_tools_.push_back(std::move(prepared));
          }
-@@ -817,6 +846,51 @@ public:
+@@ -812,6 +841,51 @@ public:
                      : sources_after(centres_, {setup}));
          }
  
@@ -109,7 +109,7 @@ index d228384..d7116f5 100644
      }
  
      [[nodiscard]] const Board& centres() const noexcept { return centres_; }
-@@ -832,6 +906,20 @@ public:
+@@ -827,6 +901,20 @@ public:
      {
          return centre_sources_;
      }
@@ -130,7 +130,7 @@ index d228384..d7116f5 100644
  
  private:
      /** Each cell answering for itself, which is what no setup at all does. */
-@@ -866,6 +954,10 @@ private:
+@@ -861,6 +949,10 @@ private:
      std::vector<Prepared> centre_tools_;
      std::vector<Turn> centre_setups_;
      std::vector<std::vector<int>> centre_sources_;
@@ -141,7 +141,7 @@ index d228384..d7116f5 100644
  };
  
  /**
-@@ -1154,22 +1246,68 @@ private:
+@@ -1149,22 +1241,68 @@ private:
  };
  
  /**
@@ -224,7 +224,7 @@ index d228384..d7116f5 100644
   */
  void build_centres(Work& work, const CentreWorkshop& shop)
  {
-@@ -1182,28 +1320,52 @@ void build_centres(Work& work, const CentreWorkshop& shop)
+@@ -1177,28 +1315,52 @@ void build_centres(Work& work, const CentreWorkshop& shop)
  
      const int target = board.target();
  

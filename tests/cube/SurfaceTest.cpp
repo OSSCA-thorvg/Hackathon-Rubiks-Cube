@@ -30,6 +30,7 @@ using rubiks::cube::SurfaceSticker;
 using rubiks::cube::axis_of;
 using rubiks::cube::coordinate_on;
 using rubiks::cube::layer;
+using rubiks::cube::moved_sticker;
 using rubiks::cube::outer_layer;
 using rubiks::cube::ring_slots;
 using rubiks::cube::turned_face;
@@ -157,6 +158,27 @@ TEST_CASE("turning stickers is a permutation of the surface that repeats at 4")
 
         // Onto as well as into: 54 distinct images of 54 stickers.
         REQUIRE(images.size() == stickers.size());
+    }
+}
+
+TEST_CASE("a move carries only the stickers of the layers it selects")
+{
+    const auto stickers = all_stickers(kSize);
+    for (const auto axis : rubiks::cube::axes()) {
+        for (int at = 0; at < kSize; ++at) {
+            for (const int turns : {-5, -1, 0, 1, 2, 3, 4, 7}) {
+                const CubeMove move{axis, layer(at), turns};
+                for (const auto& sticker : stickers) {
+                    SurfaceSticker expected = sticker;
+                    if (coordinate_on(axis, sticker) == at) {
+                        for (int i = 0; i < ((turns % 4) + 4) % 4; ++i) {
+                            expected = turned_sticker(expected, axis, kSize);
+                        }
+                    }
+                    REQUIRE(moved_sticker(sticker, move, kSize) == expected);
+                }
+            }
+        }
     }
 }
 

@@ -280,6 +280,15 @@ void set_coordinate(CubiePosition& position, Axis axis, int value) noexcept;
                                             Axis axis, int size) noexcept;
 
 /**
+ * Where a sticker is after a move: carried round as many quarter turns as the
+ * move makes when its layer is one the move selects, and left where it is
+ * otherwise.
+ */
+[[nodiscard]] SurfaceSticker moved_sticker(const SurfaceSticker& sticker,
+                                           const CubeMove& move,
+                                           int size) noexcept;
+
+/**
  * Every sticker of the cube's surface, once each, face by face.
  *
  * Screen-free like the rest of this header, which is why it lives here rather

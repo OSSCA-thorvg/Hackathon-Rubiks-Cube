@@ -206,12 +206,9 @@ private:
         for (const Axis axis : axes()) {
             for (int at = 0; at < size_; ++at) {
                 std::vector<int> lands(slots_.size(), 0);
+                const CubeMove quarter{axis, layer(at), 1};
                 for (std::size_t i = 0; i < slots_.size(); ++i) {
-                    SurfaceSticker s = slots_[i];
-                    if (coordinate_on(axis, s) == at) {
-                        s = turned_sticker(s, axis, size_);
-                    }
-                    lands[i] = slot_of(s);
+                    lands[i] = slot_of(moved_sticker(slots_[i], quarter, size_));
                 }
                 steps.push_back(std::move(lands));
             }

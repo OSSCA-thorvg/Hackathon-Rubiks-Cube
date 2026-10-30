@@ -2324,6 +2324,44 @@ kbd {
   }
 }
 
+/*
+ * The minimal page: the brand, the status line, the cube beside its net, and
+ * one row of Scramble, Reset, Solve and the way to the full app. The shell
+ * is the full app's, so what this page has no use for is taken off the
+ * screen here -- and out of the tab order and the accessibility tree with
+ * it. Nothing on this page opens the share card, the paint bar, the panels,
+ * Settings or the menu either; they are listed so that stays true.
+ */
+.game-shell[data-mode="minimal"] :is(
+  .size-chip,
+  .app-header__tools,
+  .share-card,
+  .timer,
+  .axes-badge,
+  .view-rail,
+  .paint-bar,
+  .timeline,
+  .details-rail,
+  .detail-panels,
+  .settings-backdrop,
+  .settings,
+  .command-backdrop,
+  .command-palette,
+  #rewind,
+  #undo,
+  #redo
+) {
+  display: none;
+}
+
+/* The link to the full app sits in the dock as a button would, and says what
+   it is in words at every width. */
+.dock-button--link {
+  padding: 0 16px;
+  color: var(--color-text-soft);
+  text-decoration: none;
+}
+
 /* Page states */
 
 #app[data-state="loading"] .game-stage canvas {

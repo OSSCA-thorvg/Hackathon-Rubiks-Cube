@@ -58,7 +58,7 @@ test.use({ viewport: DESKTOP });
 
 test('a turn that lands makes a sound, and mute stops it', async ({ page }) => {
   await countVoices(page);
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('.game-shell')).toBeVisible();
 
   // Nothing has been touched yet, so no context has been opened -- the policy
@@ -91,7 +91,7 @@ test('a turn that lands makes a sound, and mute stops it', async ({ page }) => {
 
 test('watching turns the cube in silence', async ({ page }) => {
   await countVoices(page);
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('.game-shell')).toBeVisible();
 
   // A gesture first, so the context exists and silence afterwards means the

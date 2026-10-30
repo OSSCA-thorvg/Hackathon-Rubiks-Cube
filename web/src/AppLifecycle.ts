@@ -1,3 +1,4 @@
+import type { AppMode } from './AppMode.ts';
 import {
   attachPointer,
   type GestureLock,
@@ -168,6 +169,11 @@ export type StartAppOptions = {
   readonly theme?: ThemeSource;
   /** Whether a dialog is up over the cube, which the game's keys stay out of. */
   readonly blocked?: () => boolean;
+  /**
+   * Which page this is, handed on to the game controller. The minimal page
+   * also takes no lighting from the address. Absent, the full app.
+   */
+  readonly mode?: AppMode;
   /**
    * Test seams; production uses CubeEngine and the real globals. The engine
    * is created at the size its canvas is first given, which is this
@@ -347,6 +353,7 @@ export async function startApp(
   setState('loading', 'Loading engine…');
 
   const theme: ThemeSource | null = options.theme ?? null;
+  const mode: AppMode = options.mode ?? 'extended';
   const views = options.views ?? [];
 
   // Every canvas the engine draws on, the cube's first.
@@ -429,8 +436,9 @@ export async function startApp(
     if (theme !== null) engine.setCanvasTheme(canvasThemeOf(theme.effective()));
     // A lighting setup in the address, for tuning the lamps by eye without a
     // rebuild. Ahead of the first render like the theme, and never fatal: a
-    // list the engine refuses simply leaves the default lights on.
-    const lighting = readLightingQuery(loc.href);
+    // list the engine refuses simply leaves the default lights on. A tool of
+    // the full app's, so the minimal page does not read it.
+    const lighting = mode === 'extended' ? readLightingQuery(loc.href) : null;
     if (lighting !== null && !engine.setLighting(lighting)) {
       console.warn('Ignoring a lighting query the engine refused.', lighting);
     }
@@ -662,6 +670,7 @@ export async function startApp(
       ui: options.gameUi,
       startFrameLoop,
       blocked: options.blocked,
+      mode,
       // A failed gameplay command leaves the engine in an unknown state, so
       // it takes the same route out as a failed frame.
       onError: (error: unknown): void => {

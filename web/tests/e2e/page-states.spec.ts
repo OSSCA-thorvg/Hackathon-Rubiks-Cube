@@ -11,7 +11,7 @@ test('a browser without WebAssembly gets the unsupported page', async ({
   await page.addInitScript(`
     Object.defineProperty(window, 'WebAssembly', { value: undefined });
   `);
-  await page.goto('./');
+  await page.goto('./?extended');
 
   await expect(page.locator('#app')).toHaveAttribute(
     'data-state',
@@ -30,7 +30,7 @@ test('a browser without WebAssembly gets the unsupported page', async ({
 
 test('a failed engine load shows the error page', async ({ page }) => {
   await page.route('**/*.wasm', (route) => route.abort());
-  await page.goto('./');
+  await page.goto('./?extended');
 
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'error');
   await expect(page.locator('#status')).toContainText('Failed to start');

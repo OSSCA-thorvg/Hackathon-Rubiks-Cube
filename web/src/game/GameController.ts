@@ -16,7 +16,12 @@ import {
   type FaceTurns,
   type PaintCursor,
 } from '../wasm/CubeEngine.ts';
-import { createClickSound, type ClickSound } from './ClickSound.ts';
+import type { AppMode } from '../AppMode.ts';
+import {
+  createClickSound,
+  SILENT_SOUND,
+  type ClickSound,
+} from './ClickSound.ts';
 import { MoveLog } from './MoveLog.ts';
 import { parseMoves, type FaceLetter, type TypedTurn } from './notation.ts';
 import { Timeline, type TimelineUi } from './Timeline.ts';
@@ -227,6 +232,13 @@ export type GameControllerOptions = {
    * is given. Absent, nothing is ever in the way.
    */
   readonly blocked?: () => boolean;
+  /**
+   * Which page this is. The minimal page has no face-turn keys and no click
+   * -- the mute that goes with the click is in Settings, which it does not
+   * have -- so neither the window's keys nor a gesture for the audio context
+   * is listened for there. Absent, the full app.
+   */
+  readonly mode?: AppMode;
 };
 
 /**
@@ -561,8 +573,10 @@ export function attachGameController(
     },
   };
 
+  const extended = (options.mode ?? 'extended') === 'extended';
   let active = true;
-  const sound = options.sound ?? createClickSound();
+  const sound =
+    options.sound ?? (extended ? createClickSound() : SILENT_SOUND);
 
   /**
    * Runs one setup step, releasing the sound if it does not survive it.
@@ -1802,7 +1816,7 @@ export function attachGameController(
   ui.netCanvas.addEventListener('keydown', onNetKeyDown);
   ui.netCanvas.addEventListener('focus', onNetFocus);
   ui.netCanvas.addEventListener('blur', onNetBlur);
-  keyboardTarget.addEventListener('keydown', onKeyDown);
+  if (extended) keyboardTarget.addEventListener('keydown', onKeyDown);
 
   /**
    * Lets go of everything this function took hold of, once.

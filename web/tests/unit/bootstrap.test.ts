@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { appModeOf } from '../../src/AppMode.ts';
 import { bootstrap } from '../../src/bootstrap.ts';
 import type { StartAppOptions } from '../../src/AppLifecycle.ts';
 
 /**
  * Thin integration tests for the real DOM wiring: the lifecycle itself is
  * stubbed, but state transitions land on the actual #app container.
+ *
+ * The full app's tests name its mode; the minimal page has a block of its
+ * own at the end.
  */
 describe('bootstrap', () => {
   beforeEach(() => {
@@ -30,6 +34,7 @@ describe('bootstrap', () => {
       },
       () => true,
       () => null,
+      'extended',
     );
 
     expect(app.querySelector('canvas')).not.toBeNull();
@@ -148,6 +153,7 @@ describe('bootstrap', () => {
       () => new Promise<never>(() => {}),
       () => true,
       () => null,
+      'extended',
     );
     await Promise.resolve();
 
@@ -170,6 +176,7 @@ describe('bootstrap', () => {
       },
       () => true,
       () => null,
+      'extended',
     );
 
     expect(app.dataset.state).toBe('error');
@@ -196,6 +203,7 @@ describe('bootstrap', () => {
       },
       () => true,
       () => null,
+      'extended',
     );
     expect(app.dataset.state).toBe('ready');
 
@@ -211,12 +219,131 @@ describe('bootstrap', () => {
     const app = createApp();
     const start = vi.fn();
 
-    await bootstrap(app, start, () => false, () => null);
+    await bootstrap(app, start, () => false, () => null, 'extended');
 
     expect(start).not.toHaveBeenCalled();
     expect(app.dataset.state).toBe('unsupported');
     expect(app.querySelector('#status')?.textContent).toContain(
       'does not support',
     );
+  });
+
+  describe('the minimal page', () => {
+    /** Boots the minimal page against a stubbed lifecycle it can drive. */
+    async function bootMinimal(app: HTMLElement): Promise<{
+      options: StartAppOptions;
+      theme: ReturnType<typeof vi.fn>;
+    }> {
+      let started: StartAppOptions | null = null;
+      const theme = vi.fn(() => null);
+      await bootstrap(
+        app,
+        async (options) => {
+          started = options;
+          return { teardown: () => {} };
+        },
+        () => true,
+        theme,
+        'minimal',
+      );
+      return { options: started!, theme };
+    }
+
+    it('is what an address without ?extended asks for', () => {
+      expect(appModeOf('')).toBe('minimal');
+      expect(appModeOf('?lighting=1,2')).toBe('minimal');
+      expect(appModeOf('?extended')).toBe('extended');
+      expect(appModeOf('?extended=')).toBe('extended');
+      expect(appModeOf('?lighting=1,2&extended')).toBe('extended');
+    });
+
+    it('is the default when the address does not ask for the full app', async () => {
+      const app = createApp();
+      const start = vi.fn(() => new Promise<never>(() => {}));
+
+      void bootstrap(app, start, () => true, () => null);
+      await Promise.resolve();
+
+      expect(app.querySelector('.game-shell')?.getAttribute('data-mode')).toBe(
+        'minimal',
+      );
+      expect(start.mock.calls[0]?.[0]).toMatchObject({ mode: 'minimal' });
+    });
+
+    it('hands the lifecycle the cube and nothing of the full app', async () => {
+      const app = createApp();
+      const { options, theme } = await bootMinimal(app);
+
+      expect(options.mode).toBe('minimal');
+      expect(options.lightingUi).toBeUndefined();
+      expect(options.blocked).toBeUndefined();
+      // The same canvases as the full app, so the scenes are split the same.
+      expect(options.views?.map((view) => view.canvas.id)).toEqual([
+        'view-net',
+        'view-rings',
+        'view-axes',
+      ]);
+      expect(theme).toHaveBeenCalledWith('minimal');
+    });
+
+    it('has its own Reset and a link to the full app', async () => {
+      const app = createApp();
+      await bootMinimal(app);
+
+      const link = app.querySelector<HTMLAnchorElement>('#full-version')!;
+      expect(link.getAttribute('href')).toBe('./?extended');
+      expect(link.textContent).toBe('Full version');
+      expect(link.closest('.action-dock')).not.toBeNull();
+      expect(app.querySelector('#minimal-reset')?.closest('.action-dock')).not.toBeNull();
+    });
+
+    it('resets through the full app\'s Home view and Reset session', async () => {
+      const app = createApp();
+      const { options } = await bootMinimal(app);
+      const reset = app.querySelector<HTMLButtonElement>('#minimal-reset')!;
+      const pressed: string[] = [];
+      for (const id of ['#home-view', '#reset']) {
+        const button = app.querySelector<HTMLButtonElement>(id)!;
+        // As the game controller leaves them once it has attached.
+        button.disabled = false;
+        button.addEventListener('click', () => pressed.push(id));
+      }
+
+      // Off until there is a cube to reset.
+      expect(reset.disabled).toBe(true);
+      options.setState('ready', 'Ready.');
+      expect(reset.disabled).toBe(false);
+
+      reset.click();
+      expect(pressed).toEqual(['#home-view', '#reset']);
+
+      options.onError(new Error('lost the engine'));
+      expect(reset.disabled).toBe(true);
+    });
+
+    it('attaches no menu, no Settings and no panels', async () => {
+      const app = createApp();
+      await bootMinimal(app);
+
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }),
+      );
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }),
+      );
+      expect(app.querySelector('#command-palette')?.hasAttribute('hidden')).toBe(
+        true,
+      );
+      expect(app.querySelector('#command-list')?.children).toHaveLength(0);
+
+      app.querySelector<HTMLButtonElement>('#settings-trigger')!.click();
+      expect(app.querySelector('#settings-panel')?.hasAttribute('hidden')).toBe(
+        true,
+      );
+      app.querySelector<HTMLButtonElement>('#details-moves')!.click();
+      expect(app.querySelector('#panel-moves')?.hasAttribute('hidden')).toBe(
+        true,
+      );
+    });
   });
 });

@@ -62,7 +62,7 @@ async function setScrambleMoves(page: Page, count: number): Promise<void> {
 
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize(DESKTOP);
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 });
 

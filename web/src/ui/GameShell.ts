@@ -1,3 +1,4 @@
+import { EXTENDED_HREF, type AppMode } from '../AppMode.ts';
 import type { GameUi } from '../game/GameController.ts';
 import type { LightingUi } from './LightingControls.ts';
 import {
@@ -37,6 +38,12 @@ export type GameShell = {
   /** The two buttons either side of the depth field. */
   readonly depthSteppers: readonly HTMLButtonElement[];
   readonly command: CommandShell;
+  /**
+   * The minimal page's Reset, which puts back the solved cube and the home
+   * view through the Settings buttons that already do each; null on the
+   * full app, which has those buttons themselves.
+   */
+  readonly minimalReset: HTMLButtonElement | null;
 };
 
 /** The canvas each view is drawn on. */
@@ -281,9 +288,17 @@ function swatches(): string {
  * two rails and the panels out to the sides; nothing moves in the document to
  * do that either.
  */
-export function createGameShell(host: HTMLElement): GameShell {
+export function createGameShell(
+  host: HTMLElement,
+  mode: AppMode = 'extended',
+): GameShell {
+  // The minimal page is the same page with less of it on show: the game
+  // controller is handed every control either way, and what the minimal page
+  // has no use for the stylesheet keeps off the screen by `data-mode`. Only
+  // its own two controls are written for it alone.
+  const minimal = mode === 'minimal';
   host.innerHTML = `
-<main class="game-shell" data-game-state="idle" data-sticker-palette="classic" data-panels="closed">
+<main class="game-shell" data-mode="${mode}" data-game-state="idle" data-sticker-palette="classic" data-panels="closed">
   <header class="app-header">
     <div class="brand">
       ${brandMark()}
@@ -383,8 +398,10 @@ export function createGameShell(host: HTMLElement): GameShell {
     <button class="dock-button dock-button--round" type="button" id="undo" aria-label="Undo">${icon(ICONS.undo)}</button>
     <button class="dock-button dock-button--primary" type="button" id="scramble">${icon(ICONS.scramble, 18)}<span>Scramble</span></button>
     <button class="dock-button dock-button--primary dock-button--stop" type="button" id="stop" hidden>${icon(ICONS.stop, 18)}<span>Stop</span></button>
+    ${minimal ? `<button class="dock-button dock-button--side" type="button" id="minimal-reset" disabled>${icon(ICONS.reset, 18)}<span class="dock-button__label">Reset</span></button>` : ''}
     <button class="dock-button dock-button--round" type="button" id="redo" aria-label="Redo">${icon(ICONS.redo)}</button>
     <button class="dock-button dock-button--side" type="button" id="solve">${icon(ICONS.solve, 18)}<span class="dock-button__label">Solve</span></button>
+    ${minimal ? `<a class="dock-button dock-button--link" id="full-version" href="${EXTENDED_HREF}">Full version</a>` : ''}
   </div>
 
   <div class="details-rail" role="group" aria-label="Details">
@@ -663,5 +680,8 @@ export function createGameShell(host: HTMLElement): GameShell {
       list: requireElement<HTMLElement>(root, '#command-list'),
       message: requireElement<HTMLElement>(root, '#command-message'),
     },
+    minimalReset: minimal
+      ? requireElement<HTMLButtonElement>(root, '#minimal-reset')
+      : null,
   };
 }

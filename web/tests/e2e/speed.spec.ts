@@ -34,7 +34,7 @@ test.use({ viewport: DESKTOP });
 test('the slider changes how long a played sequence takes', async ({
   page,
 }) => {
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('.game-shell')).toBeVisible();
 
   await expect(page.locator('#speed-value')).toHaveText('1.00×');
@@ -54,7 +54,7 @@ test('the slider changes how long a played sequence takes', async ({
 test('the slider holds the engine s range, and stays live while playing', async ({
   page,
 }) => {
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('.game-shell')).toBeVisible();
 
   // The ends of the range the engine clamps to, shown as the control's own.

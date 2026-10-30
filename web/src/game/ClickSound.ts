@@ -19,6 +19,20 @@ export type ClickSound = CommitSound & {
 };
 
 /**
+ * A sound that never plays, for a page with no way to mute one.
+ *
+ * Holds nothing and listens for nothing, so it is one shared object rather
+ * than something made per controller; muting it changes nothing, and it says
+ * so by staying muted.
+ */
+export const SILENT_SOUND: ClickSound = Object.freeze({
+  play(): void {},
+  setMuted(): void {},
+  isMuted: (): boolean => true,
+  teardown(): void {},
+});
+
+/**
  * Where the first user gesture is listened for, injectable for tests.
  *
  * A gesture is what an audio context has to be created inside, so this is not

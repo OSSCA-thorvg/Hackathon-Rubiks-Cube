@@ -33,7 +33,7 @@ test('renders the scene contract and re-verifies it after resize', async ({
 
   // Relative to baseURL so the Pages subpath is preserved; '/' would
   // resolve to the host root and dodge base path regressions.
-  await page.goto('./');
+  await page.goto('./?extended');
 
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 

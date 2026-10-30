@@ -18,7 +18,7 @@ async function pressFrontCell(page: Page, col: number, row: number) {
 
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize(DESKTOP);
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 
   // The net alone, so a cell of it is where this test says it is.

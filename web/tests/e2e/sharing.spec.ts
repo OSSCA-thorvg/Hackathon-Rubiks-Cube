@@ -29,7 +29,7 @@ test.beforeEach(async ({ page, context }) => {
   // page does, reading is what the test does afterwards.
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.setViewportSize(DESKTOP);
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 });
 
@@ -74,6 +74,9 @@ test('a link opens the same cube somewhere else', async ({ page, context }) => {
   // subpath comes along with it rather than being assumed away.
   expect(new URL(link).pathname).toBe(new URL(page.url()).pathname);
   expect(new URL(link).pathname).toContain('/Hackathon-Rubiks-Cube/');
+  // The query comes along too, so a link made on the full app opens the
+  // full app rather than the minimal page.
+  expect(new URL(link).search).toBe('?extended');
 
   // A page that has never seen this one, opened on the link alone.
   const other = await context.newPage();
@@ -150,7 +153,7 @@ test('a damaged link opens a fresh cube and does not repeat itself', async ({
   // will change without loading anything: navigating the already-open page
   // would put the payload on it and never run the application again.
   const opened = await context.newPage();
-  await opened.goto('./#s=this-is-not-a-payload');
+  await opened.goto('./?extended#s=this-is-not-a-payload');
 
   await expect(opened.locator('#app')).toHaveAttribute('data-state', 'ready');
   await expect(opened.locator('#status')).toHaveText(

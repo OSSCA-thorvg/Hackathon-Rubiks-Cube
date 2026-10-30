@@ -172,7 +172,7 @@ test('dragging the right column turns the cube and the net follows', async ({
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(String(error)));
 
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 
   const atRest = await probeCanvas(page);
@@ -217,7 +217,7 @@ test('dragging the right column turns the cube and the net follows', async ({
 });
 
 test('a drag survives the window changing size under it', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 
   const atRest = await probeCanvas(page);
@@ -240,7 +240,7 @@ test('a drag survives the window changing size under it', async ({ page }) => {
 });
 
 test('a short drag past the threshold turns the cube', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 
   const atRest = await probeCanvas(page);
@@ -259,7 +259,7 @@ test('a short drag past the threshold turns the cube', async ({ page }) => {
 });
 
 test('two drags in quick succession both turn the cube', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 
   const atRest = await probeCanvas(page);
@@ -297,7 +297,7 @@ test('dragging a net cell turns the cube', async ({ page }) => {
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(String(error)));
 
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 
   const atRest = await probeCanvas(page);
@@ -319,7 +319,7 @@ test('dragging a net cell turns the cube', async ({ page }) => {
 });
 
 test('the net is draggable when it is the only view', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 
   await page.locator('button[data-view="2d"]').click();
@@ -345,7 +345,7 @@ test('a drag of exactly one cell on the net turns the layer and nothing breaks',
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(String(error)));
   await page.setViewportSize({ width: 1024, height: 768 });
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
   await page.locator('button[data-view="2d"]').click();
   await page.locator('button[data-flat="net"]').click();
@@ -365,7 +365,7 @@ test('a drag of exactly one cell on the net turns the layer and nothing breaks',
 });
 
 test('a drag too short to commit springs back', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 
   const atRest = await probeCanvas(page);
@@ -390,7 +390,7 @@ test('a drag too short to commit springs back', async ({ page }) => {
 test('dragging the background sweeps the viewpoint, not the cube', async ({
   page,
 }) => {
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 
   const atRest = await probeCanvas(page);
@@ -419,7 +419,7 @@ test('dragging the background sweeps the viewpoint, not the cube', async ({
 test('a drag on the empty part of the net turns the viewpoint, as empty space round the cube does', async ({
   page,
 }) => {
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 
   const atRest = await probeCanvas(page);
@@ -443,7 +443,7 @@ test('a drag on the empty part of the net turns the viewpoint, as empty space ro
 test('the axes badge follows the viewpoint, and the net is not drawn again for it', async ({
   page,
 }) => {
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 
   const badge = page.locator('#view-axes');
@@ -486,7 +486,7 @@ test('the axes badge follows the viewpoint, and the net is not drawn again for i
 test('a layer still turns after the viewpoint comes back round', async ({
   page,
 }) => {
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 
   const atRest = await probeCanvas(page);

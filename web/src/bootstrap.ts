@@ -1,6 +1,8 @@
+import { appModeOf, type AppMode } from './AppMode.ts';
 import {
   startApp,
   type AppState,
+  type StageView,
   type StartAppOptions,
 } from './AppLifecycle.ts';
 import {
@@ -39,7 +41,7 @@ export type SupportCheckFn = () => boolean;
  * is not exercising the theme rather than having to stand in for a media
  * query and a storage.
  */
-export type ThemeFactory = () => ThemeController | null;
+export type ThemeFactory = (mode: AppMode) => ThemeController | null;
 
 /**
  * The width from which the rails sit beside the stage and the panels can be
@@ -237,13 +239,40 @@ function readableStorage(): StorageLike | null {
   }
 }
 
-/** Builds the real theme controller from the page's own globals. */
-export function createPageTheme(): ThemeController {
+/**
+ * Builds the real theme controller from the page's own globals.
+ *
+ * The minimal page has no theme selector and follows the system, so it is
+ * given no storage: a choice saved on the full app is neither read nor
+ * written there.
+ */
+export function createPageTheme(mode: AppMode = 'extended'): ThemeController {
   return attachThemeController({
     root: document.documentElement,
     systemDark: window.matchMedia('(prefers-color-scheme: dark)'),
-    storage: readableStorage(),
+    storage: mode === 'extended' ? readableStorage() : null,
   });
+}
+
+/**
+ * Wires the minimal page's Reset: the home view, then a fresh session.
+ *
+ * Both through the Settings buttons the full app already has, so it does
+ * exactly what pressing the two of them does and is refused whenever they
+ * are. In that order so the line the status ends on is the session's. It is
+ * on while the page is ready and off otherwise, which is when those two are.
+ */
+function attachMinimalReset(
+  reset: HTMLButtonElement,
+  shell: GameShell,
+): (state: AppState) => void {
+  reset.addEventListener('click', () => {
+    shell.ui.homeViewButton.click();
+    shell.ui.resetButton.click();
+  });
+  return (state) => {
+    reset.disabled = state !== 'ready';
+  };
 }
 
 /**
@@ -264,9 +293,14 @@ export function bootstrap(
   start: StartAppFn = startApp,
   supportCheck: SupportCheckFn = supportsBrowser,
   createTheme: ThemeFactory = createPageTheme,
+  mode: AppMode = appModeOf(window.location.search),
 ): Promise<void> {
-  const shell = createGameShell(app);
+  const shell = createGameShell(app, mode);
   const statusElement = shell.ui.status;
+  const minimalReset =
+    shell.minimalReset === null
+      ? null
+      : attachMinimalReset(shell.minimalReset, shell);
 
   // Only the gameplay controls, which the game controller takes over from
   // here and owns the enabled state of. The settings trigger, the theme
@@ -283,6 +317,7 @@ export function bootstrap(
   const setState = (state: AppState, message: string): void => {
     app.dataset.state = state;
     statusElement.textContent = message;
+    minimalReset?.(state);
   };
 
   const fail = (error: unknown): void => {
@@ -300,7 +335,58 @@ export function bootstrap(
 
   // After the support check, so a browser that cannot run the cube is told so
   // rather than failing on a media query on the way there.
-  const theme: ThemeController | null = createTheme();
+  const theme: ThemeController | null = createTheme(mode);
+
+  // The hint is a first-visit line and nothing else: the first gesture is
+  // proof it was read, and there is nothing to remember past that. A reload
+  // is a fresh page and offers it again, which is the same promise the rest
+  // of the session makes.
+  const dismissHint = (): void => {
+    shell.interactionHint.hidden = true;
+  };
+  shell.ui.stage.addEventListener('pointerdown', dismissHint, { once: true });
+
+  // A canvas for each view, so the page lays them out and the engine only
+  // fits each drawing to the box it is given. The cube's canvas keeps the
+  // scenes none of these take, which here is the cube alone. The same on
+  // both pages: the rings' and the axes' have no box on the minimal one, so
+  // the engine puts them away.
+  const views: StageView[] = [
+    {
+      id: CubeSurface.Net,
+      canvas: shell.views.net,
+      scenes: CubeScene.Net,
+      pressable: true,
+    },
+    {
+      id: CubeSurface.Rings,
+      canvas: shell.views.rings,
+      scenes: CubeScene.Rings,
+      pressable: true,
+    },
+    {
+      id: CubeSurface.Axes,
+      canvas: shell.views.axes,
+      scenes: CubeScene.Axes,
+      pressable: false,
+    },
+  ];
+
+  // The minimal page is the cube, its net and three buttons: none of the
+  // page's own small controllers below is attached, and nothing listens for
+  // a key. A drag still turns and orbits, which is the engine's own.
+  if (mode === 'minimal') {
+    return start({
+      canvas: shell.views.cube,
+      views,
+      gameUi: shell.ui,
+      setState,
+      onError: fail,
+      theme: theme ?? undefined,
+      mode,
+    }).then(() => undefined, fail);
+  }
+
   if (theme !== null) {
     attachThemeSelector({ buttons: shell.themeButtons, controller: theme });
   }
@@ -364,40 +450,9 @@ export function bootstrap(
     playIcon: ICONS.play,
   });
 
-  // The hint is a first-visit line and nothing else: the first gesture is
-  // proof it was read, and there is nothing to remember past that. A reload
-  // is a fresh page and offers it again, which is the same promise the rest
-  // of the session makes.
-  const dismissHint = (): void => {
-    shell.interactionHint.hidden = true;
-  };
-  shell.ui.stage.addEventListener('pointerdown', dismissHint, { once: true });
-
-  // A canvas for each view, so the page lays them out and the engine only
-  // fits each drawing to the box it is given. The cube's canvas keeps the
-  // scenes none of these take, which here is the cube alone.
   return start({
     canvas: shell.views.cube,
-    views: [
-      {
-        id: CubeSurface.Net,
-        canvas: shell.views.net,
-        scenes: CubeScene.Net,
-        pressable: true,
-      },
-      {
-        id: CubeSurface.Rings,
-        canvas: shell.views.rings,
-        scenes: CubeScene.Rings,
-        pressable: true,
-      },
-      {
-        id: CubeSurface.Axes,
-        canvas: shell.views.axes,
-        scenes: CubeScene.Axes,
-        pressable: false,
-      },
-    ],
+    views,
     gameUi: shell.ui,
     lightingUi: shell.lightingUi,
     // Both of the page's dialogs are modal, so nothing they cover answers a
@@ -406,5 +461,6 @@ export function bootstrap(
     setState,
     onError: fail,
     theme: theme ?? undefined,
+    mode,
   }).then(() => undefined, fail);
 }

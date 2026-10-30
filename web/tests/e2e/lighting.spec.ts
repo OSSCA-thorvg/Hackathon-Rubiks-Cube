@@ -30,7 +30,7 @@ async function slide(page: Page, selector: string, value: string): Promise<void>
 }
 
 test('the panel shows the lights the cube is drawn under', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?extended');
   await ready(page);
 
   await openSettings(page);
@@ -50,7 +50,7 @@ test('the panel shows the lights the cube is drawn under', async ({ page }) => {
 test('a list in the address bar is what the panel opens with', async ({
   page,
 }) => {
-  await page.goto('./?lighting=0.5,1,1,2.6,7,4,0.38,0.6,12');
+  await page.goto('./?extended&lighting=0.5,1,1,2.6,7,4,0.38,0.6,12');
   await ready(page);
 
   await openSettings(page);
@@ -68,7 +68,7 @@ test('a list in the address bar is what the panel opens with', async ({
 test('a slider relights the still cube at once and reset puts it back', async ({
   page,
 }) => {
-  await page.goto('./');
+  await page.goto('./?extended');
   await ready(page);
   const lit = (await probeCanvas(page)).left;
 

@@ -10,7 +10,7 @@ test('a watched big cube is mixed all over rather than in a few bands', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1200, height: 1200 });
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
 
   await fillInSettings(page, '#cube-size', String(SIZE));

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import type { AppMode } from '../../src/AppMode.ts';
 import {
   attachGameController,
   controllerControls,
@@ -190,6 +191,8 @@ function createHarness(
     opened?: { readonly scrambleEnd: number; readonly moves: number[] };
     /** Whether the page says a dialog is up. */
     blocked?: () => boolean;
+    /** Which page this is; absent, the full app. */
+    mode?: AppMode;
   } = {},
 ) {
   const ui = createUi();
@@ -502,6 +505,7 @@ function createHarness(
     shareTarget,
     prefersReducedMotion: overrides.prefersReducedMotion ?? false,
     blocked: overrides.blocked,
+    mode: overrides.mode,
   });
 
   return {
@@ -2870,5 +2874,37 @@ describe('walking the cube along its record', () => {
     harness.ui.cubeSizeInput.value = '5';
     harness.ui.cubeSizeInput.dispatchEvent(new Event('change'));
     expect(harness.ui.cubeSizeLabel.textContent).toBe('5×5×5');
+  });
+});
+
+describe('a controller on the minimal page', () => {
+  it('listens for no keys, and the buttons still work', () => {
+    const harness = createHarness({ mode: 'minimal' });
+    expect(harness.keyListenerCount()).toBe(0);
+
+    harness.ui.scrambleButton.click();
+    expect(harness.engine.scramble).toHaveBeenCalledTimes(1);
+  });
+
+  it('makes no click, so nothing waits for a gesture to open one', () => {
+    const harness = createHarness();
+    harness.controller.teardown();
+    const listen = vi.spyOn(window, 'addEventListener');
+
+    const controller = attachGameController({
+      engine: harness.engine,
+      ui: harness.ui,
+      startFrameLoop: vi.fn(),
+      onError: vi.fn(),
+      mode: 'minimal',
+    });
+
+    expect(listen).not.toHaveBeenCalled();
+    controller.teardown();
+    listen.mockRestore();
+  });
+
+  it('keeps the face-turn keys on the full app', () => {
+    expect(createHarness({ mode: 'extended' }).keyListenerCount()).toBe(1);
   });
 });

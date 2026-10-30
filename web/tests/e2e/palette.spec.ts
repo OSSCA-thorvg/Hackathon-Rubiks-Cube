@@ -67,7 +67,7 @@ async function assertChipsMatchNet(
 test('the palette changes both drawings at once and goes back', async ({
   page,
 }) => {
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('.game-shell')).toBeVisible();
 
   // The palette lives in Settings now. Left open for the whole case: the
@@ -109,7 +109,7 @@ test('the palette changes both drawings at once and goes back', async ({
 test('the palette can be changed while a scramble is playing', async ({
   page,
 }) => {
-  await page.goto('./');
+  await page.goto('./?extended');
   await expect(page.locator('.game-shell')).toBeVisible();
 
   const highContrast = page.locator('[data-palette="high-contrast"]');

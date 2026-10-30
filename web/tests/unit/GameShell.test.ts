@@ -72,3 +72,37 @@ describe('the details panels', () => {
     expect(next?.closest('.detail-panels')).not.toBeNull();
   });
 });
+
+describe('the two pages', () => {
+  it('writes the full app by default, without the minimal page\'s controls', () => {
+    const shell = createGameShell(document.createElement('div'));
+    expect(shell.root.dataset.mode).toBe('extended');
+    expect(shell.minimalReset).toBeNull();
+    expect(shell.root.querySelector('#full-version')).toBeNull();
+  });
+
+  it('gives the minimal page a Reset and a Full version link in the dock', () => {
+    const shell = createGameShell(document.createElement('div'), 'minimal');
+    expect(shell.root.dataset.mode).toBe('minimal');
+    expect(shell.minimalReset?.id).toBe('minimal-reset');
+    expect(shell.minimalReset?.disabled).toBe(true);
+
+    // In the order the row reads: Scramble (or Stop), Reset, Solve, the link.
+    const dock = [
+      ...shell.root.querySelectorAll<HTMLElement>('.action-dock > *'),
+    ].map((control) => control.id);
+    expect(dock).toEqual([
+      'rewind',
+      'undo',
+      'scramble',
+      'stop',
+      'minimal-reset',
+      'redo',
+      'solve',
+      'full-version',
+    ]);
+    expect(
+      shell.root.querySelector('#full-version')?.getAttribute('href'),
+    ).toBe('./?extended');
+  });
+});

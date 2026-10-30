@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import type { AppMode } from '../../src/AppMode.ts';
 import {
   MAX_STAGE_PIXELS,
   stageDensity,
@@ -51,6 +52,10 @@ function createHarness(overrides: {
   createGameController?: (options: GameControllerOptions) => GameController;
   /** What the address bar holds when the page opens. */
   hash?: string;
+  /** The query before it, `?` and all. */
+  search?: string;
+  /** Which page this is; absent, the full app. */
+  mode?: AppMode;
   /** The canvases beside the cube's; none keeps every scene on it. */
   views?: readonly StageView[];
 } = {}) {
@@ -131,6 +136,7 @@ function createHarness(overrides: {
       },
     ),
     pointerDownOn: vi.fn(() => true),
+    setLighting: vi.fn(() => true),
   } satisfies EngineLike;
 
   // A hand-cranked animation frame queue, so tests decide when frames run.
@@ -184,7 +190,7 @@ function createHarness(overrides: {
   // the way in, and one replaceState that has to take it off again.
   const hash = overrides.hash ?? '';
   const targetLocation = {
-    href: `https://example.test/cube/${hash}`,
+    href: `https://example.test/cube/${overrides.search ?? ''}${hash}`,
     hash,
   };
   const replaced: string[] = [];
@@ -211,6 +217,7 @@ function createHarness(overrides: {
       views: overrides.views,
       gameUi,
       blocked,
+      mode: overrides.mode,
       setState: (state, message) => states.push([state, message]),
       onError,
       createEngine: async () => engine,
@@ -1213,5 +1220,28 @@ describe('stageDensity', () => {
   it('takes a ratio that is not a positive number as one', () => {
     expect(stageDensity([{ width: 10, height: 10 }], Number.NaN)).toBe(1);
     expect(stageDensity([{ width: 10, height: 10 }], 0)).toBe(1);
+  });
+});
+
+describe('startApp on the minimal page', () => {
+  it('hands the game controller the page it is on', async () => {
+    for (const mode of ['minimal', 'extended'] as const) {
+      const harness = createHarness({ mode });
+      await harness.start();
+      expect(harness.gameOptions()?.mode).toBe(mode);
+    }
+  });
+
+  it('takes the lighting from the address only on the full app', async () => {
+    const extended = createHarness({ search: '?extended&lighting=0.5,1,1' });
+    await extended.start();
+    expect(extended.engine.setLighting).toHaveBeenCalledWith([0.5, 1, 1]);
+
+    const minimal = createHarness({
+      mode: 'minimal',
+      search: '?lighting=0.5,1,1',
+    });
+    await minimal.start();
+    expect(minimal.engine.setLighting).not.toHaveBeenCalled();
   });
 });

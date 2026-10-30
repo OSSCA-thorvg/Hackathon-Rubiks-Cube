@@ -1436,11 +1436,13 @@ Reduction::~Reduction() = default;
 
 bool Reduction::supports(int size) const noexcept
 {
-    // Every size the application builds that is not already a three by three.
+    // Every size the domain can build that is not already a three by three.
     // The method has no size in it: a workshop is derived from the cube it is
     // asked about, so what bounds this is what the domain can build
-    // rather than anything here. What it costs grows with the cube, and that
-    // is the caller's to warn about rather than this one's to refuse.
+    // rather than anything here. Above the packed limit the moves cannot be
+    // recorded, which the application's own size cap answers for. What it
+    // costs grows with the cube, and that is the caller's to warn about
+    // rather than this one's to refuse.
     return size >= 4 && size < kLayerMaskBits;
 }
 

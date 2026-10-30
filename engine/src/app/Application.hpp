@@ -185,6 +185,14 @@ void pointer_cancel() noexcept;
 inline constexpr int kMinCubeSize = cube::kMinCubeSize;
 inline constexpr int kMaxCubeSize = cube::kPackedMaxLayers;
 
+// The solver takes every size the domain can build, up to one short of the
+// layer mask, and the moves it returns for a cube wider than the packed field
+// cannot be recorded. So it is this cap, not the solver, that keeps every
+// solution the application asks for writable, and a retuned cap that forgot
+// that is a build failure rather than a silent one.
+static_assert(kMaxCubeSize <= cube::kPackedMaxLayers,
+              "every cube the application builds must have packable moves");
+
 /**
  * Builds a cube of a different size, and starts the session over.
  *

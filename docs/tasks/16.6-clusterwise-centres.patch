@@ -1,5 +1,5 @@
 diff --git a/engine/src/cube/solver/Reduction.cpp b/engine/src/cube/solver/Reduction.cpp
-index 2d7d2a7..db6b9da 100644
+index 5714879..84cacd7 100644
 --- a/engine/src/cube/solver/Reduction.cpp
 +++ b/engine/src/cube/solver/Reduction.cpp
 @@ -474,6 +474,14 @@ public:

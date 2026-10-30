@@ -323,20 +323,20 @@ extern std::unique_ptr<ApplicationState> state;
 // Defined in Application.cpp, where each is described.
 [[nodiscard]] int size_of_cube() noexcept;
 [[nodiscard]] bool valid_cube_size(int size) noexcept;
-void relayout_all() noexcept;
-void drain_orbit() noexcept;
-void install_cube(cube::Cube next,
-                  std::vector<cube::FaceColor> origin = {}) noexcept;
-[[nodiscard]] bool cube_held() noexcept;
 [[nodiscard]] bool turnable_layers(cube::LayerMask layers, int size) noexcept;
 [[nodiscard]] std::optional<cube::CubeMove> depth_move(cube::Face face,
                                                        int first_depth,
                                                        int last_depth,
                                                        int turns,
                                                        int size) noexcept;
-void discard_playback() noexcept;
 [[nodiscard]] std::uint32_t drawn_scenes(const Surface& surface) noexcept;
+void relayout_all() noexcept;
 [[nodiscard]] bool live_surface(std::uint32_t id) noexcept;
+void drain_orbit() noexcept;
+void discard_playback() noexcept;
+void install_cube(cube::Cube next,
+                  std::vector<cube::FaceColor> origin = {}) noexcept;
+[[nodiscard]] bool cube_held() noexcept;
 
 // Defined in History.cpp, where each is described.
 [[nodiscard]] bool play_rewind(std::vector<cube::CubeMove> plan,

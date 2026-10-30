@@ -1,9 +1,7 @@
 #include "app/Application.hpp"
 
-#include <algorithm>
-#include <array>
 #include <cmath>
-#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -12,22 +10,14 @@
 #include <thorvg.h>
 
 #include "app/ApplicationState.hpp"
-
 #include "cube/Cube.hpp"
-#include "cube/CubeDraft.hpp"
+#include "cube/CubeMove.hpp"
 #include "cube/MoveTimeline.hpp"
-#include "cube/PackedMove.hpp"
 #include "cube/Scramble.hpp"
-#include "cube/Surface.hpp"
-#include "cube/solver/LayerByLayer.hpp"
-#include "cube/solver/Reduction.hpp"
-#include "cube/solver/Solver.hpp"
 #include "graphics/3d/Camera.hpp"
+#include "graphics/CanvasTheme.hpp"
 #include "graphics/frame/FrameInputs.hpp"
 #include "graphics/Layout.hpp"
-#include "graphics/3d/Light.hpp"
-#include "graphics/2d/net/NetGeometry.hpp"
-#include "graphics/2d/rings/RingsGeometry.hpp"
 #include "graphics/3d/OrbitCamera.hpp"
 #include "interaction/InteractionController.hpp"
 #include "interaction/NetPicking.hpp"
@@ -245,9 +235,68 @@ namespace detail {
     return size >= kMinCubeSize && size <= kMaxCubeSize;
 }
 
+/**
+ * Whether a layer set is one this application turns and writes down, for a
+ * cube of `size`.
+ *
+ * One unbroken run of that cube's layers, short of all of them: exactly the
+ * moves this application can make and can write down. Every layer at once is
+ * a rotation of the whole cube, which it neither makes nor records.
+ *
+ * Asked where a move is made from a face and a range of depths, and asked
+ * again of every move that arrives in a shared record. The mask field of a
+ * packed move is wide enough for the slices of a much larger cube and for
+ * sets with gaps in them, and a word arriving from a link is free to name any
+ * of those -- but nothing here can make one, so letting one in would put a
+ * move on the record that has no notation to be written in and no command
+ * that could have produced it.
+ */
+[[nodiscard]] bool turnable_layers(cube::LayerMask layers, int size) noexcept
+{
+    return cube::is_layer_run(layers, size) &&
+           layers != cube::layers_through(0, size - 1);
+}
+
+/**
+ * The move a face names, taken as deep as a range of depths says and turned
+ * `turns` quarters clockwise as seen from outside it.
+ *
+ * `cube::face_move()` with this application's refusals in front of it: which
+ * layers the depths select and which way the face turns about its axis are
+ * worked out there, not here. Depth 1 is the face; `(Right, 1, 1, 1)` is R
+ * and `(Right, 1, 2, 1)` is Rw.
+ *
+ * Nothing for a range no move corresponds to: empty, reversed, off the far
+ * side of the cube, or the whole of it -- the last being a rotation, which
+ * this application neither makes nor writes down.
+ */
+[[nodiscard]] std::optional<cube::CubeMove> depth_move(cube::Face face,
+                                                       int first_depth,
+                                                       int last_depth,
+                                                       int turns,
+                                                       int size) noexcept
+{
+    const cube::CubeMove move =
+        cube::face_move(face, first_depth, last_depth, turns, size);
+    if (!turnable_layers(move.layers, size)) return std::nullopt;
+    return move;
+}
+
+/** What one surface draws: the scenes it holds that are shown. */
+[[nodiscard]] std::uint32_t drawn_scenes(const Surface& surface) noexcept
+{
+    return surface.scenes & shown_scenes();
+}
+
 void relayout_all() noexcept
 {
     for (auto& surface : state->surfaces) relayout(surface);
+}
+
+/** Whether `id` names a surface, and that surface has a target to draw on. */
+[[nodiscard]] bool live_surface(std::uint32_t id) noexcept
+{
+    return id < kSurfaceCount && state->surfaces[id].renderer != nullptr;
 }
 
 /**
@@ -262,6 +311,23 @@ void drain_orbit() noexcept
     if (const auto delta = state->interaction.take_orbit_delta()) {
         state->orbit.turn(delta->yaw_degrees, delta->pitch_degrees);
     }
+}
+
+/**
+ * Throws away everything a playback is made of, in one call.
+ *
+ * Two things, not one: the sequence, and any turn of it already in flight. A
+ * turn that has left the player still commits on its own a few frames later,
+ * so dropping only the player would apply the last move of an abandoned
+ * scramble onto the cube that replaced it. The sweep the pointer has made is
+ * kept -- a viewpoint is where the user left it -- and moves already committed
+ * are never taken back.
+ */
+void discard_playback() noexcept
+{
+    drain_orbit();
+    state->interaction.reset();
+    state->playback.reset();
 }
 
 /**
@@ -310,82 +376,6 @@ void install_cube(cube::Cube next,
 [[nodiscard]] bool cube_held() noexcept
 {
     return busy() || state->paint.has_value();
-}
-
-/**
- * Whether a layer set is one this application turns and writes down, for a
- * cube of `size`.
- *
- * One unbroken run of that cube's layers, short of all of them: exactly the
- * moves this application can make and can write down. Every layer at once is
- * a rotation of the whole cube, which it neither makes nor records.
- *
- * Asked where a move is made from a face and a range of depths, and asked
- * again of every move that arrives in a shared record. The mask field of a
- * packed move is wide enough for the slices of a much larger cube and for
- * sets with gaps in them, and a word arriving from a link is free to name any
- * of those -- but nothing here can make one, so letting one in would put a
- * move on the record that has no notation to be written in and no command
- * that could have produced it.
- */
-[[nodiscard]] bool turnable_layers(cube::LayerMask layers, int size) noexcept
-{
-    return cube::is_layer_run(layers, size) &&
-           layers != cube::layers_through(0, size - 1);
-}
-
-/**
- * The move a face names, taken as deep as a range of depths says and turned
- * `turns` quarters clockwise as seen from outside it.
- *
- * `cube::face_move()` with this application's refusals in front of it: which
- * layers the depths select and which way the face turns about its axis are
- * worked out there, not here. Depth 1 is the face; `(Right, 1, 1, 1)` is R
- * and `(Right, 1, 2, 1)` is Rw.
- *
- * Nothing for a range no move corresponds to: empty, reversed, off the far
- * side of the cube, or the whole of it -- the last being a rotation, which
- * this application neither makes nor writes down.
- */
-[[nodiscard]] std::optional<cube::CubeMove> depth_move(cube::Face face,
-                                                       int first_depth,
-                                                       int last_depth,
-                                                       int turns,
-                                                       int size) noexcept
-{
-    const cube::CubeMove move =
-        cube::face_move(face, first_depth, last_depth, turns, size);
-    if (!turnable_layers(move.layers, size)) return std::nullopt;
-    return move;
-}
-
-/**
- * Throws away everything a playback is made of, in one call.
- *
- * Two things, not one: the sequence, and any turn of it already in flight. A
- * turn that has left the player still commits on its own a few frames later,
- * so dropping only the player would apply the last move of an abandoned
- * scramble onto the cube that replaced it. The sweep the pointer has made is
- * kept -- a viewpoint is where the user left it -- and moves already committed
- * are never taken back.
- */
-void discard_playback() noexcept
-{
-    drain_orbit();
-    state->interaction.reset();
-    state->playback.reset();
-}
-
-/** What one surface draws: the scenes it holds that are shown. */
-[[nodiscard]] std::uint32_t drawn_scenes(const Surface& surface) noexcept
-{
-    return surface.scenes & shown_scenes();
-}
-
-/** Whether `id` names a surface, and that surface has a target to draw on. */
-[[nodiscard]] bool live_surface(std::uint32_t id) noexcept
-{
-    return id < kSurfaceCount && state->surfaces[id].renderer != nullptr;
 }
 
 }  // namespace detail

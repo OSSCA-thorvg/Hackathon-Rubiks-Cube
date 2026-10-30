@@ -43,8 +43,10 @@ keeps reads separate from writes and preserves the owner's buffer addresses.
 
 `is_solved()` means that each of the six faces is uniform, including a completed
 cube held in any rigid orientation. Equality compares visible colours in the same
-frame, so an assembled cube equals the cube that was painted, including after
-identical later moves.
+frame, and equal cubes stay equal through identical later moves. An assembled
+cube is the painting read in the first of the 24 holdings in which it is a
+reachable cube. That equals the cube that was painted unless a middle-layer turn
+has moved an odd cube's centres; then it is the same cube held differently.
 
 ## Painting and solver frames
 
@@ -135,3 +137,16 @@ First-use 5×5 reduction preparation remained comparable: 163.37–163.93 ms bef
 141.31–167.51 ms after. These are local native measurements for those workloads,
 not a browser performance guarantee. The temporary driver and raw runs are in
 `/tmp/rubiks-core-performance/` and are not a permanent benchmark suite.
+
+## Revisions
+
+- **2026-10-30.** The sentence above on assembled cubes said they always equal
+  the painted cube; it now states the odd-centre exception, which is how
+  `assembled()` has always behaved. The duplicates the earlier cleanup held back
+  for this work, and the ones this work added, were resolved afterwards; the
+  record is in the [engine cleanup revisions](./engine-cleanup.md#개정-기록).
+  Moving a `Cube` now copies it, so no moved-from cube is left with a size and
+  no colours. The retained 16.6 patch was regenerated with each change to
+  `Reduction.cpp`. With it applied, `solver-test` passes except
+  `odd cubes solve after thin and wide moves carry their fixed centres`, which
+  aborts at size 5; it already did at `cd20bab`, before that round.

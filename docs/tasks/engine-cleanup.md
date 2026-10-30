@@ -48,7 +48,7 @@ Phase 번호가 없는 횡단 작업입니다. 2026-10-03~04에 `3f8dee4` 위에
 
 ### 큐브 저장 방식을 바꾼 뒤에 다시 볼 것
 
-큐브 상태를 cubie 배열에서 면 단위 저장으로 바꾸는 작업이 뒤따를 예정이라, 저장 방식에 기대는 중복은 정리하지 않았습니다. 후속 작업은 [면 저장소 정리](./cube-face-storage.md)에 기록합니다. 아래 목록은 cleanup 완료 시점의 보류 항목입니다.
+큐브 상태를 cubie 배열에서 면 단위 저장으로 바꾸는 작업이 뒤따를 예정이라, 저장 방식에 기대는 중복은 정리하지 않았습니다. 후속 작업은 [면 저장소 정리](./cube-face-storage.md)에 기록합니다. 아래 목록은 cleanup 완료 시점의 보류 항목입니다. 열 항목이고, 모두 면 저장 뒤에 정리했습니다([개정 기록](#개정-기록)).
 
 - `Surface.hpp`가 `is_positive_face`, `faces_along`, `set_coordinate`, `is_exposed`를 내보내고 solver가 쓰는 일
 - Scramble의 layer mask를 `depth_layers`에서 얻는 일
@@ -89,3 +89,24 @@ Phase 번호가 없는 횡단 작업입니다. 2026-10-03~04에 `3f8dee4` 위에
 - `git apply --check docs/tasks/16.6-clusterwise-centres.patch` 통과.
 
 묶음마다 구현 뒤에 독립 검토 둘(계획 대비 diff, 깨진 곳 찾기)을 거쳤고, 나온 지적은 보완 커밋으로 고쳤습니다.
+
+## 개정 기록
+
+- **남긴 열 항목을 면 저장 뒤에 정리했습니다 (2026-10-30).** 8번이 든 `turn_role`은 코드에 있던 이름이 아닙니다. 가리킨 것은 sticker 하나를 move만큼 돌리는 반복문들(`Reduction.cpp`의 `carried_one`, `RingsGeometry.cpp`의 `turned_times`, `Assembly.cpp`의 orbit 단계)입니다. 면 저장(`17defb4`)이 5번과 7번을 없앴고, 나머지와 면 저장이 새로 만든 중복은 2026-10-18 독립 검토의 목록대로 아래처럼 정리했습니다.
+
+  | 항목 | 지금 | 커밋 |
+  |---|---|---|
+  | 1 `Surface`의 면 규칙 | `Surface`가 `is_positive_face`, `end_face`, `set_coordinate`를 내보내고, solver의 `positive_face`·`set_axis`와 `exposed_faces`의 비교, `Turning.hpp`의 Right·Up·Front 표 둘이 그것을 씁니다 | `27547ad`, `87991e3` |
+  | 2 Scramble의 layer mask | `depth_layers(end_face(axis, ...), 1, depth, size)` | `27547ad` |
+  | 3 `CubeGeometry.cpp`의 사본 | `faces_along`은 `end_face`로, `cap_position`은 `set_coordinate`로 | `27547ad` |
+  | 4 `pick_cube`의 여섯 평면 | 면 표(`axis_of`, `is_positive_face`)에서 | `27547ad` |
+  | 5 역참조 표와 index 식 | 면 저장에서 해결. 저장 배치는 `native_index`, painting 순서는 `painting_index` 한 곳에 적고 `surface_stickers()`도 그것으로 만듭니다 | `17defb4`, `85a1a44` |
+  | 6 `(position, face)` struct | `Assembly.cpp`의 `Where`·`Which`, `Pick`의 좌표는 `CubiePosition`·`SurfaceSticker`로, 전개도의 `NetPosition`과 `net_cell`은 `cube::FaceCell`과 `face_sticker`로 | `85a1a44`, `14a899c`, `ccb6a0f` |
+  | 7 `assembled()`의 cubie 배열 | 면 저장에서 해결 | `17defb4` |
+  | 8 Sticker 하나에 하는 turn | `moved_sticker`, 그리고 면 단위는 `turned_face(axis, face, turns)` | `8c4f26e`, `27547ad` |
+  | 9 Orbit flood fill과 parity | `cube/Permutation.hpp`의 `orbits`, `is_odd_permutation` | `4d642cf` |
+  | 10 Solver 안의 반복 | 위 1, 8, 9에 더해, 24가지 방향은 `cube_orientations()` 한 목록이고, 탐색용 3×3 상태는 `Cube`와 같은 `turn_colors()`로 돌며 따로 있는 이유를 주석에 적었습니다. `sticker_of`는 `sticker_at`으로 합쳤습니다 | `d6d3e24`, `aa26f48` |
+
+  같은 검토의 작은 지적도 고쳤습니다. 이동된 `Cube`는 복사로 남아 크기만 있고 색이 없는 상태가 없습니다(`7fe469c`). 전개도 painting 크기 검사는 다시 runtime 검사입니다(`414797a`). 32층 assembly test는 크기 검사만 거절할 수 있는 painting을 씁니다(`a0bd211`). `Reduction::supports`는 domain 범위 그대로 두고, packing 범위는 application 상한 옆의 `static_assert`가 지킵니다(`72f9f6e`). cubie를 말하던 주석을 고치고 `SolverFrame`이 runtime 검사를 두지 않는 이유를 적었습니다(`766a740`).
+
+  Solver 동작은 바뀌지 않았습니다. `solver-test "[.dump]"`와 `cube-test "[.survey]"` 출력이 cube나 solver를 고친 커밋마다 시작 전과 같았고, pixel 단언은 그대로입니다. `Reduction.cpp`를 고친 커밋마다 16.6 패치를 다시 떴습니다. 확인 결과는 native 30 suite, 기본 실행 463 case, solver `[.big]` 4 case(단언 37,442개), wasm(export 68), web unit 382개, e2e 84개입니다.

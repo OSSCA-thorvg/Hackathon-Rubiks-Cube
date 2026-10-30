@@ -272,6 +272,12 @@ surface 0은 `initialize()`가 만드는 원래의 캔버스이고 모든 장면
 엔진을 ThorVG 예제로도 읽을 수 있게 정리했습니다. 새 기능은 없습니다. 엔진이 쓰지 않는 코드를 지우거나 test helper(`tests/support/`)로 옮겼고, 여러 곳에 적혀 있던 규칙과 값을 한 곳씩으로 모았습니다.
 C ABI는 78개에서 68개가 되었고 `engine/src/bindings/capi.cpp`에 있습니다. `graphics/`는 루트, `3d/`, `2d/`, `frame/`으로 나뉩니다. Face와 depth를 move로 바꾸는 규칙은 `cube::face_move` 하나입니다.
 큐브의 저장 방식에 기대는 중복은 그 저장 방식을 바꾸는 작업 뒤로 남겼고, 코어 경량화는 조사와 측정만 해 두었습니다.
+남긴 중복은 면 저장 뒤 2026-10-30에 정리했습니다([개정 기록](./engine-cleanup.md#개정-기록)).
+
+## [x] 횡단 작업: [Cube face storage](./cube-face-storage.md)
+
+큐브를 N³ cubie 배열 대신 바깥을 향한 여섯 면의 row-major 격자로 저장합니다. `CubeState`는 `Cube`와 `CubeDraft`로 나뉘었습니다. `Cube`는 돌려서 닿을 수 있는 큐브만 담고, 칠하는 중인 색은 `CubeDraft`가 담으며, 조립(`assembled`)을 통과해야 `Cube`가 됩니다. 면과 XYZ의 대응은 `Surface`의 면 표 하나에서 나오고, 회전도 그 표에서 유도합니다.
+"풀렸다"의 뜻이 바뀌었습니다. 여섯 면이 각각 한 색이면 큐브를 어느 방향으로 들고 있어도 풀린 것이고, 타이머와 solve 거절도 이 뜻을 따릅니다. Solver는 홀수 큐브의 센터로 자기 사본의 방향을 맞춘 뒤 답을 원래 축으로 되돌립니다. 공유 링크의 painting 순서와 C ABI는 그대로입니다.
 
 ## [x] 횡단 작업: [Minimal mode](./minimal-mode.md)
 

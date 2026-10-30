@@ -685,7 +685,15 @@ void place_middle_edges(Work& work)
 // together is the one idea in F2L, and it is worth about a fifth of the whole
 // solution.
 
-/** A reduced three-by-three search state with 54 visible colours and no heap allocation. */
+/**
+ * A reduced three-by-three search state with 54 visible colours and no heap
+ * allocation.
+ *
+ * A second cube type on purpose: the search turns and reads it hundreds of
+ * thousands of times, and a fixed array on the stack is what makes that
+ * cheap. It turns through the same turn_colors() as Cube, so only the
+ * storage is its own.
+ */
 struct Small {
     std::array<FaceColor, 54> colors{};
 
@@ -699,22 +707,9 @@ struct Small {
     /** Applies an outer face turn to the search state. */
     void turn(Face face, int turns) noexcept
     {
-        const CubeMove move = to_move(face_turn(face, turns), 3);
-        for (int turn = 0, count = normalized_turns(move.quarter_turns); turn < count; ++turn) {
-            quarter(move.axis, move.layers);
-        }
-    }
-
-    /** Permutes only selected surface cells using the domain coordinate mapping. */
-    void quarter(Axis axis, LayerMask layers) noexcept
-    {
-        const std::array<FaceColor, 54> previous = colors;
-        for (int slice = 0; slice < 3; ++slice) {
-            if (!in_layers(layers, slice)) continue;
-            for (const SurfaceTurn& turn : surface_turns(axis, slice, 3)) {
-                colors[turn.to] = previous[turn.from];
-            }
-        }
+        std::array<FaceColor, 54> scratch{};
+        turn_colors(colors.data(), scratch.data(),
+                    to_move(face_turn(face, turns), size()), size());
     }
 };
 
@@ -733,13 +728,6 @@ struct Small {
     return small;
 }
 
-template <typename Cube>
-[[nodiscard]] FaceColor sticker_of(const Cube& cube, const CubiePosition& at,
-                                   Face face) noexcept
-{
-    return cube.at(at.x, at.y, at.z).sticker(face);
-}
-
 /**
  * Reading slots without building anything.
  *
@@ -753,17 +741,17 @@ template <typename Cube>
                              Face right) noexcept
 {
     const auto slot = corner_slot(down_or_up, front, right, cube.size());
-    return sticker_of(cube, slot, down_or_up) == home_colour(down_or_up) &&
-           sticker_of(cube, slot, front) == home_colour(front) &&
-           sticker_of(cube, slot, right) == home_colour(right);
+    return sticker_at(cube, slot, down_or_up) == home_colour(down_or_up) &&
+           sticker_at(cube, slot, front) == home_colour(front) &&
+           sticker_at(cube, slot, right) == home_colour(right);
 }
 
 template <typename Cube>
 [[nodiscard]] bool edge_at(const Cube& cube, Face a, Face b) noexcept
 {
     const auto slot = edge_slot(a, b, cube.size());
-    return sticker_of(cube, slot, a) == home_colour(a) &&
-           sticker_of(cube, slot, b) == home_colour(b);
+    return sticker_at(cube, slot, a) == home_colour(a) &&
+           sticker_at(cube, slot, b) == home_colour(b);
 }
 
 /** Whether one slot holds both of its own pieces, each the right way round. */
@@ -814,9 +802,9 @@ template <typename Cube>
         const Face front = about_up(Face::Front, at);
         const Face right = about_up(Face::Right, at);
         const auto slot = corner_slot(Face::Up, front, right, cube.size());
-        const auto up = sticker_of(cube, slot, Face::Up);
-        const auto on_front = sticker_of(cube, slot, front);
-        const auto on_right = sticker_of(cube, slot, right);
+        const auto up = sticker_at(cube, slot, Face::Up);
+        const auto on_front = sticker_at(cube, slot, front);
+        const auto on_right = sticker_at(cube, slot, right);
         if (among(first, up, on_front, on_right) &&
             among(second, up, on_front, on_right) &&
             among(third, up, on_front, on_right)) {
@@ -834,8 +822,8 @@ template <typename Cube>
 
     for (const Face side : kSides) {
         const auto slot = edge_slot(Face::Up, side, cube.size());
-        const auto up = sticker_of(cube, slot, Face::Up);
-        const auto out = sticker_of(cube, slot, side);
+        const auto up = sticker_at(cube, slot, Face::Up);
+        const auto out = sticker_at(cube, slot, side);
         if ((up == first && out == second) || (up == second && out == first)) {
             return true;
         }

@@ -179,6 +179,22 @@ const std::vector<SurfaceTurn>& surface_turns(Axis axis, int slice, int size)
     return found->second[axis_index(axis)][static_cast<std::size_t>(slice)];
 }
 
+void turn_colors(FaceColor* colors, FaceColor* scratch, const CubeMove& move,
+                 int size) noexcept
+{
+    const std::size_t count = surface_cells(size).size();
+    for (int turn = 0, quarters = normalized_turns(move.quarter_turns);
+         turn < quarters; ++turn) {
+        std::copy(colors, colors + count, scratch);
+        for (int slice = 0; slice < size; ++slice) {
+            if (!in_layers(move.layers, slice)) continue;
+            for (const SurfaceTurn& step : surface_turns(move.axis, slice, size)) {
+                colors[step.to] = scratch[step.from];
+            }
+        }
+    }
+}
+
 LayerMask depth_layers(Face face, int first_depth, int last_depth,
                        int size) noexcept
 {

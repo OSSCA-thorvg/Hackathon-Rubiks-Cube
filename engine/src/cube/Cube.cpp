@@ -43,17 +43,12 @@ void FaceStorage::fill(Face face, FaceColor color) noexcept
     std::fill(first, first + area, color);
 }
 
-void FaceStorage::rotate_quarter(Axis axis, LayerMask layers) noexcept
+void FaceStorage::apply(const CubeMove& move) noexcept
 {
     // Reuse the workspace across search nodes; the state owns only its colours.
-    static thread_local std::vector<FaceColor> next;
-    next = colors_;
-    for (int slice = 0; slice < size_; ++slice) {
-        if (!in_layers(layers, slice)) continue;
-        for (const SurfaceTurn& turn : surface_turns(axis, slice, size_)) {
-            colors_[turn.to] = next[turn.from];
-        }
-    }
+    static thread_local std::vector<FaceColor> scratch;
+    scratch.resize(colors_.size());
+    turn_colors(colors_.data(), scratch.data(), move, size_);
 }
 
 }  // namespace detail
@@ -77,9 +72,7 @@ bool Cube::is_solved() const noexcept
 
 void Cube::apply(const CubeMove& move) noexcept
 {
-    const int turns = normalized_turns(move.quarter_turns);
-    for (int turn = 0; turn < turns; ++turn)
-        storage_.rotate_quarter(move.axis, move.layers);
+    storage_.apply(move);
 }
 
 bool operator==(const Cube& a, const Cube& b) noexcept

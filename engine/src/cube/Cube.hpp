@@ -211,8 +211,8 @@ public:
     void set(Face face, int row, int col, FaceColor color) noexcept;
     /** Fills one native face with a colour. */
     void fill(Face face, FaceColor color) noexcept;
-    /** Permutes selected surface stickers using the common coordinate rules. */
-    void rotate_quarter(Axis axis, LayerMask layers) noexcept;
+    /** Turns the selected layers' stickers through a move. */
+    void apply(const CubeMove& move) noexcept;
 
 private:
     int size_;

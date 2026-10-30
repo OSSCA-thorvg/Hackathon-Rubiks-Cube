@@ -233,9 +233,11 @@ struct Turn {
     return showing;
 }
 
-[[nodiscard]] inline FaceColor sticker_at(const Cube& cube,
-                                          const CubiePosition& position,
-                                          Face face) noexcept
+/** The colour a piece shows on one face, read from a Cube or a search state. */
+template <typename Pieces>
+[[nodiscard]] FaceColor sticker_at(const Pieces& cube,
+                                   const CubiePosition& position,
+                                   Face face) noexcept
 {
     return cube.at(position.x, position.y, position.z).sticker(face);
 }

@@ -195,6 +195,17 @@ struct SurfaceTurn {
 /** Derives and caches a layer permutation once per thread and cube size. */
 [[nodiscard]] const std::vector<SurfaceTurn>& surface_turns(Axis axis, int layer, int size);
 
+/**
+ * Carries a native surface's colours through a move, in place.
+ *
+ * `colors` holds 6N^2 colours in native order, and `scratch` is a buffer of
+ * the same length that each quarter turn reads them back from, so no colour
+ * is overwritten before it has moved. The cube's storage and the solver's
+ * search scratch both turn through this, each with a buffer of its own kind.
+ */
+void turn_colors(FaceColor* colors, FaceColor* scratch, const CubeMove& move,
+                 int size) noexcept;
+
 [[nodiscard]] constexpr bool operator==(const CubiePosition& a,
                                         const CubiePosition& b) noexcept
 {

@@ -2325,8 +2325,8 @@ kbd {
 }
 
 /*
- * The minimal page: the brand, the status line, the cube beside its net, and
- * one row of Scramble, Reset, Solve and the way to the full app. The shell
+ * The minimal page: the brand, the light and dark switch, the cube alone, and
+ * one row of Scramble, Reset and Solve. The shell
  * is the full app's, so what this page has no use for is taken off the
  * screen here -- and out of the tab order and the accessibility tree with
  * it. Nothing on this page opens the share card, the paint bar, the panels,
@@ -2354,11 +2354,10 @@ kbd {
   display: none;
 }
 
-/* The link to the full app sits in the dock as a round button would, its
-   name in a tooltip: an icon of more panels than this page shows. */
-.dock-button--link {
-  color: var(--color-text-soft);
-  text-decoration: none;
+/* The status line goes too, unless it is the page saying why there is no
+   cube: those two states below show it whatever the page. */
+.game-shell[data-mode="minimal"] .status-line {
+  display: none;
 }
 
 /* The sun-and-moon button stands where the full app's tools would, and shows

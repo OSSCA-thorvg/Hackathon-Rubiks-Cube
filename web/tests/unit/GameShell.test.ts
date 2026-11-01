@@ -82,13 +82,13 @@ describe('the two pages', () => {
     expect(shell.root.querySelector('#full-version')).toBeNull();
   });
 
-  it('gives the minimal page a Reset and a Full version link in the dock', () => {
+  it('gives the minimal page a Reset in the dock and no link to the full app', () => {
     const shell = createGameShell(document.createElement('div'), 'minimal');
     expect(shell.root.dataset.mode).toBe('minimal');
     expect(shell.minimalReset?.id).toBe('minimal-reset');
     expect(shell.minimalReset?.disabled).toBe(true);
 
-    // In the order the row reads: Scramble (or Stop), Reset, Solve, the link.
+    // In the order the row reads: Scramble (or Stop), Reset, Solve.
     const dock = [
       ...shell.root.querySelectorAll<HTMLElement>('.action-dock > *'),
     ].map((control) => control.id);
@@ -100,11 +100,9 @@ describe('the two pages', () => {
       'minimal-reset',
       'redo',
       'solve',
-      'full-version',
     ]);
-    expect(
-      shell.root.querySelector('#full-version')?.getAttribute('href'),
-    ).toBe('./?extended');
+    expect(shell.root.querySelector('a[href]')).toBeNull();
+    expect(shell.ui.stage.dataset.viewMode).toBe('3d');
   });
 
   it('gives the minimal page a sun-and-moon button in the header', () => {

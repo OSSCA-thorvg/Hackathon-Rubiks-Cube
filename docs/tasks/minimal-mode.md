@@ -64,3 +64,13 @@ Scramble(재생 중에는 Stop)과 Solve는 full app의 버튼 그대로입니�
 - `Full version` 글자 링크를 dock의 둥근 아이콘 버튼으로 바꿨습니다. 아이콘은 네 칸 중 한 칸이 `+`인 그림(`ICONS.more`)으로, 이 화면보다 패널이 많은 앱으로 간다는 뜻입니다.
 - 헤더 오른쪽 위에 해·달 토글을 더했습니다(`ICONS.sun`, 새 `ICONS.moon`). 평소에는 옅은 테두리 안의 아이콘만 보이고, 마우스를 올리면 테두리와 채움이 진해집니다. Minimal도 full app과 같은 저장소에 테마를 저장하도록 바꿨고, 그래서 `createPageTheme`과 `ThemeFactory`는 모드를 받지 않습니다.
 - Unit test는 382개에서 386개, e2e는 84개에서 85개가 되었습니다. 새 e2e는 시스템이 밝을 때 해가 보이고, 누르면 어두워져 저장되고, Full version으로 가면 full app이 Dark로 열리는지 봅니다.
+
+## 개정: 큐브만 남기기 (2026-11-01)
+
+- 브랜드 아래 문구를 "drawn with ThorVG"에서 "powered by ThorVG"로 바꿨습니다(두 모드 공통).
+- Minimal에서 2D Net을 뺐습니다. `startApp`이 첫 frame 전에 엔진 view를 `Cube3D`로 두고, shell도 처음부터 `data-view-mode="3d"`로 써서 Net이 한 frame도 보이지 않습니다. Reset은 view를 건드리지 않으므로 그대로 큐브만 남습니다.
+- Minimal에서 상태 문구를 숨겼습니다. `role="status"`라서 스크린리더에는 그대로 읽히고, 브라우저가 큐브를 돌릴 수 없거나 엔진이 실패한 화면에서는 이유를 알리기 위해 보입니다.
+- `Full version` 아이콘 링크를 뺐습니다. Full app은 주소에 `?extended`를 붙여야만 열립니다. 그래서 `EXTENDED_HREF`와 `ICONS.more`, `.dock-button--link`도 지웠습니다.
+- Minimal e2e는 Net 대신 큐브 캔버스의 스티커 샘플(`cubeGrid`)을 풀린 큐브의 것과 비교해 상태를 읽습니다. Full version 링크 test는 지웠고, 테마 test는 `./?extended`를 직접 엽니다. Unit test는 386개에서 387개가 되었습니다.
+
+위 본문 중 Net, 상태 줄, `Full version` 링크를 말하는 부분은 이 개정 전의 상태입니다.

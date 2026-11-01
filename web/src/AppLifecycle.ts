@@ -10,6 +10,7 @@ import {
   computeDrawingBufferSize,
   CubeEngine,
   CubeSurface,
+  CubeViewMode,
   type CubeCanvasTheme,
   type CubeEngineSize,
 } from './wasm/CubeEngine.ts';
@@ -417,6 +418,9 @@ export async function startApp(
 
   let opening: OpeningState = 'fresh';
   try {
+    // The minimal page is the cube alone: the engine's default puts the net
+    // beside it, and nothing on that page can change the view.
+    if (mode === 'minimal') engine.setViewMode(CubeViewMode.Cube3D);
     if (views.length > 0) {
       let elsewhere = 0;
       for (const view of views) {

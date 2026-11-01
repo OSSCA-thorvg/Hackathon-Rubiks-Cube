@@ -286,14 +286,11 @@ describe('bootstrap', () => {
       expect(theme).toHaveBeenCalledOnce();
     });
 
-    it('has its own Reset and a link to the full app', async () => {
+    it('has its own Reset and no link to the full app', async () => {
       const app = createApp();
       await bootMinimal(app);
 
-      const link = app.querySelector<HTMLAnchorElement>('#full-version')!;
-      expect(link.getAttribute('href')).toBe('./?extended');
-      expect(link.getAttribute('aria-label')).toBe('Full version');
-      expect(link.closest('.action-dock')).not.toBeNull();
+      expect(app.querySelector('#full-version')).toBeNull();
       expect(app.querySelector('#minimal-reset')?.closest('.action-dock')).not.toBeNull();
     });
 

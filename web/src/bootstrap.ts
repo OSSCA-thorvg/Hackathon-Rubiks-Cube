@@ -373,8 +373,7 @@ export function bootstrap(
     },
   ];
 
-  // The minimal page is the cube, its net, three buttons and the sun and
-  // moon: none of the page's own small controllers below is attached, and no
+  // The minimal page is the cube, three buttons and the sun and moon: none of the page's own small controllers below is attached, and no
   // key turns the cube. A drag still turns and orbits, which is the engine's own.
   if (mode === 'minimal') {
     if (theme !== null && shell.themeToggle !== null) {

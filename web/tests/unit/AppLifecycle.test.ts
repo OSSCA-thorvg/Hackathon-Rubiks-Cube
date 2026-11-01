@@ -15,7 +15,7 @@ import type {
   GameUi,
 } from '../../src/game/GameController.ts';
 import { encodeSession } from '../../src/game/shareCode.ts';
-import { CubeScene, CubeSurface } from '../../src/wasm/CubeEngine.ts';
+import { CubeScene, CubeSurface, CubeViewMode } from '../../src/wasm/CubeEngine.ts';
 
 /**
  * The gameplay DOM the lifecycle forwards. GameController owns what the
@@ -1243,5 +1243,18 @@ describe('startApp on the minimal page', () => {
     });
     await minimal.start();
     expect(minimal.engine.setLighting).not.toHaveBeenCalled();
+  });
+
+  it('shows the cube alone on the minimal page, from the first frame', async () => {
+    const minimal = createHarness({ mode: 'minimal' });
+    await minimal.start();
+    expect(minimal.engine.setViewMode).toHaveBeenCalledWith(CubeViewMode.Cube3D);
+    expect(
+      minimal.engine.setViewMode.mock.invocationCallOrder[0]!,
+    ).toBeLessThan(minimal.engine.render.mock.invocationCallOrder[0]!);
+
+    const extended = createHarness({ mode: 'extended' });
+    await extended.start();
+    expect(extended.engine.setViewMode).not.toHaveBeenCalled();
   });
 });

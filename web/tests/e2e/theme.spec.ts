@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 import { openSettings } from './shell.ts';
 import { cssColour, probeCanvas } from './sceneContract.ts';
@@ -9,11 +9,19 @@ const LIGHT_GROUND = [231, 235, 240, 255];
 
 const DESKTOP = { width: 1200, height: 1000 };
 
+/**
+ * Waits for the engine's first frame, not just the shell: a canvas read
+ * before it is transparent, which a slow load on the deployment shows.
+ */
+async function engineReady(page: Page): Promise<void> {
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+}
+
 test.use({ viewport: DESKTOP });
 
 test('the machine decides when nothing has been chosen', async ({ page }) => {
   await page.goto('./?extended');
-  await expect(page.locator('.game-shell')).toBeVisible();
+  await engineReady(page);
 
   // The suite runs dark, so System means dark here -- on the page and on the
   // canvas alike, which is the whole point of carrying the theme through to
@@ -34,7 +42,7 @@ test('a light machine gets a light page and a light canvas', async ({
 }) => {
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('./?extended');
-  await expect(page.locator('.game-shell')).toBeVisible();
+  await engineReady(page);
 
   await expect(page.locator('html')).not.toHaveAttribute('data-theme');
   expect((await probeCanvas(page)).corners[0]).toEqual(LIGHT_GROUND);
@@ -45,7 +53,7 @@ test('an explicit choice paints both surfaces and survives a reload', async ({
   page,
 }) => {
   await page.goto('./?extended');
-  await expect(page.locator('.game-shell')).toBeVisible();
+  await engineReady(page);
   await openSettings(page);
 
   await page.locator('[data-theme-choice="light"]').click();
@@ -68,7 +76,7 @@ test('an explicit choice paints both surfaces and survives a reload', async ({
 
 test('an explicit choice is not overruled by the machine', async ({ page }) => {
   await page.goto('./?extended');
-  await expect(page.locator('.game-shell')).toBeVisible();
+  await engineReady(page);
   await openSettings(page);
 
   await page.locator('[data-theme-choice="dark"]').click();
@@ -89,7 +97,7 @@ test('the settings surface opens and closes from the keyboard', async ({
   page,
 }) => {
   await page.goto('./?extended');
-  await expect(page.locator('.game-shell')).toBeVisible();
+  await engineReady(page);
 
   const trigger = page.locator('#settings-trigger');
   const panel = page.locator('#settings-panel');

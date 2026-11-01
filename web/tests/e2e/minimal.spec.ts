@@ -117,7 +117,9 @@ test('the menu shortcut and the face-turn keys do nothing', async ({ page }) => 
   await open(page);
   const before = await probeCanvas(page);
 
-  await page.locator('#view').click({ position: { x: 5, y: 5 } });
+  // A corner of the canvas away from the header, which lies over its top.
+  const box = (await page.locator('#view').boundingBox())!;
+  await page.locator('#view').click({ position: { x: 5, y: box.height - 5 } });
   for (const key of ['Meta+k', 'Control+k', 'r', 'Shift+U', 'f']) {
     await page.keyboard.press(key);
   }

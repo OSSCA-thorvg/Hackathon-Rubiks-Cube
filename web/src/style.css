@@ -2365,6 +2365,30 @@ kbd {
   padding: 0 24px;
 }
 
+/* With no status line between them, the stage runs up under the header, so
+   the cube centred in it sits higher, nearer the title. The header is laid
+   over the canvas and lets a drag through everywhere but its own controls. */
+.game-shell[data-mode="minimal"] .app-header {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.game-shell[data-mode="minimal"] .app-header > * {
+  pointer-events: auto;
+}
+
+.game-shell[data-mode="minimal"] .game-stage {
+  margin-top: calc(-1 * var(--target) - 8px);
+}
+
+@media (min-width: 1024px) {
+  .game-shell[data-mode="minimal"] .game-stage {
+    grid-row: 1 / 3;
+    margin-top: 0;
+  }
+}
+
 /* The status line goes too, unless it is the page saying why there is no
    cube: those two states below show it whatever the page. */
 .game-shell[data-mode="minimal"] .status-line {

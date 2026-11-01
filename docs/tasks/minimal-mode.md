@@ -74,3 +74,4 @@ Scramble(재생 중에는 Stop)과 Solve는 full app의 버튼 그대로입니�
 - Minimal e2e는 Net 대신 큐브 캔버스의 스티커 샘플(`cubeGrid`)을 풀린 큐브의 것과 비교해 상태를 읽습니다. Full version 링크 test는 지웠고, 테마 test는 `./?extended`를 직접 엽니다. Unit test는 386개에서 387개가 되었습니다.
 
 위 본문 중 Net, 상태 줄, `Full version` 링크를 말하는 부분은 이 개정 전의 상태입니다.
+- Minimal의 dock은 full app의 560px 줄을 채우지 않고 세 버튼에 맞춰 줄어듭니다. Scramble은 남는 폭을 다 차지하지 않고 글자 폭에 맞춥니다.

@@ -2354,6 +2354,17 @@ kbd {
   display: none;
 }
 
+/* Three buttons do not need the full app's row: the dock fits them, and
+   Scramble is as wide as its word rather than everything left over. */
+.game-shell[data-mode="minimal"] .action-dock {
+  width: auto;
+}
+
+.game-shell[data-mode="minimal"] .dock-button--primary {
+  flex: none;
+  padding: 0 24px;
+}
+
 /* The status line goes too, unless it is the page saying why there is no
    cube: those two states below show it whatever the page. */
 .game-shell[data-mode="minimal"] .status-line {
